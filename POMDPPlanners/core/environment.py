@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.simulation import StepData
 
-class ObservationModel(Distribution):
+class ObservationModel(Distribution, ABC):
     def __init__(self, next_state, action):
         self.next_state = next_state
         self.action = action
@@ -12,14 +12,20 @@ class ObservationModel(Distribution):
     @abstractmethod
     def sample(self) -> Any:
         pass
+    
+    def probability(self, next_observation: Any) -> float:
+        pass
 
-class StateTransitionModel(Distribution):
+class StateTransitionModel(Distribution, ABC):
     def __init__(self, state, action):
         self.state = state
         self.action = action
 
     @abstractmethod
     def sample(self) -> Any:
+        pass
+
+    def probability(self, next_state: Any) -> float:
         pass
 
 class Environment(ABC):
