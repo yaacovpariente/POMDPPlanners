@@ -39,11 +39,11 @@ def test_compute_statistics_basic():
     assert abs(stats["average_return"][0] - expected_avg_return) < 1e-6
     
     # Test timing statistics
-    assert len(stats["average_state_sampling_time"][0]) == 3
-    assert len(stats["average_action_time"][0]) == 3
-    assert len(stats["average_observation_time"][0]) == 3
-    assert len(stats["average_belief_update_time"][0]) == 3
-    assert len(stats["average_reward_time"][0]) == 3
+    assert len(stats["average_state_sampling_time"][1]) == 2  # Confidence interval has lower and upper bounds
+    assert len(stats["average_action_time"][1]) == 2
+    assert len(stats["average_observation_time"][1]) == 2
+    assert len(stats["average_belief_update_time"][1]) == 2
+    assert len(stats["average_reward_time"][1]) == 2
     
     # Test confidence intervals
     for key in stats:
