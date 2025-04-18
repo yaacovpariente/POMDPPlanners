@@ -1,15 +1,4 @@
-from time import time
-from typing import Any, List, NamedTuple
-from abc import ABC, abstractmethod
-import copy
-
-import numpy as np
-
-# from POMDPPlanners.core.environment import Environment
-# from POMDPPlanners.core.policy import Policy
-# from POMDPPlanners.core.belief import Belief
-# from POMDPPlanners.utils.statistics import cvar_estimator
-
+from typing import Any, NamedTuple, Union
 class StepData(NamedTuple):
     state: Any
     action: Any
@@ -26,45 +15,14 @@ class History(NamedTuple):
     average_belief_update_time: float
     average_reward_time: float
 
-    
-# def compute_statistics(history: List[History], alpha: float) -> dict:
-#     assert isinstance(history, list)
-#     assert all(isinstance(h, History) for h in history)
-    
-#     return_samples = []
-#     average_state_sampling_time = []
-#     average_action_time = []
-#     average_observation_time = []
-#     average_belief_update_time = []
-#     average_reward_time = []
-    
-#     for i, h in enumerate(history):
-#         return_ = sum([h.history[j].reward * h.discount_factor ** j for j in range(len(h.history))])
-#         return_samples.append(return_)
-        
-#         average_state_sampling_time.append(h.average_state_sampling_time)
-#         average_action_time.append(h.average_action_time)
-#         average_observation_time.append(h.average_observation_time)
-#         average_belief_update_time.append(h.average_belief_update_time)
-#         average_reward_time.append(h.average_reward_time)
-        
-#     average_return = sum(return_samples) / len(return_samples)
-    
-    
-#     return_cvar = cvar_estimator(return_samples, alpha)
-#     return_value_at_risk = np.percentile(return_samples, alpha * 100)
-    
-#     return {
-#         "average_return": average_return,
-#         "return_cvar": return_cvar,
-#         "return_value_at_risk": return_value_at_risk,
-#         "average_state_sampling_time": average_state_sampling_time,
-#         "average_action_time": average_action_time,
-#         "average_observation_time": average_observation_time,
-#         "average_belief_update_time": average_belief_update_time,
-#         "average_reward_time": average_reward_time,
-#     }
+class CategoricalHyperParameter(NamedTuple):
+    choices: list[Any]
+    name: str
 
+class NumericalHyperParameter(NamedTuple):
+    low: Union[int, float]
+    high: Union[int, float]
+    name: str
     
 # class Simulation(ABC):
 #     def __init__(

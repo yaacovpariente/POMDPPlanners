@@ -60,6 +60,9 @@ def confidence_interval(data, confidence=0.95):
         tuple: (lower_bound, upper_bound) of the confidence interval
     """
     data = np.array(data)
+    if len(data) <= 1:
+        raise ValueError("Data must contain at least two elements")
+    
     mean = np.mean(data)
     sem = stats.sem(data, nan_policy='omit')  # Standard error of the mean
     df = len(data) - 1  # Degrees of freedom
