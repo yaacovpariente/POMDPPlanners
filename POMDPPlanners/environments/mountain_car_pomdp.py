@@ -72,7 +72,7 @@ class MountainCarObservation(ObservationModel):
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
-    def __init__(self, discount_factor: float = 0.95):
+    def __init__(self, discount_factor: float):
         super().__init__(discount_factor)
         
         self.min_position = -1.2

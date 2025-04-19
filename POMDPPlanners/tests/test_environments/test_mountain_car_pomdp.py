@@ -4,8 +4,7 @@ from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.core.simulation import StepData
 
 def test_mountain_car_initialization():
-    pomdp = MountainCarPOMDP()
-    assert pomdp.discount_factor == 0.95
+    pomdp = MountainCarPOMDP(discount_factor=0.95)
     assert pomdp.min_position == -1.2
     assert pomdp.max_position == 0.6
     assert pomdp.max_speed == 0.07
@@ -18,7 +17,7 @@ def test_mountain_car_initialization():
     assert 1 in pomdp.actions
 
 def test_mountain_car_state_transition():
-    pomdp = MountainCarPOMDP()
+    pomdp = MountainCarPOMDP(discount_factor=0.95)
     
     # Test left acceleration
     state = (0.0, 0.0)
@@ -49,7 +48,7 @@ def test_mountain_car_state_transition():
     assert abs(new_state[1]) <= pomdp.max_speed
 
 def test_mountain_car_observation():
-    pomdp = MountainCarPOMDP()
+    pomdp = MountainCarPOMDP(discount_factor=0.95)
     
     # Test observation with known state
     state = (0.0, 0.0)
@@ -70,7 +69,7 @@ def test_mountain_car_observation():
     assert np.std(velocities) > 0
 
 def test_mountain_car_reward():
-    pomdp = MountainCarPOMDP()
+    pomdp = MountainCarPOMDP(discount_factor=0.95)
     
     # Test reward when not at goal
     state = (0.0, 0.0)
@@ -88,7 +87,7 @@ def test_mountain_car_reward():
     assert reward == 0.0
 
 def test_mountain_car_terminal():
-    pomdp = MountainCarPOMDP()
+    pomdp = MountainCarPOMDP(discount_factor=0.95)
     
     # Test non-terminal state
     state = (0.0, 0.0)
@@ -103,7 +102,7 @@ def test_mountain_car_terminal():
     assert pomdp.is_terminal(state)
 
 def test_mountain_car_initial_state():
-    pomdp = MountainCarPOMDP()
+    pomdp = MountainCarPOMDP(discount_factor=0.95)
     initial_state = pomdp.initial_state_dist().sample()
     
     assert isinstance(initial_state, tuple)
@@ -115,7 +114,7 @@ def test_mountain_car_initial_state():
     assert initial_state[1] == 0.0
 
 def test_mountain_car_initial_observation():
-    pomdp = MountainCarPOMDP()
+    pomdp = MountainCarPOMDP(discount_factor=0.95)
     initial_observation = pomdp.initial_observation_dist().sample()
     
     assert isinstance(initial_observation, tuple)
@@ -124,7 +123,7 @@ def test_mountain_car_initial_observation():
     assert initial_observation[1] == 0.0
 
 def test_mountain_car_actions():
-    pomdp = MountainCarPOMDP()
+    pomdp = MountainCarPOMDP(discount_factor=0.95)
     actions = pomdp.get_actions()
     
     assert len(actions) == 3
@@ -133,7 +132,7 @@ def test_mountain_car_actions():
     assert 1 in actions
 
 def test_mountain_car_state_bounds():
-    pomdp = MountainCarPOMDP()
+    pomdp = MountainCarPOMDP(discount_factor=0.95)
     
     # Test position bounds
     state = (pomdp.min_position - 0.1, 0.0)

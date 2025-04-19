@@ -55,7 +55,7 @@ class TigerObservation(ObservationModel):
 
 
 class TigerPOMDP(DiscreteActionsEnvironment):
-    def __init__(self, discount_factor: float = 0.95):
+    def __init__(self, discount_factor: float):
         super().__init__(discount_factor)
         self.states = STATES
         self.actions = ACTIONS

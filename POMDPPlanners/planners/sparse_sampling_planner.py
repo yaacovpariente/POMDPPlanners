@@ -16,20 +16,18 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         self, 
         environment: DiscreteActionsEnvironment,  
         branching_factor: int,
-        depth: int,
-        discount_factor: float
+        depth: int
     ):
         assert isinstance(environment, DiscreteActionsEnvironment)
         assert isinstance(branching_factor, int)
         assert isinstance(depth, int)
-        assert isinstance(discount_factor, float)
         
         if depth <= 0:
             raise ValueError("Depth must be greater than 0")
         if branching_factor <= 0:
             raise ValueError("Branching factor must be greater than 0")
         
-        super().__init__(environment=environment, discount_factor=discount_factor)
+        super().__init__(environment=environment, discount_factor=environment.discount_factor)
         
         self.branching_factor = branching_factor
         self.depth = depth
@@ -132,14 +130,12 @@ class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActions
         self, 
         environment: DiscreteActionsEnvironment, 
         branching_factor: int,
-        depth: int,
-        discount_factor: float
+        depth: int
     ):
         super().__init__(
             environment=environment,
             branching_factor=branching_factor,
-            depth=depth,
-            discount_factor=discount_factor
+            depth=depth
         )
                         
     def _update_leaf_node_q_value(self, node: ActionNode):
@@ -148,7 +144,7 @@ class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActions
 
     def _update_non_leaf_action_node_q_value(self, node: ActionNode):
         children_q_values = [child.v_value for child in node.children]
-        node.q_value = node.immediate_cost + self.discount_factor * np.mean(children_q_values)
+        node.q_value = node.immediate_cost + self.environment.discount_factor * np.mean(children_q_values)
     
     def _update_belief_node_v_value(self, node: BeliefNode):
         node.v_value = min([child.q_value for child in node.children])

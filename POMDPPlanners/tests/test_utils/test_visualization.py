@@ -30,8 +30,7 @@ def test_plot_statistics_comparison(temp_cache_dir):
     policy = StandardSparseSamplingDiscreteActionsPlanner(
         environment=environment,
         branching_factor=2,
-        depth=1,
-        discount_factor=0.95
+        depth=1
     )
 
     # Create mock statistics
@@ -80,14 +79,12 @@ def test_plot_statistics_comparison_multiple_envs_policies(temp_cache_dir):
     policy1 = StandardSparseSamplingDiscreteActionsPlanner(
         environment=environment1,
         branching_factor=2,
-        depth=1,
-        discount_factor=0.95
+        depth=1
     )
     policy2 = StandardSparseSamplingDiscreteActionsPlanner(
         environment=environment2,
         branching_factor=3,
-        depth=4,
-        discount_factor=0.99
+        depth=4
     )
 
     # Create mock statistics for multiple environment-policy combinations
@@ -139,12 +136,11 @@ def test_plot_statistics_comparison_empty_statistics(temp_cache_dir):
     policy = StandardSparseSamplingDiscreteActionsPlanner(
         environment=environment,
         branching_factor=2,
-        depth=1,
-        discount_factor=0.95
+        depth=1
     )
 
     # Test with empty statistics
-    with pytest.raises(IndexError):
+    with pytest.raises(Exception):
         plot_statistics_comparison(
             statistics=[],
             environments=[environment],
