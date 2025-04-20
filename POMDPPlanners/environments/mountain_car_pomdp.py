@@ -145,6 +145,6 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
     def get_actions(self) -> List[Any]:
         return self.actions 
     
-    def cache_history_artifacts(self, history: List[StepData], cache_path: Path) -> None:
+    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         # Create a figure and axis
         pass
