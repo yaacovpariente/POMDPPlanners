@@ -2,6 +2,8 @@ from typing import List, Any
 import numpy as np
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment, ObservationModel, StateTransitionModel
 from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
+from POMDPPlanners.core.simulation import History
+from pathlib import Path
 
 STATES = ['tiger_left', 'tiger_right']
 ACTIONS = ['listen', 'open_left', 'open_right']
@@ -99,3 +101,64 @@ class TigerPOMDP(DiscreteActionsEnvironment):
 
     def get_actions(self) -> List[Any]:
         return self.actions
+
+    def cache_history_artifacts(self, history: History, cache_path: Path) -> None:
+        """Create a visualization of the agent's path through the Tiger problem.
+        
+        Args:
+            history: The history of states, actions, and observations
+            cache_path: Path where to save the visualization
+        """
+        import matplotlib.pyplot as plt
+        import matplotlib.animation as animation
+        
+        assert isinstance(cache_path, Path)
+        assert str(cache_path).endswith(".gif")
+        
+        # Create figure and axis
+        fig, ax = plt.subplots(figsize=(8, 4))
+        ax.set_xlim(-0.5, 1.5)
+        ax.set_ylim(-0.5, 1.5)
+        ax.set_xticks([])
+        ax.set_yticks([])
+        
+        # Draw doors
+        left_door = plt.Rectangle((0, 0), 0.2, 1, facecolor='brown')
+        right_door = plt.Rectangle((1, 0), 0.2, 1, facecolor='brown')
+        ax.add_patch(left_door)
+        ax.add_patch(right_door)
+        
+        # Initialize agent position
+        agent, = ax.plot([], [], 'ro', markersize=10)
+        state_text = ax.text(0.5, 1.2, '', ha='center')
+        action_text = ax.text(0.5, -0.2, '', ha='center')
+        
+        def init():
+            agent.set_data([], [])
+            state_text.set_text('')
+            action_text.set_text('')
+            return agent, state_text, action_text
+        
+        def update(frame):
+            step = history.history[frame]
+            # Update agent position based on state
+            if step.state == 'tiger_left':
+                agent.set_data([0.1], [0.5])  # Left door
+            else:
+                agent.set_data([1.1], [0.5])  # Right door
+                
+            # Update text
+            state_text.set_text(f'State: {step.state}')
+            action_text.set_text(f'Action: {step.action}')
+            
+            return agent, state_text, action_text
+        
+        # Create animation
+        ani = animation.FuncAnimation(
+            fig, update, frames=len(history.history),
+            init_func=init, blit=True, repeat=False
+        )
+        
+        # Save animation
+        ani.save(cache_path, writer='pillow', fps=2)
+        plt.close()

@@ -276,6 +276,6 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
         
         plt.close()
         
-    def cache_history_artifacts(self, history: History, cache_path: Path) -> None:
+    def cache_visualization(self, history: History, cache_path: Path) -> None:
         agent_path = [step.state for step in history.history]
         self.visualize_path(path=agent_path, cache_path=cache_path)
