@@ -9,6 +9,7 @@ import os
 from POMDPPlanners.utils.visualization import plot_statistics_comparison
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+from POMDPPlanners.core.simulation import MetricValue
 
 @pytest.fixture
 def temp_cache_dir():
@@ -33,12 +34,27 @@ def test_plot_statistics_comparison(temp_cache_dir):
         depth=1
     )
 
-    # Create mock statistics
-    mock_statistics = [{
-        'average_return': (-10.0, (-15.0, -5.0)),
-        'return_cvar': (-12.0, (-17.0, -7.0)),
-        'average_action_time': (0.1, (0.05, 0.15))
-    }]
+    # Create mock statistics using MetricValue objects
+    mock_statistics = [[
+        MetricValue(
+            name="average_return",
+            value=-10.0,
+            lower_confidence_bound=-15.0,
+            upper_confidence_bound=-5.0
+        ),
+        MetricValue(
+            name="return_cvar",
+            value=-12.0,
+            lower_confidence_bound=-17.0,
+            upper_confidence_bound=-7.0
+        ),
+        MetricValue(
+            name="average_action_time",
+            value=0.1,
+            lower_confidence_bound=0.05,
+            upper_confidence_bound=0.15
+        )
+    ]]
 
     # Create mlruns directory
     mlruns_dir = temp_cache_dir / "mlruns"
@@ -87,16 +103,36 @@ def test_plot_statistics_comparison_multiple_envs_policies(temp_cache_dir):
         depth=4
     )
 
-    # Create mock statistics for multiple environment-policy combinations
+    # Create mock statistics for multiple environment-policy combinations using MetricValue objects
     mock_statistics = [
-        {
-            'average_return': (-10.0, (-15.0, -5.0)),
-            'return_cvar': (-12.0, (-17.0, -7.0))
-        },
-        {
-            'average_return': (-8.0, (-13.0, -3.0)),
-            'return_cvar': (-10.0, (-15.0, -5.0))
-        }
+        [
+            MetricValue(
+                name="average_return",
+                value=-10.0,
+                lower_confidence_bound=-15.0,
+                upper_confidence_bound=-5.0
+            ),
+            MetricValue(
+                name="return_cvar",
+                value=-12.0,
+                lower_confidence_bound=-17.0,
+                upper_confidence_bound=-7.0
+            )
+        ],
+        [
+            MetricValue(
+                name="average_return",
+                value=-8.0,
+                lower_confidence_bound=-13.0,
+                upper_confidence_bound=-3.0
+            ),
+            MetricValue(
+                name="return_cvar",
+                value=-10.0,
+                lower_confidence_bound=-15.0,
+                upper_confidence_bound=-5.0
+            )
+        ]
     ]
 
     # Create mlruns directory

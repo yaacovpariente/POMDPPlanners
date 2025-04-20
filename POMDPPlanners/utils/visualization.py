@@ -8,9 +8,10 @@ import mlflow
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.simulation import MetricValue
 
 def plot_statistics_comparison(
-    statistics: List[dict],
+    statistics: List[List[MetricValue]],
     environments: List[Environment],
     policies: List[Policy],
     cache_dir_path: Path
@@ -19,17 +20,20 @@ def plot_statistics_comparison(
     Plot bar plots comparing statistics across environments and policies.
     
     Args:
-        statistics: List of statistics dictionaries for each environment-policy combination
+        statistics: List of lists of MetricValue objects for each environment-policy combination
         environments: List of environments
         policies: List of policies
         cache_dir_path: Path to save the plots
     """
+    assert len(statistics) > 0 and len(environments) > 0 and len(policies) > 0, \
+        "Statistics, environments, and policies lists must not be empty"
+
     # Create plots directory if it doesn't exist
     plots_dir = cache_dir_path / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
     
-    # Get all statistic names from the first statistics dictionary
-    stat_names = list(statistics[0].keys())
+    # Get all unique metric names from the first statistics list
+    stat_names = list({metric.name for metric in statistics[0]})
     
     # Create a figure for each statistic
     for stat_name in stat_names:
@@ -47,21 +51,35 @@ def plot_statistics_comparison(
         labels = []
         
         for i, (env, policy) in enumerate(zip(environments, policies)):
-            mean, ci = statistics[i][stat_name]
-            means.append(mean)
-            lower_bounds.append(ci[0])
-            upper_bounds.append(ci[1])
+            if i >= len(statistics):
+                break
+                
+            # Find the metric with the matching name
+            metric = next((m for m in statistics[i] if m.name == stat_name), None)
+            if metric is None:
+                continue
+                
+            if np.isnan(metric.value) or np.isnan(metric.lower_confidence_bound) or np.isnan(metric.upper_confidence_bound):
+                continue
+                
+            means.append(metric.value)
+            lower_bounds.append(metric.lower_confidence_bound)
+            upper_bounds.append(metric.upper_confidence_bound)
             labels.append(f"{env.__class__.__name__}\n{policy.__class__.__name__}")
         
+        if not means:  # Skip if no valid data points
+            plt.close()
+            continue
+            
         # Plot bars
-        plt.bar(x, means, width, yerr=(np.array(upper_bounds) - np.array(lower_bounds)) / 2,
+        plt.bar(x[:len(means)], means, width, yerr=(np.array(upper_bounds) - np.array(lower_bounds)) / 2,
                 capsize=5)
         
         # Customize the plot
         plt.xlabel('Environment-Policy Pair')
         plt.ylabel(stat_name.replace('_', ' ').title())
         plt.title(f'{stat_name.replace("_", " ").title()} Comparison')
-        plt.xticks(x, labels, rotation=45, ha='right')
+        plt.xticks(x[:len(means)], labels, rotation=45, ha='right')
         
         # Adjust layout to prevent label cutoff
         plt.tight_layout()
