@@ -10,19 +10,21 @@ import optuna
 import pandas as pd
 import numpy as np
 import tempfile
+from typing import Union, List, Tuple, Type
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.belief import Belief, get_initial_belief
-from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.simulation import History, StepData, CategoricalHyperParameter, NumericalHyperParameter, MetricValue
 from POMDPPlanners.simulations.simulation_statistics import compute_statistics
 from POMDPPlanners.utils.visualization import plot_statistics_comparison
+
+HyperParameterFeatures = Union[CategoricalHyperParameter, NumericalHyperParameter]
 
 def run_multiple_episodes(
     environment: Environment, 
     policy: Policy, 
     initial_belief: Belief, 
-    discount_factor: float, 
     num_episodes: int, 
     num_steps: int,
     n_jobs: int = 1
@@ -30,14 +32,12 @@ def run_multiple_episodes(
     assert isinstance(environment, Environment)
     assert isinstance(policy, Policy)
     assert isinstance(initial_belief, Belief)
-    assert isinstance(discount_factor, float)
     
-    assert 1 >= discount_factor >= 0
     assert num_episodes > 0
     assert num_steps > 0
     
     # Create a list of arguments for each episode
-    episode_args = [(environment, policy, initial_belief, discount_factor, num_steps) for _ in range(num_episodes)]
+    episode_args = [(environment, policy, initial_belief, num_steps) for _ in range(num_episodes)]
     
     # Run episodes in parallel using joblib
     histories = Parallel(n_jobs=n_jobs)(delayed(run_episode)(*args) for args in episode_args)
@@ -48,15 +48,11 @@ def run_episode(
     environment: Environment, 
     policy: Policy, 
     initial_belief: Belief, 
-    discount_factor: float, 
     num_steps: int
 ) -> History:
     assert isinstance(environment, Environment)
     assert isinstance(policy, Policy)
     assert isinstance(initial_belief, Belief)
-    assert isinstance(discount_factor, float)
-    
-    assert 1 >= discount_factor >= 0
     assert num_steps > 0
     
     average_state_sampling_time = 0.
@@ -108,8 +104,8 @@ def run_episode(
         state = next_state
     
     return History(
-        history=history, 
-        discount_factor=discount_factor, 
+        history=history,
+        discount_factor=environment.discount_factor,
         average_state_sampling_time=average_state_sampling_time, 
         average_action_time=average_action_time, 
         average_observation_time=average_observation_time, 
@@ -121,17 +117,15 @@ def simulation(
     environment: Environment,
     policy: Policy,
     initial_belief: Belief,
-    discount_factor: float,
     num_episodes: int,
     num_steps: int,
     alpha: float,
     confidence_interval_level: float = 0.95,
     n_jobs: int = 1
-) -> dict:
+) -> Tuple[List[History], List[MetricValue]]:
     assert isinstance(environment, Environment)
     assert isinstance(policy, Policy)
     assert isinstance(initial_belief, Belief)
-    assert isinstance(discount_factor, float)
     assert isinstance(num_episodes, int)
     assert isinstance(num_steps, int)
     assert isinstance(confidence_interval_level, float)
@@ -144,7 +138,6 @@ def simulation(
         environment=environment, 
         policy=policy, 
         initial_belief=initial_belief, 
-        discount_factor=discount_factor, 
         num_episodes=num_episodes, 
         num_steps=num_steps,
         n_jobs=n_jobs
@@ -160,33 +153,35 @@ def simulation(
 
 def compare_planners(
     environment_policy_pairs: List[Tuple[Environment, Policy]],
-    discount_factor: float,
     num_episodes: int,
     num_steps: int,
     alpha: float,
     n_particles: int,
     cache_dir_path: Path,
+    resampling: bool = True,
     experiment_name: str = "POMDP_Planning_Comparison",
     confidence_interval_level: float = 0.95,
     n_jobs: int = 1
-) -> Tuple[List[dict], pd.DataFrame]:
+) -> Tuple[List[List[MetricValue]], pd.DataFrame]:
     assert isinstance(environment_policy_pairs, List)
-    assert all(isinstance(pair, tuple) and len(pair) == 2 for pair in environment_policy_pairs)
-    assert all(isinstance(env, Environment) for env, _ in environment_policy_pairs)
-    assert all(isinstance(policy, Policy) for _, policy in environment_policy_pairs)
-    assert isinstance(discount_factor, float)
+    assert len(environment_policy_pairs) > 0
+    
+    for env, pol in environment_policy_pairs:
+        assert isinstance(env, Environment)
+        assert isinstance(pol, Policy)
+        
     assert isinstance(num_episodes, int)
     assert isinstance(num_steps, int)
     assert isinstance(alpha, float)
     assert isinstance(n_particles, int)
     assert isinstance(cache_dir_path, Path)
     assert isinstance(confidence_interval_level, float)
+    assert isinstance(resampling, bool)
     
     assert num_episodes > 0
     assert num_steps > 0
     assert n_particles > 0
-    assert 1 >= discount_factor >= 0
-
+    
     # Set up MLFlow tracking with proper file scheme for Windows
     mlruns_path = cache_dir_path / "mlruns"
     mlruns_path.mkdir(parents=True, exist_ok=True)
@@ -194,10 +189,10 @@ def compare_planners(
     tracking_uri = mlruns_path
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(experiment_name)
-
+    
     planner_statistics = []
     aggregated_data = []
-
+    
     for pair_idx, (environment, policy) in enumerate(environment_policy_pairs):
         # End any active run safely
         active_run = mlflow.active_run()
@@ -210,7 +205,6 @@ def compare_planners(
             common_params = {
                 "environment_type": environment.__class__.__name__,
                 "policy_type": policy.__class__.__name__,
-                "discount_factor": discount_factor,
                 "num_episodes": num_episodes,
                 "num_steps": num_steps,
                 "alpha": alpha,
@@ -241,12 +235,11 @@ def compare_planners(
             
             mlflow.log_params(all_params)
             
-            initial_belief = get_initial_belief(pomdp=environment, n_particles=n_particles)
+            initial_belief = get_initial_belief(pomdp=environment, n_particles=n_particles, resampling=resampling)
             histories, statistics = simulation(
                 environment=environment,
                 policy=policy,
                 initial_belief=initial_belief,
-                discount_factor=discount_factor,
                 num_episodes=num_episodes,
                 num_steps=num_steps,
                 alpha=alpha,
@@ -255,33 +248,44 @@ def compare_planners(
             )
             
             # Log metrics from statistics
-            for metric_name, (metric_value, confidence_interval) in statistics.items():
-                if isinstance(metric_value, (int, float)):
-                    mlflow.log_metric(metric_name, metric_value)
-                    # Log confidence interval bounds
-                    mlflow.log_metric(f"{metric_name}_ci_lower", confidence_interval[0])
-                    mlflow.log_metric(f"{metric_name}_ci_upper", confidence_interval[1])
-                elif isinstance(metric_value, dict):
-                    # For nested statistics, flatten them
-                    for sub_name, (sub_value, sub_ci) in metric_value.items():
-                        if isinstance(sub_value, (int, float)):
-                            mlflow.log_metric(f"{metric_name}_{sub_name}", sub_value)
-                            mlflow.log_metric(f"{metric_name}_{sub_name}_ci_lower", sub_ci[0])
-                            mlflow.log_metric(f"{metric_name}_{sub_name}_ci_upper", sub_ci[1])
+            for metric in statistics:
+                mlflow.log_metric(metric.name, metric.value)
+                # Log confidence interval bounds
+                mlflow.log_metric(f"{metric.name}_ci_lower", metric.lower_confidence_bound)
+                mlflow.log_metric(f"{metric.name}_ci_upper", metric.upper_confidence_bound)
             
             # Save the full statistics as a JSON artifact
             full_data = {
-                "statistics": statistics,
+                "statistics": [metric._asdict() for metric in statistics],
                 "parameters": all_params
             }
             mlflow.log_dict(full_data, "statistics/full_data.json")
-            
+    
+            with tempfile.TemporaryDirectory() as temp_dir:
+                temp_dir_path = Path(temp_dir)
+                
+                for episode_idx, history in enumerate(histories):
+                    episode_dir = temp_dir_path / f"episode_{episode_idx}"
+                    file_name = f"agent_path_{episode_idx}.gif" 
+                    cache_path = episode_dir / file_name
+                    episode_dir.mkdir(exist_ok=True)
+                    
+                    # Only try to create visualization if the environment supports it
+                    try:
+                        environment.cache_visualization(history=history, cache_path=cache_path)
+                        if cache_path.exists():
+                            # Log individual artifact file
+                            mlflow.log_artifact(str(cache_path), f"visualization/{file_name}")
+                    except Exception:
+                        # Skip visualization if not supported
+                        pass
+
             planner_statistics.append(statistics)
             
             # Aggregate data for DataFrame
             run_data = {
                 **all_params,
-                **statistics
+                **{metric.name: metric.value for metric in statistics}
             }
             aggregated_data.append(run_data)
     
@@ -302,8 +306,8 @@ def compare_planners(
         )
         
         # Log all generated plots as artifacts
-        for plot_file in temp_dir_path.glob("*.png"):
-            mlflow.log_artifact(str(plot_file), "statistics_plots")
+        for plot_file in (temp_dir_path / "plots").glob("*.png"):
+            mlflow.log_artifact(str(plot_file), f"statistics_plots/{str(plot_file.name)}")
     
     # End any active run safely before returning
     active_run = mlflow.active_run()
@@ -388,8 +392,7 @@ def create_policy_optimization_objective(
 def optimize_policy_parameters_with_optuna(
     environment: Environment,
     policy_class: Type[Policy],
-    param_ranges: dict,  # TODO: Change to list of HyperParameterSearch
-    discount_factor: float,
+    param_ranges: List[HyperParameterFeatures],
     num_episodes: int,
     num_steps: int,
     n_particles: int,
@@ -406,8 +409,7 @@ def optimize_policy_parameters_with_optuna(
     Args:
         environment: The environment to evaluate policies in
         policy_class: The Policy class to optimize
-        param_ranges: Dictionary defining parameter ranges and types
-        discount_factor: Discount factor for reward calculation
+        param_ranges: List of hyperparameters to optimize
         num_episodes: Number of episodes to run per evaluation
         num_steps: Number of steps per episode
         n_particles: Number of particles for belief representation
@@ -425,8 +427,8 @@ def optimize_policy_parameters_with_optuna(
     assert isinstance(environment, Environment)
     assert isinstance(policy_class, type)
     assert issubclass(policy_class, Policy)
-    assert isinstance(param_ranges, dict)
-    assert isinstance(discount_factor, float)
+    assert isinstance(param_ranges, list)
+    assert all(isinstance(param, HyperParameterFeatures) for param in param_ranges)
     assert isinstance(num_episodes, int)
     assert isinstance(num_steps, int)
     assert isinstance(n_particles, int)
@@ -438,7 +440,6 @@ def optimize_policy_parameters_with_optuna(
     assert num_episodes > 0
     assert num_steps > 0
     assert n_particles > 0
-    assert 0 <= discount_factor <= 1
     assert 0 <= confidence_interval_level <= 1
     
     def evaluation_function(policy: Policy, trial: optuna.Trial) -> float:
@@ -447,7 +448,6 @@ def optimize_policy_parameters_with_optuna(
             environment=environment,
             policy=policy,
             initial_belief=initial_belief,
-            discount_factor=discount_factor,
             num_episodes=num_episodes,
             num_steps=num_steps,
             alpha=0.05,  # Fixed alpha for optimization
@@ -459,40 +459,39 @@ def optimize_policy_parameters_with_optuna(
         trial.set_user_attr('histories', histories)
         
         # Get the current value
-        current_value = statistics[parameter_to_optimize]
-        if isinstance(current_value, tuple):
-            current_value = current_value[0]  # Get the mean value
+        for metric in statistics:
+            if metric.name == parameter_to_optimize:
+                return metric.value
             
-        return current_value
+        raise ValueError(f"Parameter {parameter_to_optimize} not found in statistics")
     
     def objective(trial: optuna.Trial) -> float:
-        # Create parameters dictionary from ranges
+        # Create parameters dictionary from hyperparameters
         policy_params = {}
         
         # Add required parameters first
         policy_params['environment'] = environment
-        policy_params['discount_factor'] = discount_factor
             
         # Add optimization parameters
-        for param_name, param_config in param_ranges.items():
-            if param_config['type'] == 'int':
-                policy_params[param_name] = trial.suggest_int(
-                    param_name, 
-                    param_config['low'], 
-                    param_config['high']
+        for param in param_ranges:
+            if isinstance(param, CategoricalHyperParameter):
+                policy_params[param.name] = trial.suggest_categorical(
+                    param.name, 
+                    param.choices
                 )
-            elif param_config['type'] == 'float':
-                policy_params[param_name] = trial.suggest_float(
-                    param_name, 
-                    param_config['low'], 
-                    param_config['high'],
-                    log=param_config.get('log', False)
-                )
-            elif param_config['type'] == 'categorical':
-                policy_params[param_name] = trial.suggest_categorical(
-                    param_name, 
-                    param_config['choices']
-                )
+            elif isinstance(param, NumericalHyperParameter):
+                if isinstance(param.low, float):
+                    policy_params[param.name] = trial.suggest_float(
+                        param.name,
+                        param.low,
+                        param.high
+                    )
+                else:
+                    policy_params[param.name] = trial.suggest_int(
+                        param.name,
+                        param.low,
+                        param.high
+                    )
         
         # Create policy instance with suggested parameters
         policy = policy_class(**policy_params)
@@ -506,15 +505,14 @@ def optimize_policy_parameters_with_optuna(
     # Get histories from the best trial
     best_histories = study.best_trial.user_attrs['histories']
     
-    # Remove environment and discount_factor from best params as they were not optimized
+    # Remove environment from best params as it was not optimized
     best_params = {k: v for k, v in study.best_trial.params.items() 
-                  if k not in ['environment', 'discount_factor']}
+                  if k not in ['environment']}
     
     return best_params, study.best_value, best_histories
 
 def optimize_policy_parameters_for_multiple_environments(
-    environment_policy_pairs: List[Tuple[Environment, Tuple[Type[Policy], dict]]],
-    discount_factor: float,
+    environment_policy_pairs: List[Tuple[Environment, Tuple[Type[Policy], List[HyperParameterFeatures]]]],
     num_episodes: int,
     num_steps: int,
     n_particles: int,
@@ -531,8 +529,7 @@ def optimize_policy_parameters_for_multiple_environments(
     assert all(isinstance(env, Environment) for env, _ in environment_policy_pairs)
     assert all(isinstance(policy_config, tuple) and len(policy_config) == 2 for _, policy_config in environment_policy_pairs)
     assert all(isinstance(policy_class, type) and issubclass(policy_class, Policy) for _, (policy_class, _) in environment_policy_pairs)
-    assert all(isinstance(param_ranges, dict) for _, (_, param_ranges) in environment_policy_pairs)
-    assert isinstance(discount_factor, float)
+    assert all(isinstance(param_ranges, list) and all(isinstance(param, HyperParameterFeatures) for param in param_ranges) for _, (_, param_ranges) in environment_policy_pairs)
     assert isinstance(num_episodes, int)
     assert isinstance(num_steps, int)
     assert isinstance(n_particles, int)
@@ -546,7 +543,6 @@ def optimize_policy_parameters_for_multiple_environments(
     assert num_episodes > 0
     assert num_steps > 0
     assert n_particles > 0
-    assert 0 <= discount_factor <= 1
     assert 0 <= confidence_interval_level <= 1
     assert direction in ["maximize", "minimize"]
     
@@ -558,8 +554,8 @@ def optimize_policy_parameters_for_multiple_environments(
     mlflow.set_experiment(experiment_name)
     
     results = []
-    aggregated_data = []
     planner_statistics = []
+    aggregated_data = []
     
     for pair_idx, (environment, (policy_class, param_ranges)) in enumerate(environment_policy_pairs):
         # End any active run safely
@@ -568,12 +564,11 @@ def optimize_policy_parameters_for_multiple_environments(
             mlflow.end_run()
         
         # Start a new MLFlow run for each environment-policy combination
-        with mlflow.start_run(run_name=f"pair_{pair_idx}"):
+        with mlflow.start_run(run_name=f"{environment.__class__.__name__}_{policy_class.__name__}_{pair_idx}"):
             # Log common parameters
             common_params = {
                 "environment_type": environment.__class__.__name__,
                 "policy_type": policy_class.__name__,
-                "discount_factor": discount_factor,
                 "num_episodes": num_episodes,
                 "num_steps": num_steps,
                 "n_particles": n_particles,
@@ -591,10 +586,12 @@ def optimize_policy_parameters_for_multiple_environments(
             }
             
             # Log policy-specific parameter ranges
-            policy_param_ranges = {
-                f"param_range_{param_name}": f"{param_config['low']}-{param_config['high']}"
-                for param_name, param_config in param_ranges.items()
-            }
+            policy_param_ranges = {}
+            for param in param_ranges:
+                if isinstance(param, CategoricalHyperParameter):
+                    policy_param_ranges[f"param_range_{param.name}"] = f"choices: {param.choices}"
+                elif isinstance(param, NumericalHyperParameter):
+                    policy_param_ranges[f"param_range_{param.name}"] = f"{param.low}-{param.high}"
             
             # Combine all parameters
             all_params = {
@@ -610,7 +607,6 @@ def optimize_policy_parameters_for_multiple_environments(
                 environment=environment,
                 policy_class=policy_class,
                 param_ranges=param_ranges,
-                discount_factor=discount_factor,
                 num_episodes=num_episodes,
                 num_steps=num_steps,
                 n_particles=n_particles,
@@ -626,9 +622,8 @@ def optimize_policy_parameters_for_multiple_environments(
             initial_belief = get_initial_belief(pomdp=environment, n_particles=n_particles)
             _, statistics = simulation(
                 environment=environment,
-                policy=policy_class(environment=environment, discount_factor=discount_factor, **best_params),
+                policy=policy_class(environment=environment, **best_params),
                 initial_belief=initial_belief,
-                discount_factor=discount_factor,
                 num_episodes=num_episodes,
                 num_steps=num_steps,
                 alpha=0.05,  # Fixed alpha for evaluation
@@ -645,8 +640,8 @@ def optimize_policy_parameters_for_multiple_environments(
                 "best_parameters": best_params,
                 "best_value": best_value,
                 "parameters": all_params,
-                "param_ranges": param_ranges,
-                "statistics": statistics
+                "param_ranges": [param._asdict() for param in param_ranges],
+                "statistics": [metric._asdict() for metric in statistics]
             }
             mlflow.log_dict(results_data, f"optimization_results_pair_{pair_idx}.json")
             
@@ -658,7 +653,7 @@ def optimize_policy_parameters_for_multiple_environments(
                 **all_params,
                 **{f"best_{k}": v for k, v in best_params.items()},
                 "best_value": best_value,
-                **statistics
+                **{metric.name: metric.value for metric in statistics}
             }
             aggregated_data.append(run_data)
     
