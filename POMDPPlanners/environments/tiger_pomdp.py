@@ -64,8 +64,8 @@ class TigerPOMDP(DiscreteActionsEnvironment):
     def state_transition_model(self, state: str, action: str) -> Distribution:
         return TigerTransition(state=state, action=action)
 
-    def observation_model(self, state: str, action: str) -> Distribution:                    
-        return TigerObservation(next_state=state, action=action)
+    def observation_model(self, next_state: str, action: str) -> Distribution:                    
+        return TigerObservation(next_state=next_state, action=action)
 
     def reward(self, state: str, action: str) -> float:
         if action == 'listen':
@@ -94,7 +94,7 @@ class TigerPOMDP(DiscreteActionsEnvironment):
     def initial_observation_dist(self) -> Distribution:
         return DiscreteDistribution(
             values=['hear_nothing'],
-            probs=[1.0]
+            probs=np.array([1.0])
         )
 
     def get_actions(self) -> List[Any]:

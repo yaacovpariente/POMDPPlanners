@@ -103,9 +103,9 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             max_position=self.max_position
         )
 
-    def observation_model(self, state: Tuple[float, float], action: int) -> Distribution:
+    def observation_model(self, next_state: Tuple[float, float], action: int) -> Distribution:
         return MountainCarObservation(
-            next_state=state, 
+            next_state=next_state, 
             action=action, 
             cov_matrix=self.cov_matrix
         )
@@ -145,6 +145,6 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
     def get_actions(self) -> List[Any]:
         return self.actions 
     
-    def get_history_artifacts(self, history: List[StepData], cache_path: Path) -> None:
+    def cache_history_artifacts(self, history: List[StepData], cache_path: Path) -> None:
         # Create a figure and axis
         pass

@@ -1,4 +1,5 @@
 from typing import Any, List, Tuple
+from pathlib import Path
 import gymnasium as gym
 from abc import ABC, abstractmethod
 
@@ -41,7 +42,7 @@ class Environment(ABC):
         pass
 
     @abstractmethod
-    def observation_model(self, state: Any, action: Any) -> ObservationModel:
+    def observation_model(self, next_state: Any, action: Any) -> ObservationModel:
         pass
 
     @abstractmethod
@@ -62,12 +63,12 @@ class Environment(ABC):
     
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
         next_state = self.state_transition_model(state=state, action=action).sample()
-        next_observation = self.observation_model(state=next_state, action=action).sample()
+        next_observation = self.observation_model(next_state=next_state, action=action).sample()
         reward = self.reward(state=state, action=action)
         
         return next_state, next_observation, reward
     
-    def get_history_artifacts(self, history: List[StepData]) -> None:
+    def cache_history_artifacts(self, history: List[StepData], cache_path: Path) -> None:
         pass
 
 class DiscreteActionsEnvironment(Environment):
@@ -76,11 +77,10 @@ class DiscreteActionsEnvironment(Environment):
         
     @abstractmethod
     def state_transition_model(self, state: Any, action: Any) -> StateTransitionModel:
-        next_state, reward, done, info = self.env.step(action)
-        return 
-
+        pass
+    
     @abstractmethod
-    def observation_model(self, state: Any, action: Any) -> ObservationModel:
+    def observation_model(self, next_state: Any, action: Any) -> ObservationModel:
         pass
 
     @abstractmethod
@@ -101,6 +101,9 @@ class DiscreteActionsEnvironment(Environment):
     
     @abstractmethod
     def get_actions(self) -> List[Any]:
+        pass
+    
+    def cache_history_artifacts(self, history: List[StepData], cache_path: Path) -> None:
         pass
     
     
