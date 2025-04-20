@@ -2,7 +2,7 @@ from typing import List
 import math
 
 import numpy as np
-
+import scipy.stats as stats
 from POMDPPlanners.core.environment import ObservationModel, StateTransitionModel, DiscreteActionsEnvironment
 from POMDPPlanners.core.distributions import Distribution
 
@@ -69,6 +69,9 @@ class CartPoleObservation(ObservationModel):
 
     def sample(self) -> np.ndarray:
         return np.random.multivariate_normal(self.next_state, self.noise_cov)
+    
+    def probability(self, observation: np.ndarray) -> float:
+        return stats.multivariate_normal(self.next_state, self.noise_cov).pdf(observation)
 
 class CartPoleInitialStateDistribution(Distribution):
     def __init__(self):
