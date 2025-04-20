@@ -2,13 +2,10 @@ from typing import List
 
 import numpy as np
 
-from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.simulation import History
+from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.utils.statistics import cvar_estimator, confidence_interval
 
-def compute_statistics(histories: List[History], alpha: float, confidence_interval_level: float = 0.95) -> dict:
+def compute_statistics(histories: List[History], alpha: float, confidence_interval_level: float = 0.95) -> List[MetricValue]:
     assert isinstance(histories, list)
     assert len(histories) > 0
     assert all(isinstance(h, History) for h in histories)
@@ -43,13 +40,53 @@ def compute_statistics(histories: List[History], alpha: float, confidence_interv
     average_belief_update_time_confidence_interval = confidence_interval(data=average_belief_update_time, confidence=confidence_interval_level)
     average_reward_time_confidence_interval = confidence_interval(data=average_reward_time, confidence=confidence_interval_level)
     
-    return {
-        "average_return": (average_return, average_return_confidence_interval),
-        "return_cvar": (return_cvar, return_confidence_interval),
-        "return_value_at_risk": (return_value_at_risk, return_confidence_interval),
-        "average_state_sampling_time": (np.mean(average_state_sampling_time), average_state_sampling_time_confidence_interval),
-        "average_action_time": (np.mean(average_action_time), average_action_time_confidence_interval),
-        "average_observation_time": (np.mean(average_observation_time), average_observation_time_confidence_interval),
-        "average_belief_update_time": (np.mean(average_belief_update_time), average_belief_update_time_confidence_interval),
-        "average_reward_time": (np.mean(average_reward_time), average_reward_time_confidence_interval),
-    }
+    return [
+        MetricValue(
+            name="average_return",
+            value=average_return,
+            lower_confidence_bound=average_return_confidence_interval[0],
+            upper_confidence_bound=average_return_confidence_interval[1]
+        ),
+        MetricValue(
+            name="return_cvar",
+            value=return_cvar,
+            lower_confidence_bound=return_confidence_interval[0],
+            upper_confidence_bound=return_confidence_interval[1]
+        ),
+        MetricValue(
+            name="return_value_at_risk",
+            value=return_value_at_risk,
+            lower_confidence_bound=return_confidence_interval[0],
+            upper_confidence_bound=return_confidence_interval[1]
+        ),
+        MetricValue(
+            name="average_state_sampling_time",
+            value=np.mean(average_state_sampling_time),
+            lower_confidence_bound=average_state_sampling_time_confidence_interval[0],
+            upper_confidence_bound=average_state_sampling_time_confidence_interval[1]
+        ),
+        MetricValue(
+            name="average_action_time",
+            value=np.mean(average_action_time),
+            lower_confidence_bound=average_action_time_confidence_interval[0],
+            upper_confidence_bound=average_action_time_confidence_interval[1]
+        ),
+        MetricValue(
+            name="average_observation_time",
+            value=np.mean(average_observation_time),
+            lower_confidence_bound=average_observation_time_confidence_interval[0],
+            upper_confidence_bound=average_observation_time_confidence_interval[1]
+        ),
+        MetricValue(
+            name="average_belief_update_time",
+            value=np.mean(average_belief_update_time),
+            lower_confidence_bound=average_belief_update_time_confidence_interval[0],
+            upper_confidence_bound=average_belief_update_time_confidence_interval[1]
+        ),
+        MetricValue(
+            name="average_reward_time",
+            value=np.mean(average_reward_time),
+            lower_confidence_bound=average_reward_time_confidence_interval[0],
+            upper_confidence_bound=average_reward_time_confidence_interval[1]
+        )
+    ]

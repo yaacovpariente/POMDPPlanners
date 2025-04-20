@@ -68,7 +68,7 @@ class Environment(ABC):
         
         return next_state, next_observation, reward
     
-    def cache_history_artifacts(self, history: List[StepData], cache_path: Path) -> None:
+    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         pass
 
 class DiscreteActionsEnvironment(Environment):
@@ -103,7 +103,7 @@ class DiscreteActionsEnvironment(Environment):
     def get_actions(self) -> List[Any]:
         pass
     
-    def cache_history_artifacts(self, history: List[StepData], cache_path: Path) -> None:
+    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         pass
     
     

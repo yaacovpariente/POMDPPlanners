@@ -1,6 +1,6 @@
 import numpy as np
 from typing import List
-from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.simulation import History, StepData, MetricValue
 from POMDPPlanners.simulations.simulation_statistics import compute_statistics
 
 def create_test_history(rewards: List[float], discount_factor: float = 0.95) -> History:
@@ -15,6 +15,13 @@ def create_test_history(rewards: List[float], discount_factor: float = 0.95) -> 
         average_reward_time=0.5
     )
     return history
+
+def get_metric_value(metrics: List[MetricValue], name: str) -> MetricValue:
+    """Helper function to get a metric value by name from the list."""
+    for metric in metrics:
+        if metric.name == name:
+            return metric
+    raise ValueError(f"Metric {name} not found")
 
 def test_compute_statistics_basic():
     # Create test histories with known rewards
@@ -36,19 +43,21 @@ def test_compute_statistics_basic():
         3.0 + 4.0*0.95 + 5.0*0.95**2
     ]
     expected_avg_return = np.mean(expected_returns)
-    assert abs(stats["average_return"][0] - expected_avg_return) < 1e-6
+    avg_return_metric = get_metric_value(stats, "average_return")
+    assert abs(avg_return_metric.value - expected_avg_return) < 1e-6
     
     # Test timing statistics
-    assert len(stats["average_state_sampling_time"][1]) == 2  # Confidence interval has lower and upper bounds
-    assert len(stats["average_action_time"][1]) == 2
-    assert len(stats["average_observation_time"][1]) == 2
-    assert len(stats["average_belief_update_time"][1]) == 2
-    assert len(stats["average_reward_time"][1]) == 2
+    assert isinstance(get_metric_value(stats, "average_state_sampling_time"), MetricValue)
+    assert isinstance(get_metric_value(stats, "average_action_time"), MetricValue)
+    assert isinstance(get_metric_value(stats, "average_observation_time"), MetricValue)
+    assert isinstance(get_metric_value(stats, "average_belief_update_time"), MetricValue)
+    assert isinstance(get_metric_value(stats, "average_reward_time"), MetricValue)
     
     # Test confidence intervals
-    for key in stats:
-        if key != "return_value_at_risk" and key != "return_cvar":
-            assert len(stats[key][1]) == 2  # Each confidence interval should have lower and upper bounds
+    for metric in stats:
+        if metric.name not in ["return_value_at_risk", "return_cvar"]:
+            assert metric.lower_confidence_bound is not None
+            assert metric.upper_confidence_bound is not None
 
 def test_compute_statistics_single_history():
     # Test with a single history
@@ -66,9 +75,13 @@ def test_compute_statistics_single_history():
     stats = compute_statistics(histories, alpha, confidence_level)
     
     # With identical histories, CVaR and VaR should be the same as the return
-    assert abs(stats["average_return"][0] - expected_return) < 1e-6
-    assert abs(stats["return_cvar"][0] - expected_return) < 1e-6
-    assert abs(stats["return_value_at_risk"][0] - expected_return) < 1e-6
+    avg_return_metric = get_metric_value(stats, "average_return")
+    cvar_metric = get_metric_value(stats, "return_cvar")
+    var_metric = get_metric_value(stats, "return_value_at_risk")
+    
+    assert abs(avg_return_metric.value - expected_return) < 1e-6
+    assert abs(cvar_metric.value - expected_return) < 1e-6
+    assert abs(var_metric.value - expected_return) < 1e-6
 
 def test_compute_statistics_negative_rewards():
     # Test with negative rewards
@@ -84,9 +97,13 @@ def test_compute_statistics_negative_rewards():
     stats = compute_statistics(histories, alpha, confidence_level)
     
     # Verify that statistics handle negative values correctly
-    assert stats["average_return"][0] < 0
-    assert stats["return_cvar"][0] < 0
-    assert stats["return_value_at_risk"][0] < 0
+    avg_return_metric = get_metric_value(stats, "average_return")
+    cvar_metric = get_metric_value(stats, "return_cvar")
+    var_metric = get_metric_value(stats, "return_value_at_risk")
+    
+    assert avg_return_metric.value < 0
+    assert cvar_metric.value < 0
+    assert var_metric.value < 0
 
 def test_compute_statistics_zero_rewards():
     # Test with zero rewards
@@ -102,6 +119,10 @@ def test_compute_statistics_zero_rewards():
     stats = compute_statistics(histories, alpha, confidence_level)
     
     # All statistics should be zero
-    assert abs(stats["average_return"][0]) < 1e-6
-    assert abs(stats["return_cvar"][0]) < 1e-6
-    assert abs(stats["return_value_at_risk"][0]) < 1e-6
+    avg_return_metric = get_metric_value(stats, "average_return")
+    cvar_metric = get_metric_value(stats, "return_cvar")
+    var_metric = get_metric_value(stats, "return_value_at_risk")
+    
+    assert abs(avg_return_metric.value) < 1e-6
+    assert abs(cvar_metric.value) < 1e-6
+    assert abs(var_metric.value) < 1e-6

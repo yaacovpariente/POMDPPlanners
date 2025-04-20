@@ -24,6 +24,12 @@ class NumericalHyperParameter(NamedTuple):
     high: Union[int, float]
     name: str
     
+class MetricValue(NamedTuple):
+    name: str
+    value: float
+    lower_confidence_bound: float
+    upper_confidence_bound: float
+    
 # class Simulation(ABC):
 #     def __init__(
 #         self, 
