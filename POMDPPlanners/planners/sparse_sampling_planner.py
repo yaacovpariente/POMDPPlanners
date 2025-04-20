@@ -16,12 +16,13 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         self, 
         environment: DiscreteActionsEnvironment,  
         branching_factor: int,
-        depth: int
+        depth: int,
+        resampling: bool = False
     ):
         assert isinstance(environment, DiscreteActionsEnvironment)
         assert isinstance(branching_factor, int)
         assert isinstance(depth, int)
-        
+        assert isinstance(resampling, bool)
         if depth <= 0:
             raise ValueError("Depth must be greater than 0")
         if branching_factor <= 0:
@@ -109,10 +110,6 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         
     @abstractmethod
     def _update_belief_node_v_value(self, node: BeliefNode):
-        pass
-    
-    @abstractmethod
-    def _set_last_belief_node(self, node: BeliefNode):
         pass
     
     def _set_last_belief_node(self, node: BeliefNode):
