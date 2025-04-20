@@ -11,6 +11,9 @@ class Distribution(ABC):
     
 class DiscreteDistribution(Distribution):
     def __init__(self, values: list, probs: np.array):
+        assert isinstance(values, list)
+        assert isinstance(probs, np.ndarray)
+        
         assert len(values) == len(probs)
         assert sum(probs) == 1
         
@@ -18,10 +21,15 @@ class DiscreteDistribution(Distribution):
         self.probs = probs
         
     def sample(self):
-        return np.random.choice(self.values, p=self.probs)
+        idx = np.random.choice(len(self.values), p=self.probs)
+        return self.values[idx]
     
     def probability(self, value):
-        return self.probs[self.values.index(value)]
+        idx = np.array([i if np.array_equal(v, value) else 0 for i, v in enumerate(self.values)])
+        if len(idx) == 0:
+            return 0.0
+        
+        return sum(self.probs * idx)
         
 class Numpy2DDistribution(Distribution):
     def __init__(self, values: np.ndarray, probs: np.array):
