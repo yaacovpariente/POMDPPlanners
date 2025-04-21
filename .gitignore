@@ -26,6 +26,7 @@ wheels/
 env/
 venv/
 ENV/
+legacy/
 
 # IDE
 .idea/

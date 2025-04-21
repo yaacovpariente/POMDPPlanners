@@ -32,8 +32,13 @@ Before contributing a major change, please open an issue or discussion to ensure
 
 ### Prerequisites
 
-- [Programming language] version [X.X.X]
-- Required tools: [list tools, e.g., Python, pip, make, Docker]
+- Python 3.8 or higher
+- Required tools:
+  - pip (Python package installer)
+  - pytest (for running tests)
+  - black (for code formatting)
+  - pylint (for static code analysis)
+  - make (optional, for running checks)
 
 ### Steps
 
@@ -47,9 +52,16 @@ Before contributing a major change, please open an issue or discussion to ensure
    ```bash
    pip install -r requirements-dev.txt
    ```
-4. Run tests:
+4. Set up pre-commit hooks (this will automatically format your code before each commit):
+   ```bash
+   pre-commit install
+   ```
+5. Run tests and linting:
    ```bash
    pytest
+   black .
+   flake8 .
+   pylint POMDPPlanners/
    ```
 
 ---
@@ -79,8 +91,9 @@ Before contributing a major change, please open an issue or discussion to ensure
    ```bash
    pytest
    black .
-   flake8 .
+   pylint POMDPPlanners/
    ```
+   Note that `black` is automatically run on commit through pre-commit hooks, but you can run it manually as shown above.
 
 4. Commit your changes:
    ```bash
@@ -135,22 +148,13 @@ This project uses the following tools:
 
 - **CI/CD**: All pull requests run through automated pipelines for testing, formatting, and linting  
 - **Formatter**: `black` (Python), `clang-format` (C++)  
-- **Linter**: `flake8`, `pylint`, etc.  
+- **Linter**: `pylint`  
 - **Tests**: `pytest`
 - **Docs**: [e.g., Sphinx, MkDocs]
-
-To run all standard checks locally:
-```bash
-make check
-```
-or:
-```bash
-./scripts/run_checks.sh
-```
 
 ---
 
 ## 💡 Tips for New Contributors
 
-- Start with [good first issues](https://github.com/your-org/your-project/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22)  
-- Don’t hesitate to ask questions — we love helping
+- Look for [good first issues](https://github.com/yaacovpariente/POMDPPlanners/issues?q=is%3Aissue%20state%3Aopen%20label%3A%22Good%20first%20issue%22) label.
+- Don't hesitate to ask questions — we love helping
