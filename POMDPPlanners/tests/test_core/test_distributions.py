@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 from POMDPPlanners.core.distributions import DiscreteDistribution, Numpy2DDistribution
 
+
 def test_discrete_distribution_initialization():
     # Test valid initialization
     values = [1, 2, 3]
@@ -14,24 +15,26 @@ def test_discrete_distribution_initialization():
     with pytest.raises(AssertionError):
         DiscreteDistribution([1, 2], np.array([0.5, 0.5, 0.0]))
 
+
 def test_discrete_distribution_sample():
     # Test sampling from a simple distribution
     values = [1, 2, 3]
     probs = np.array([0.0, 1.0, 0.0])  # Always returns 2
     dist = DiscreteDistribution(values, probs)
-    
+
     # Sample multiple times and verify we always get 2
     samples = [dist.sample() for _ in range(100)]
     assert all(s == 2 for s in samples)
 
     # Test sampling from a uniform distribution
     values = [1, 2, 3]
-    probs = np.array([1/3, 1/3, 1/3])
+    probs = np.array([1 / 3, 1 / 3, 1 / 3])
     dist = DiscreteDistribution(values, probs)
-    
+
     # Sample multiple times and verify we get all values
     samples = [dist.sample() for _ in range(1000)]
     assert all(v in samples for v in values)
+
 
 def test_numpy2d_distribution_initialization():
     # Test valid initialization
@@ -49,21 +52,22 @@ def test_numpy2d_distribution_initialization():
     with pytest.raises(AssertionError):
         Numpy2DDistribution(np.array([[1, 2], [3, 4]]), np.array([0.5, 0.5, 0.0]))
 
+
 def test_numpy2d_distribution_sample():
     # Test sampling from a simple distribution
     values = np.array([[1, 2, 3], [4, 5, 6]])
     probs = np.array([0.0, 1.0, 0.0])  # Always returns [2, 5]
     dist = Numpy2DDistribution(values, probs)
-    
+
     # Sample multiple times and verify we always get [2, 5]
     samples = [dist.sample() for _ in range(100)]
     assert all(np.array_equal(s, np.array([2, 5])) for s in samples)
 
     # Test sampling from a uniform distribution
     values = np.array([[1, 2, 3], [4, 5, 6]])
-    probs = np.array([1/3, 1/3, 1/3])
+    probs = np.array([1 / 3, 1 / 3, 1 / 3])
     dist = Numpy2DDistribution(values, probs)
-    
+
     # Sample multiple times and verify we get all possible values
     samples = [dist.sample() for _ in range(1000)]
     possible_values = [values[:, i] for i in range(values.shape[1])]

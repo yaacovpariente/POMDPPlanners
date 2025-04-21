@@ -13,11 +13,11 @@ from POMDPPlanners.core.cost import belief_expectation_cost
 
 class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
     def __init__(
-        self, 
-        environment: DiscreteActionsEnvironment,  
+        self,
+        environment: DiscreteActionsEnvironment,
         branching_factor: int,
         depth: int,
-        resampling: bool = False
+        resampling: bool = False,
     ):
         assert isinstance(environment, DiscreteActionsEnvironment)
         assert isinstance(branching_factor, int)
@@ -27,53 +27,55 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
             raise ValueError("Depth must be greater than 0")
         if branching_factor <= 0:
             raise ValueError("Branching factor must be greater than 0")
-        
-        super().__init__(environment=environment, discount_factor=environment.discount_factor)
-        
+
+        super().__init__(
+            environment=environment, discount_factor=environment.discount_factor
+        )
+
         self.branching_factor = branching_factor
         self.depth = depth
-        
+
     def action(self, belief: Belief) -> Any:
         assert isinstance(belief, Belief)
-        
+
         tree = self._learn_belief_tree(belief)
         return get_optimal_action(tree)
-    
+
     def _learn_belief_tree(self, belief: Belief) -> BeliefNode:
         tree = BeliefNode(belief=belief)
-        
+
         self._build_tree(belief_node=tree, current_depth=0)
         self._update_node_statistics(tree)
-        
+
         return tree
-    
+
     def _build_tree(self, belief_node: BeliefNode, current_depth: int):
         if current_depth == self.depth:
             self._set_last_belief_node(belief_node)
-            return 
-        
+            return
+
         for action in self.environment.get_actions():
             child = ActionNode(
-                action=action,
-                parent=belief_node,
-                children=tuple(),
-                data=None
+                action=action, parent=belief_node, children=tuple(), data=None
             )
-            
+
             state = belief_node.belief.sample()
             next_state = self.environment.state_transition_model(state, action).sample()
-            next_observation = self.environment.observation_model(next_state, action).sample()
-            
-            next_belief = belief_node.belief.update(action=action, observation=next_observation, pomdp=self.environment)
-            next_belief_node = BeliefNode(
-                belief=next_belief,
-                parent=child,
-                children=tuple(),
-                data=None
+            next_observation = self.environment.observation_model(
+                next_state, action
+            ).sample()
+
+            next_belief = belief_node.belief.update(
+                action=action, observation=next_observation, pomdp=self.environment
             )
-            
-            self._build_tree(belief_node=next_belief_node, current_depth=current_depth + 1)
-            
+            next_belief_node = BeliefNode(
+                belief=next_belief, parent=child, children=tuple(), data=None
+            )
+
+            self._build_tree(
+                belief_node=next_belief_node, current_depth=current_depth + 1
+            )
+
     def _update_node_statistics(self, tree: BeliefNode):
         for node in PostOrderIter(tree):
             if node.is_leaf:
@@ -84,12 +86,12 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
                 self._update_belief_node_statistics(node)
             else:
                 raise ValueError(f"Unknown node type: {type(node)}")
-    
+
     def _update_leaf_node_statistics(self, node: ActionNode):
         assert isinstance(node, ActionNode)
         assert node.height == 0
-        node.visit_count = 1        
-        
+        node.visit_count = 1
+
         self._update_leaf_node_q_value(node)
 
     @abstractmethod
@@ -107,41 +109,37 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
     def _update_belief_node_statistics(self, node: BeliefNode):
         node.visit_count = sum([child.visit_count for child in node.children])
         self._update_belief_node_v_value(node)
-        
+
     @abstractmethod
     def _update_belief_node_v_value(self, node: BeliefNode):
         pass
-    
+
     def _set_last_belief_node(self, node: BeliefNode):
         for action in self.environment.get_actions():
-            child = ActionNode(
-                action=action,
-                parent=node,
-                children=tuple(),
-                data=None
-            )
+            child = ActionNode(action=action, parent=node, children=tuple(), data=None)
 
 
-class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActionsPlanner):
+class StandardSparseSamplingDiscreteActionsPlanner(
+    SparseSamplingDiscreteActionsPlanner
+):
     def __init__(
-        self, 
-        environment: DiscreteActionsEnvironment, 
-        branching_factor: int,
-        depth: int
+        self, environment: DiscreteActionsEnvironment, branching_factor: int, depth: int
     ):
         super().__init__(
-            environment=environment,
-            branching_factor=branching_factor,
-            depth=depth
+            environment=environment, branching_factor=branching_factor, depth=depth
         )
-                        
+
     def _update_leaf_node_q_value(self, node: ActionNode):
-        node.immediate_cost = belief_expectation_cost(belief=node.parent.belief, action=node.action, env=self.environment)
+        node.immediate_cost = belief_expectation_cost(
+            belief=node.parent.belief, action=node.action, env=self.environment
+        )
         node.q_value = node.immediate_cost
 
     def _update_non_leaf_action_node_q_value(self, node: ActionNode):
         children_q_values = [child.v_value for child in node.children]
-        node.q_value = node.immediate_cost + self.environment.discount_factor * np.mean(children_q_values)
-    
+        node.q_value = node.immediate_cost + self.environment.discount_factor * np.mean(
+            children_q_values
+        )
+
     def _update_belief_node_v_value(self, node: BeliefNode):
         node.v_value = min([child.q_value for child in node.children])

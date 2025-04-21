@@ -8,8 +8,11 @@ import os
 
 from POMDPPlanners.utils.visualization import plot_statistics_comparison
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+from POMDPPlanners.planners.sparse_sampling_planner import (
+    StandardSparseSamplingDiscreteActionsPlanner,
+)
 from POMDPPlanners.core.simulation import MetricValue
+
 
 @pytest.fixture
 def temp_cache_dir():
@@ -25,36 +28,37 @@ def temp_cache_dir():
     if temp_path.exists():
         shutil.rmtree(temp_path)
 
+
 def test_plot_statistics_comparison(temp_cache_dir):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment,
-        branching_factor=2,
-        depth=1
+        environment=environment, branching_factor=2, depth=1
     )
 
     # Create mock statistics using MetricValue objects
-    mock_statistics = [[
-        MetricValue(
-            name="average_return",
-            value=-10.0,
-            lower_confidence_bound=-15.0,
-            upper_confidence_bound=-5.0
-        ),
-        MetricValue(
-            name="return_cvar",
-            value=-12.0,
-            lower_confidence_bound=-17.0,
-            upper_confidence_bound=-7.0
-        ),
-        MetricValue(
-            name="average_action_time",
-            value=0.1,
-            lower_confidence_bound=0.05,
-            upper_confidence_bound=0.15
-        )
-    ]]
+    mock_statistics = [
+        [
+            MetricValue(
+                name="average_return",
+                value=-10.0,
+                lower_confidence_bound=-15.0,
+                upper_confidence_bound=-5.0,
+            ),
+            MetricValue(
+                name="return_cvar",
+                value=-12.0,
+                lower_confidence_bound=-17.0,
+                upper_confidence_bound=-7.0,
+            ),
+            MetricValue(
+                name="average_action_time",
+                value=0.1,
+                lower_confidence_bound=0.05,
+                upper_confidence_bound=0.15,
+            ),
+        ]
+    ]
 
     # Create mlruns directory
     mlruns_dir = temp_cache_dir / "mlruns"
@@ -71,7 +75,7 @@ def test_plot_statistics_comparison(temp_cache_dir):
             statistics=mock_statistics,
             environments=[environment],
             policies=[policy],
-            cache_dir_path=temp_cache_dir
+            cache_dir_path=temp_cache_dir,
         )
 
         # Verify plots directory was created
@@ -80,27 +84,24 @@ def test_plot_statistics_comparison(temp_cache_dir):
 
         # Verify plot files were created
         expected_plots = [
-            'average_return_comparison.png',
-            'return_cvar_comparison.png',
-            'average_action_time_comparison.png'
+            "average_return_comparison.png",
+            "return_cvar_comparison.png",
+            "average_action_time_comparison.png",
         ]
         for plot_file in expected_plots:
             plot_path = plots_dir / plot_file
             assert plot_path.exists()
+
 
 def test_plot_statistics_comparison_multiple_envs_policies(temp_cache_dir):
     # Setup
     environment1 = TigerPOMDP(discount_factor=0.95)
     environment2 = TigerPOMDP(discount_factor=0.99)
     policy1 = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment1,
-        branching_factor=2,
-        depth=1
+        environment=environment1, branching_factor=2, depth=1
     )
     policy2 = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment2,
-        branching_factor=3,
-        depth=4
+        environment=environment2, branching_factor=3, depth=4
     )
 
     # Create mock statistics for multiple environment-policy combinations using MetricValue objects
@@ -110,29 +111,29 @@ def test_plot_statistics_comparison_multiple_envs_policies(temp_cache_dir):
                 name="average_return",
                 value=-10.0,
                 lower_confidence_bound=-15.0,
-                upper_confidence_bound=-5.0
+                upper_confidence_bound=-5.0,
             ),
             MetricValue(
                 name="return_cvar",
                 value=-12.0,
                 lower_confidence_bound=-17.0,
-                upper_confidence_bound=-7.0
-            )
+                upper_confidence_bound=-7.0,
+            ),
         ],
         [
             MetricValue(
                 name="average_return",
                 value=-8.0,
                 lower_confidence_bound=-13.0,
-                upper_confidence_bound=-3.0
+                upper_confidence_bound=-3.0,
             ),
             MetricValue(
                 name="return_cvar",
                 value=-10.0,
                 lower_confidence_bound=-15.0,
-                upper_confidence_bound=-5.0
-            )
-        ]
+                upper_confidence_bound=-5.0,
+            ),
+        ],
     ]
 
     # Create mlruns directory
@@ -150,7 +151,7 @@ def test_plot_statistics_comparison_multiple_envs_policies(temp_cache_dir):
             statistics=mock_statistics,
             environments=[environment1, environment2],
             policies=[policy1, policy2],
-            cache_dir_path=temp_cache_dir
+            cache_dir_path=temp_cache_dir,
         )
 
         # Verify plots directory was created
@@ -158,21 +159,17 @@ def test_plot_statistics_comparison_multiple_envs_policies(temp_cache_dir):
         assert plots_dir.exists()
 
         # Verify plot files were created
-        expected_plots = [
-            'average_return_comparison.png',
-            'return_cvar_comparison.png'
-        ]
+        expected_plots = ["average_return_comparison.png", "return_cvar_comparison.png"]
         for plot_file in expected_plots:
             plot_path = plots_dir / plot_file
             assert plot_path.exists()
+
 
 def test_plot_statistics_comparison_empty_statistics(temp_cache_dir):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment,
-        branching_factor=2,
-        depth=1
+        environment=environment, branching_factor=2, depth=1
     )
 
     # Test with empty statistics
@@ -181,5 +178,5 @@ def test_plot_statistics_comparison_empty_statistics(temp_cache_dir):
             statistics=[],
             environments=[environment],
             policies=[policy],
-            cache_dir_path=temp_cache_dir
-        ) 
+            cache_dir_path=temp_cache_dir,
+        )
