@@ -1,1 +1,1 @@
-# This file makes the core directory a proper Python package 
+# This file makes the core directory a proper Python package

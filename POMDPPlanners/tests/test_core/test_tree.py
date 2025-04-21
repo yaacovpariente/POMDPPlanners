@@ -6,16 +6,19 @@ from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action
 from POMDPPlanners.core.belief import ParticleBelief
 from POMDPPlanners.core.environment import Environment
 
+
 # Create a simple test environment for belief updates
 class TestEnvironment(Environment):
     def state_transition(self, state, action):
         return state
-    
+
     def observation_model(self, state, action):
         class DummyModel:
             def probability(self, obs):
                 return 1.0
+
         return DummyModel()
+
 
 @pytest.fixture
 def test_belief():
@@ -24,14 +27,18 @@ def test_belief():
     log_weights = np.log(np.array([0.6, 0.4]))  # Convert to log weights
     return ParticleBelief(particles=particles, log_weights=log_weights)
 
+
 @pytest.fixture
 def test_env():
     return TestEnvironment()
 
+
 def test_action_node_initialization():
     # Test basic initialization
     action = "move_forward"
-    node = ActionNode(action, children=())  # Initialize with empty tuple instead of None
+    node = ActionNode(
+        action, children=()
+    )  # Initialize with empty tuple instead of None
     assert node.action == action
     assert node.q_value == 0.0
     assert node.visit_count == 0
@@ -48,6 +55,7 @@ def test_action_node_initialization():
     node = ActionNode(action, parent=parent, data=data, children=())
     assert node.parent == parent
     assert node.data == data
+
 
 def test_belief_node_initialization(test_belief):
     # Test basic initialization
@@ -67,6 +75,7 @@ def test_belief_node_initialization(test_belief):
     assert node.parent == parent
     assert node.data == data
 
+
 def test_tree_structure(test_belief):
     # Create a simple tree structure
     root = BeliefNode(test_belief, children=())
@@ -82,17 +91,18 @@ def test_tree_structure(test_belief):
     assert belief1.parent == action1
     assert belief2.parent == action2
 
+
 def test_get_optimal_action(test_belief):
     # Create a belief node with multiple action children
     belief_node = BeliefNode(test_belief, children=())
-    
+
     # Create action nodes with different q-values
     action1 = ActionNode("action1", parent=belief_node, children=())
     action1.q_value = 0.5
-    
+
     action2 = ActionNode("action2", parent=belief_node, children=())
     action2.q_value = 0.8
-    
+
     action3 = ActionNode("action3", parent=belief_node, children=())
     action3.q_value = 0.3
 
@@ -105,6 +115,7 @@ def test_get_optimal_action(test_belief):
     optimal_action = get_optimal_action(belief_node)
     # Should return the first action with max q-value
     assert optimal_action in ["action1", "action2"]
+
 
 def test_node_properties(test_belief):
     # Test updating node properties
