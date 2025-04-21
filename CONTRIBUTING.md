@@ -150,7 +150,7 @@ This project uses the following tools:
 - **Formatter**: `black` (Python), `clang-format` (C++)  
 - **Linter**: `pylint`  
 - **Tests**: `pytest`
-- **Docs**: [e.g., Sphinx, MkDocs]
+- **Docs**: Sphinx
 
 ---
 
