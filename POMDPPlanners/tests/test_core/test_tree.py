@@ -2,7 +2,7 @@ import pytest
 import numpy as np
 from anytree import NodeMixin, RenderTree, PostOrderIter
 
-from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action
+from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action_cost_setting
 from POMDPPlanners.core.belief import ParticleBelief
 from POMDPPlanners.core.environment import Environment
 
@@ -107,12 +107,12 @@ def test_get_optimal_action(test_belief):
     action3.q_value = 0.3
 
     # Test that the action with highest q-value is selected
-    optimal_action = get_optimal_action(belief_node)
+    optimal_action = get_optimal_action_cost_setting(belief_node)
     assert optimal_action == "action2"
 
     # Test with equal q-values
     action1.q_value = 0.8
-    optimal_action = get_optimal_action(belief_node)
+    optimal_action = get_optimal_action_cost_setting(belief_node)
     # Should return the first action with max q-value
     assert optimal_action in ["action1", "action2"]
 

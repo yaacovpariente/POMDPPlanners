@@ -5,6 +5,7 @@ from pathlib import Path
 import mlflow
 import json
 import os
+import logging
 from joblib import Parallel, delayed
 import optuna
 import pandas as pd
@@ -25,6 +26,13 @@ from POMDPPlanners.core.simulation import (
 from POMDPPlanners.simulations.simulation_statistics import compute_statistics
 from POMDPPlanners.utils.visualization import plot_statistics_comparison
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 HyperParameterFeatures = Union[CategoricalHyperParameter, NumericalHyperParameter]
 
 
@@ -36,6 +44,7 @@ def run_multiple_episodes(
     num_steps: int,
     n_jobs: int = 1,
 ) -> List[History]:
+    logger.info(f"Starting {num_episodes} episodes with {num_steps} steps each using {n_jobs} jobs")
     assert isinstance(environment, Environment)
     assert isinstance(policy, Policy)
     assert isinstance(initial_belief, Belief)
@@ -49,9 +58,11 @@ def run_multiple_episodes(
     ]
 
     # Run episodes in parallel using joblib
+    logger.info("Running episodes in parallel")
     histories = Parallel(n_jobs=n_jobs)(
         delayed(run_episode)(*args) for args in episode_args
     )
+    logger.info("All episodes completed")
 
     return histories
 
@@ -59,6 +70,8 @@ def run_multiple_episodes(
 def run_episode(
     environment: Environment, policy: Policy, initial_belief: Belief, num_steps: int
 ) -> History:
+    logger.debug(f"Starting episode with {num_steps} steps")
+    
     assert isinstance(environment, Environment)
     assert isinstance(policy, Policy)
     assert isinstance(initial_belief, Belief)
@@ -120,6 +133,10 @@ def run_episode(
 
         state = next_state
 
+    logger.debug(f"Episode completed with average times: action={average_action_time:.4f}s, "
+                f"reward={average_reward_time:.4f}s, state_sampling={average_state_sampling_time:.4f}s, "
+                f"observation={average_observation_time:.4f}s, belief_update={average_belief_update_time:.4f}s")
+
     return History(
         history=history,
         discount_factor=environment.discount_factor,
@@ -141,6 +158,8 @@ def simulation(
     confidence_interval_level: float = 0.95,
     n_jobs: int = 1,
 ) -> Tuple[List[History], List[MetricValue]]:
+    logger.info(f"Starting simulation with {num_episodes} episodes, {num_steps} steps, "
+                f"alpha={alpha}, confidence_interval={confidence_interval_level}")
     assert isinstance(environment, Environment)
     assert isinstance(policy, Policy)
     assert isinstance(initial_belief, Belief)
@@ -161,11 +180,13 @@ def simulation(
         n_jobs=n_jobs,
     )
 
+    logger.info("Computing statistics from simulation results")
     statistics = compute_statistics(
         histories=histories,
         alpha=alpha,
         confidence_interval_level=confidence_interval_level,
     )
+    logger.info("Statistics computation completed")
 
     return histories, statistics
 
@@ -182,6 +203,8 @@ def compare_planners(
     confidence_interval_level: float = 0.95,
     n_jobs: int = 1,
 ) -> Tuple[List[List[MetricValue]], pd.DataFrame]:
+    logger.info(f"Starting planner comparison with {len(environment_policy_pairs)} pairs, "
+                f"{num_episodes} episodes, {num_steps} steps")
     assert isinstance(environment_policy_pairs, List)
     assert len(environment_policy_pairs) > 0
 
@@ -208,11 +231,15 @@ def compare_planners(
     tracking_uri = mlruns_path
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(experiment_name)
+    logger.info(f"MLFlow tracking set up at {tracking_uri}")
 
     planner_statistics = []
     aggregated_data = []
 
     for pair_idx, (environment, policy) in enumerate(environment_policy_pairs):
+        logger.info(f"Processing pair {pair_idx + 1}/{len(environment_policy_pairs)}: "
+                   f"{environment.__class__.__name__} with {policy.__class__.__name__}")
+        
         # End any active run safely
         active_run = mlflow.active_run()
         if active_run is not None:
@@ -222,6 +249,8 @@ def compare_planners(
         with mlflow.start_run(
             run_name=f"{environment.__class__.__name__}_{policy.__class__.__name__}_{pair_idx}"
         ):
+            logger.info("Starting MLFlow run for current pair")
+            
             # Log common parameters
             common_params = {
                 "environment_type": environment.__class__.__name__,
@@ -251,10 +280,12 @@ def compare_planners(
             all_params = {**common_params, **env_params, **policy_params}
 
             mlflow.log_params(all_params)
+            logger.debug(f"Logged parameters: {all_params}")
 
             initial_belief = get_initial_belief(
                 pomdp=environment, n_particles=n_particles, resampling=resampling
             )
+            logger.info("Running simulation for current pair")
             histories, statistics = simulation(
                 environment=environment,
                 policy=policy,
@@ -276,6 +307,7 @@ def compare_planners(
                 mlflow.log_metric(
                     f"{metric.name}_ci_upper", metric.upper_confidence_bound
                 )
+            logger.debug(f"Logged metrics for {len(statistics)} statistics")
 
             # Save the full statistics as a JSON artifact
             full_data = {
@@ -303,7 +335,8 @@ def compare_planners(
                             mlflow.log_artifact(
                                 str(cache_path), f"visualization/{file_name}"
                             )
-                    except Exception:
+                    except Exception as e:
+                        logger.warning(f"Visualization failed for episode {episode_idx}: {str(e)}")
                         # Skip visualization if not supported
                         pass
 
@@ -318,31 +351,36 @@ def compare_planners(
 
     # Convert aggregated data to DataFrame
     df = pd.DataFrame(aggregated_data)
+    logger.info("Created DataFrame with aggregated results")
 
-    # Log DataFrame as table artifact
-    mlflow.log_table(df, "dataframes/planner_comparison.json")
+    with mlflow.start_run(run_name="stats and plots"):
+        # Log DataFrame as table artifact
+        mlflow.log_table(df, "dataframes/planner_comparison.json")
 
-    # Plot statistics comparison
-    with tempfile.TemporaryDirectory() as temp_dir:
-        temp_dir_path = Path(temp_dir)
-        plot_statistics_comparison(
-            statistics=planner_statistics,
-            environments=[env for env, _ in environment_policy_pairs],
-            policies=[policy for _, policy in environment_policy_pairs],
-            cache_dir_path=temp_dir_path,
-        )
-
-        # Log all generated plots as artifacts
-        for plot_file in (temp_dir_path / "plots").glob("*.png"):
-            mlflow.log_artifact(
-                str(plot_file), f"statistics_plots/{str(plot_file.name)}"
+    
+        # Plot statistics comparison
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir_path = Path(temp_dir)
+            logger.info("Generating statistics comparison plots")
+            plot_statistics_comparison(
+                statistics=planner_statistics,
+                environments=[env for env, _ in environment_policy_pairs],
+                policies=[policy for _, policy in environment_policy_pairs],
+                cache_dir_path=temp_dir_path,
             )
+
+            # Log all generated plots as artifacts
+            for plot_file in (temp_dir_path / "plots").glob("*.png"):
+                mlflow.log_artifact(
+                    str(plot_file), f"statistics_plots/{str(plot_file.name)}"
+                )
 
     # End any active run safely before returning
     active_run = mlflow.active_run()
     if active_run is not None:
         mlflow.end_run()
 
+    logger.info("Planner comparison completed successfully")
     return planner_statistics, df
 
 
