@@ -181,3 +181,6 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
 
     def get_actions(self) -> List[int]:
         return [0, 1]
+    
+    def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
+        return np.array_equal(observation1, observation2)

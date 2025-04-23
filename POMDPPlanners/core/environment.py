@@ -63,6 +63,10 @@ class Environment(ABC):
     @abstractmethod
     def initial_observation_dist(self) -> Distribution:
         pass
+    
+    @abstractmethod
+    def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
+        pass
 
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
         next_state = self.state_transition_model(state=state, action=action).sample()
@@ -107,6 +111,10 @@ class DiscreteActionsEnvironment(Environment):
 
     @abstractmethod
     def get_actions(self) -> List[Any]:
+        pass
+
+    @abstractmethod
+    def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         pass
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:

@@ -1,5 +1,8 @@
 from typing import List, Any
+from pathlib import Path
+
 import numpy as np
+
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     ObservationModel,
@@ -7,7 +10,6 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
 from POMDPPlanners.core.simulation import History
-from pathlib import Path
 
 STATES = ["tiger_left", "tiger_right"]
 ACTIONS = ["listen", "open_left", "open_right"]
@@ -167,3 +169,6 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         # Save animation
         ani.save(cache_path, writer="pillow", fps=2)
         plt.close()
+
+    def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
+        return observation1 == observation2

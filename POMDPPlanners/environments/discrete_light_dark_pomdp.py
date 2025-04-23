@@ -313,3 +313,7 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
     def cache_visualization(self, history: History, cache_path: Path) -> None:
         agent_path = [step.state for step in history.history]
         self.visualize_path(path=agent_path, cache_path=cache_path)
+
+    def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
+        return np.array_equal(observation1, observation2)
+

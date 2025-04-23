@@ -162,3 +162,6 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         # Create a figure and axis
         pass
+
+    def is_equal_observation(self, observation1: Tuple[float, float], observation2: Tuple[float, float]) -> bool:
+        return np.array_equal(observation1, observation2)
