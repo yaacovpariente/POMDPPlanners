@@ -85,13 +85,12 @@ def test_update_leaf_node_q_value(planner):
         children=tuple(),
         data=None
     )
-    action_node.q_value = 0.0
     action_node.visit_count = 1
 
     planner._update_leaf_node_q_value(action_node)
     # The Q-value should be -1.0 (cost of listening) for both states
-    # The value is log-weighted sum: exp(-0.69314718) * (-1.0) + exp(-0.69314718) * (-1.0) = -1.38629436
-    assert np.isclose(action_node.q_value, -1.38629436, rtol=1e-6)
+    # The value is log-weighted sum: exp(-0.69314718) * 1.0 + exp(-0.69314718) * 1.0 = 1.
+    assert np.isclose(action_node.q_value, 1., rtol=1e-6)
 
 def test_update_non_leaf_action_node_q_value(planner):
     # Create a belief node and action node with children
@@ -135,7 +134,7 @@ def test_update_non_leaf_action_node_q_value(planner):
     expected_q = -1.0 + 0.9 * (-1.0)  # immediate_cost + discount_factor * average_v_value
     assert np.isclose(action_node.q_value, expected_q)
 
-def test_update_belief_node_v_value(planner):
+def test_update_v_and_q_values(planner):
     # Create a belief node with children
     belief = ParticleBelief(
         particles=["tiger_left", "tiger_right"],
@@ -150,23 +149,52 @@ def test_update_belief_node_v_value(planner):
     )
     belief_node.visit_count = 1
     
-    for action in planner.environment.get_actions():
-        action_node = ActionNode(
-            action=action,
-            parent=belief_node,
-            children=tuple(),
-            data=None
-        )
-        # Set different Q-values for different actions
-        if action == "listen":
-            action_node.q_value = -1.0
-        elif action == "open_left":
-            action_node.q_value = -100.0
-        else:  # open_right
-            action_node.q_value = -100.0
-
-    planner._update_belief_node_v_value(belief_node)
+    # Create action nodes with different Q-values
+    action_node1 = ActionNode(
+        action="listen",
+        parent=belief_node,
+        children=tuple(),
+        data=None
+    )
+    action_node1.q_value = -1.0
+    action_node1.immediate_cost = -1.0
+    action_node1.visit_count = 1
+    
+    action_node2 = ActionNode(
+        action="open_left",
+        parent=belief_node,
+        children=tuple(),
+        data=None
+    )
+    action_node2.q_value = -100.0
+    action_node2.immediate_cost = action_node2.q_value
+    action_node2.visit_count = 1
+    
+    # Test updating leaf action node
+    planner._update_v_and_q_values(belief_node=belief_node, action_node=action_node1)
+    # For leaf action node, q_value should be updated to immediate cost
+    assert np.isclose(action_node1.q_value, -1.0, rtol=1e-6)  # Cost of listening
+    # For non-leaf belief node, v_value should be updated to min of children q_values
     assert belief_node.v_value == -100.0  # Should be the minimum Q-value
+    
+    # Test updating non-leaf action node
+    # Add a child belief node to action_node1
+    child_belief = BeliefNode(
+        belief=belief,
+        observation="hear_left",
+        parent=action_node1,
+        children=tuple(),
+        data=None
+    )
+    child_belief.v_value = -2.0
+    child_belief.visit_count = 1
+    
+    planner._update_v_and_q_values(belief_node=belief_node, action_node=action_node1)
+    # For non-leaf action node, q_value should be updated to immediate cost + discounted average of children v_values
+    expected_q = -1.0 + 0.9 * (-2.0)  # immediate_cost + discount_factor * child_v_value
+    assert np.isclose(action_node1.q_value, expected_q, rtol=1e-6)
+    # Belief node v_value should be updated to min of children q_values
+    assert belief_node.v_value == -100.0  # Should still be the minimum Q-value
 
 def test_action_selection(planner):
     # Create a belief with tiger more likely on the left

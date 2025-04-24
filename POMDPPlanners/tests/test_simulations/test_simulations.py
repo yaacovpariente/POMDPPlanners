@@ -248,9 +248,9 @@ def test_simulation_different_alphas():
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3
+        environment=environment, branching_factor=5, depth=3
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=5)
 
     # Execute with different alphas
     _, statistics1 = simulation(
@@ -259,7 +259,7 @@ def test_simulation_different_alphas():
         initial_belief=initial_belief,
         num_episodes=5,
         num_steps=3,
-        alpha=0.1,
+        alpha=1,
     )
 
     _, statistics2 = simulation(

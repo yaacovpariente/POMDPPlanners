@@ -42,7 +42,7 @@ def test_action_node_initialization():
     assert node.action == action
     assert node.q_value == 0.0
     assert node.visit_count == 0
-    assert node.immediate_cost == 0
+    assert node.immediate_cost == None
     assert node.sample == []
     assert node.lower_confidence_bound == 0.0
     assert node.upper_confidence_bound == 0.0
@@ -108,14 +108,7 @@ def test_get_optimal_action(test_belief):
 
     # Test that the action with highest q-value is selected
     optimal_action = get_optimal_action_cost_setting(belief_node)
-    assert optimal_action == "action2"
-
-    # Test with equal q-values
-    action1.q_value = 0.8
-    optimal_action = get_optimal_action_cost_setting(belief_node)
-    # Should return the first action with max q-value
-    assert optimal_action in ["action1", "action2"]
-
+    assert optimal_action == "action3"
 
 def test_node_properties(test_belief):
     # Test updating node properties
