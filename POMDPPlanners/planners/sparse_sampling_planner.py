@@ -136,6 +136,10 @@ class StandardSparseSamplingDiscreteActionsPlanner(
         node.q_value = node.immediate_cost
 
     def _update_non_leaf_action_node_q_value(self, node: ActionNode):
+        if node.immediate_cost is None:
+            node.immediate_cost = belief_expectation_cost(
+                belief=node.parent.belief, action=node.action, env=self.environment
+            )
         children_q_values = [child.v_value for child in node.children]
         node.q_value = node.immediate_cost + self.environment.discount_factor * np.mean(
             children_q_values
