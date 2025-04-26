@@ -214,6 +214,8 @@ def test_simulation_returns_histories_and_statistics():
     for history in histories:
         assert isinstance(history, History)
         assert len(history.history) == num_steps
+        assert history.actual_num_steps == num_steps
+        assert isinstance(history.reach_terminal_state, bool)
 
     # Check statistics type and content
     assert isinstance(statistics, list)
@@ -230,6 +232,8 @@ def test_simulation_returns_histories_and_statistics():
         "average_observation_time",
         "average_belief_update_time",
         "average_reward_time",
+        "average_actual_num_steps",
+        "average_reach_terminal_state",
     }
     assert metric_names == expected_metrics
 
@@ -253,23 +257,29 @@ def test_simulation_different_alphas():
     initial_belief = get_initial_belief(environment, n_particles=5)
 
     # Execute with different alphas
-    _, statistics1 = simulation(
+    histories1, statistics1 = simulation(
         environment=environment,
         policy=policy,
         initial_belief=initial_belief,
         num_episodes=5,
         num_steps=3,
-        alpha=1,
+        alpha=0.9,
     )
 
-    _, statistics2 = simulation(
+    histories2, statistics2 = simulation(
         environment=environment,
         policy=policy,
         initial_belief=initial_belief,
         num_episodes=5,
         num_steps=3,
-        alpha=0.05,
+        alpha=0.1,
     )
+
+    # Check history fields
+    for histories in [histories1, histories2]:
+        for history in histories:
+            assert history.actual_num_steps == 3
+            assert isinstance(history.reach_terminal_state, bool)
 
     # Get CVaR values from the statistics
     cvar1 = next(metric.value for metric in statistics1 if metric.name == "return_cvar")
@@ -285,11 +295,12 @@ def test_compare_planners_parameter_validation(temp_cache_dir):
     policy = StandardSparseSamplingDiscreteActionsPlanner(
         environment=environment, branching_factor=2, depth=3
     )
+    initial_belief = get_initial_belief(environment, n_particles=100)
 
     # Test invalid parameters
     with pytest.raises(AssertionError):
         compare_planners(
-            environment_policy_pairs=[("not_an_environment", policy)],
+            environment_policy_pairs=[("not_an_environment", policy, initial_belief)],
             num_episodes=10,
             num_steps=5,
             alpha=0.1,
@@ -328,7 +339,7 @@ def test_compare_planners_mlflow_integration(temp_cache_dir):
 
     # Execute
     compare_planners(
-        environment_policy_pairs=[(environment, policy)],
+        environment_policy_pairs=[(environment, policy, initial_belief)],
         num_episodes=2,
         num_steps=2,
         alpha=0.1,
@@ -359,11 +370,15 @@ def test_compare_planners_different_parameters(temp_cache_dir):
     policy2 = StandardSparseSamplingDiscreteActionsPlanner(
         environment=environment2, branching_factor=3, depth=4
     )
-    initial_belief = get_initial_belief(environment1, n_particles=100)
+    initial_belief1 = get_initial_belief(environment1, n_particles=100)
+    initial_belief2 = get_initial_belief(environment2, n_particles=100)
 
     # Execute
     planner_statistics, results_df = compare_planners(
-        environment_policy_pairs=[(environment1, policy1), (environment2, policy2)],
+        environment_policy_pairs=[
+            (environment1, policy1, initial_belief1),
+            (environment2, policy2, initial_belief2)
+        ],
         num_episodes=2,
         num_steps=2,
         alpha=0.1,

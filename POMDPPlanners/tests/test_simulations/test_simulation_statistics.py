@@ -14,6 +14,8 @@ def create_test_history(rewards: List[float], discount_factor: float = 0.95) -> 
         average_observation_time=0.3,
         average_belief_update_time=0.4,
         average_reward_time=0.5,
+        actual_num_steps=len(steps),
+        reach_terminal_state=True
     )
     return history
 
@@ -65,6 +67,11 @@ def test_compute_statistics_basic():
         if metric.name not in ["return_value_at_risk", "return_cvar"]:
             assert metric.lower_confidence_bound is not None
             assert metric.upper_confidence_bound is not None
+
+    # Test that all histories have the correct number of steps and terminal state flag
+    for history in histories:
+        assert history.actual_num_steps == len(history.history)
+        assert history.reach_terminal_state is True
 
 
 def test_compute_statistics_single_history():

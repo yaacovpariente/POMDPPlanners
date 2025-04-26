@@ -12,7 +12,6 @@ import pandas as pd
 import numpy as np
 import tempfile
 from typing import Union, List, Tuple, Type
-
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.belief import Belief, get_initial_belief
@@ -82,12 +81,19 @@ def run_episode(
     average_observation_time = 0.0
     average_belief_update_time = 0.0
     average_reward_time = 0.0
+    actual_num_steps = 0
+    reach_terminal_state = False
 
     belief = copy.deepcopy(initial_belief)
     state = belief.sample()
 
     history = []
     for i in range(1, num_steps + 1):
+        # TODO: add count of terminal states.
+        if environment.is_terminal(state=state):
+            reach_terminal_state = True
+            break
+
         action_start_time = time()
         action = policy.action(belief)
         action_time = time() - action_start_time
@@ -131,8 +137,9 @@ def run_episode(
             average_belief_update_time * (i - 1) + belief_update_time
         ) / i
 
+        actual_num_steps += 1
         state = next_state
-
+        
     logger.debug(f"Episode completed with average times: action={average_action_time:.4f}s, "
                 f"reward={average_reward_time:.4f}s, state_sampling={average_state_sampling_time:.4f}s, "
                 f"observation={average_observation_time:.4f}s, belief_update={average_belief_update_time:.4f}s")
@@ -145,6 +152,8 @@ def run_episode(
         average_observation_time=average_observation_time,
         average_belief_update_time=average_belief_update_time,
         average_reward_time=average_reward_time,
+        actual_num_steps=actual_num_steps,
+        reach_terminal_state=reach_terminal_state,
     )
 
 
@@ -192,7 +201,7 @@ def simulation(
 
 
 def compare_planners(
-    environment_policy_pairs: List[Tuple[Environment, Policy]],
+    environment_policy_pairs: List[Tuple[Environment, Policy, Belief]],
     num_episodes: int,
     num_steps: int,
     alpha: float,
@@ -208,9 +217,10 @@ def compare_planners(
     assert isinstance(environment_policy_pairs, List)
     assert len(environment_policy_pairs) > 0
 
-    for env, pol in environment_policy_pairs:
+    for env, pol, belief in environment_policy_pairs:
         assert isinstance(env, Environment)
         assert isinstance(pol, Policy)
+        assert isinstance(belief, Belief)
 
     assert isinstance(num_episodes, int)
     assert isinstance(num_steps, int)
@@ -236,7 +246,7 @@ def compare_planners(
     planner_statistics = []
     aggregated_data = []
 
-    for pair_idx, (environment, policy) in enumerate(environment_policy_pairs):
+    for pair_idx, (environment, policy, initial_belief) in enumerate(environment_policy_pairs):
         logger.info(f"Processing pair {pair_idx + 1}/{len(environment_policy_pairs)}: "
                    f"{environment.__class__.__name__} with {policy.__class__.__name__}")
         
@@ -282,9 +292,6 @@ def compare_planners(
             mlflow.log_params(all_params)
             logger.debug(f"Logged parameters: {all_params}")
 
-            initial_belief = get_initial_belief(
-                pomdp=environment, n_particles=n_particles, resampling=resampling
-            )
             logger.info("Running simulation for current pair")
             histories, statistics = simulation(
                 environment=environment,
@@ -364,8 +371,8 @@ def compare_planners(
             logger.info("Generating statistics comparison plots")
             plot_statistics_comparison(
                 statistics=planner_statistics,
-                environments=[env for env, _ in environment_policy_pairs],
-                policies=[policy for _, policy in environment_policy_pairs],
+                environments=[env for env, _, _ in environment_policy_pairs],
+                policies=[policy for _, policy, _ in environment_policy_pairs],
                 cache_dir_path=temp_dir_path,
             )
 
@@ -751,10 +758,8 @@ def optimize_policy_parameters_for_multiple_environments(
         temp_dir_path = Path(temp_dir)
         plot_statistics_comparison(
             statistics=planner_statistics,
-            environments=[env for env, _ in environment_policy_pairs],
-            policies=[
-                policy_class for _, (policy_class, _) in environment_policy_pairs
-            ],
+            environments=[env for env, (policy_class, _) in environment_policy_pairs],
+            policies=[policy_class for _, (policy_class, _) in environment_policy_pairs],
             cache_dir_path=temp_dir_path,
         )
 
