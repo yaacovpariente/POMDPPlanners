@@ -1,7 +1,7 @@
 import pytest
 import numpy as np
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.core.belief import ParticleBelief
+from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
 )
@@ -22,7 +22,7 @@ def initial_belief(tiger_pomdp):
     log_weights = np.log(
         np.ones(len(particles)) / len(particles)
     )  # Uniform log weights
-    return ParticleBelief(particles=particles, log_weights=log_weights)
+    return WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
 
 @pytest.fixture

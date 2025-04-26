@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 from anytree import Node
 from anytree import PostOrderIter
 
-from POMDPPlanners.core.belief import ParticleBelief
+from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
 from POMDPPlanners.planners.mcts_planners.pomcp_planner import POMCPPlanner
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
@@ -32,7 +32,7 @@ def test_initialization(planner, environment):
 
 def test_get_explored_action_node(planner):
     # Create a belief node with children
-    belief = ParticleBelief(
+    belief = WeightedParticleBelief(
         particles=["tiger_left", "tiger_right"],
         log_weights=np.array([-0.69314718, -0.69314718])  # log(0.5) for equal weights
     )
@@ -67,7 +67,7 @@ def test_get_explored_action_node(planner):
 
 def test_update_leaf_node_q_value(planner):
     # Create a belief node and action node
-    belief = ParticleBelief(
+    belief = WeightedParticleBelief(
         particles=["tiger_left", "tiger_right"],
         log_weights=np.array([-0.69314718, -0.69314718])  # log(0.5) for equal weights
     )
@@ -94,7 +94,7 @@ def test_update_leaf_node_q_value(planner):
 
 def test_update_non_leaf_action_node_q_value(planner):
     # Create a belief node and action node with children
-    belief = ParticleBelief(
+    belief = WeightedParticleBelief(
         particles=["tiger_left", "tiger_right"],
         log_weights=np.array([-0.69314718, -0.69314718])
     )
@@ -118,7 +118,7 @@ def test_update_non_leaf_action_node_q_value(planner):
     # Add children to action node
     for observation in planner.environment.observations:
         child = BeliefNode(
-            belief=ParticleBelief(
+            belief=WeightedParticleBelief(
                 particles=["tiger_left", "tiger_right"],
                 log_weights=np.array([-0.69314718, -0.69314718])
             ),
@@ -136,7 +136,7 @@ def test_update_non_leaf_action_node_q_value(planner):
 
 def test_update_v_and_q_values(planner):
     # Create a belief node with children
-    belief = ParticleBelief(
+    belief = WeightedParticleBelief(
         particles=["tiger_left", "tiger_right"],
         log_weights=np.array([-0.69314718, -0.69314718])
     )
@@ -198,7 +198,7 @@ def test_update_v_and_q_values(planner):
 
 def test_action_selection(planner):
     # Create a belief with tiger more likely on the left
-    belief = ParticleBelief(
+    belief = WeightedParticleBelief(
         particles=["tiger_left"] * 8 + ["tiger_right"] * 2,  # 80% chance tiger is on left
         log_weights=np.array([-2.302585] * 10)  # log(0.1) for equal weights
     )
@@ -210,7 +210,7 @@ def test_action_selection(planner):
     assert action in ["listen", "open_right", "open_left"]
 
 def test_pomcp_planner_tree_node_update(planner):
-    belief = ParticleBelief(
+    belief = WeightedParticleBelief(
         particles=["tiger_left"] * 8 + ["tiger_right"] * 2,  # 80% chance tiger is on left
         log_weights=np.array([-2.302585] * 10)  # log(0.1) for equal weights
     )
