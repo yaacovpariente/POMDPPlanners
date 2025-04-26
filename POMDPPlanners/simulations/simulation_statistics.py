@@ -19,6 +19,8 @@ def compute_statistics(
     average_observation_time = []
     average_belief_update_time = []
     average_reward_time = []
+    average_actual_num_steps = []
+    average_reach_terminal_state = []
 
     for i, h in enumerate(histories):
         return_ = sum(
@@ -31,6 +33,8 @@ def compute_statistics(
         average_observation_time.append(h.average_observation_time)
         average_belief_update_time.append(h.average_belief_update_time)
         average_reward_time.append(h.average_reward_time)
+        average_actual_num_steps.append(h.actual_num_steps)
+        average_reach_terminal_state.append(h.reach_terminal_state)
 
     average_return = sum(return_samples) / len(return_samples)
 
@@ -57,6 +61,12 @@ def compute_statistics(
     )
     average_reward_time_confidence_interval = confidence_interval(
         data=average_reward_time, confidence=confidence_interval_level
+    )
+    average_actual_num_steps_confidence_interval = confidence_interval(
+        data=average_actual_num_steps, confidence=confidence_interval_level
+    )
+    average_reach_terminal_state_confidence_interval = confidence_interval(
+        data=average_reach_terminal_state, confidence=confidence_interval_level
     )
 
     return [
@@ -107,5 +117,17 @@ def compute_statistics(
             value=np.mean(average_reward_time),
             lower_confidence_bound=average_reward_time_confidence_interval[0],
             upper_confidence_bound=average_reward_time_confidence_interval[1],
+        ),
+        MetricValue(
+            name="average_actual_num_steps",
+            value=np.mean(average_actual_num_steps),
+            lower_confidence_bound=average_actual_num_steps_confidence_interval[0],
+            upper_confidence_bound=average_actual_num_steps_confidence_interval[1],
+        ),
+        MetricValue(
+            name="average_reach_terminal_state",
+            value=np.mean(average_reach_terminal_state),
+            lower_confidence_bound=average_reach_terminal_state_confidence_interval[0],
+            upper_confidence_bound=average_reach_terminal_state_confidence_interval[1],
         ),
     ]
