@@ -3,7 +3,7 @@ import numpy as np
 from anytree import NodeMixin, RenderTree, PostOrderIter
 
 from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action_cost_setting
-from POMDPPlanners.core.belief import ParticleBelief
+from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.environment import Environment
 
 
@@ -25,7 +25,7 @@ def test_belief():
     # Create a simple particle belief with two particles
     particles = [1, 2]  # Simple integer particles
     log_weights = np.log(np.array([0.6, 0.4]))  # Convert to log weights
-    return ParticleBelief(particles=particles, log_weights=log_weights)
+    return WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
 
 @pytest.fixture

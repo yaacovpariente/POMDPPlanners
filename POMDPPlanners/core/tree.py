@@ -3,6 +3,7 @@ import numpy as np
 from anytree import NodeMixin
 from anytree import RenderTree
 
+from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.belief import Belief
 
 class BaseNode(NodeMixin):
@@ -31,8 +32,7 @@ class ActionNode(BaseNode):
         return self.spec
 
     def print(self):
-        print_tree(self)
-
+        print_tree(self)        
 class BeliefNode(BaseNode):
     def __init__(self, belief: Belief, observation: Any = None, parent=None, children=tuple(), data: Any = None):
         assert isinstance(belief, Belief)
@@ -53,6 +53,10 @@ class BeliefNode(BaseNode):
     def print(self):
         print_tree(self)
         
+    def update_belief(self, action: Any, observation: Any, pomdp: Environment, **kwargs):
+        self.belief = self.belief.update(action=action, observation=observation, pomdp=pomdp, **kwargs)
+        
+        
 def print_tree(tree: Union[BeliefNode, ActionNode]):
     for pre, fill, node in RenderTree(tree):
         if isinstance(node, BeliefNode):
@@ -66,3 +70,8 @@ def get_optimal_action_cost_setting(belief_node: BeliefNode) -> Any:
     actions = [child.action for child in belief_node.children]
     q_values = [child.q_value for child in belief_node.children]
     return actions[np.argmin(q_values)]
+
+def get_optimal_action_reward_setting(belief_node: BeliefNode) -> Any:
+    actions = [child.action for child in belief_node.children]
+    q_values = [child.q_value for child in belief_node.children]
+    return actions[np.argmax(q_values)]
