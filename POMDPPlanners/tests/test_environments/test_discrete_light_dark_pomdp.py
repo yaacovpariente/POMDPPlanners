@@ -103,12 +103,12 @@ def test_reward_function():
     # Test obstacle hit reward
     state = np.array([2, 5])
     reward = env.reward(state, "right")  # Moves to [3, 5] which is obstacle
-    assert reward == env.obstacle_reward - env.fuel_cost
+    assert reward == env.obstacle_reward - env.fuel_cost - np.linalg.norm(np.array([3, 5]) - env.goal_state)
 
     # Test normal movement reward
     state = np.array([1, 1])
     reward = env.reward(state, "right")
-    assert reward == -env.fuel_cost  # Just fuel cost for normal movement
+    assert reward == -env.fuel_cost - np.linalg.norm(np.array([2, 1]) - env.goal_state)
 
 
 def test_is_terminal():
