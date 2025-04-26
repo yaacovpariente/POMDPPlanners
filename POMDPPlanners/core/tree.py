@@ -14,14 +14,14 @@ class BaseNode(NodeMixin):
         self.visit_count = 0
         self.lower_confidence_bound = 0.0
         self.upper_confidence_bound = 0.0
+        self.immediate_cost = None
         self.sample = []
 class ActionNode(BaseNode):
     def __init__(self, action, parent=None, children=tuple(), data: Any = None):
         super().__init__(parent=parent, children=children, data=data)
         self.action = action
-
         self.q_value = 0.0
-        self.immediate_cost = None
+        
 
     @property
     def spec(self):
@@ -75,3 +75,8 @@ def get_optimal_action_reward_setting(belief_node: BeliefNode) -> Any:
     actions = [child.action for child in belief_node.children]
     q_values = [child.q_value for child in belief_node.children]
     return actions[np.argmax(q_values)]
+
+def sample_belief_node_child(action_node: ActionNode) -> BeliefNode:
+    child_visit_counts = np.array([child.visit_count for child in action_node.children])
+    weights = child_visit_counts / sum(child_visit_counts)
+    return np.random.choice(action_node.children, p=weights)

@@ -13,3 +13,6 @@ def belief_expectation_cost(belief: WeightedParticleBelief, action: Any, env: En
     cost_ = np.sum(costs * belief.normalized_weights)
 
     return cost_
+
+def belief_expectation_reward(belief: WeightedParticleBelief, action: Any, env: Environment):
+    return -belief_expectation_cost(belief=belief, env=env, action=action)
