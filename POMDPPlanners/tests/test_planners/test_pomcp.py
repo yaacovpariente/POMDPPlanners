@@ -198,7 +198,7 @@ def test_tree_structure_construction(environment, discount_factor, depth, explor
     
     planner._construct_tree_using_n_simulations(belief=belief, belief_node=root_belief_node)
     
-    assert root_belief_node.height == (depth + 1) * 2
+    assert root_belief_node.height == 2 * depth + 1
     for node in PostOrderIter(root_belief_node):
         assert node.visit_count >= 0
         if isinstance(node, BeliefNode):

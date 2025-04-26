@@ -61,8 +61,11 @@ class POMCP(Policy):
             self.simulate(state=state, belief_node=belief_node, depth=0)
     
     def simulate(self, state: Any, belief_node: BeliefNode, depth: int) -> float:
-        if depth > self.depth or self.environment.is_terminal(state=state):
-            belief_node.visit_count += 1
+        if depth > self.depth: 
+            belief_node.parent = None  # remove the node from the tree
+            return 0
+        
+        if self.environment.is_terminal(state=state):
             return 0
 
         if belief_node.is_leaf:
@@ -70,9 +73,7 @@ class POMCP(Policy):
                 action_node = ActionNode(action=action, parent=belief_node, children=tuple())
                 
             belief_node.visit_count += 1
-            belief_node.v_value = self.random_rollout(state=state, depth=depth)            
-            
-            return belief_node.v_value
+            return self.random_rollout(state=state, depth=depth)            
         
         action_node = self.get_explored_action_node(belief_node=belief_node)
         
@@ -112,7 +113,7 @@ class POMCP(Policy):
         return belief_node.children[np.argmax(pomcp_exploration_values)]
         
     def random_rollout(self, state: Any, depth: int) -> float:
-        if depth > self.depth:
+        if depth > self.depth or self.environment.is_terminal(state=state):
             return 0
         
         action = random.choice(self.environment.get_actions())
