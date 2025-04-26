@@ -39,11 +39,9 @@ class DiscreteLDObservationModel(ObservationModel):
         else:
             beacon_error_factor = 1.0
 
-        state = next_state - self.action_to_vector[action]
-
-        values = [state + self.action_to_vector[action] for action in self.actions]
+        values = [next_state + self.action_to_vector[action] for action in self.actions]
         values.append(next_state)
-
+        
         observation_error_prob = self.observation_error_prob * beacon_error_factor
         probs = np.ones(len(values)) * (observation_error_prob / (len(values) - 1))
         probs[-1] = 1 - observation_error_prob
@@ -221,7 +219,7 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
         is_out_of_grid = np.any(next_state < 0) or np.any(next_state > self.grid_size)
 
         # Start with base reward (fuel cost)
-        reward = -self.fuel_cost
+        reward = -self.fuel_cost - np.linalg.norm(next_state - self.goal_state)
 
         if is_goal_state:
             reward += self.goal_reward

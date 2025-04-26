@@ -51,16 +51,17 @@ class TigerObservation(ObservationModel):
             return "hear_nothing"
 
     def probability(self, next_observation: Any) -> float:
+        if next_observation not in OBSERVATIONS:
+            raise ValueError(f"Invalid observation: {next_observation}")
+            
         if self.action == "listen":
             if self.next_state == "tiger_left":
                 return 0.85 if next_observation == "hear_left" else 0.15
             else:
                 return 0.85 if next_observation == "hear_right" else 0.15
 
-        if next_observation == "hear_nothing":
-            return 1.0
-        else:
-            raise ValueError(f"Invalid observation: {next_observation}")
+        # For non-listen actions, only hear_nothing has probability 1.0, others have probability 0.0
+        return 1.0 if next_observation == "hear_nothing" else 0.0
 
 
 class TigerPOMDP(DiscreteActionsEnvironment):
