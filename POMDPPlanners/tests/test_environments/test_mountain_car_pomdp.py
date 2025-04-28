@@ -160,3 +160,96 @@ def test_mountain_car_state_bounds():
     state = (0.0, -pomdp.max_speed - 0.1)
     transition = pomdp.state_transition_model(state, 0).sample()
     assert abs(transition[1]) <= pomdp.max_speed
+
+
+@pytest.fixture
+def base_mountain_car_environment() -> MountainCarPOMDP:
+    """Fixture providing a base MountainCarPOMDP environment for comparison."""
+    return MountainCarPOMDP(discount_factor=0.95)
+
+
+class TestMountainCarPOMDPEquality:
+    """Test suite for MountainCarPOMDP equality comparisons."""
+    
+    def test_same_discount_factor(self, base_mountain_car_environment: MountainCarPOMDP):
+        """Test that MountainCarPOMDPs with same discount factor are equal."""
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        assert base_mountain_car_environment == other_env
+        assert other_env == base_mountain_car_environment  # Test symmetry
+    
+    def test_different_discount_factor(self, base_mountain_car_environment: MountainCarPOMDP):
+        """Test that MountainCarPOMDPs with different discount factors are not equal."""
+        other_env = MountainCarPOMDP(discount_factor=0.8)
+        assert base_mountain_car_environment != other_env
+        assert other_env != base_mountain_car_environment  # Test symmetry
+    
+    def test_different_parameters(self, base_mountain_car_environment: MountainCarPOMDP):
+        """Test that MountainCarPOMDPs with different parameters are not equal."""
+        # Create a copy and modify parameters
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env.min_position = -1.0  # Different from -1.2
+        assert base_mountain_car_environment != other_env
+        
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env.max_position = 0.7  # Different from 0.6
+        assert base_mountain_car_environment != other_env
+        
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env.max_speed = 0.08  # Different from 0.07
+        assert base_mountain_car_environment != other_env
+        
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env.goal_position = 0.6  # Different from 0.5
+        assert base_mountain_car_environment != other_env
+        
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env.power = 0.002  # Different from 0.001
+        assert base_mountain_car_environment != other_env
+        
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env.gravity = 0.003  # Different from 0.0025
+        assert base_mountain_car_environment != other_env
+    
+    def test_different_noise_parameters(self, base_mountain_car_environment: MountainCarPOMDP):
+        """Test that MountainCarPOMDPs with different noise parameters are not equal."""
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env.position_noise = 0.2  # Different from 0.1
+        assert base_mountain_car_environment != other_env
+        
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env.velocity_noise = 0.02  # Different from 0.01
+        assert base_mountain_car_environment != other_env
+        
+        # Test covariance matrix changes
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env.cov_matrix = np.array([[0.2**2, 0], [0, 0.02**2]])  # Different from original
+        assert base_mountain_car_environment != other_env
+    
+    def test_different_actions(self, base_mountain_car_environment: MountainCarPOMDP):
+        """Test that MountainCarPOMDPs with different actions are not equal."""
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        other_env.actions = [-1, 0, 1, 2]  # Different from [-1, 0, 1]
+        assert base_mountain_car_environment != other_env
+    
+    def test_comparison_with_non_environment(self, base_mountain_car_environment: MountainCarPOMDP):
+        """Test comparison with non-Environment objects."""
+        assert base_mountain_car_environment != "not an environment"
+        assert base_mountain_car_environment != 42
+        assert base_mountain_car_environment != None
+    
+    def test_missing_attributes(self, base_mountain_car_environment: MountainCarPOMDP):
+        """Test equality when attributes are missing."""
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        delattr(other_env, 'min_position')
+        assert base_mountain_car_environment != other_env
+        
+        other_env = MountainCarPOMDP(discount_factor=0.95)
+        delattr(other_env, 'cov_matrix')
+        assert base_mountain_car_environment != other_env
+    
+    def test_deep_copy_equality(self, base_mountain_car_environment: MountainCarPOMDP):
+        """Test that a deep copy of MountainCarPOMDP is equal to original."""
+        import copy
+        copied_env = copy.deepcopy(base_mountain_car_environment)
+        assert copied_env == base_mountain_car_environment
+        assert base_mountain_car_environment == copied_env  # Test symmetry

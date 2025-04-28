@@ -7,6 +7,256 @@ from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import ObservationModel
 
 
+@pytest.fixture
+def base_light_dark_environment() -> DiscreteLightDarkPOMDP:
+    """Fixture providing a base DiscreteLightDarkPOMDP environment for comparison."""
+    return DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        obstacle_hit_probability=0.2,
+        obstacle_reward=-10.0,
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        is_stochastic_reward=True,
+    )
+
+
+class TestDiscreteLightDarkPOMDPEquality:
+    """Test suite for DiscreteLightDarkPOMDP equality comparisons."""
+    
+    def test_same_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that DiscreteLightDarkPOMDPs with same discount factor are equal."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        )
+        assert base_light_dark_environment == other_env
+        assert other_env == base_light_dark_environment  # Test symmetry
+    
+    def test_different_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that DiscreteLightDarkPOMDPs with different discount factors are not equal."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.8,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        )
+        assert base_light_dark_environment != other_env
+        assert other_env != base_light_dark_environment  # Test symmetry
+    
+    def test_different_transition_error(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that DiscreteLightDarkPOMDPs with different transition error probabilities are not equal."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.1,  # Different transition error
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        )
+        assert base_light_dark_environment != other_env
+    
+    def test_different_observation_error(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that DiscreteLightDarkPOMDPs with different observation error probabilities are not equal."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.1,  # Different observation error
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        )
+        assert base_light_dark_environment != other_env
+    
+    def test_different_beacons(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that DiscreteLightDarkPOMDPs with different beacon positions are not equal."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+            beacons=np.array([[1, 1, 1, 6, 6, 6, 11, 11, 11], [1, 6, 11, 1, 6, 11, 1, 6, 11]]),  # Different beacons
+        )
+        assert base_light_dark_environment != other_env
+    
+    def test_different_obstacles(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that DiscreteLightDarkPOMDPs with different obstacle positions are not equal."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+            obstacles=np.array([[4, 8], [6, 6]]),  # Different obstacles
+        )
+        assert base_light_dark_environment != other_env
+    
+    def test_different_goal_state(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that DiscreteLightDarkPOMDPs with different goal states are not equal."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+            goal_state=np.array([9, 4]),  # Different goal state
+        )
+        assert base_light_dark_environment != other_env
+    
+    def test_different_start_state(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that DiscreteLightDarkPOMDPs with different start states are not equal."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+            start_state=np.array([1, 4]),  # Different start state
+        )
+        assert base_light_dark_environment != other_env
+    
+    def test_different_rewards(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that DiscreteLightDarkPOMDPs with different rewards are not equal."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-20.0,  # Different obstacle reward
+            goal_reward=20.0,  # Different goal reward
+            fuel_cost=3.0,  # Different fuel cost
+            grid_size=11,
+            is_stochastic_reward=True,
+        )
+        assert base_light_dark_environment != other_env
+    
+    def test_different_grid_size(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that DiscreteLightDarkPOMDPs with different grid sizes are not equal."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=15,  # Different grid size
+            is_stochastic_reward=True,
+        )
+        assert base_light_dark_environment != other_env
+    
+    def test_different_beacon_radius(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that DiscreteLightDarkPOMDPs with different beacon radii are not equal."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+            beacon_radius=2.0,  # Different beacon radius
+        )
+        assert base_light_dark_environment != other_env
+    
+    def test_different_stochastic_reward(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that DiscreteLightDarkPOMDPs with different stochastic reward settings are not equal."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=False,  # Different stochastic reward setting
+        )
+        assert base_light_dark_environment != other_env
+    
+    def test_comparison_with_non_environment(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test comparison with non-Environment objects."""
+        assert base_light_dark_environment != "not an environment"
+        assert base_light_dark_environment != 42
+        assert base_light_dark_environment != None
+    
+    def test_missing_attributes(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test equality when attributes are missing."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        )
+        delattr(other_env, 'beacons')
+        assert base_light_dark_environment != other_env
+        
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        )
+        delattr(other_env, 'obstacles')
+        assert base_light_dark_environment != other_env
+    
+    def test_deep_copy_equality(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that a deep copy of DiscreteLightDarkPOMDP is equal to original."""
+        import copy
+        copied_env = copy.deepcopy(base_light_dark_environment)
+        assert copied_env == base_light_dark_environment
+        assert base_light_dark_environment == copied_env  # Test symmetry
+
+
 def test_initialization():
     """Test initialization with default parameters"""
     env = DiscreteLightDarkPOMDP(

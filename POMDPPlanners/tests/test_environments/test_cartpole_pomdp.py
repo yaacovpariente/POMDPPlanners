@@ -8,6 +8,89 @@ from POMDPPlanners.environments.cartpole_pomdp import (
 )
 
 
+@pytest.fixture
+def base_cartpole_environment() -> CartPolePOMDP:
+    """Fixture providing a base CartPolePOMDP environment for comparison."""
+    noise_cov = np.eye(4) * 0.1
+    return CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+
+
+class TestCartPolePOMDPEquality:
+    """Test suite for CartPolePOMDP equality comparisons."""
+    
+    def test_same_discount_factor(self, base_cartpole_environment: CartPolePOMDP):
+        """Test that CartPolePOMDPs with same discount factor are equal."""
+        other_env = CartPolePOMDP(
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov
+        )
+        assert base_cartpole_environment == other_env
+        assert other_env == base_cartpole_environment  # Test symmetry
+    
+    def test_different_discount_factor(self, base_cartpole_environment: CartPolePOMDP):
+        """Test that CartPolePOMDPs with different discount factors are not equal."""
+        other_env = CartPolePOMDP(
+            discount_factor=0.8,
+            noise_cov=base_cartpole_environment.noise_cov
+        )
+        assert base_cartpole_environment != other_env
+        assert other_env != base_cartpole_environment  # Test symmetry
+    
+    def test_different_noise_covariance(self, base_cartpole_environment: CartPolePOMDP):
+        """Test that CartPolePOMDPs with different noise covariance are not equal."""
+        other_env = CartPolePOMDP(
+            discount_factor=0.95,
+            noise_cov=np.eye(4) * 0.2  # Different noise covariance
+        )
+        assert base_cartpole_environment != other_env
+        assert other_env != base_cartpole_environment  # Test symmetry
+    
+    def test_different_physical_parameters(self, base_cartpole_environment: CartPolePOMDP):
+        """Test that CartPolePOMDPs with different physical parameters are not equal."""
+        other_env = CartPolePOMDP(
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov
+        )
+        other_env.gravity = 10.0  # Different gravity
+        assert base_cartpole_environment != other_env
+        
+        other_env = CartPolePOMDP(
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov
+        )
+        other_env.masscart = 2.0  # Different cart mass
+        assert base_cartpole_environment != other_env
+    
+    def test_comparison_with_non_environment(self, base_cartpole_environment: CartPolePOMDP):
+        """Test comparison with non-Environment objects."""
+        assert base_cartpole_environment != "not an environment"
+        assert base_cartpole_environment != 42
+        assert base_cartpole_environment != None
+    
+    def test_missing_attributes(self, base_cartpole_environment: CartPolePOMDP):
+        """Test equality when attributes are missing."""
+        other_env = CartPolePOMDP(
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov
+        )
+        delattr(other_env, 'gravity')
+        assert base_cartpole_environment != other_env
+        
+        other_env = CartPolePOMDP(
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov
+        )
+        delattr(other_env, 'masscart')
+        assert base_cartpole_environment != other_env
+    
+    def test_deep_copy_equality(self, base_cartpole_environment: CartPolePOMDP):
+        """Test that a deep copy of CartPolePOMDP is equal to original."""
+        import copy
+        copied_env = copy.deepcopy(base_cartpole_environment)
+        assert copied_env == base_cartpole_environment
+        assert base_cartpole_environment == copied_env  # Test symmetry
+
+
 def test_cartpole_state_transition():
     # Test state transition with known parameters
     state = np.array([0.0, 0.0, 0.0, 0.0])  # x, x_dot, theta, theta_dot
