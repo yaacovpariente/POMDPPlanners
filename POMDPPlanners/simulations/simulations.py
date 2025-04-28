@@ -24,7 +24,7 @@ from POMDPPlanners.core.simulation import (
     MetricValue,
 )
 from POMDPPlanners.simulations.simulation_statistics import compute_statistics
-from POMDPPlanners.utils.visualization import plot_metrics_comparison
+from POMDPPlanners.utils.visualization import plot_metrics_comparison, plot_discounted_returns_histogram
 
 # Configure logging
 logging.basicConfig(
@@ -277,6 +277,11 @@ def _process_environment_policy_pair(
 
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_dir_path = Path(temp_dir)
+
+            # Create and save return histogram
+            histogram_path = temp_dir_path / "returns_histogram.png"
+            plot_discounted_returns_histogram(histories, histogram_path)
+            mlflow.log_artifact(str(histogram_path), "visualization/returns_histogram.png")
 
             for episode_idx, history in enumerate(histories):
                 episode_dir = temp_dir_path / f"episode_{episode_idx}"
@@ -597,7 +602,7 @@ def optimize_policy_parameters_with_optuna(
     study = optuna.create_study(direction=direction)
     study.optimize(objective, n_trials=n_trials)
 
-    # Get histories from the best trial
+    # Get histories from the best trial-
     best_histories = study.best_trial.user_attrs["histories"]
 
     # Remove environment from best params as it was not optimized

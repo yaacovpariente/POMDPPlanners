@@ -3,16 +3,16 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib
+import seaborn as sns
 
 matplotlib.use("Agg")  # Use non-interactive backend
 import mlflow
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.core.simulation import MetricValue
+from POMDPPlanners.core.simulation import MetricValue, History, history_to_discounted_return_value
 
-
-def plot_statistics_comparison(
+def plot_metrics_comparison(
     statistics: List[List[MetricValue]],
     environments: List[Environment],
     policies: List[Policy],
@@ -102,3 +102,59 @@ def plot_statistics_comparison(
 
         # Log the plot to MLflow
         mlflow.log_artifact(str(plots_dir / f"{stat_name}_comparison.png"))
+
+
+def plot_reward_comparison(
+    histories: List[History],
+    environments: List[Environment],
+    policies: List[Policy],
+    cache_dir_path: Path,
+) -> None:
+    history_discounted_returns = [history_to_discounted_return_value(history) for history in histories]
+    
+
+def plot_discounted_returns_histogram(
+    histories: List[History],
+    cache_path: Path,
+) -> None:
+    """
+    Create a histogram plot of discounted returns from a list of histories using seaborn.
+
+    Args:
+        histories: List of History objects containing episode data
+        cache_path: Path where the histogram plot will be saved
+    """
+    # Convert histories to discounted returns
+    discounted_returns = [history_to_discounted_return_value(history) for history in histories]
+    
+    # Set seaborn style
+    sns.set_style("whitegrid")
+    sns.set_context("notebook", font_scale=1.2)
+    
+    # Create the figure and axis
+    plt.figure(figsize=(10, 6))
+    
+    # Create the histogram using seaborn
+    sns.histplot(
+        data=discounted_returns,
+        bins=15,
+        edgecolor='black',
+        color='skyblue',
+        alpha=0.7
+    )
+    
+    # Customize the plot
+    plt.xlabel('Discounted Return', fontsize=12)
+    plt.ylabel('Frequency', fontsize=12)
+    plt.title('Distribution of Discounted Returns', fontsize=14, pad=20)
+    
+    # Add a light grid
+    plt.grid(True, alpha=0.3)
+    
+    # Adjust layout
+    plt.tight_layout()
+    
+    # Save the plot
+    plt.savefig(cache_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    
