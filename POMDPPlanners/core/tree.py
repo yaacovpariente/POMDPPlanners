@@ -25,7 +25,7 @@ class ActionNode(BaseNode):
 
     @property
     def spec(self):
-        return f"ActionNode: action={self.action}, q_value={self.q_value}, visit_count={self.visit_count}, immediate_cost={self.immediate_cost}, sample={self.sample}, lower_confidence_bound={self.lower_confidence_bound}, upper_confidence_bound={self.upper_confidence_bound}, depth={self.depth}"
+        return f"ActionNode: action={self.action}, q_value={self.q_value}, visit_count={self.visit_count}, immediate_cost={self.immediate_cost}, lower_confidence_bound={self.lower_confidence_bound}, upper_confidence_bound={self.upper_confidence_bound}, depth={self.depth}"
 
     @property
     def name(self):
@@ -40,11 +40,11 @@ class BeliefNode(BaseNode):
 
         self.belief = belief
         self.observation = observation
-        self.v_value = 0.0
+        self.v_value = 0.
         
     @property
     def spec(self):
-        return f"BeliefNode: v_value={self.v_value}, visit_count={self.visit_count}, lower_confidence_bound={self.lower_confidence_bound}, upper_confidence_bound={self.upper_confidence_bound}, depth={self.depth}"
+        return f"BeliefNode: observation={self.observation}, v_value={self.v_value}, visit_count={self.visit_count}, lower_confidence_bound={self.lower_confidence_bound}, upper_confidence_bound={self.upper_confidence_bound}, depth={self.depth}"
         
     @property
     def name(self):
