@@ -16,12 +16,14 @@ class DiscreteLDObservationModel(ObservationModel):
         next_state: np.ndarray,
         action: Any,
         beacons: np.ndarray,
+        obstacles: np.ndarray,
         beacon_radius: float,
         observation_error_prob: float,
     ):
         self.next_state = next_state
         self.action = action
         self.beacons = beacons
+        self.obstacles = obstacles
         self.beacon_radius = beacon_radius
         self.observation_error_prob = observation_error_prob
         self.actions = ["up", "down", "right", "left"]
@@ -31,20 +33,27 @@ class DiscreteLDObservationModel(ObservationModel):
             "right": np.array([1, 0]),
             "left": np.array([-1, 0]),
         }
-
-        distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
-        min_distance = np.min(distances)
-        if min_distance < self.beacon_radius:
-            beacon_error_factor = 0.2
-        else:
-            beacon_error_factor = 1.0
-
-        values = [next_state + self.action_to_vector[action] for action in self.actions]
-        values.append(next_state)
         
-        observation_error_prob = self.observation_error_prob * beacon_error_factor
-        probs = np.ones(len(values)) * (observation_error_prob / (len(values) - 1))
-        probs[-1] = 1 - observation_error_prob
+        is_obstacle_hit = np.any(
+            np.all(next_state.reshape(-1, 1) == self.obstacles, axis=0)
+        )
+        if is_obstacle_hit:
+            distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
+            min_distance = np.min(distances)
+            if min_distance < self.beacon_radius:
+                beacon_error_factor = 0.2
+            else:
+                beacon_error_factor = 1.0
+
+            values = [next_state + self.action_to_vector[action] for action in self.actions]
+            values.append(next_state)
+            
+            observation_error_prob = self.observation_error_prob * beacon_error_factor
+            probs = np.ones(len(values)) * (observation_error_prob / (len(values) - 1))
+            probs[-1] = 1 - observation_error_prob
+        else:
+            values = [next_state]
+            probs = np.array([1.0])
 
         self.distribution = DiscreteDistribution(values=values, probs=probs)
 
@@ -195,6 +204,8 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
             self.transition_error_prob / (len(self.actions) - 1)
         )
         probs[action_index] = 1 - self.transition_error_prob
+        s = sum(probs)
+        probs[0] += 1 - s
 
         return DiscreteDistribution(values, probs)
 
@@ -203,6 +214,7 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
             next_state=next_state,
             action=action,
             beacons=self.beacons,
+            obstacles=self.obstacles,
             beacon_radius=self.beacon_radius,
             observation_error_prob=self.observation_error_prob,
         )
