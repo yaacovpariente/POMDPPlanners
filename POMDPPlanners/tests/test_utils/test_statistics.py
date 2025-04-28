@@ -87,3 +87,50 @@ def test_cvar_estimator_single_element():
     vec4 = np.array([1.0])
     result = cvar_estimator(vec4, alpha=0.5)
     assert np.isclose(result, 1.0)
+
+
+def test_cvar_estimator_from_dist():
+    """Test CVaR calculation from discrete probability distribution."""
+    from POMDPPlanners.utils.statistics import cvar_estimator_from_dist
+    
+    # Test single value case
+    values = np.array([1.0])
+    weights = np.array([1.0])
+    alpha = 0.2
+    cvar = cvar_estimator_from_dist(values, weights, alpha)
+    assert np.isclose(cvar, 1.0, atol=1e-4)
+    
+    # Test three values with different weights
+    values = np.array([1.0, 2.0, 3.0])
+    weights = np.array([0.8, 0.1, 0.1])
+    cvar = cvar_estimator_from_dist(values, weights, alpha)
+    assert np.isclose(cvar, 2.5, atol=1e-4)
+    
+    # Test four values with duplicate values
+    values = np.array([1.0, 2.0, 3.0, 3.0])
+    weights = np.array([0.8, 0.1, 0.05, 0.05])
+    cvar = cvar_estimator_from_dist(values, weights, alpha)
+    assert np.isclose(cvar, 2.5, atol=1e-4)
+    
+    # Test edge case where P(q_alpha) != alpha
+    alpha = 0.1
+    values = np.array([1.0, 2.0, 3.0])
+    weights = np.array([0.8, 0.15, 0.05])
+    cvar = cvar_estimator_from_dist(values, weights, alpha)
+    assert np.isclose(cvar, 2.5, atol=1e-4)
+    
+    # Test two values case
+    values = np.array([1.0, 2.0])
+    weights = np.array([0.8, 0.2])
+    cvar = cvar_estimator_from_dist(values, weights, alpha)
+    assert np.isclose(cvar, 2.0, atol=1e-4)
+    
+    # Test invalid inputs
+    with pytest.raises(ValueError):
+        cvar_estimator_from_dist(np.array([1.0]), np.array([0.5]), 0.2)  # weights don't sum to 1
+        
+    with pytest.raises(ValueError):
+        cvar_estimator_from_dist(np.array([]), np.array([]), 0.2)  # empty arrays
+        
+    with pytest.raises(ValueError):
+        cvar_estimator_from_dist(np.array([1.0]), np.array([1.0]), 1.1)  # invalid alpha
