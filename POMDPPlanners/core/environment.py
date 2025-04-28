@@ -40,6 +40,48 @@ class Environment(ABC):
     def __init__(self, discount_factor: float):
         self.discount_factor = discount_factor
 
+    def __eq__(self, other):
+        if not isinstance(other, Environment):
+            return False
+        if self.__class__ != other.__class__:
+            return False
+
+        def _compare_values(v1, v2):
+            """Helper function to compare values, handling numpy arrays specially."""
+            if isinstance(v1, np.ndarray) or isinstance(v2, np.ndarray):
+                if not (isinstance(v1, np.ndarray) and isinstance(v2, np.ndarray)):
+                    return False
+                return np.array_equal(v1, v2)
+            elif isinstance(v1, (list, tuple)) and isinstance(v2, (list, tuple)):
+                if len(v1) != len(v2):
+                    return False
+                return all(_compare_values(x1, x2) for x1, x2 in zip(v1, v2))
+            elif isinstance(v1, dict) and isinstance(v2, dict):
+                if v1.keys() != v2.keys():
+                    return False
+                return all(_compare_values(v1[k], v2[k]) for k in v1)
+            else:
+                return v1 == v2
+
+        # Compare all public attributes (excluding callables and private)
+        for key, value in self.__dict__.items():
+            if key.startswith('_') or callable(value):
+                continue
+            if not hasattr(other, key):
+                return False
+            other_value = getattr(other, key)
+            if not _compare_values(value, other_value):
+                return False
+
+        # Check for any attributes in other that aren't in self
+        for key in other.__dict__:
+            if key.startswith('_') or callable(getattr(other, key)):
+                continue
+            if not hasattr(self, key):
+                return False
+
+        return True
+
     @abstractmethod
     def state_transition_model(self, state: Any, action: Any) -> StateTransitionModel:
         pass

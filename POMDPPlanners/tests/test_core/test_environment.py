@@ -1,0 +1,209 @@
+import numpy as np
+import pytest
+from typing import Optional
+from POMDPPlanners.core.environment import Environment, StateTransitionModel, ObservationModel
+from POMDPPlanners.core.distributions import Distribution
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP, STATES, ACTIONS, OBSERVATIONS
+
+class MockDistribution(Distribution):
+    def sample(self) -> np.ndarray:
+        return np.array([1, 2])
+    
+    def probability(self, value: np.ndarray) -> float:
+        return 1.0
+
+class MockStateTransitionModel(StateTransitionModel):
+    def sample(self) -> np.ndarray:
+        return np.array([1, 2])
+    
+    def probability(self, next_state: np.ndarray) -> float:
+        return 1.0
+
+class MockObservationModel(ObservationModel):
+    def sample(self) -> np.ndarray:
+        return np.array([3, 4])
+    
+    def probability(self, next_observation: np.ndarray) -> float:
+        return 1.0
+
+class MockEnvironment(Environment):
+    def __init__(self, discount_factor: float, test_array: Optional[np.ndarray] = None):
+        super().__init__(discount_factor)
+        self.test_array = test_array if test_array is not None else np.array([1, 2, 3])
+    
+    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
+        return MockStateTransitionModel(state, action)
+    
+    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
+        return MockObservationModel(next_state, action)
+    
+    def reward(self, state: np.ndarray, action: np.ndarray) -> float:
+        return 1.0
+    
+    def is_terminal(self, state: np.ndarray) -> bool:
+        return False
+    
+    def initial_state_dist(self) -> Distribution:
+        return MockDistribution()
+    
+    def initial_observation_dist(self) -> Distribution:
+        return MockDistribution()
+    
+    def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
+        return np.array_equal(observation1, observation2)
+
+class DifferentEnvironment(Environment):
+    def __init__(self, discount_factor: float):
+        super().__init__(discount_factor)
+    
+    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
+        return MockStateTransitionModel(state, action)
+    
+    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
+        return MockObservationModel(next_state, action)
+    
+    def reward(self, state: np.ndarray, action: np.ndarray) -> float:
+        return 1.0
+    
+    def is_terminal(self, state: np.ndarray) -> bool:
+        return False
+    
+    def initial_state_dist(self) -> Distribution:
+        return MockDistribution()
+    
+    def initial_observation_dist(self) -> Distribution:
+        return MockDistribution()
+    
+    def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
+        return np.array_equal(observation1, observation2)
+
+@pytest.fixture
+def base_environment() -> MockEnvironment:
+    """Fixture providing a base environment for comparison."""
+    return MockEnvironment(discount_factor=0.9)
+
+@pytest.mark.parametrize("discount_factor,expected_equal", [
+    (0.9, True),   # Same discount factor
+    (0.8, False),  # Different discount factor
+])
+def test_discount_factor_equality(base_environment: MockEnvironment, 
+                                discount_factor: float, 
+                                expected_equal: bool):
+    """Test equality comparison with different discount factors."""
+    other_env = MockEnvironment(discount_factor=discount_factor)
+    assert (base_environment == other_env) == expected_equal
+
+@pytest.mark.parametrize("test_array,expected_equal", [
+    (np.array([1, 2, 3]), True),   # Same array
+    (np.array([4, 5, 6]), False),  # Different array
+])
+def test_array_equality(base_environment: MockEnvironment, 
+                       test_array: np.ndarray, 
+                       expected_equal: bool):
+    """Test equality comparison with different numpy arrays."""
+    other_env = MockEnvironment(discount_factor=0.9, test_array=test_array)
+    assert (base_environment == other_env) == expected_equal
+
+def test_different_environment_class(base_environment: MockEnvironment):
+    """Test equality comparison with a different environment class."""
+    different_env = DifferentEnvironment(discount_factor=0.9)
+    assert base_environment != different_env
+
+def test_non_environment_comparison(base_environment: MockEnvironment):
+    """Test equality comparison with non-Environment objects."""
+    assert base_environment != "not an environment"
+    assert base_environment != 42
+    assert base_environment != None
+
+def test_missing_attribute(base_environment: MockEnvironment):
+    """Test equality comparison when an attribute is missing."""
+    other_env = MockEnvironment(discount_factor=0.9)
+    delattr(other_env, 'test_array')
+    assert base_environment != other_env
+
+@pytest.mark.parametrize("attr_name,attr_value", [
+    ("discount_factor", 0.9),
+    ("test_array", np.array([1, 2, 3])),
+])
+def test_attribute_presence(base_environment: MockEnvironment, 
+                          attr_name: str, 
+                          attr_value: object):
+    """Test that attributes are present and have correct values."""
+    assert hasattr(base_environment, attr_name)
+    if isinstance(attr_value, np.ndarray):
+        assert np.array_equal(getattr(base_environment, attr_name), attr_value)
+    else:
+        assert getattr(base_environment, attr_name) == attr_value
+
+@pytest.fixture
+def base_tiger_environment() -> TigerPOMDP:
+    """Fixture providing a base TigerPOMDP environment for comparison."""
+    return TigerPOMDP(discount_factor=0.95)
+
+class TestTigerPOMDPEquality:
+    """Test suite for TigerPOMDP equality comparisons."""
+    
+    def test_same_discount_factor(self, base_tiger_environment: TigerPOMDP):
+        """Test that TigerPOMDPs with same discount factor are equal."""
+        other_env = TigerPOMDP(discount_factor=0.95)  # Same as base
+        assert base_tiger_environment == other_env
+        assert other_env == base_tiger_environment  # Test symmetry
+    
+    def test_different_discount_factor(self, base_tiger_environment: TigerPOMDP):
+        """Test that TigerPOMDPs with different discount factors are not equal."""
+        other_env = TigerPOMDP(discount_factor=0.8)  # Different from base
+        assert base_tiger_environment != other_env
+        assert other_env != base_tiger_environment  # Test symmetry
+    
+    def test_comparison_with_mock_environment(self, base_tiger_environment: TigerPOMDP):
+        """Test that TigerPOMDP is not equal to other Environment types."""
+        mock_env = MockEnvironment(discount_factor=0.95)
+        assert base_tiger_environment != mock_env
+        assert mock_env != base_tiger_environment  # Test symmetry
+    
+    @pytest.mark.parametrize("invalid_value", [None, 42, "tiger", []])
+    def test_comparison_with_non_environment(self, base_tiger_environment: TigerPOMDP, invalid_value):
+        """Test comparison with non-Environment objects."""
+        assert base_tiger_environment != invalid_value
+    
+    def test_missing_attributes(self, base_tiger_environment: TigerPOMDP):
+        """Test equality when attributes are missing."""
+        other_env = TigerPOMDP(discount_factor=0.95)
+        delattr(other_env, 'states')
+        assert base_tiger_environment != other_env
+        
+        other_env = TigerPOMDP(discount_factor=0.95)
+        delattr(other_env, 'actions')
+        assert base_tiger_environment != other_env
+        
+        other_env = TigerPOMDP(discount_factor=0.95)
+        delattr(other_env, 'observations')
+        assert base_tiger_environment != other_env
+    
+    def test_modified_tiger_environment(self, base_tiger_environment: TigerPOMDP):
+        """Test equality after modifying environment attributes."""
+        modified_env = TigerPOMDP(discount_factor=0.95)
+        
+        # Test modifying each attribute
+        modifications = [
+            ('states', ['new_state1', 'new_state2']),
+            ('actions', ['new_action1', 'new_action2']),
+            ('observations', ['new_obs1', 'new_obs2']),
+            ('discount_factor', 0.8)
+        ]
+        
+        for attr, new_value in modifications:
+            # Create fresh environment for each test
+            test_env = TigerPOMDP(discount_factor=0.95)
+            assert test_env == base_tiger_environment  # Should be equal initially
+            
+            # Modify attribute
+            setattr(test_env, attr, new_value)
+            assert test_env != base_tiger_environment  # Should not be equal after modification
+    
+    def test_deep_copy_equality(self, base_tiger_environment: TigerPOMDP):
+        """Test that a deep copy of TigerPOMDP is equal to original."""
+        import copy
+        copied_env = copy.deepcopy(base_tiger_environment)
+        assert copied_env == base_tiger_environment
+        assert base_tiger_environment == copied_env  # Test symmetry
