@@ -7,6 +7,7 @@ import json
 import os
 import logging
 from joblib import Parallel, delayed
+from multiprocessing import cpu_count
 import optuna
 import pandas as pd
 import numpy as np
@@ -23,7 +24,7 @@ from POMDPPlanners.core.simulation import (
     MetricValue,
 )
 from POMDPPlanners.simulations.simulation_statistics import compute_statistics
-from POMDPPlanners.utils.visualization import plot_statistics_comparison
+from POMDPPlanners.utils.visualization import plot_metrics_comparison
 
 # Configure logging
 logging.basicConfig(
@@ -200,6 +201,110 @@ def simulation(
     return histories, statistics
 
 
+def _process_environment_policy_pair(
+    pair_idx: int,
+    environment_policy_pair: Tuple[Environment, Policy, Belief],
+    num_episodes: int,
+    num_steps: int,
+    alpha: float,
+    n_particles: int,
+    cache_dir_path: Path,
+    confidence_interval_level: float,
+    n_jobs: int,
+    experiment_name: str,
+) -> Tuple[List[MetricValue], dict]:
+    """Process a single environment-policy pair and return its statistics and run data."""
+    environment, policy, initial_belief = environment_policy_pair
+    
+    # Start a new MLFlow run for each environment-policy combination
+    with mlflow.start_run(
+        run_name=f"{environment.__class__.__name__}_{policy.__class__.__name__}_{pair_idx}"
+    ):
+        # Log common parameters
+        common_params = {
+            "environment_type": environment.__class__.__name__,
+            "policy_type": policy.__class__.__name__,
+            "num_episodes": num_episodes,
+            "num_steps": num_steps,
+            "alpha": alpha,
+            "n_particles": n_particles,
+            "confidence_interval_level": confidence_interval_level,
+        }
+
+        # Log environment-specific parameters
+        env_params = {
+            f"env_{key}": value
+            for key, value in environment.__dict__.items()
+            if isinstance(value, (int, float, str, bool))
+        }
+
+        # Log policy-specific parameters
+        policy_params = {
+            f"policy_{key}": value
+            for key, value in policy.__dict__.items()
+            if isinstance(value, (int, float, str, bool))
+        }
+
+        # Combine all parameters
+        all_params = {**common_params, **env_params, **policy_params}
+
+        mlflow.log_params(all_params)
+
+        # Run simulation
+        histories, statistics = simulation(
+            environment=environment,
+            policy=policy,
+            initial_belief=initial_belief,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            alpha=alpha,
+            confidence_interval_level=confidence_interval_level,
+            n_jobs=n_jobs,
+        )
+
+        # Log metrics from statistics
+        for metric in statistics:
+            mlflow.log_metric(metric.name, metric.value)
+            mlflow.log_metric(f"{metric.name}_ci_lower", metric.lower_confidence_bound)
+            mlflow.log_metric(f"{metric.name}_ci_upper", metric.upper_confidence_bound)
+
+        # Save the full statistics as a JSON artifact
+        full_data = {
+            "statistics": [metric._asdict() for metric in statistics],
+            "parameters": all_params,
+        }
+        mlflow.log_dict(full_data, "statistics/full_data.json")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir_path = Path(temp_dir)
+
+            for episode_idx, history in enumerate(histories):
+                episode_dir = temp_dir_path / f"episode_{episode_idx}"
+                file_name = f"agent_path_{episode_idx}.gif"
+                cache_path = episode_dir / file_name
+                episode_dir.mkdir(exist_ok=True)
+
+                try:
+                    environment.cache_visualization(
+                        history=history, cache_path=cache_path
+                    )
+                    if cache_path.exists():
+                        mlflow.log_artifact(
+                            str(cache_path), f"visualization/{file_name}"
+                        )
+                except Exception as e:
+                    logger.warning(f"Visualization failed for episode {episode_idx}: {str(e)}")
+                    pass
+
+        # Aggregate data for DataFrame
+        run_data = {
+            **all_params,
+            **{metric.name: metric.value for metric in statistics},
+        }
+
+        return statistics, run_data
+
+
 def compare_planners(
     environment_policy_pairs: List[Tuple[Environment, Policy, Belief]],
     num_episodes: int,
@@ -237,124 +342,47 @@ def compare_planners(
     # Set up MLFlow tracking with proper file scheme for Windows
     mlruns_path = cache_dir_path / "mlruns"
     mlruns_path.mkdir(parents=True, exist_ok=True)
-    # Use empty string for default local storage
     tracking_uri = mlruns_path
     mlflow.set_tracking_uri(tracking_uri)
     mlflow.set_experiment(experiment_name)
     logger.info(f"MLFlow tracking set up at {tracking_uri}")
 
-    planner_statistics = []
-    aggregated_data = []
+    # Process environment-policy pairs in parallel
+    cpu_number = cpu_count()
+    if n_jobs == -1:
+        n_jobs = cpu_number
+    else:
+        if cpu_number < n_jobs:
+            n_jobs = cpu_number
 
-    for pair_idx, (environment, policy, initial_belief) in enumerate(environment_policy_pairs):
-        logger.info(f"Processing pair {pair_idx + 1}/{len(environment_policy_pairs)}: "
-                   f"{environment.__class__.__name__} with {policy.__class__.__name__}")
-        
-        # End any active run safely
-        active_run = mlflow.active_run()
-        if active_run is not None:
-            mlflow.end_run()
+    if num_episodes > n_jobs:
+        n_jobs_pairs = 1
+        n_jobs_process = cpu_number
+    else:
+        n_jobs_pairs = min(len(environment_policy_pairs), cpu_number)
+        n_jobs_process = int(cpu_number / n_jobs_pairs)
+    
+    logger.info(f"Using {n_jobs_pairs} jobs for parallel processing of environment-policy pairs")
+    logger.info(f"Using {n_jobs_process} jobs for internal processing within each pair")
+    
+    results = Parallel(n_jobs=n_jobs_pairs)(
+        delayed(_process_environment_policy_pair)(
+            pair_idx=pair_idx,
+            environment_policy_pair=pair,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            alpha=alpha,
+            n_particles=n_particles,
+            cache_dir_path=cache_dir_path,
+            confidence_interval_level=confidence_interval_level,
+            n_jobs=n_jobs_process,  # Use single job for each pair's internal processing
+            experiment_name=experiment_name,
+        )
+        for pair_idx, pair in enumerate(environment_policy_pairs)
+    )
 
-        # Start a new MLFlow run for each environment-policy combination
-        with mlflow.start_run(
-            run_name=f"{environment.__class__.__name__}_{policy.__class__.__name__}_{pair_idx}"
-        ):
-            logger.info("Starting MLFlow run for current pair")
-            
-            # Log common parameters
-            common_params = {
-                "environment_type": environment.__class__.__name__,
-                "policy_type": policy.__class__.__name__,
-                "num_episodes": num_episodes,
-                "num_steps": num_steps,
-                "alpha": alpha,
-                "n_particles": n_particles,
-                "confidence_interval_level": confidence_interval_level,
-            }
-
-            # Log environment-specific parameters
-            env_params = {
-                f"env_{key}": value
-                for key, value in environment.__dict__.items()
-                if isinstance(value, (int, float, str, bool))
-            }
-
-            # Log policy-specific parameters
-            policy_params = {
-                f"policy_{key}": value
-                for key, value in policy.__dict__.items()
-                if isinstance(value, (int, float, str, bool))
-            }
-
-            # Combine all parameters
-            all_params = {**common_params, **env_params, **policy_params}
-
-            mlflow.log_params(all_params)
-            logger.debug(f"Logged parameters: {all_params}")
-
-            logger.info("Running simulation for current pair")
-            histories, statistics = simulation(
-                environment=environment,
-                policy=policy,
-                initial_belief=initial_belief,
-                num_episodes=num_episodes,
-                num_steps=num_steps,
-                alpha=alpha,
-                confidence_interval_level=confidence_interval_level,
-                n_jobs=n_jobs,
-            )
-
-            # Log metrics from statistics
-            for metric in statistics:
-                mlflow.log_metric(metric.name, metric.value)
-                # Log confidence interval bounds
-                mlflow.log_metric(
-                    f"{metric.name}_ci_lower", metric.lower_confidence_bound
-                )
-                mlflow.log_metric(
-                    f"{metric.name}_ci_upper", metric.upper_confidence_bound
-                )
-            logger.debug(f"Logged metrics for {len(statistics)} statistics")
-
-            # Save the full statistics as a JSON artifact
-            full_data = {
-                "statistics": [metric._asdict() for metric in statistics],
-                "parameters": all_params,
-            }
-            mlflow.log_dict(full_data, "statistics/full_data.json")
-
-            with tempfile.TemporaryDirectory() as temp_dir:
-                temp_dir_path = Path(temp_dir)
-
-                for episode_idx, history in enumerate(histories):
-                    episode_dir = temp_dir_path / f"episode_{episode_idx}"
-                    file_name = f"agent_path_{episode_idx}.gif"
-                    cache_path = episode_dir / file_name
-                    episode_dir.mkdir(exist_ok=True)
-
-                    # Only try to create visualization if the environment supports it
-                    try:
-                        environment.cache_visualization(
-                            history=history, cache_path=cache_path
-                        )
-                        if cache_path.exists():
-                            # Log individual artifact file
-                            mlflow.log_artifact(
-                                str(cache_path), f"visualization/{file_name}"
-                            )
-                    except Exception as e:
-                        logger.warning(f"Visualization failed for episode {episode_idx}: {str(e)}")
-                        # Skip visualization if not supported
-                        pass
-
-            planner_statistics.append(statistics)
-
-            # Aggregate data for DataFrame
-            run_data = {
-                **all_params,
-                **{metric.name: metric.value for metric in statistics},
-            }
-            aggregated_data.append(run_data)
+    # Unpack results
+    planner_statistics, aggregated_data = zip(*results)
 
     # Convert aggregated data to DataFrame
     df = pd.DataFrame(aggregated_data)
@@ -364,12 +392,11 @@ def compare_planners(
         # Log DataFrame as table artifact
         mlflow.log_table(df, "dataframes/planner_comparison.json")
 
-    
         # Plot statistics comparison
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_dir_path = Path(temp_dir)
             logger.info("Generating statistics comparison plots")
-            plot_statistics_comparison(
+            plot_metrics_comparison(
                 statistics=planner_statistics,
                 environments=[env for env, _, _ in environment_policy_pairs],
                 policies=[policy for _, policy, _ in environment_policy_pairs],
@@ -756,7 +783,7 @@ def optimize_policy_parameters_for_multiple_environments(
     # Plot statistics comparison
     with tempfile.TemporaryDirectory() as temp_dir:
         temp_dir_path = Path(temp_dir)
-        plot_statistics_comparison(
+        plot_metrics_comparison(
             statistics=planner_statistics,
             environments=[env for env, (policy_class, _) in environment_policy_pairs],
             policies=[policy_class for _, (policy_class, _) in environment_policy_pairs],
