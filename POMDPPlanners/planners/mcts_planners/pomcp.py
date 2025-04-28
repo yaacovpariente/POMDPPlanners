@@ -66,6 +66,7 @@ class POMCP(Policy):
             return 0
         
         if self.environment.is_terminal(state=state):
+            belief_node.visit_count += 1
             return 0
 
         if belief_node.is_leaf:
@@ -107,10 +108,9 @@ class POMCP(Policy):
             return belief_node.children[np.random.choice(unvisited_action_indices)]
 
         action_nodes_q_values = np.array([child.q_value for child in belief_node.children])
-        pomcp_exploration_addition = self.exploration_constant * np.sqrt(np.log(belief_node.visit_count) / action_nodes_visits)
+        ucb = action_nodes_q_values + self.exploration_constant * np.sqrt(np.log(belief_node.visit_count) / action_nodes_visits)
 
-        pomcp_exploration_values = action_nodes_q_values + pomcp_exploration_addition
-        return belief_node.children[np.argmax(pomcp_exploration_values)]
+        return belief_node.children[np.argmax(ucb)]
         
     def random_rollout(self, state: Any, depth: int) -> float:
         if depth > self.depth or self.environment.is_terminal(state=state):
