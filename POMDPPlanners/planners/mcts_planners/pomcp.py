@@ -15,7 +15,8 @@ class POMCP(Policy):
         environment: Environment, 
         discount_factor: float, 
         depth: int, 
-        exploration_constant: float, 
+        exploration_constant: float,
+        name: str,
         time_out_in_seconds: int = None, 
         n_simulations: int = None, 
         min_samples_per_node: int = 10
@@ -24,8 +25,8 @@ class POMCP(Policy):
         combination2 = time_out_in_seconds is None and n_simulations is not None
         assert combination1 or combination2, "Only one of time_out_in_seconds and n_simulations must be provided."
         
-        self.environment = environment
-        self.discount_factor = discount_factor
+        super().__init__(environment=environment, discount_factor=discount_factor, name=name)
+        
         self.depth = depth
         self.exploration_constant = exploration_constant
         self.timeout_in_seconds = time_out_in_seconds
