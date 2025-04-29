@@ -6,7 +6,7 @@ import shutil
 import mlflow
 import os
 
-from POMDPPlanners.utils.visualization import plot_statistics_comparison
+from POMDPPlanners.utils.visualization import plot_metrics_comparison
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
@@ -71,7 +71,7 @@ def test_plot_statistics_comparison(temp_cache_dir):
 
     with mlflow.start_run():
         # Execute
-        plot_statistics_comparison(
+        plot_metrics_comparison(
             statistics=mock_statistics,
             environments=[environment],
             policies=[policy],
@@ -147,7 +147,7 @@ def test_plot_statistics_comparison_multiple_envs_policies(temp_cache_dir):
 
     with mlflow.start_run():
         # Execute
-        plot_statistics_comparison(
+        plot_metrics_comparison(
             statistics=mock_statistics,
             environments=[environment1, environment2],
             policies=[policy1, policy2],
@@ -174,7 +174,7 @@ def test_plot_statistics_comparison_empty_statistics(temp_cache_dir):
 
     # Test with empty statistics
     with pytest.raises(Exception):
-        plot_statistics_comparison(
+        plot_metrics_comparison(
             statistics=[],
             environments=[environment],
             policies=[policy],

@@ -115,6 +115,8 @@ def plot_reward_comparison(
 
 def plot_discounted_returns_histogram(
     histories: List[History],
+    policy: Policy,
+    environment: Environment,
     cache_path: Path,
 ) -> None:
     """
@@ -144,7 +146,7 @@ def plot_discounted_returns_histogram(
     )
     
     # Customize the plot
-    plt.xlabel('Discounted Return', fontsize=12)
+    plt.xlabel(f'Discounted Return for {policy.name} in {environment.name}', fontsize=12)
     plt.ylabel('Frequency', fontsize=12)
     plt.title('Distribution of Discounted Returns', fontsize=14, pad=20)
     
@@ -158,3 +160,19 @@ def plot_discounted_returns_histogram(
     plt.savefig(cache_path, dpi=300, bbox_inches='tight')
     plt.close()
     
+    
+def plot_environment_policy_pair_comparison(
+    histories: List[History],
+    policy: Policy,
+    environment: Environment,
+    cache_path: Path,
+) -> None:
+    plot_discounted_returns_histogram(histories=histories, policy=policy, environment=environment, cache_path=cache_path)
+
+def plot_policies_comparison_on_environment(
+    histories: List[List[History]],
+    environments: List[Environment],
+    policies: List[Policy],
+    cache_path: Path,
+) -> None:
+    pass

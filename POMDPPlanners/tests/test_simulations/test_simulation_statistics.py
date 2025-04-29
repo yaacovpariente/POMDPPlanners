@@ -1,7 +1,7 @@
 import numpy as np
 from typing import List
 from POMDPPlanners.core.simulation import History, StepData, MetricValue
-from POMDPPlanners.simulations.simulation_statistics import compute_statistics
+from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environment_policy_pair
 
 
 def create_test_history(rewards: List[float], discount_factor: float = 0.95) -> History:
@@ -39,7 +39,7 @@ def test_compute_statistics_basic():
     alpha = 0.1
     confidence_level = 0.95
 
-    stats = compute_statistics(histories, alpha, confidence_level)
+    stats = compute_statistics_environment_policy_pair(histories, alpha, confidence_level)
 
     # Test average return
     expected_returns = [
@@ -90,7 +90,7 @@ def test_compute_statistics_single_history():
         create_test_history([1.0, 2.0, 3.0]),
     ]
 
-    stats = compute_statistics(histories, alpha, confidence_level)
+    stats = compute_statistics_environment_policy_pair(histories, alpha, confidence_level)
 
     # With identical histories, CVaR and VaR should be the same as the return
     avg_return_metric = get_metric_value(stats, "average_return")
@@ -113,7 +113,7 @@ def test_compute_statistics_negative_rewards():
     alpha = 0.1
     confidence_level = 0.95
 
-    stats = compute_statistics(histories, alpha, confidence_level)
+    stats = compute_statistics_environment_policy_pair(histories, alpha, confidence_level)
 
     # Verify that statistics handle negative values correctly
     avg_return_metric = get_metric_value(stats, "average_return")
@@ -136,7 +136,7 @@ def test_compute_statistics_zero_rewards():
     alpha = 0.1
     confidence_level = 0.95
 
-    stats = compute_statistics(histories, alpha, confidence_level)
+    stats = compute_statistics_environment_policy_pair(histories, alpha, confidence_level)
 
     # All statistics should be zero
     avg_return_metric = get_metric_value(stats, "average_return")
