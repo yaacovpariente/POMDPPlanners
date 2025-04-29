@@ -68,6 +68,7 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
     def __init__(
         self,
         discount_factor: float,
+        name: str = "DiscreteLightDarkPOMDP",
         transition_error_prob: float = 0.05,
         observation_error_prob: float = 0.05,
         beacons: np.ndarray = np.array(
@@ -101,7 +102,7 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
             is_stochastic_reward=is_stochastic_reward,
         )
 
-        super().__init__(discount_factor=discount_factor)
+        super().__init__(discount_factor=discount_factor, name=name)
 
         self.transition_error_prob = transition_error_prob
         self.observation_error_prob = observation_error_prob

@@ -91,8 +91,8 @@ class CartPoleInitialStateDistribution(Distribution):
 
 
 class CartPolePOMDP(DiscreteActionsEnvironment):
-    def __init__(self, discount_factor: float, noise_cov: np.ndarray):
-        super().__init__(discount_factor)
+    def __init__(self, discount_factor: float, noise_cov: np.ndarray, name: str = "CartPolePOMDP"):
+        super().__init__(discount_factor=discount_factor, name=name)
 
         self.noise_cov = noise_cov
 

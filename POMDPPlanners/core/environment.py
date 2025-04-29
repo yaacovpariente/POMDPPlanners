@@ -37,8 +37,9 @@ class StateTransitionModel(Distribution, ABC):
 
 
 class Environment(ABC):
-    def __init__(self, discount_factor: float):
+    def __init__(self, discount_factor: float, name: str):
         self.discount_factor = discount_factor
+        self.name = name
 
     def __eq__(self, other):
         if not isinstance(other, Environment):
@@ -124,8 +125,8 @@ class Environment(ABC):
 
 
 class DiscreteActionsEnvironment(Environment):
-    def __init__(self, discount_factor: float):
-        super().__init__(discount_factor)
+    def __init__(self, discount_factor: float, name: str):
+        super().__init__(discount_factor=discount_factor, name=name)
 
     @abstractmethod
     def state_transition_model(self, state: Any, action: Any) -> StateTransitionModel:
