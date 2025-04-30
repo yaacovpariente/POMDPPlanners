@@ -12,6 +12,7 @@ import optuna
 import pandas as pd
 import numpy as np
 import tempfile
+from tqdm import tqdm
 from typing import Union, List, Tuple, Type
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
@@ -24,7 +25,7 @@ from POMDPPlanners.core.simulation import (
     MetricValue,
 )
 from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environment_policy_pair, compute_statistics_environments_policies_comparison
-from POMDPPlanners.utils.visualization import plot_metrics_comparison, plot_discounted_returns_histogram, plot_environment_policy_pair_comparison
+from POMDPPlanners.utils.visualization import plot_metrics_comparison, plot_discounted_returns_histogram, plot_environment_policy_pair_comparison, plot_discounted_returns_histogram_multiple_policies
 
 # Configure logging
 logging.basicConfig(
@@ -45,6 +46,7 @@ def run_multiple_episodes(
     n_jobs: int = 1,
 ) -> List[History]:
     logger.info(f"Starting {num_episodes} episodes with {num_steps} steps each using {n_jobs} jobs")
+    logger.info(f"Environment: {environment.name}, Policy: {policy.name}")
     assert isinstance(environment, Environment)
     assert isinstance(policy, Policy)
     assert isinstance(initial_belief, Belief)
@@ -57,12 +59,17 @@ def run_multiple_episodes(
         (environment, policy, initial_belief, num_steps) for _ in range(num_episodes)
     ]
 
-    # Run episodes in parallel using joblib
-    logger.info("Running episodes in parallel")
+    # Run episodes in parallel using joblib with progress bar
+    logger.info(f"Running episodes in parallel for {environment.name} with {policy.name}")
     histories = Parallel(n_jobs=n_jobs)(
-        delayed(run_episode)(*args) for args in episode_args
+        delayed(run_episode)(*args) for args in tqdm(
+            episode_args,
+            total=num_episodes,
+            desc=f"Running episodes for {environment.name} with {policy.name}",
+            unit="episode"
+        )
     )
-    logger.info("All episodes completed")
+    logger.info(f"All episodes completed for {environment.name} with {policy.name}")
 
     return histories
 
@@ -192,6 +199,7 @@ def simulation(
 
     logger.info("Computing statistics from simulation results")
     statistics = compute_statistics_environment_policy_pair(
+        env=environment,
         histories=histories,
         alpha=alpha,
         confidence_interval_level=confidence_interval_level,
@@ -341,6 +349,7 @@ def compare_multiple_environments_policies(
     n_jobs: int = 1,
     cache_dir_path: Path = None,
     experiment_name: str = "POMDP_Planning_Comparison",
+    cache_visualizations: bool = True,
 ) -> Tuple[Dict[str, Dict[str, List[History]]], pd.DataFrame]:
     """
     Compare multiple policies on multiple environments and cache results in MLFlow.
@@ -419,6 +428,7 @@ def compare_multiple_environments_policies(
         # Compute statistics
         statistics_df = compute_statistics_environments_policies_comparison(
             histories=histories,
+            environments=[env for env, _, _ in environment_belief_policy_tuples],
             alpha=alpha,
             confidence_interval_level=confidence_interval_level,
         )
@@ -460,19 +470,31 @@ def compare_multiple_environments_policies(
                 viz_dir = policy_dir / "visualizations"
                 viz_dir.mkdir(exist_ok=True)
                 
-                # Cache visualizations for each history
-                for episode_idx, history in enumerate(policy_histories):
-                    file_name = f"agent_path_{episode_idx}.gif"
-                    cache_path = viz_dir / file_name
-                    
-                    try:
-                        environment.cache_visualization(
-                            history=history,
-                            cache_path=cache_path
-                        )
-                    except Exception as e:
-                        logger.warning(f"Visualization failed for episode {episode_idx}: {str(e)}")
-                        continue
+                if cache_visualizations:
+                    # Cache visualizations for each history
+                    for episode_idx, history in enumerate(policy_histories):
+                        file_name = f"agent_path_{episode_idx}.gif"
+                        cache_path = viz_dir / file_name
+                        
+                        try:
+                            environment.cache_visualization(
+                                history=history,
+                                cache_path=cache_path
+                            )
+                        except Exception as e:
+                            logger.warning(f"Visualization failed for episode {episode_idx}: {str(e)}")
+                            continue
+            
+            # Create comparison plot for all policies in this environment
+            comparison_plot_path = env_dir / "policy_comparison_histogram.png"
+            # Get the policies that correspond to the histories in policy_histories_dict
+            policies_for_plot = [policy for policy in policies if policy.name in policy_histories_dict]
+            plot_discounted_returns_histogram_multiple_policies(
+                histories=policy_histories_dict,
+                policies=policies_for_plot,
+                environment=environment,
+                cache_path=comparison_plot_path
+            )
         
         # Log all generated plots and visualizations as artifacts
         mlflow.log_artifact(str(results_dir), ".")
