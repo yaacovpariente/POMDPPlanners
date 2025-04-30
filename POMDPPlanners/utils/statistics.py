@@ -50,7 +50,6 @@ def cvar_estimator(vec: np.ndarray, alpha: float) -> float:
 
 
 def confidence_interval(data, confidence=0.95):
-    # TODO: test this function
     """
     Calculate the confidence interval for the mean of a dataset using the t-distribution.
 
@@ -60,13 +59,19 @@ def confidence_interval(data, confidence=0.95):
 
     Returns:
         tuple: (lower_bound, upper_bound) of the confidence interval
+        
+    Raises:
+        ValueError: If data contains NaN values or has insufficient samples
     """
     data = np.array(data)
     if len(data) <= 1:
         raise ValueError("Data must contain at least two elements")
+        
+    if np.any(np.isnan(data)):
+        raise ValueError("Data contains NaN values")
 
     mean = np.mean(data)
-    sem = stats.sem(data, nan_policy="omit")  # Standard error of the mean
+    sem = stats.sem(data)  # Standard error of the mean
     df = len(data) - 1  # Degrees of freedom
 
     # Confidence interval

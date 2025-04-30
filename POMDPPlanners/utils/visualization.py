@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Dict
 from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
@@ -160,7 +160,67 @@ def plot_discounted_returns_histogram(
     plt.savefig(cache_path, dpi=300, bbox_inches='tight')
     plt.close()
     
+def plot_discounted_returns_histogram_multiple_policies(
+    histories: Dict[str, List[History]],
+    policies: List[Policy],
+    environment: Environment,
+    cache_path: Path,
+) -> None:
+    """
+    Create overlapping histogram plots of discounted returns for multiple policies using seaborn.
+
+    Args:
+        histories: Dictionary mapping policy names to lists of History objects
+        policies: List of Policy objects
+        environment: Environment object
+        cache_path: Path where the histogram plot will be saved
+    """
+    # Set seaborn style
+    sns.set_style("whitegrid")
+    sns.set_context("notebook", font_scale=1.2)
     
+    # Create the figure and axis
+    plt.figure(figsize=(12, 7))
+    
+    # Create a color palette
+    colors = sns.color_palette("husl", n_colors=len(policies))
+    
+    # Plot histogram for each policy
+    for policy, color in zip(policies, colors):
+        policy_histories = histories[policy.name]
+        if not policy_histories:  # Skip if no histories for this policy
+            continue
+            
+        discounted_returns = [history_to_discounted_return_value(history) for history in policy_histories]
+        
+        sns.histplot(
+            data=discounted_returns,
+            bins=15,
+            alpha=0.5,
+            color=color,
+            label=policy.name,
+            edgecolor='black',
+            linewidth=0.5
+        )
+    
+    # Customize the plot
+    plt.xlabel('Discounted Return', fontsize=12)
+    plt.ylabel('Frequency', fontsize=12)
+    plt.title(f'Distribution of Discounted Returns for {environment.name}', fontsize=14, pad=20)
+    
+    # Add legend
+    plt.legend(title='Policies', bbox_to_anchor=(1.05, 1), loc='upper left')
+    
+    # Add a light grid
+    plt.grid(True, alpha=0.3)
+    
+    # Adjust layout to prevent label cutoff
+    plt.tight_layout()
+    
+    # Save the plot
+    plt.savefig(cache_path, dpi=300, bbox_inches='tight')
+    plt.close()
+
 def plot_environment_policy_pair_comparison(
     histories: List[History],
     policy: Policy,
