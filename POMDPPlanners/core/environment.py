@@ -6,8 +6,8 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 from POMDPPlanners.core.distributions import Distribution
-from POMDPPlanners.core.simulation import StepData
-
+from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.simulation import MetricValue
 
 class ObservationModel(Distribution, ABC):
     def __init__(self, next_state, action):
@@ -122,6 +122,9 @@ class Environment(ABC):
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         pass
+    
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        return []
 
 
 class DiscreteActionsEnvironment(Environment):
@@ -158,9 +161,6 @@ class DiscreteActionsEnvironment(Environment):
 
     @abstractmethod
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
-        pass
-
-    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         pass
 
 
