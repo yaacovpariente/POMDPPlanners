@@ -39,4 +39,4 @@ class MetricValue(NamedTuple):
     upper_confidence_bound: float
 
 def history_to_discounted_return_value(history: History) -> float:
-    return sum(step.reward * history.discount_factor ** i for i, step in enumerate(history.history))
+    return sum(step.reward * history.discount_factor ** i for i, step in enumerate(history.history) if step.reward is not None)

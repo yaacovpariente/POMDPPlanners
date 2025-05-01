@@ -24,7 +24,7 @@ def compute_statistics_environment_policy_pair(
     average_reach_terminal_state = []
 
     for i, h in enumerate(histories):
-        return_ = sum(h.history[j].reward * h.discount_factor**j for j in range(len(h.history)))
+        return_ = sum(h.history[j].reward * h.discount_factor**j for j in range(len(h.history)) if h.history[j].reward is not None)
         return_samples.append(return_)
 
         average_state_sampling_time.append(h.average_state_sampling_time)
