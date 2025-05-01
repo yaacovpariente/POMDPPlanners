@@ -11,10 +11,11 @@ from POMDPPlanners.core.cost import belief_expectation_cost, belief_expectation_
 
 
 class SparsePFT(Policy):
-    def __init__(self, environment: Environment, discount_factor: float, gamma: float, depth: int, c_ucb: float, beta_ucb: float, belief_child_num: int, n_simulations: int):
+    def __init__(self, environment: Environment, discount_factor: float, gamma: float, depth: int, c_ucb: float, beta_ucb: float, belief_child_num: int, n_simulations: int, name: str = "SparsePFT"):
         super().__init__(
             environment=environment,
-            discount_factor=discount_factor
+            discount_factor=discount_factor,
+            name=name
         )
         
         self.gamma = gamma

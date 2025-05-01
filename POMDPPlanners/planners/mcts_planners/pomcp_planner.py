@@ -18,7 +18,8 @@ class POMCPPlanner(BeliefBasedMCTS):
             environment=environment, 
             discount_factor=discount_factor,
             n_simulations=n_simulations,
-            depth=depth
+            depth=depth,
+            name="POMCPPlanner"
         )
         
         self.exploration_constant = exploration_constant
@@ -54,7 +55,7 @@ class POMCPPlanner(BeliefBasedMCTS):
         children_visit_counts = np.array([child.visit_count for child in node.children if child.visit_count > 0])
         children_v_values = np.array([child.v_value for child in node.children if child.visit_count > 0])
         node.q_value = node.immediate_cost + self.discount_factor * np.sum(children_v_values * children_visit_counts) / np.sum(children_visit_counts)
-    
+        # TODO: change to updating mean
     def _update_non_leaf_belief_node_v_value(self, node: BeliefNode):
         children_q_values = np.array([child.q_value for child in node.children if child.q_value != -float('inf')])
         node.v_value = np.min(children_q_values)

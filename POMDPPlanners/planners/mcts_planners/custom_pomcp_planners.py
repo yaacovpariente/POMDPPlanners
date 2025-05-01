@@ -13,11 +13,13 @@ class BeliefBasedMCTS(Policy, ABC):
         environment: Environment, 
         discount_factor: float,
         n_simulations: int, 
-        depth: int
+        depth: int,
+        name: str = "BeliefBasedMCTS"
     ):
         super().__init__(
             environment=environment, 
-            discount_factor=discount_factor
+            discount_factor=discount_factor,
+            name=name
         )
         
         self.n_simulations = n_simulations
@@ -51,7 +53,7 @@ class BeliefBasedMCTS(Policy, ABC):
         
         if current_depth > self.depth:
             return
-        
+        # TODO: add a check that this is not a terminal node
         if node.is_leaf:
             self._expand_leaf_belief_node(node=node, current_depth=current_depth)
             return

@@ -18,6 +18,7 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         branching_factor: int,
         depth: int,
         resampling: bool = False,
+        name: str = "SparseSamplingDiscreteActionsPlanner"
     ):
         assert isinstance(environment, DiscreteActionsEnvironment)
         assert isinstance(branching_factor, int)
@@ -29,7 +30,9 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
             raise ValueError("Branching factor must be greater than 0")
 
         super().__init__(
-            environment=environment, discount_factor=environment.discount_factor
+            environment=environment, 
+            discount_factor=environment.discount_factor,
+            name=name
         )
 
         self.branching_factor = branching_factor
@@ -123,10 +126,10 @@ class StandardSparseSamplingDiscreteActionsPlanner(
     SparseSamplingDiscreteActionsPlanner
 ):
     def __init__(
-        self, environment: DiscreteActionsEnvironment, branching_factor: int, depth: int
+        self, environment: DiscreteActionsEnvironment, branching_factor: int, depth: int, name: str = "StandardSparseSamplingDiscreteActionsPlanner"
     ):
         super().__init__(
-            environment=environment, branching_factor=branching_factor, depth=depth
+            environment=environment, branching_factor=branching_factor, depth=depth, name=name
         )
 
     def _update_leaf_node_q_value(self, node: ActionNode):

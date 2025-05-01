@@ -46,7 +46,8 @@ def planner(environment, discount_factor, depth, exploration_constant, n_simulat
         discount_factor=discount_factor,
         depth=depth,
         exploration_constant=exploration_constant,
-        n_simulations=n_simulations
+        n_simulations=n_simulations,
+        name="TestPOMCP"
     )
 
 
@@ -65,8 +66,13 @@ def test_initialization_with_n_simulations(environment, discount_factor, depth, 
         discount_factor=discount_factor,
         depth=depth,
         exploration_constant=exploration_constant,
-        n_simulations=100
+        n_simulations=100,
+        name="TestPOMCP"
     )
+    assert planner.environment == environment
+    assert planner.discount_factor == discount_factor
+    assert planner.depth == depth
+    assert planner.exploration_constant == exploration_constant
     assert planner.n_simulations == 100
     assert planner.timeout_in_seconds is None
 
@@ -77,10 +83,15 @@ def test_initialization_with_timeout(environment, discount_factor, depth, explor
         discount_factor=discount_factor,
         depth=depth,
         exploration_constant=exploration_constant,
-        time_out_in_seconds=5
+        time_out_in_seconds=5,
+        name="TestPOMCP"
     )
-    assert planner.n_simulations is None
+    assert planner.environment == environment
+    assert planner.discount_factor == discount_factor
+    assert planner.depth == depth
+    assert planner.exploration_constant == exploration_constant
     assert planner.timeout_in_seconds == 5
+    assert planner.n_simulations is None
 
 
 def test_invalid_initialization(environment, discount_factor, depth, exploration_constant):
@@ -91,7 +102,8 @@ def test_invalid_initialization(environment, discount_factor, depth, exploration
             depth=depth,
             exploration_constant=exploration_constant,
             n_simulations=100,
-            time_out_in_seconds=5
+            time_out_in_seconds=5,
+            name="TestPOMCP"
         )
 
 
@@ -137,7 +149,8 @@ def test_construct_tree_using_timeout(environment, discount_factor, depth, explo
         discount_factor=discount_factor,
         depth=depth,
         exploration_constant=exploration_constant,
-        time_out_in_seconds=timeout_seconds
+        time_out_in_seconds=timeout_seconds,
+        name="TestPOMCP"
     )
     
     belief = get_initial_belief(environment, n_particles=100, resampling=True)
@@ -162,7 +175,8 @@ def test_construct_tree_using_n_simulations(environment, discount_factor, depth,
         discount_factor=discount_factor,
         depth=depth,
         exploration_constant=exploration_constant,
-        n_simulations=n_sims
+        n_simulations=n_sims,
+        name="TestPOMCP"
     )
     
     belief = get_initial_belief(environment, n_particles=100, resampling=True)
@@ -189,7 +203,8 @@ def test_tree_structure_construction(environment, discount_factor, depth, explor
         discount_factor=discount_factor,
         depth=depth,
         exploration_constant=exploration_constant,
-        n_simulations=n_sims
+        n_simulations=n_sims,
+        name="TestPOMCP"
     )
     
     n_particles = 100

@@ -28,7 +28,9 @@ def initial_belief(tiger_pomdp):
 @pytest.fixture
 def planner(tiger_pomdp):
     return StandardSparseSamplingDiscreteActionsPlanner(
-        environment=tiger_pomdp, branching_factor=2, depth=2
+        environment=tiger_pomdp,
+        branching_factor=2,
+        depth=2
     )
 
 
@@ -158,7 +160,9 @@ def test_invalid_branching_factor():
     env = TigerPOMDP(discount_factor=0.95)
     with pytest.raises(ValueError):
         StandardSparseSamplingDiscreteActionsPlanner(
-            environment=env, branching_factor=0, depth=1
+            environment=env,
+            branching_factor=0,
+            depth=1
         )
 
 
@@ -167,5 +171,7 @@ def test_invalid_depth():
     env = TigerPOMDP(discount_factor=0.95)
     with pytest.raises(ValueError):
         StandardSparseSamplingDiscreteActionsPlanner(
-            environment=env, branching_factor=2, depth=0
+            environment=env,
+            branching_factor=2,
+            depth=0
         )
