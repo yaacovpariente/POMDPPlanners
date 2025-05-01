@@ -28,7 +28,7 @@ class MockObservationModel(ObservationModel):
 
 class MockEnvironment(Environment):
     def __init__(self, discount_factor: float, test_array: Optional[np.ndarray] = None):
-        super().__init__(discount_factor)
+        super().__init__(discount_factor=discount_factor, name="MockEnvironment")
         self.test_array = test_array if test_array is not None else np.array([1, 2, 3])
     
     def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
@@ -54,7 +54,7 @@ class MockEnvironment(Environment):
 
 class DifferentEnvironment(Environment):
     def __init__(self, discount_factor: float):
-        super().__init__(discount_factor)
+        super().__init__(discount_factor=discount_factor, name="DifferentEnvironment")
     
     def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
         return MockStateTransitionModel(state, action)

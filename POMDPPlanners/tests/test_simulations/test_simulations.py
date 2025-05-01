@@ -6,14 +6,13 @@ import shutil
 import mlflow
 import json
 import os
-import optuna
 import pandas as pd
 
 from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.simulations.simulations import (
     run_episode,
     simulation,
-    compare_planners,
+    compare_multiple_environments_policies,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
@@ -21,19 +20,14 @@ from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.simulation import History, NumericalHyperParameter
-from POMDPPlanners.simulations.simulations import (
-    create_policy_optimization_objective,
-    optimize_policy_parameters_with_optuna,
-    optimize_policy_parameters_for_multiple_environments,
-)
+from POMDPPlanners.core.simulation import History
 
 
 def test_run_episode_returns_history():
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3
+        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
     )
     initial_belief = get_initial_belief(environment, n_particles=100)
     num_steps = 5
@@ -55,7 +49,7 @@ def test_run_episode_timing_statistics():
     # Setup
     environment = MountainCarPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3
+        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
     )
     initial_belief = get_initial_belief(environment, n_particles=100)
     num_steps = 5
@@ -84,7 +78,7 @@ def test_run_episode_valid_transitions():
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3
+        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
     )
     initial_belief = get_initial_belief(environment, n_particles=100)
     num_steps = 5
@@ -110,7 +104,7 @@ def test_run_episode_reward_calculation():
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3
+        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
     )
     initial_belief = get_initial_belief(environment, n_particles=100)
     num_steps = 5
@@ -152,7 +146,7 @@ def test_simulation_parameter_validation():
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3
+        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
     )
     initial_belief = get_initial_belief(environment, n_particles=100)
 
@@ -193,7 +187,7 @@ def test_simulation_returns_histories_and_statistics():
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3
+        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
     )
     initial_belief = get_initial_belief(environment, n_particles=100)
     num_episodes = 2
@@ -252,7 +246,7 @@ def test_simulation_different_alphas():
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=5, depth=3
+        environment=environment, branching_factor=5, depth=3, name="TestPolicy"
     )
     initial_belief = get_initial_belief(environment, n_particles=5)
 
@@ -289,41 +283,39 @@ def test_simulation_different_alphas():
     assert cvar1 != cvar2
 
 
-def test_compare_planners_parameter_validation(temp_cache_dir):
+def test_compare_multiple_environments_policies_parameter_validation(temp_cache_dir):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3
+        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
     )
     initial_belief = get_initial_belief(environment, n_particles=100)
 
     # Test invalid parameters
     with pytest.raises(AssertionError):
-        compare_planners(
-            environment_policy_pairs=[("not_an_environment", policy, initial_belief)],
+        compare_multiple_environments_policies(
+            environment_belief_policy_tuples=[("not_an_environment", initial_belief, [policy])],
             num_episodes=10,
             num_steps=5,
             alpha=0.1,
-            n_particles=100,
             cache_dir_path=temp_cache_dir,
         )
 
     with pytest.raises(AssertionError):
-        compare_planners(
-            environment_policy_pairs=[],  # Empty policy list
+        compare_multiple_environments_policies(
+            environment_belief_policy_tuples=[],  # Empty policy list
             num_episodes=10,
             num_steps=5,
             alpha=0.1,
-            n_particles=100,
             cache_dir_path=temp_cache_dir,
         )
 
 
-def test_compare_planners_mlflow_integration(temp_cache_dir):
+def test_compare_multiple_environments_policies_mlflow_integration(temp_cache_dir):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3
+        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
     )
     initial_belief = get_initial_belief(environment, n_particles=100)
 
@@ -338,12 +330,11 @@ def test_compare_planners_mlflow_integration(temp_cache_dir):
     mlflow.set_experiment(experiment_name)
 
     # Execute
-    compare_planners(
-        environment_policy_pairs=[(environment, policy, initial_belief)],
+    compare_multiple_environments_policies(
+        environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
         num_episodes=2,
         num_steps=2,
         alpha=0.1,
-        n_particles=5,
         cache_dir_path=temp_cache_dir,
         experiment_name=experiment_name,
     )
@@ -360,207 +351,33 @@ def test_compare_planners_mlflow_integration(temp_cache_dir):
         assert run.status == "FINISHED"
 
 
-def test_compare_planners_different_parameters(temp_cache_dir):
+def test_compare_multiple_environments_policies_different_parameters(temp_cache_dir):
     # Setup
-    environment1 = TigerPOMDP(discount_factor=0.95)
-    environment2 = TigerPOMDP(discount_factor=0.99)
+    environment1 = TigerPOMDP(discount_factor=0.95, name="TigerPOMDP_095")
+    environment2 = TigerPOMDP(discount_factor=0.99, name="TigerPOMDP_099")
     policy1 = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment1, branching_factor=2, depth=3
+        environment=environment1, branching_factor=2, depth=3, name="TestPolicy1"
     )
     policy2 = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment2, branching_factor=3, depth=4
+        environment=environment2, branching_factor=3, depth=4, name="TestPolicy2"
     )
     initial_belief1 = get_initial_belief(environment1, n_particles=100)
     initial_belief2 = get_initial_belief(environment2, n_particles=100)
 
     # Execute
-    planner_statistics, results_df = compare_planners(
-        environment_policy_pairs=[
-            (environment1, policy1, initial_belief1),
-            (environment2, policy2, initial_belief2)
+    histories, statistics_df = compare_multiple_environments_policies(
+        environment_belief_policy_tuples=[
+            (environment1, initial_belief1, [policy1]),
+            (environment2, initial_belief2, [policy2])
         ],
         num_episodes=2,
         num_steps=2,
         alpha=0.1,
-        n_particles=5,
         cache_dir_path=temp_cache_dir,
     )
 
     # Assert
-    assert isinstance(results_df, pd.DataFrame)
-    assert len(results_df) == 2  # One row per policy
-    assert "policy_branching_factor" in results_df.columns
-    assert "policy_depth" in results_df.columns
-    assert all(results_df["policy_branching_factor"] == [2, 3])
-    assert all(results_df["policy_depth"] == [3, 4])
-
-
-def test_create_policy_optimization_objective():
-    # Setup
-    environment = TigerPOMDP(discount_factor=0.95)
-
-    # Define parameter ranges for testing
-    param_ranges = {
-        "branching_factor": {"type": "int", "low": 2, "high": 5},
-        "depth": {"type": "int", "low": 2, "high": 4},
-    }
-
-    # Create a simple evaluation function
-    def evaluation_function(policy):
-        assert isinstance(policy, StandardSparseSamplingDiscreteActionsPlanner)
-        assert hasattr(policy, "environment")
-        return (1.0, (0.5, 1.5))  # Return a tuple to simulate statistics
-
-    # Create a mock trial that implements all suggest methods
-    class MockTrial:
-        def suggest_int(self, name, low, high):
-            return (low + high) // 2
-
-        def suggest_float(self, name, low, high, log=False):
-            return (low + high) / 2
-
-        def suggest_categorical(self, name, choices):
-            return choices[0]
-
-    # Execute
-    objective = create_policy_optimization_objective(
-        policy_class=StandardSparseSamplingDiscreteActionsPlanner,
-        param_ranges=param_ranges,
-        evaluation_function=evaluation_function,
-        environment=environment,
-    )
-
-    # Test the objective function
-    result = objective(MockTrial())
-
-    # Assert
-    assert result == 1.0  # Should return the mean value from the tuple
-
-
-def test_optimize_policy_parameters_with_optuna(temp_cache_dir):
-    # Setup
-    environment = TigerPOMDP(discount_factor=0.95)
-    param_ranges = [
-        NumericalHyperParameter(name="branching_factor", low=2, high=3),
-        NumericalHyperParameter(name="depth", low=2, high=3),
-    ]
-
-    # Execute
-    best_params, best_value, histories = optimize_policy_parameters_with_optuna(
-        environment=environment,
-        policy_class=StandardSparseSamplingDiscreteActionsPlanner,
-        param_ranges=param_ranges,
-        num_episodes=2,
-        num_steps=2,
-        n_particles=10,
-        cache_dir_path=temp_cache_dir,
-        n_trials=2,
-    )
-
-    # Assert
-    assert isinstance(best_params, dict)
-    assert "branching_factor" in best_params
-    assert "depth" in best_params
-    assert isinstance(best_value, float)
-    assert isinstance(histories, list)
-    assert len(histories) > 0
-
-
-def test_optimize_policy_parameters_with_optuna_invalid_params(temp_cache_dir):
-    # Setup
-    environment = TigerPOMDP(discount_factor=0.95)
-    param_ranges = [
-        NumericalHyperParameter(name="branching_factor", low=2, high=3),
-        NumericalHyperParameter(name="depth", low=2, high=3),
-    ]
-
-    # Test invalid parameters
-    with pytest.raises(AssertionError):
-        optimize_policy_parameters_with_optuna(
-            environment=environment,
-            policy_class=StandardSparseSamplingDiscreteActionsPlanner,
-            param_ranges=param_ranges,
-            num_episodes=0,  # Invalid num_episodes
-            num_steps=2,
-            n_particles=10,
-            cache_dir_path=temp_cache_dir,
-            n_trials=2,
-        )
-
-
-def test_optimize_policy_parameters_with_optuna_different_metrics(temp_cache_dir):
-    # Setup
-    environment = TigerPOMDP(discount_factor=0.95)
-    param_ranges = [
-        NumericalHyperParameter(name="branching_factor", low=2, high=3),
-        NumericalHyperParameter(name="depth", low=2, high=3),
-    ]
-
-    # Execute with different optimization metrics
-    best_params1, _, _ = optimize_policy_parameters_with_optuna(
-        environment=environment,
-        policy_class=StandardSparseSamplingDiscreteActionsPlanner,
-        param_ranges=param_ranges,
-        num_episodes=5,
-        num_steps=5,
-        n_particles=10,
-        cache_dir_path=temp_cache_dir,
-        parameter_to_optimize="average_return",
-        n_trials=2,
-    )
-
-    best_params2, _, _ = optimize_policy_parameters_with_optuna(
-        environment=environment,
-        policy_class=StandardSparseSamplingDiscreteActionsPlanner,
-        param_ranges=param_ranges,
-        num_episodes=5,
-        num_steps=5,
-        n_particles=10,
-        cache_dir_path=temp_cache_dir,
-        parameter_to_optimize="return_cvar",
-        n_trials=2,
-    )
-
-    # Assert different metrics can lead to different optimal parameters
-    assert best_params1 != best_params2
-
-
-def test_optimize_policy_parameters_for_multiple_environments(temp_cache_dir):
-    # Setup
-    environment1 = TigerPOMDP(discount_factor=0.95)
-    environment2 = TigerPOMDP(discount_factor=0.99)
-    param_ranges = [
-        NumericalHyperParameter(name="branching_factor", low=2, high=3),
-        NumericalHyperParameter(name="depth", low=2, high=3),
-    ]
-
-    environment_policy_pairs = [
-        (environment1, (StandardSparseSamplingDiscreteActionsPlanner, param_ranges)),
-        (environment2, (StandardSparseSamplingDiscreteActionsPlanner, param_ranges)),
-    ]
-
-    # Execute
-    results, df = optimize_policy_parameters_for_multiple_environments(
-        environment_policy_pairs=environment_policy_pairs,
-        num_episodes=2,
-        num_steps=2,
-        n_particles=10,
-        cache_dir_path=temp_cache_dir,
-        n_trials=2,
-    )
-
-    # Assert
-    assert isinstance(results, list)
-    assert len(results) == 2  # One result per environment
-    for result in results:
-        assert isinstance(result, tuple)
-        assert len(result) == 3  # (best_params, best_value, histories)
-        best_params, best_value, histories = result
-        assert isinstance(best_params, dict)
-        assert isinstance(best_value, float)
-        assert isinstance(histories, list)
-
-    assert isinstance(df, pd.DataFrame)
-    assert len(df) > 0
-    assert "param_range_branching_factor" in df.columns
-    assert "param_range_depth" in df.columns
+    assert isinstance(histories, dict)
+    assert len(histories) == 2  # One for each environment
+    assert isinstance(statistics_df, pd.DataFrame)
+    assert len(statistics_df) == 2  # One row per policy
