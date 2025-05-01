@@ -9,6 +9,7 @@ from POMDPPlanners.core.environment import DiscreteActionsEnvironment, Observati
 from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
 from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.simulation import MetricValue
+from POMDPPlanners.utils.statistics import confidence_interval
 
 class DiscreteLDObservationModel(ObservationModel):
     def __init__(
@@ -330,42 +331,43 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         # Calculate time to reach goal for each history
-        time_to_goal = []
         goal_reached = []
+        obstacle_hits = []
         for history in histories:
             goal_reached_in_history = False
+            obstacle_hit_in_history = False
+            
             for i, step in enumerate(history.history):
                 if np.array_equal(step.state, self.goal_state):
-                    time_to_goal.append(i)
                     goal_reached_in_history = True
                     break
-            if not goal_reached_in_history:
-                # If goal was never reached, use the full history length
-                time_to_goal.append(len(history.history))
+                
+                if np.any(np.all(step.state.reshape(-1, 1) == self.obstacles, axis=0)):
+                    obstacle_hit_in_history = True
+            
             goal_reached.append(1 if goal_reached_in_history else 0)
+            obstacle_hits.append(1 if obstacle_hit_in_history else 0)
 
-        # Calculate average time to goal
-        avg_time_to_goal = np.mean(time_to_goal)
-
-        # Calculate confidence interval for time to goal
-        from POMDPPlanners.utils.statistics import confidence_interval
-        time_to_goal_ci = confidence_interval(data=time_to_goal, confidence=0.95)
-
-        # Calculate average goal reaching rate
         avg_goal_reached = np.mean(goal_reached)
+        avg_obstacle_hits = np.mean(obstacle_hits)
+
+        goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
 
+        avg_obstacle_hits = np.mean(obstacle_hits)
+        obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)
+
         return [
-            MetricValue(
-                name="average_time_to_goal",
-                value=avg_time_to_goal,
-                lower_confidence_bound=time_to_goal_ci[0],
-                upper_confidence_bound=time_to_goal_ci[1],
-            ),
             MetricValue(
                 name="goal_reaching_rate",
                 value=avg_goal_reached,
                 lower_confidence_bound=goal_reached_ci[0],
                 upper_confidence_bound=goal_reached_ci[1],
+            ),
+            MetricValue(
+                name="obstacle_hit_rate",
+                value=avg_obstacle_hits,
+                lower_confidence_bound=obstacle_hits_ci[0],
+                upper_confidence_bound=obstacle_hits_ci[1],
             )
         ]

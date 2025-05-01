@@ -414,3 +414,54 @@ def test_visualize_path(tmp_path):
 
     # Verify file was created
     assert cache_path.exists()
+
+
+def test_compute_metrics():
+    """Test computation of metrics for different simulation histories"""
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    
+    # Create test histories
+    from POMDPPlanners.core.simulation import History, StepData
+    
+    # History 1: Reaches goal in 3 steps
+    history1 = History([
+        StepData(state=np.array([0, 5]), action="right", next_state=np.array([1, 5]), observation=np.array([1, 5]), reward=-2.0),
+        StepData(state=np.array([1, 5]), action="right", next_state=np.array([2, 5]), observation=np.array([2, 5]), reward=-2.0),
+        StepData(state=np.array([2, 5]), action="right", next_state=np.array([3, 5]), observation=np.array([3, 5]), reward=-2.0),
+        StepData(state=np.array([10, 5]), action="right", next_state=np.array([10, 5]), observation=np.array([10, 5]), reward=8.0),  # Goal state
+    ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=4, reach_terminal_state=True)
+    
+    # History 2: Hits obstacle
+    history2 = History([
+        StepData(state=np.array([0, 5]), action="right", next_state=np.array([1, 5]), observation=np.array([1, 5]), reward=-2.0),
+        StepData(state=np.array([1, 5]), action="right", next_state=np.array([2, 5]), observation=np.array([2, 5]), reward=-2.0),
+        StepData(state=np.array([3, 5]), action="right", next_state=np.array([3, 5]), observation=np.array([3, 5]), reward=-12.0),  # Obstacle state
+    ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=3, reach_terminal_state=True)
+    
+    # History 3: Reaches goal in 5 steps, avoiding obstacle by going up
+    history3 = History([
+        StepData(state=np.array([0, 5]), action="right", next_state=np.array([1, 5]), observation=np.array([1, 5]), reward=-2.0),
+        StepData(state=np.array([1, 5]), action="right", next_state=np.array([2, 5]), observation=np.array([2, 5]), reward=-2.0),
+        StepData(state=np.array([2, 5]), action="up", next_state=np.array([2, 6]), observation=np.array([2, 6]), reward=-2.0),
+        StepData(state=np.array([2, 6]), action="right", next_state=np.array([3, 6]), observation=np.array([3, 6]), reward=-2.0),
+        StepData(state=np.array([3, 6]), action="right", next_state=np.array([4, 6]), observation=np.array([4, 6]), reward=-2.0),
+        StepData(state=np.array([10, 5]), action="right", next_state=np.array([10, 5]), observation=np.array([10, 5]), reward=8.0),  # Goal state
+    ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=6, reach_terminal_state=True)
+    
+    # Compute metrics
+    metrics = env.compute_metrics([history1, history2, history3])
+    
+    # Convert metrics to dictionary for easier access
+    metrics_dict = {metric.name: metric for metric in metrics}
+    
+    # Test goal reaching rate
+    assert "goal_reaching_rate" in metrics_dict
+    goal_rate = metrics_dict["goal_reaching_rate"]
+    assert goal_rate.value == 2/3  # 2 out of 3 histories reach goal
+    assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
+    
+    # Test obstacle hit rate
+    assert "obstacle_hit_rate" in metrics_dict
+    obstacle_rate = metrics_dict["obstacle_hit_rate"]
+    assert obstacle_rate.value == 1/3  # 1 out of 3 histories hits obstacle
+    assert obstacle_rate.lower_confidence_bound <= obstacle_rate.value <= obstacle_rate.upper_confidence_bound
