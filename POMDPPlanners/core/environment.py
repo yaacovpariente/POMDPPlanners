@@ -2,6 +2,8 @@ from typing import Any, List, Tuple
 from pathlib import Path
 import gymnasium as gym
 from abc import ABC, abstractmethod
+import json
+import hashlib
 
 import numpy as np
 
@@ -83,6 +85,40 @@ class Environment(ABC):
 
         return True
 
+    @property
+    def config_id(self) -> str:
+        """Generate a deterministic identifier based on environment configuration."""
+        config_dict = {}
+        
+        # Include all public attributes that aren't callables
+        for key, value in self.__dict__.items():
+            if key.startswith('_') or callable(value):
+                continue
+                
+            # Handle numpy arrays
+            if isinstance(value, np.ndarray):
+                config_dict[key] = value.tolist()
+            # Handle basic Python types
+            elif isinstance(value, (str, int, float, bool, list, tuple)):
+                config_dict[key] = value
+            # Handle dictionaries
+            elif isinstance(value, dict):
+                # Only include serializable values
+                serializable_dict = {}
+                for k, v in value.items():
+                    if isinstance(v, (str, int, float, bool, list, tuple)):
+                        serializable_dict[k] = v
+                    elif isinstance(v, np.ndarray):
+                        serializable_dict[k] = v.tolist()
+                config_dict[key] = serializable_dict
+                
+        # Sort dictionary to ensure consistent ordering
+        config_dict = dict(sorted(config_dict.items()))
+        
+        # Create a deterministic string representation and hash it
+        config_str = json.dumps(config_dict, sort_keys=True)
+        return hashlib.sha256(config_str.encode()).hexdigest()
+
     @abstractmethod
     def state_transition_model(self, state: Any, action: Any) -> StateTransitionModel:
         pass
@@ -163,6 +199,14 @@ class DiscreteActionsEnvironment(Environment):
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         pass
 
+
+class EnvironmentGenerator(ABC):
+    def __init__(self, name: str):
+        self.name = name
+
+    @abstractmethod
+    def generate_environment(self) -> Environment:
+        pass
 
 # class GymEnvStateTransition(StateTransitionModel):
 #     def __init__(self, env: gym.Env, state: Any, action: Any):

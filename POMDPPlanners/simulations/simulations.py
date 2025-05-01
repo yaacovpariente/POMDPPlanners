@@ -3,38 +3,22 @@ import copy
 from time import time
 from pathlib import Path
 import mlflow
-import json
-import os
-import logging
 from joblib import Parallel, delayed
-from multiprocessing import cpu_count
-import optuna
 import pandas as pd
-import numpy as np
-import tempfile
 from tqdm import tqdm
 from typing import Union, List, Tuple, Type
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.core.belief import Belief, get_initial_belief
+from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation import (
     History,
     StepData,
-    CategoricalHyperParameter,
-    NumericalHyperParameter,
     MetricValue,
 )
 from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environment_policy_pair, compute_statistics_environments_policies_comparison
-from POMDPPlanners.utils.visualization import plot_metrics_comparison, plot_discounted_returns_histogram, plot_environment_policy_pair_comparison, plot_discounted_returns_histogram_multiple_policies
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-HyperParameterFeatures = Union[CategoricalHyperParameter, NumericalHyperParameter]
+from POMDPPlanners.utils.visualization import plot_discounted_returns_histogram, plot_discounted_returns_histogram_multiple_policies
+from POMDPPlanners.utils.simulations_caching import load_simulation_results, cache_simulation_results
+from POMDPPlanners.utils.logger import logger
 
 
 def run_multiple_episodes(
@@ -44,25 +28,28 @@ def run_multiple_episodes(
     num_episodes: int,
     num_steps: int,
     n_jobs: int = 1,
+    cache_dir_path: Path = None,
 ) -> List[History]:
     logger.info(f"Starting {num_episodes} episodes with {num_steps} steps each using {n_jobs} jobs")
     logger.info(f"Environment: {environment.name}, Policy: {policy.name}")
     assert isinstance(environment, Environment)
     assert isinstance(policy, Policy)
     assert isinstance(initial_belief, Belief)
+    if cache_dir_path is not None:
+        assert isinstance(cache_dir_path, Path)
 
     assert num_episodes > 0
     assert num_steps > 0
 
     # Create a list of arguments for each episode
     episode_args = [
-        (environment, policy, initial_belief, num_steps) for _ in range(num_episodes)
+        (environment, policy, initial_belief, num_steps, cache_dir_path, i) for i in range(num_episodes)
     ]
 
     # Run episodes in parallel using joblib with progress bar
     logger.info(f"Running episodes in parallel for {environment.name} with {policy.name}")
     histories = Parallel(n_jobs=n_jobs)(
-        delayed(run_episode)(*args) for args in tqdm(
+        delayed(run_and_cache_episode)(*args) for args in tqdm(
             episode_args,
             total=num_episodes,
             desc=f"Running episodes for {environment.name} with {policy.name}",
@@ -75,8 +62,19 @@ def run_multiple_episodes(
 
 
 def run_episode(
-    environment: Environment, policy: Policy, initial_belief: Belief, num_steps: int
+    environment: Environment, policy: Policy, initial_belief: Belief, num_steps: int,
 ) -> History:
+    """Run a single episode without caching.
+    
+    Args:
+        environment: The environment to run the episode in
+        policy: The policy to use
+        initial_belief: Initial belief state
+        num_steps: Number of steps to run
+        
+    Returns:
+        History object containing episode data
+    """
     logger.debug(f"Starting episode with {num_steps} steps")
     
     assert isinstance(environment, Environment)
@@ -97,7 +95,6 @@ def run_episode(
 
     history = []
     for i in range(1, num_steps + 1):
-        # TODO: add count of terminal states.
         if environment.is_terminal(state=state):
             reach_terminal_state = True
             history.append(
@@ -109,7 +106,6 @@ def run_episode(
                     reward=None,
                 )
             )
-
             break
 
         action_start_time = time()
@@ -175,6 +171,74 @@ def run_episode(
     )
 
 
+def run_and_cache_episode(
+    environment: Environment,
+    policy: Policy,
+    initial_belief: Belief,
+    num_steps: int,
+    cache_dir_path: Path = None,
+    episode_id: int = None,
+) -> History:
+    """Run an episode with optional caching support.
+    
+    Args:
+        environment: The environment to run the episode in
+        policy: The policy to use
+        initial_belief: Initial belief state
+        num_steps: Number of steps to run
+        cache_dir_path: Directory to store cache files (optional)
+        episode_id: Unique identifier for this episode (required if cache_dir_path is provided)
+        
+    Returns:
+        History object containing episode data
+    """
+    if cache_dir_path is not None:
+        assert isinstance(cache_dir_path, Path)
+        assert episode_id is not None, "episode_id must be provided when using caching"
+
+        general_config = {'episode_id': episode_id, 'num_steps': num_steps}
+
+        # Try to load from cache
+        try:
+            cached_history = load_simulation_results(
+                environment=environment,
+                policy=policy,
+                initial_belief=initial_belief,
+                cache_dir_path=cache_dir_path,
+                general_config=general_config
+            )
+            if len(cached_history) > 0:
+                logger.info(f"Loaded episode {episode_id} from cache")
+                return cached_history[0]
+        except Exception as e:
+            logger.warning(f"Failed to load episode {episode_id} from cache: {str(e)}")
+
+    # Run the episode
+    result = run_episode(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=num_steps,
+    )
+
+    # Cache the result if caching is enabled
+    if cache_dir_path is not None:
+        try:
+            cache_simulation_results(
+                environment=environment,
+                policy=policy,
+                initial_belief=initial_belief,
+                results=[result],
+                cache_dir_path=cache_dir_path,
+                general_config=general_config
+            )
+            logger.debug(f"Cached episode {episode_id}")
+        except Exception as e:
+            logger.warning(f"Failed to cache episode {episode_id}: {str(e)}")
+
+    return result
+
+
 def simulation(
     environment: Environment,
     policy: Policy,
@@ -184,6 +248,7 @@ def simulation(
     alpha: float,
     confidence_interval_level: float = 0.95,
     n_jobs: int = 1,
+    cache_dir_path: Path = None,
 ) -> Tuple[List[History], List[MetricValue]]:
     logger.info(f"Starting simulation with {num_episodes} episodes, {num_steps} steps, "
                 f"alpha={alpha}, confidence_interval={confidence_interval_level}")
@@ -193,6 +258,8 @@ def simulation(
     assert isinstance(num_episodes, int)
     assert isinstance(num_steps, int)
     assert isinstance(confidence_interval_level, float)
+    if cache_dir_path is not None:
+        assert isinstance(cache_dir_path, Path)
 
     assert 1 >= confidence_interval_level >= 0
     assert num_episodes > 0
@@ -205,6 +272,7 @@ def simulation(
         num_episodes=num_episodes,
         num_steps=num_steps,
         n_jobs=n_jobs,
+        cache_dir_path=cache_dir_path,
     )
 
     logger.info("Computing statistics from simulation results")
@@ -226,6 +294,7 @@ def simulate_multiple_policies(
     num_episodes: int,
     num_steps: int,
     alpha: float,
+    cache_dir_path: Path = None,
     confidence_interval_level: float = 0.95,
     n_jobs: int = 1,
 ) -> Tuple[Dict[str, List[History]], List[List[MetricValue]]]:
@@ -264,7 +333,6 @@ def simulate_multiple_policies(
     assert 0 <= confidence_interval_level <= 1
 
     all_histories = {}
-    all_statistics = []
 
     for policy in policies:
         # Run simulation
@@ -277,10 +345,10 @@ def simulate_multiple_policies(
             alpha=alpha,
             confidence_interval_level=confidence_interval_level,
             n_jobs=n_jobs,
+            cache_dir_path=cache_dir_path,
         )
 
         all_histories[policy.name] = histories
-        all_statistics.append(statistics)
 
     return all_histories
 
@@ -290,6 +358,7 @@ def simulate_multiple_environments_and_policies(
     num_episodes: int,
     num_steps: int,
     alpha: float,
+    cache_dir_path: Path = None,
     confidence_interval_level: float = 0.95,
     n_jobs: int = 1,
 ) -> Dict[str, Dict[str, List[History]]]:
@@ -342,6 +411,7 @@ def simulate_multiple_environments_and_policies(
             num_episodes=num_episodes,
             num_steps=num_steps,
             alpha=alpha,
+            cache_dir_path=cache_dir_path,
             confidence_interval_level=confidence_interval_level,
             n_jobs=n_jobs,
         )
@@ -428,6 +498,7 @@ def compare_multiple_environments_policies(
             alpha=alpha,
             confidence_interval_level=confidence_interval_level,
             n_jobs=n_jobs,
+            cache_dir_path=cache_dir_path,
         )
         # Compute statistics
         statistics_df = compute_statistics_environments_policies_comparison(

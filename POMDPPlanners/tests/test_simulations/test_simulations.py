@@ -11,6 +11,7 @@ import pandas as pd
 from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.simulations.simulations import (
     run_episode,
+    run_and_cache_episode,
     simulation,
     compare_multiple_environments_policies,
 )
@@ -138,8 +139,15 @@ def temp_cache_dir():
     temp_path.mkdir(parents=True, exist_ok=True)
     yield temp_path
     # Cleanup
-    if temp_path.exists():
-        shutil.rmtree(temp_path)
+    try:
+        if temp_path.exists():
+            # Force close any open file handles
+            import gc
+            gc.collect()
+            # Try to remove the directory
+            shutil.rmtree(temp_path, ignore_errors=True)
+    except Exception as e:
+        print(f"Warning: Failed to clean up temporary directory {temp_path}: {e}")
 
 
 def test_simulation_parameter_validation():
@@ -381,3 +389,143 @@ def test_compare_multiple_environments_policies_different_parameters(temp_cache_
     assert len(histories) == 2  # One for each environment
     assert isinstance(statistics_df, pd.DataFrame)
     assert len(statistics_df) == 2  # One row per policy
+
+
+def test_run_and_cache_episode_returns_history(temp_cache_dir):
+    # Setup
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    )
+    initial_belief = get_initial_belief(environment, n_particles=100)
+    num_steps = 5
+    episode_id = 1
+
+    # Execute
+    history = run_and_cache_episode(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=num_steps,
+        cache_dir_path=temp_cache_dir,
+        episode_id=episode_id,
+    )
+
+    # Assert
+    assert isinstance(history, History)
+    assert len(history.history) == num_steps
+
+
+def test_run_and_cache_episode_caching(temp_cache_dir):
+    # Setup
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    )
+    initial_belief = get_initial_belief(environment, n_particles=100)
+    num_steps = 5
+    episode_id = 1
+
+    # First run - should execute and cache
+    history1 = run_and_cache_episode(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=num_steps,
+        cache_dir_path=temp_cache_dir,
+        episode_id=episode_id,
+    )
+
+    # Second run - should load from cache
+    history2 = run_and_cache_episode(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=num_steps,
+        cache_dir_path=temp_cache_dir,
+        episode_id=episode_id,
+    )
+
+    # Assert both histories are identical
+    assert history1.history == history2.history
+    assert history1.discount_factor == history2.discount_factor
+    assert history1.average_state_sampling_time == history2.average_state_sampling_time
+    assert history1.average_action_time == history2.average_action_time
+    assert history1.average_observation_time == history2.average_observation_time
+    assert history1.average_belief_update_time == history2.average_belief_update_time
+    assert history1.average_reward_time == history2.average_reward_time
+    assert history1.actual_num_steps == history2.actual_num_steps
+    assert history1.reach_terminal_state == history2.reach_terminal_state
+
+
+def test_run_and_cache_episode_different_episode_ids(temp_cache_dir):
+    # Setup
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    )
+    initial_belief = get_initial_belief(environment, n_particles=100)
+    num_steps = 5
+
+    # Run two different episodes
+    history1 = run_and_cache_episode(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=num_steps,
+        cache_dir_path=temp_cache_dir,
+        episode_id=1,
+    )
+
+    history2 = run_and_cache_episode(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=num_steps,
+        cache_dir_path=temp_cache_dir,
+        episode_id=2,
+    )
+
+    # Assert histories are different (due to stochasticity)
+    assert history1.history != history2.history
+
+
+def test_run_and_cache_episode_parameter_validation():
+    # Setup
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    )
+    initial_belief = get_initial_belief(environment, n_particles=100)
+    temp_dir = Path("/tmp/test_cache")
+
+    # Test invalid parameters
+    with pytest.raises(AssertionError):
+        run_and_cache_episode(
+            environment="not_an_environment",
+            policy=policy,
+            initial_belief=initial_belief,
+            num_steps=5,
+            cache_dir_path=temp_dir,
+            episode_id=1,
+        )
+
+    with pytest.raises(AssertionError):
+        run_and_cache_episode(
+            environment=environment,
+            policy=policy,
+            initial_belief=initial_belief,
+            num_steps=5,
+            cache_dir_path=temp_dir,
+            episode_id=None,  # Invalid episode_id
+        )
+
+    with pytest.raises(AssertionError):
+        run_and_cache_episode(
+            environment=environment,
+            policy=policy,
+            initial_belief=initial_belief,
+            num_steps=0,  # Invalid num_steps
+            cache_dir_path=temp_dir,
+            episode_id=1,
+        )
