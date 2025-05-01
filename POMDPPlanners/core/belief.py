@@ -1,12 +1,48 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple, Any
 import random
+import hashlib
+import json
 
 import numpy as np
 
 from POMDPPlanners.core.environment import Environment
 
 class Belief(ABC):
+    @property
+    def config_id(self) -> str:
+        """Generate a deterministic identifier based on belief configuration."""
+        config_dict = {}
+        
+        # Include all public attributes that aren't callables
+        for key, value in self.__dict__.items():
+            if key.startswith('_') or callable(value):
+                continue
+                
+            # Handle numpy arrays
+            if isinstance(value, np.ndarray):
+                config_dict[key] = value.tolist()
+            # Handle basic Python types
+            elif isinstance(value, (str, int, float, bool, list, tuple)):
+                config_dict[key] = value
+            # Handle dictionaries
+            elif isinstance(value, dict):
+                # Only include serializable values
+                serializable_dict = {}
+                for k, v in value.items():
+                    if isinstance(v, (str, int, float, bool, list, tuple)):
+                        serializable_dict[k] = v
+                    elif isinstance(v, np.ndarray):
+                        serializable_dict[k] = v.tolist()
+                config_dict[key] = serializable_dict
+                
+        # Sort dictionary to ensure consistent ordering
+        config_dict = dict(sorted(config_dict.items()))
+        
+        # Create a deterministic string representation and hash it
+        config_str = json.dumps(config_dict, sort_keys=True)
+        return hashlib.sha256(config_str.encode()).hexdigest()
+
     @abstractmethod
     def update(self, action, observation, pomdp: Environment) -> "Belief":
         pass
@@ -102,6 +138,33 @@ class WeightedParticleBelief(Belief):
         self.ess_threshold = ess_threshold
 
         self.eps = 1e-10
+
+    @property
+    def config_id(self) -> str:
+        """Generate a deterministic identifier based on belief configuration."""
+        config_dict = {}
+        
+        # Create a list of particle-weight pairs to maintain order
+        particle_weight_pairs = []
+        for particle, weight in zip(self.particles, self.log_weights):
+            # Convert particle to a serializable format if needed
+            if isinstance(particle, np.ndarray):
+                particle = particle.tolist()
+            particle_weight_pairs.append((particle, float(weight)))
+        
+        # Sort particle-weight pairs to make config_id invariant to order
+        particle_weight_pairs.sort(key=lambda x: (str(x[0]), x[1]))
+        
+        config_dict['particle_weight_pairs'] = particle_weight_pairs
+        config_dict['resampling'] = self.resampling
+        config_dict['ess_threshold'] = self.ess_threshold
+        
+        # Sort dictionary to ensure consistent ordering
+        config_dict = dict(sorted(config_dict.items()))
+        
+        # Create a deterministic string representation and hash it
+        config_str = json.dumps(config_dict, sort_keys=True)
+        return hashlib.sha256(config_str.encode()).hexdigest()
 
     def update(self, action, observation, pomdp: Environment) -> "WeightedParticleBelief":
         next_particles = [
