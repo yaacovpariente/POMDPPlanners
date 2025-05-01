@@ -207,3 +207,48 @@ class TestTigerPOMDPEquality:
         copied_env = copy.deepcopy(base_tiger_environment)
         assert copied_env == base_tiger_environment
         assert base_tiger_environment == copied_env  # Test symmetry
+
+class TestEnvironmentConfigId:
+    """Test suite for Environment config_id property."""
+    
+    def test_same_config_same_id(self, base_environment: MockEnvironment):
+        """Test that environments with same configuration have same config_id."""
+        other_env = MockEnvironment(discount_factor=0.9)
+        assert base_environment.config_id == other_env.config_id
+    
+    def test_different_discount_factor(self, base_environment: MockEnvironment):
+        """Test that different discount factor results in different config_id."""
+        other_env = MockEnvironment(discount_factor=0.8)
+        assert base_environment.config_id != other_env.config_id
+    
+    def test_different_array(self, base_environment: MockEnvironment):
+        """Test that different numpy array results in different config_id."""
+        other_env = MockEnvironment(discount_factor=0.9, test_array=np.array([4, 5, 6]))
+        assert base_environment.config_id != other_env.config_id
+    
+    def test_different_environment_class(self, base_environment: MockEnvironment):
+        """Test that different environment class results in different config_id."""
+        different_env = DifferentEnvironment(discount_factor=0.9)
+        assert base_environment.config_id != different_env.config_id
+    
+    def test_config_id_consistency(self, base_environment: MockEnvironment):
+        """Test that config_id remains consistent across multiple calls."""
+        id1 = base_environment.config_id
+        id2 = base_environment.config_id
+        assert id1 == id2
+    
+    def test_tiger_pomdp_config_id(self, base_tiger_environment: TigerPOMDP):
+        """Test config_id with TigerPOMDP environment."""
+        # Same configuration should have same ID
+        other_env = TigerPOMDP(discount_factor=0.95)
+        assert base_tiger_environment.config_id == other_env.config_id
+        
+        # Different configuration should have different ID
+        different_env = TigerPOMDP(discount_factor=0.8)
+        assert base_tiger_environment.config_id != different_env.config_id
+    
+    def test_config_id_format(self, base_environment: MockEnvironment):
+        """Test that config_id is a valid SHA-256 hash."""
+        config_id = base_environment.config_id
+        assert len(config_id) == 64  # SHA-256 produces 64 hex characters
+        assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters

@@ -91,6 +91,63 @@ class TestCartPolePOMDPEquality:
         assert base_cartpole_environment == copied_env  # Test symmetry
 
 
+class TestCartPolePOMDPConfigId:
+    """Test suite for CartPolePOMDP config_id functionality."""
+    
+    def test_config_id_consistency(self, base_cartpole_environment: CartPolePOMDP):
+        """Test that config_id is consistent for identical environments."""
+        other_env = CartPolePOMDP(
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov
+        )
+        assert base_cartpole_environment.config_id == other_env.config_id
+    
+    def test_config_id_different_discount_factor(self, base_cartpole_environment: CartPolePOMDP):
+        """Test that config_id changes with different discount factor."""
+        other_env = CartPolePOMDP(
+            discount_factor=0.8,
+            noise_cov=base_cartpole_environment.noise_cov
+        )
+        assert base_cartpole_environment.config_id != other_env.config_id
+    
+    def test_config_id_different_noise_covariance(self, base_cartpole_environment: CartPolePOMDP):
+        """Test that config_id changes with different noise covariance."""
+        other_env = CartPolePOMDP(
+            discount_factor=0.95,
+            noise_cov=np.eye(4) * 0.2  # Different noise covariance
+        )
+        assert base_cartpole_environment.config_id != other_env.config_id
+    
+    def test_config_id_different_physical_parameters(self, base_cartpole_environment: CartPolePOMDP):
+        """Test that config_id changes with different physical parameters."""
+        other_env = CartPolePOMDP(
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov
+        )
+        other_env.gravity = 10.0  # Different gravity
+        assert base_cartpole_environment.config_id != other_env.config_id
+        
+        other_env = CartPolePOMDP(
+            discount_factor=0.95,
+            noise_cov=base_cartpole_environment.noise_cov
+        )
+        other_env.masscart = 2.0  # Different cart mass
+        assert base_cartpole_environment.config_id != other_env.config_id
+    
+    def test_config_id_format(self, base_cartpole_environment: CartPolePOMDP):
+        """Test that config_id is a valid SHA-256 hash."""
+        config_id = base_cartpole_environment.config_id
+        assert isinstance(config_id, str)
+        assert len(config_id) == 64  # SHA-256 hash length
+        assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters
+    
+    def test_config_id_deterministic(self, base_cartpole_environment: CartPolePOMDP):
+        """Test that config_id is deterministic (same input always produces same output)."""
+        config_id1 = base_cartpole_environment.config_id
+        config_id2 = base_cartpole_environment.config_id
+        assert config_id1 == config_id2
+
+
 def test_cartpole_state_transition():
     # Test state transition with known parameters
     state = np.array([0.0, 0.0, 0.0, 0.0])  # x, x_dot, theta, theta_dot

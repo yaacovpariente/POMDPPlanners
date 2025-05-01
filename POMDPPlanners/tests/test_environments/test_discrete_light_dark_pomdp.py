@@ -257,6 +257,154 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment == copied_env  # Test symmetry
 
 
+class TestDiscreteLightDarkPOMDPConfigId:
+    """Test suite for DiscreteLightDarkPOMDP config_id functionality."""
+    
+    def test_config_id_consistency(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that config_id is consistent for identical environments."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        )
+        assert base_light_dark_environment.config_id == other_env.config_id
+    
+    def test_config_id_different_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that config_id changes with different discount factor."""
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.8,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        )
+        assert base_light_dark_environment.config_id != other_env.config_id
+    
+    def test_config_id_different_parameters(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that config_id changes with different parameters."""
+        # Test different transition error
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.1,  # Different
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        )
+        assert base_light_dark_environment.config_id != other_env.config_id
+        
+        # Test different observation error
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.1,  # Different
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+        )
+        assert base_light_dark_environment.config_id != other_env.config_id
+        
+        # Test different beacons
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+            beacons=np.array([[1, 1, 1, 6, 6, 6, 11, 11, 11], [1, 6, 11, 1, 6, 11, 1, 6, 11]]),  # Different
+        )
+        assert base_light_dark_environment.config_id != other_env.config_id
+    
+    def test_config_id_format(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that config_id is a valid SHA-256 hash."""
+        config_id = base_light_dark_environment.config_id
+        assert isinstance(config_id, str)
+        assert len(config_id) == 64  # SHA-256 hash length
+        assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters
+    
+    def test_config_id_deterministic(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that config_id is deterministic (same input always produces same output)."""
+        config_id1 = base_light_dark_environment.config_id
+        config_id2 = base_light_dark_environment.config_id
+        assert config_id1 == config_id2
+    
+    def test_config_id_order_invariance(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
+        """Test that config_id is invariant to the order of beacons and obstacles."""
+        # Create environment with same beacons but in different order
+        beacons_reordered = base_light_dark_environment.beacons.copy()
+        # Swap first and last beacon columns
+        beacons_reordered[:, [0, -1]] = beacons_reordered[:, [-1, 0]]
+        
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+            beacons=beacons_reordered
+        )
+        assert base_light_dark_environment.config_id == other_env.config_id
+        
+        # Create environment with same obstacles but in different order
+        obstacles_reordered = base_light_dark_environment.obstacles.copy()
+        # Swap the two obstacle positions
+        obstacles_reordered[:, [0, 1]] = obstacles_reordered[:, [1, 0]]
+        
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+            obstacles=obstacles_reordered
+        )
+        assert base_light_dark_environment.config_id == other_env.config_id
+        
+        # Test both beacons and obstacles reordered together
+        other_env = DiscreteLightDarkPOMDP(
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.05,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            is_stochastic_reward=True,
+            beacons=beacons_reordered,
+            obstacles=obstacles_reordered
+        )
+        assert base_light_dark_environment.config_id == other_env.config_id
+
+
 def test_initialization():
     """Test initialization with default parameters"""
     env = DiscreteLightDarkPOMDP(

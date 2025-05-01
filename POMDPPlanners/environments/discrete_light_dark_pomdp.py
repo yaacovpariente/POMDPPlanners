@@ -1,5 +1,7 @@
 from typing import List, Any
 from pathlib import Path
+import json
+import hashlib
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -328,6 +330,50 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return np.array_equal(observation1, observation2)
+
+    @property
+    def config_id(self) -> str:
+        """Generate a deterministic identifier based on environment configuration.
+        This implementation ensures that the config_id is invariant to the order of beacons and obstacles.
+        """
+        config_dict = {}
+        
+        # Include all public attributes that aren't callables
+        for key, value in self.__dict__.items():
+            if key.startswith('_') or callable(value):
+                continue
+                
+            # Handle numpy arrays
+            if isinstance(value, np.ndarray):
+                if key in ['beacons', 'obstacles']:
+                    # For beacons and obstacles, sort columns to ensure order invariance
+                    # First, transpose to get columns as rows
+                    # Then sort rows lexicographically
+                    # Finally, transpose back
+                    sorted_array = np.sort(value.T, axis=0).T
+                    config_dict[key] = sorted_array.tolist()
+                else:
+                    config_dict[key] = value.tolist()
+            # Handle basic Python types
+            elif isinstance(value, (str, int, float, bool, list, tuple)):
+                config_dict[key] = value
+            # Handle dictionaries
+            elif isinstance(value, dict):
+                # Only include serializable values
+                serializable_dict = {}
+                for k, v in value.items():
+                    if isinstance(v, (str, int, float, bool, list, tuple)):
+                        serializable_dict[k] = v
+                    elif isinstance(v, np.ndarray):
+                        serializable_dict[k] = v.tolist()
+                config_dict[key] = serializable_dict
+                
+        # Sort dictionary to ensure consistent ordering
+        config_dict = dict(sorted(config_dict.items()))
+        
+        # Create a deterministic string representation and hash it
+        config_str = json.dumps(config_dict, sort_keys=True)
+        return hashlib.sha256(config_str.encode()).hexdigest()
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         # Calculate time to reach goal for each history

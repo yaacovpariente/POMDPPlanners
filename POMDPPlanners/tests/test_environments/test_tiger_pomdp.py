@@ -94,3 +94,48 @@ def test_is_terminal(tiger_pomdp):
     # Currently always returns False
     for state in tiger_pomdp.states:
         assert not tiger_pomdp.is_terminal(state)
+
+
+class TestTigerPOMDPConfigId:
+    """Test suite for TigerPOMDP config_id functionality."""
+    
+    def test_config_id_consistency(self, tiger_pomdp: TigerPOMDP):
+        """Test that config_id is consistent for identical environments."""
+        other_env = TigerPOMDP(discount_factor=0.95)
+        assert tiger_pomdp.config_id == other_env.config_id
+    
+    def test_config_id_different_discount_factor(self, tiger_pomdp: TigerPOMDP):
+        """Test that config_id changes with different discount factor."""
+        other_env = TigerPOMDP(discount_factor=0.8)
+        assert tiger_pomdp.config_id != other_env.config_id
+    
+    def test_config_id_different_states(self, tiger_pomdp: TigerPOMDP):
+        """Test that config_id changes with different states."""
+        other_env = TigerPOMDP(discount_factor=0.95)
+        other_env.states = ["tiger_left", "tiger_right", "tiger_middle"]  # Different states
+        assert tiger_pomdp.config_id != other_env.config_id
+    
+    def test_config_id_different_actions(self, tiger_pomdp: TigerPOMDP):
+        """Test that config_id changes with different actions."""
+        other_env = TigerPOMDP(discount_factor=0.95)
+        other_env.actions = ["listen", "open_left", "open_right", "wait"]  # Different actions
+        assert tiger_pomdp.config_id != other_env.config_id
+    
+    def test_config_id_different_observations(self, tiger_pomdp: TigerPOMDP):
+        """Test that config_id changes with different observations."""
+        other_env = TigerPOMDP(discount_factor=0.95)
+        other_env.observations = ["hear_left", "hear_right", "hear_nothing", "hear_both"]  # Different observations
+        assert tiger_pomdp.config_id != other_env.config_id
+    
+    def test_config_id_format(self, tiger_pomdp: TigerPOMDP):
+        """Test that config_id is a valid SHA-256 hash."""
+        config_id = tiger_pomdp.config_id
+        assert isinstance(config_id, str)
+        assert len(config_id) == 64  # SHA-256 hash length
+        assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters
+    
+    def test_config_id_deterministic(self, tiger_pomdp: TigerPOMDP):
+        """Test that config_id is deterministic (same input always produces same output)."""
+        config_id1 = tiger_pomdp.config_id
+        config_id2 = tiger_pomdp.config_id
+        assert config_id1 == config_id2
