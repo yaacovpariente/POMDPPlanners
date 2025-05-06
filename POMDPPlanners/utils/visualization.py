@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib
 import seaborn as sns
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 matplotlib.use("Agg")  # Use non-interactive backend
 import mlflow
@@ -11,6 +13,7 @@ import mlflow
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import MetricValue, History, history_to_discounted_return_value
+from POMDPPlanners.core.tree import BeliefNode, ActionNode
 
 def plot_metrics_comparison(
     statistics: List[List[MetricValue]],
@@ -236,3 +239,179 @@ def plot_policies_comparison_on_environment(
     cache_path: Path,
 ) -> None:
     pass
+
+def plot_tree_graphs(root_node: BeliefNode):
+    """
+    Create two interactive visualizations of the belief tree:
+    1. Node visit counts
+    2. Node values (v_value for belief nodes, q_value for action nodes)
+    
+    Args:
+        root_node (BeliefNode): Root node of the belief tree
+    """
+    # Create custom hierarchical layout
+    pos = {}
+    all_nodes = [node for node in root_node.descendants] + [root_node]
+    
+    for node in all_nodes:
+        depth = node.depth
+        siblings = [n for n in all_nodes if n.depth == depth]
+        x = (siblings.index(node) - (len(siblings) - 1) / 2) * 0.3
+        y = 1 - depth * 0.2
+        pos[node] = (x, y)
+    
+    # Create edge traces
+    edge_x = []
+    edge_y = []
+    for node in all_nodes:
+        if node.parent:
+            x0, y0 = pos[node.parent]
+            x1, y1 = pos[node]
+            cx = (x0 + x1) / 2
+            cy = (y0 + y1) / 2
+            edge_x.extend([x0, cx, x1, None])
+            edge_y.extend([y0, cy, y1, None])
+    
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=1, color='#888'),
+        hoverinfo='none',
+        mode='lines'
+    )
+    
+    # Create node traces for both graphs
+    node_x = []
+    node_y = []
+    node_text = []
+    node_values = []
+    node_visits = []
+    node_sizes = []
+    node_labels = []  # New list for node labels
+    
+    for node in all_nodes:
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        
+        # Create hover text
+        if isinstance(node, BeliefNode):
+            node_type = "Belief"
+            value = node.v_value
+            value_type = "v_value"
+            if hasattr(node, 'observation') and node.observation is not None:
+                if isinstance(node.observation, np.ndarray):
+                    node_info = f"Obs: [{node.observation[0]:.1f}, {node.observation[1]:.1f}]"
+                else:
+                    node_info = f"Obs: {node.observation}"
+            else:
+                node_info = "Root"
+        else:  # ActionNode
+            node_type = "Action"
+            value = node.q_value
+            value_type = "q_value"
+            node_info = f"Action: {node.action}"
+        
+        hover_text = (f"{node_type} Node<br>"
+                     f"{node_info}<br>"
+                     f"{value_type}: {value:.3f}<br>"
+                     f"Visits: {node.visit_count}<br>"
+                     f"Depth: {node.depth}")
+        if node.parent:
+            if isinstance(node.parent, ActionNode):
+                hover_text += f"<br>Parent Action: {node.parent.action}"
+            else:
+                if isinstance(node.parent.observation, np.ndarray):
+                    hover_text += f"<br>Parent: [{node.parent.observation[0]:.1f}, {node.parent.observation[1]:.1f}]"
+                else:
+                    hover_text += f"<br>Parent: {node.parent.observation if node.parent.observation else 'Root'}"
+        
+        node_text.append(hover_text)
+        node_values.append(value)
+        node_visits.append(node.visit_count)
+        node_sizes.append(20)
+        
+        # Create node label (just the value)
+        if isinstance(node, BeliefNode):
+            node_labels.append(f"{value:.2f}")  # v_value with 2 decimal places
+        else:
+            node_labels.append(f"{value:.2f}")  # q_value with 2 decimal places
+    
+    # Create subplots
+    fig = make_subplots(
+        rows=1, cols=2,
+        subplot_titles=('Node Values (v_value/q_value)', 'Visit Counts'),
+        horizontal_spacing=0.1
+    )
+    
+    # Add value-based node trace
+    node_trace_values = go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers+text',
+        hoverinfo='text',
+        text=node_text,
+        textposition="middle center",
+        textfont=dict(size=10, color='white'),
+        marker=dict(
+            size=node_sizes,
+            color=node_values,
+            colorscale='Viridis',
+            showscale=True,
+            colorbar=dict(title='Node Value', x=0.45),
+            line_width=2
+        ),
+        name='Values'
+    )
+    
+    # Add visit count-based node trace
+    node_trace_visits = go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers+text',
+        hoverinfo='text',
+        text=node_text,
+        textposition="middle center",
+        textfont=dict(size=10, color='white'),
+        marker=dict(
+            size=node_sizes,
+            color=node_visits,
+            colorscale='RdBu',
+            showscale=True,
+            colorbar=dict(title='Visit Count', x=1.0),
+            line_width=2
+        ),
+        name='Visits'
+    )
+    
+    # Add value labels to both plots
+    node_trace_values.text = node_labels
+    node_trace_visits.text = [f"n={v}" for v in node_visits]  # Show visit counts in right plot
+    
+    # Add traces to both subplots
+    fig.add_trace(edge_trace, row=1, col=1)
+    fig.add_trace(edge_trace, row=1, col=2)
+    fig.add_trace(node_trace_values, row=1, col=1)
+    fig.add_trace(node_trace_visits, row=1, col=2)
+    
+    # Update layout
+    fig.update_layout(
+        title_text=f'Tiger POMDP Tree Visualization - Total Nodes: {len(all_nodes)}',
+        showlegend=False,
+        hovermode='closest',
+        width=1800,
+        height=800,
+        dragmode='pan',
+        modebar_add=['zoom', 'pan', 'reset', 'zoomIn', 'zoomOut']
+    )
+    
+    # Update axes
+    fig.update_xaxes(showgrid=False, zeroline=False, showticklabels=False)
+    fig.update_yaxes(showgrid=False, zeroline=False, showticklabels=False)
+    
+    # Show the plot
+    fig.show()
+    
+    # Print statistics
+    print(f"Total number of nodes: {len(all_nodes)}")
+    print(f"Tree depth: {max(node.depth for node in all_nodes)}")
+    print(f"Number of leaf nodes: {len([node for node in all_nodes if not node.children])}")
+    print(f"Value range: [{min(node_values):.3f}, {max(node_values):.3f}]")
+    print(f"Visit count range: [{min(node_visits)}, {max(node_visits)}]")
