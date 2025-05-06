@@ -293,11 +293,14 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
         # Initialize the agent's position and path line
         (agent,) = ax.plot([], [], "ro", markersize=10)
         (path_line,) = ax.plot([], [], "r-", alpha=0.5, linewidth=2)
+        # Initialize the action arrow
+        arrow = plt.arrow(0, 0, 0, 0, color='red', width=0.1, head_width=0.3, head_length=0.3, length_includes_head=True)
 
         def init():
             agent.set_data([], [])
             path_line.set_data([], [])
-            return agent, path_line
+            arrow.set_data(x=0, y=0, dx=0, dy=0)
+            return agent, path_line, arrow
 
         def update(frame):
             # Update current position
@@ -310,7 +313,16 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
             path_y = [float(p[1]) for p in path[: frame + 1]]
             path_line.set_data(path_x, path_y)
 
-            return agent, path_line
+            # Update action arrow
+            if frame < len(path) - 1:
+                next_pos = path[frame + 1]
+                dx = next_pos[0] - x
+                dy = next_pos[1] - y
+                arrow.set_data(x=x, y=y, dx=dx, dy=dy)
+            else:
+                arrow.set_data(x=x, y=y, dx=0, dy=0)
+
+            return agent, path_line, arrow
 
         ani = animation.FuncAnimation(
             fig, update, frames=len(path), init_func=init, blit=True, repeat=False
