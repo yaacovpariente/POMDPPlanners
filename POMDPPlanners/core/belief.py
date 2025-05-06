@@ -43,6 +43,16 @@ class Belief(ABC):
         config_str = json.dumps(config_dict, sort_keys=True)
         return hashlib.sha256(config_str.encode()).hexdigest()
 
+    def __hash__(self) -> int:
+        """Make the belief hashable by using its config_id."""
+        return int(self.config_id, 16)  # Convert hex string to integer
+
+    def __eq__(self, other: object) -> bool:
+        """Define equality based on config_id."""
+        if not isinstance(other, Belief):
+            return NotImplemented
+        return self.config_id == other.config_id
+
     @abstractmethod
     def update(self, action, observation, pomdp: Environment) -> "Belief":
         pass
