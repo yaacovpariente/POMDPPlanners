@@ -8,6 +8,7 @@ import json
 import os
 import optuna
 import pandas as pd
+import time
 
 from POMDPPlanners.core.simulation import MetricValue, NumericalHyperParameter
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
@@ -32,7 +33,18 @@ def temp_cache_dir():
     yield temp_path
     # Cleanup
     if temp_path.exists():
-        shutil.rmtree(temp_path)
+        # Wait a bit to ensure all Redis connections are closed
+        time.sleep(0.1)
+        # Try multiple times to delete the directory
+        for _ in range(5):
+            try:
+                shutil.rmtree(temp_path)
+                break
+            except PermissionError:
+                time.sleep(0.1)
+            except Exception as e:
+                print(f"Error cleaning up temp directory: {e}")
+                break
 
 
 def test_create_policy_optimization_objective():

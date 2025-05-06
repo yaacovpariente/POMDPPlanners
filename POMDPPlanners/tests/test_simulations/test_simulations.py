@@ -16,18 +16,24 @@ from POMDPPlanners.simulations.simulations import (
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
-from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.simulations.simulations_deployment import LocalSimulationDeployment, DeploymentType
 
 
 def test_run_episode_returns_history():
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=3)
     num_steps = 5
 
     # Execute
@@ -46,10 +52,15 @@ def test_run_episode_returns_history():
 def test_run_episode_timing_statistics():
     # Setup
     environment = MountainCarPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=3)
     num_steps = 5
 
     # Execute
@@ -75,10 +86,15 @@ def test_run_episode_timing_statistics():
 def test_run_episode_valid_transitions():
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=3)
     num_steps = 5
 
     # Execute
@@ -101,10 +117,15 @@ def test_run_episode_valid_transitions():
 def test_run_episode_reward_calculation():
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=3)
     num_steps = 5
 
     # Execute
@@ -147,13 +168,23 @@ def temp_cache_dir():
         print(f"Warning: Failed to clean up temporary directory {temp_path}: {e}")
 
 
-def test_run_and_cache_episode_returns_history(temp_cache_dir):
+@pytest.fixture
+def simulation_deployment():
+    return LocalSimulationDeployment(n_jobs=1)
+
+
+def test_run_and_cache_episode_returns_history(temp_cache_dir, simulation_deployment):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=3)
     num_steps = 5
     episode_id = 1
     seed = 42
@@ -167,6 +198,7 @@ def test_run_and_cache_episode_returns_history(temp_cache_dir):
         cache_dir_path=temp_cache_dir,
         episode_id=episode_id,
         seed=seed,
+        simulation_deployment=simulation_deployment
     )
 
     # Assert
@@ -174,13 +206,18 @@ def test_run_and_cache_episode_returns_history(temp_cache_dir):
     assert len(history.history) == num_steps
 
 
-def test_run_and_cache_episode_caching(temp_cache_dir):
+def test_run_and_cache_episode_caching(temp_cache_dir, simulation_deployment):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=3)
     num_steps = 5
     episode_id = 1
     seed = 42
@@ -194,6 +231,7 @@ def test_run_and_cache_episode_caching(temp_cache_dir):
         cache_dir_path=temp_cache_dir,
         episode_id=episode_id,
         seed=seed,
+        simulation_deployment=simulation_deployment
     )
 
     # Second run - should load from cache
@@ -205,6 +243,7 @@ def test_run_and_cache_episode_caching(temp_cache_dir):
         cache_dir_path=temp_cache_dir,
         episode_id=episode_id,
         seed=seed,
+        simulation_deployment=simulation_deployment
     )
 
     # Assert histories are identical
@@ -219,13 +258,18 @@ def test_run_and_cache_episode_caching(temp_cache_dir):
     assert history1.reach_terminal_state == history2.reach_terminal_state
 
 
-def test_run_and_cache_episode_different_episode_ids(temp_cache_dir):
+def test_run_and_cache_episode_different_episode_ids(temp_cache_dir, simulation_deployment):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=3)
     num_steps = 5
 
     # Run two different episodes
@@ -237,6 +281,7 @@ def test_run_and_cache_episode_different_episode_ids(temp_cache_dir):
         cache_dir_path=temp_cache_dir,
         episode_id=1,
         seed=42,
+        simulation_deployment=simulation_deployment
     )
 
     history2 = run_and_cache_episode(
@@ -247,19 +292,25 @@ def test_run_and_cache_episode_different_episode_ids(temp_cache_dir):
         cache_dir_path=temp_cache_dir,
         episode_id=2,
         seed=43,
+        simulation_deployment=simulation_deployment
     )
 
     # Assert histories are different (due to different seeds)
     assert history1.history != history2.history
 
 
-def test_run_and_cache_episode_parameter_validation():
+def test_run_and_cache_episode_parameter_validation(simulation_deployment):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=3)
     temp_dir = Path("/tmp/test_cache")
 
     # Test invalid parameters
@@ -272,6 +323,7 @@ def test_run_and_cache_episode_parameter_validation():
             cache_dir_path=temp_dir,
             episode_id=1,
             seed=42,
+            simulation_deployment=simulation_deployment
         )
 
     with pytest.raises(AssertionError):
@@ -283,6 +335,7 @@ def test_run_and_cache_episode_parameter_validation():
             cache_dir_path=temp_dir,
             episode_id=None,  # Invalid episode_id
             seed=42,
+            simulation_deployment=simulation_deployment
         )
 
     with pytest.raises(AssertionError):
@@ -294,16 +347,22 @@ def test_run_and_cache_episode_parameter_validation():
             cache_dir_path=temp_dir,
             episode_id=1,
             seed=42,
+            simulation_deployment=simulation_deployment
         )
 
 
 def test_simulate_multiple_environments_and_policies_parallel_parameter_validation():
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=3)
 
     # Test invalid parameters
     with pytest.raises(AssertionError):
@@ -343,10 +402,15 @@ def test_simulate_multiple_environments_and_policies_parallel_parameter_validati
 def test_simulate_multiple_environments_and_policies_parallel_single_environment_policy(temp_cache_dir):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=3)
     num_episodes = 2
     num_steps = 3
 
@@ -357,6 +421,7 @@ def test_simulate_multiple_environments_and_policies_parallel_single_environment
         num_steps=num_steps,
         alpha=0.1,
         cache_dir_path=temp_cache_dir,
+        deployment_type=DeploymentType.LOCAL
     )
 
     # Assert
@@ -377,14 +442,24 @@ def test_simulate_multiple_environments_and_policies_parallel_multiple_environme
     # Setup
     environment1 = TigerPOMDP(discount_factor=0.95, name="TigerPOMDP_095")
     environment2 = TigerPOMDP(discount_factor=0.99, name="TigerPOMDP_099")
-    policy1 = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment1, branching_factor=2, depth=3, name="TestPolicy1"
+    policy1 = POMCP(
+        environment=environment1,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy1",
+        n_simulations=2
     )
-    policy2 = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment2, branching_factor=3, depth=4, name="TestPolicy2"
+    policy2 = POMCP(
+        environment=environment2,
+        discount_factor=0.99,
+        depth=4,
+        exploration_constant=1.5,
+        name="TestPolicy2",
+        n_simulations=2
     )
-    initial_belief1 = get_initial_belief(environment1, n_particles=100)
-    initial_belief2 = get_initial_belief(environment2, n_particles=100)
+    initial_belief1 = get_initial_belief(environment1, n_particles=3)
+    initial_belief2 = get_initial_belief(environment2, n_particles=3)
     num_episodes = 2
     num_steps = 3
 
@@ -398,6 +473,7 @@ def test_simulate_multiple_environments_and_policies_parallel_multiple_environme
         num_steps=num_steps,
         alpha=0.1,
         cache_dir_path=temp_cache_dir,
+        deployment_type=DeploymentType.LOCAL
     )
 
     # Assert
@@ -424,10 +500,15 @@ def test_simulate_multiple_environments_and_policies_parallel_multiple_environme
 def test_simulate_multiple_environments_and_policies_parallel_caching(temp_cache_dir):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=3)
     num_episodes = 2
     num_steps = 3
 
@@ -438,6 +519,7 @@ def test_simulate_multiple_environments_and_policies_parallel_caching(temp_cache
         num_steps=num_steps,
         alpha=0.1,
         cache_dir_path=temp_cache_dir,
+        deployment_type=DeploymentType.LOCAL
     )
 
     # Second run - should load from cache
@@ -447,6 +529,7 @@ def test_simulate_multiple_environments_and_policies_parallel_caching(temp_cache
         num_steps=num_steps,
         alpha=0.1,
         cache_dir_path=temp_cache_dir,
+        deployment_type=DeploymentType.LOCAL
     )
 
     # Assert results are identical
@@ -456,10 +539,15 @@ def test_simulate_multiple_environments_and_policies_parallel_caching(temp_cache
 def test_simulate_multiple_environments_and_policies_parallel_parallelization():
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
-    policy = StandardSparseSamplingDiscreteActionsPlanner(
-        environment=environment, branching_factor=2, depth=3, name="TestPolicy"
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=100)
+    initial_belief = get_initial_belief(environment, n_particles=3)
     num_episodes = 4
     num_steps = 3
 
@@ -470,6 +558,7 @@ def test_simulate_multiple_environments_and_policies_parallel_parallelization():
         num_steps=num_steps,
         alpha=0.1,
         n_jobs=1,
+        deployment_type=DeploymentType.LOCAL
     )
 
     results_2jobs = simulate_multiple_environments_and_policies_parallel(
@@ -478,6 +567,7 @@ def test_simulate_multiple_environments_and_policies_parallel_parallelization():
         num_steps=num_steps,
         alpha=0.1,
         n_jobs=2,
+        deployment_type=DeploymentType.LOCAL
     )
 
     # Compare results ignoring timing information
@@ -507,3 +597,142 @@ def test_simulate_multiple_environments_and_policies_parallel_parallelization():
 
     # Assert results are identical when ignoring timing information
     assert strip_timing_info(results_1job) == strip_timing_info(results_2jobs)
+
+
+def test_simulate_multiple_environments_and_policies_parallel_remote_ray(temp_cache_dir):
+    """Test parallel simulation with REMOTE_RAY deployment type."""
+    # Setup
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
+    )
+    initial_belief = get_initial_belief(environment, n_particles=3)
+    num_episodes = 2
+    num_steps = 3
+
+    # Execute
+    results = simulate_multiple_environments_and_policies_parallel(
+        environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
+        num_episodes=num_episodes,
+        num_steps=num_steps,
+        alpha=0.1,
+        cache_dir_path=temp_cache_dir,
+        deployment_type=DeploymentType.REMOTE_RAY
+    )
+
+    # Assert
+    assert isinstance(results, dict)
+    assert environment.name in results
+    assert policy.name in results[environment.name]
+    assert len(results[environment.name][policy.name]) == num_episodes
+
+    # Check each history
+    for history in results[environment.name][policy.name]:
+        assert isinstance(history, History)
+        assert len(history.history) == num_steps
+        assert history.actual_num_steps == num_steps
+        assert isinstance(history.reach_terminal_state, bool)
+
+
+def test_simulate_multiple_environments_and_policies_parallel_remote_ray_multiple_environments(temp_cache_dir):
+    """Test parallel simulation with REMOTE_RAY deployment type for multiple environments."""
+    # Setup
+    environment1 = TigerPOMDP(discount_factor=0.95, name="TigerPOMDP_095")
+    environment2 = TigerPOMDP(discount_factor=0.99, name="TigerPOMDP_099")
+    policy1 = POMCP(
+        environment=environment1,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy1",
+        n_simulations=2
+    )
+    policy2 = POMCP(
+        environment=environment2,
+        discount_factor=0.99,
+        depth=4,
+        exploration_constant=1.5,
+        name="TestPolicy2",
+        n_simulations=2
+    )
+    initial_belief1 = get_initial_belief(environment1, n_particles=3)
+    initial_belief2 = get_initial_belief(environment2, n_particles=3)
+    num_episodes = 2
+    num_steps = 3
+
+    # Execute
+    results = simulate_multiple_environments_and_policies_parallel(
+        environment_belief_policy_tuples=[
+            (environment1, initial_belief1, [policy1]),
+            (environment2, initial_belief2, [policy2])
+        ],
+        num_episodes=num_episodes,
+        num_steps=num_steps,
+        alpha=0.1,
+        cache_dir_path=temp_cache_dir,
+        deployment_type=DeploymentType.REMOTE_RAY
+    )
+
+    # Assert
+    assert isinstance(results, dict)
+    assert len(results) == 2  # Two environments
+    assert environment1.name in results
+    assert environment2.name in results
+
+    # Check first environment
+    assert policy1.name in results[environment1.name]
+    assert len(results[environment1.name][policy1.name]) == num_episodes
+    for history in results[environment1.name][policy1.name]:
+        assert isinstance(history, History)
+        assert len(history.history) == num_steps
+
+    # Check second environment
+    assert policy2.name in results[environment2.name]
+    assert len(results[environment2.name][policy2.name]) == num_episodes
+    for history in results[environment2.name][policy2.name]:
+        assert isinstance(history, History)
+        assert len(history.history) == num_steps
+
+
+def test_simulate_multiple_environments_and_policies_parallel_remote_ray_error_handling(temp_cache_dir):
+    """Test error handling in parallel simulation with REMOTE_RAY deployment type."""
+    # Setup
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
+    )
+    initial_belief = get_initial_belief(environment, n_particles=3)
+    num_episodes = 2
+    num_steps = 3
+
+    # Mock a Redis connection error by temporarily removing redis module
+    import sys
+    original_redis = sys.modules.get('redis')
+    sys.modules['redis'] = None
+
+    try:
+        # Execute - should raise an error
+        with pytest.raises(Exception) as exc_info:
+            simulate_multiple_environments_and_policies_parallel(
+                environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
+                num_episodes=num_episodes,
+                num_steps=num_steps,
+                alpha=0.1,
+                cache_dir_path=temp_cache_dir,
+                deployment_type=DeploymentType.REMOTE_RAY
+            )
+        assert "Error running simulations" in str(exc_info.value)
+    finally:
+        # Restore redis module
+        if original_redis is not None:
+            sys.modules['redis'] = original_redis
