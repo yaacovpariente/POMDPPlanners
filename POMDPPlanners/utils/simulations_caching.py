@@ -21,7 +21,7 @@ def get_cache_dir_path(
 ) -> Path:
     return cache_dir_path / "simulations_cache"
 
-def cache_simulation_results(
+def cache_episode_simulation_results(
     environment: Environment,
     policy: Policy,
     initial_belief: Belief,
@@ -38,7 +38,7 @@ def cache_simulation_results(
     else:
         cache[key] = results
 
-def load_simulation_results(
+def load_episode_simulation_results(
     environment: Environment,
     policy: Policy,
     initial_belief: Belief,
