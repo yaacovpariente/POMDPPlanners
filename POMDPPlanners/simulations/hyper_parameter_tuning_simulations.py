@@ -26,17 +26,105 @@ from POMDPPlanners.core.simulation import (
 )
 from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environment_policy_pair, compute_statistics_environments_policies_comparison
 from POMDPPlanners.utils.visualization import plot_metrics_comparison, plot_discounted_returns_histogram, plot_environment_policy_pair_comparison, plot_discounted_returns_histogram_multiple_policies
-from POMDPPlanners.simulations.simulations import simulation
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
+from POMDPPlanners.simulations.simulations import run_and_cache_episode
+from POMDPPlanners.simulations.simulations_deployment import SimulationDeployment, LocalSimulationDeployment
+from POMDPPlanners.utils.logger import logger
 
 HyperParameterFeatures = Union[CategoricalHyperParameter, NumericalHyperParameter]
 
+def run_multiple_episodes(
+    environment: Environment,
+    policy: Policy,
+    initial_belief: Belief,
+    num_episodes: int,
+    num_steps: int,
+    n_jobs: int = 1,
+    cache_dir_path: Path = None,
+    simulation_deployment: SimulationDeployment = None,
+) -> List[History]:
+    logger.info(f"Starting {num_episodes} episodes with {num_steps} steps each using {n_jobs} jobs")
+    logger.info(f"Environment: {environment.name}, Policy: {policy.name}")
+    assert isinstance(environment, Environment)
+    assert isinstance(policy, Policy)
+    assert isinstance(initial_belief, Belief)
+    if cache_dir_path is not None:
+        assert isinstance(cache_dir_path, Path)
+    if simulation_deployment is not None:
+        assert isinstance(simulation_deployment, SimulationDeployment)
+
+    assert num_episodes > 0
+    assert num_steps > 0
+
+    # Create a list of arguments for each episode
+    episode_args = [
+        (environment, policy, initial_belief, num_steps, i, hash(f"{environment.name}_{policy.name}_{i}") % (2**32), simulation_deployment, cache_dir_path) 
+        for i in range(num_episodes)
+    ]
+
+    # Run episodes in parallel using joblib with progress bar
+    logger.info(f"Running episodes in parallel for {environment.name} with {policy.name}")
+    histories = Parallel(n_jobs=n_jobs)(
+        delayed(run_and_cache_episode)(*args) for args in tqdm(
+            episode_args,
+            total=num_episodes,
+            desc=f"Running episodes for {environment.name} with {policy.name}",
+            unit="episode"
+        )
+    )
+    logger.info(f"All episodes completed for {environment.name} with {policy.name}")
+
+    return histories
+
+def simulation(
+    environment: Environment,
+    policy: Policy,
+    initial_belief: Belief,
+    num_episodes: int,
+    num_steps: int,
+    alpha: float,
+    confidence_interval_level: float = 0.95,
+    n_jobs: int = 1,
+    cache_dir_path: Path = None,
+    simulation_deployment: SimulationDeployment = None,
+) -> Tuple[List[History], List[MetricValue]]:
+    logger.info(f"Starting simulation with {num_episodes} episodes, {num_steps} steps, "
+                f"alpha={alpha}, confidence_interval={confidence_interval_level}")
+    assert isinstance(environment, Environment)
+    assert isinstance(policy, Policy)
+    assert isinstance(initial_belief, Belief)
+    assert isinstance(num_episodes, int)
+    assert isinstance(num_steps, int)
+    assert isinstance(confidence_interval_level, float)
+    if cache_dir_path is not None:
+        assert isinstance(cache_dir_path, Path)
+    if simulation_deployment is not None:
+        assert isinstance(simulation_deployment, SimulationDeployment)
+
+    assert 1 >= confidence_interval_level >= 0
+    assert num_episodes > 0
+    assert num_steps > 0
+
+    histories = run_multiple_episodes(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_episodes=num_episodes,
+        num_steps=num_steps,
+        n_jobs=n_jobs,
+        cache_dir_path=cache_dir_path,
+        simulation_deployment=simulation_deployment,
+    )
+
+    logger.info("Computing statistics from simulation results")
+    statistics = compute_statistics_environment_policy_pair(
+        env=environment,
+        histories=histories,
+        alpha=alpha,
+        confidence_interval_level=confidence_interval_level,
+    )
+    logger.info("Statistics computation completed")
+
+    return histories, statistics
 
 def create_policy_optimization_objective(
     policy_class: Type[Policy],
@@ -123,11 +211,10 @@ def optimize_policy_parameters_with_optuna(
     confidence_interval_level: float = 0.95,
     n_jobs: int = 1,
 ) -> Tuple[dict, float, List[History]]:
-    """
-    Optimizes policy parameters using Optuna.
+    """Optimize policy parameters using Optuna.
 
     Args:
-        environment: The environment to evaluate policies in
+        environment: The environment to optimize for
         policy_class: The Policy class to optimize
         param_ranges: List of hyperparameters to optimize
         num_episodes: Number of episodes to run per evaluation
@@ -135,8 +222,10 @@ def optimize_policy_parameters_with_optuna(
         n_particles: Number of particles for belief representation
         cache_dir_path: Path to store optimization results
         parameter_to_optimize: Name of the statistic to optimize
+        direction: Direction of optimization ("maximize" or "minimize")
         n_trials: Number of optimization trials
         confidence_interval_level: Confidence level for statistics
+        n_jobs: Number of parallel jobs for simulation
 
     Returns:
         Tuple containing:
@@ -162,6 +251,9 @@ def optimize_policy_parameters_with_optuna(
     assert n_particles > 0
     assert 0 <= confidence_interval_level <= 1
 
+    # Create simulation deployment
+    simulation_deployment = LocalSimulationDeployment(n_jobs=n_jobs)
+
     def evaluation_function(policy: Policy, trial: optuna.Trial) -> float:
         initial_belief = get_initial_belief(pomdp=environment, n_particles=n_particles)
         histories, statistics = simulation(
@@ -173,6 +265,8 @@ def optimize_policy_parameters_with_optuna(
             alpha=0.05,  # Fixed alpha for optimization
             confidence_interval_level=confidence_interval_level,
             n_jobs=n_jobs,
+            cache_dir_path=cache_dir_path,
+            simulation_deployment=simulation_deployment,
         )
 
         # Store histories as trial user attributes
@@ -214,18 +308,19 @@ def optimize_policy_parameters_with_optuna(
         # Evaluate policy and return objective value
         return evaluation_function(policy, trial)
 
+    # Create and run the study
     study = optuna.create_study(direction=direction)
     study.optimize(objective, n_trials=n_trials)
 
-    # Get histories from the best trial-
-    best_histories = study.best_trial.user_attrs["histories"]
+    # Get best parameters and value
+    best_params = study.best_params
+    best_value = study.best_value
 
-    # Remove environment from best params as it was not optimized
-    best_params = {
-        k: v for k, v in study.best_trial.params.items() if k not in ["environment"]
-    }
+    # Get histories from the best trial
+    best_trial = study.best_trial
+    histories = best_trial.user_attrs["histories"]
 
-    return best_params, study.best_value, best_histories
+    return best_params, best_value, histories
 
 
 def optimize_policy_parameters_for_multiple_environments(
