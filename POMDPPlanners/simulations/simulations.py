@@ -3,21 +3,23 @@ import copy
 from time import time
 from pathlib import Path
 import mlflow
+
 from joblib import Parallel, delayed
-import pandas as pd
 from tqdm import tqdm
-from typing import List, Tuple
+
+import numpy as np
+import pandas as pd
+
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation import (
     History,
     StepData,
-    MetricValue,
 )
-from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environment_policy_pair, compute_statistics_environments_policies_comparison
+from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environments_policies_comparison
+from POMDPPlanners.simulations.simulations_deployment import LocalSimulationDeployment, RemoteRaySimulationDeployment, DeploymentType, SimulationDeployment
 from POMDPPlanners.utils.visualization import plot_discounted_returns_histogram, plot_discounted_returns_histogram_multiple_policies
-from POMDPPlanners.utils.simulations_caching import load_episode_simulation_results, cache_episode_simulation_results
 from POMDPPlanners.utils.logger import logger
 
 
@@ -170,6 +172,7 @@ def run_and_cache_episode(
     num_steps: int,
     episode_id: int,
     seed: int,
+    simulation_deployment: SimulationDeployment,
     cache_dir_path: Path = None,
 ) -> History:
     """Run an episode with optional caching support and deterministic seed.
@@ -202,7 +205,7 @@ def run_and_cache_episode(
 
         # Try to load from cache
         try:
-            cached_history = load_episode_simulation_results(
+            cached_history = simulation_deployment.load_episode_simulation_results(
                 environment=environment,
                 policy=policy,
                 initial_belief=initial_belief,
@@ -216,7 +219,6 @@ def run_and_cache_episode(
             logger.warning(f"Failed to load episode {episode_id} from cache for environment {environment.name} and policy {policy.name}: {str(e)}")
 
     # Set random seed
-    import numpy as np
     state = np.random.get_state()
     np.random.seed(seed)
 
@@ -232,7 +234,7 @@ def run_and_cache_episode(
         # Cache the result if caching is enabled
         if cache_dir_path is not None:
             try:
-                cache_episode_simulation_results(
+                simulation_deployment.save_episode_simulation_results(
                     environment=environment,
                     policy=policy,
                     initial_belief=initial_belief,
@@ -298,7 +300,8 @@ def create_simulation_tasks(
     environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
     num_episodes: int,
     num_steps: int,
-    cache_dir_path: Path
+    cache_dir_path: Path,
+    simulation_deployment: SimulationDeployment
 ) -> List[Dict]:
     """Create list of simulation tasks with deterministic ordering.
     
@@ -307,6 +310,7 @@ def create_simulation_tasks(
         num_episodes: Number of episodes to run per policy
         num_steps: Number of steps per episode
         cache_dir_path: Path to store results
+        simulation_deployment: The deployment strategy to use
         
     Returns:
         List of dictionaries containing simulation task parameters
@@ -325,7 +329,8 @@ def create_simulation_tasks(
                     'num_steps': num_steps,
                     'episode_id': episode_id,
                     'seed': seed,
-                    'cache_dir_path': cache_dir_path
+                    'cache_dir_path': cache_dir_path,
+                    'simulation_deployment': simulation_deployment
                 })
                 total_tasks += 1
 
@@ -337,13 +342,15 @@ def create_simulation_tasks(
 
 def execute_parallel_simulations(
     simulation_tasks: List[Dict],
-    n_jobs: int
+    n_jobs: int,
+    simulation_deployment: SimulationDeployment
 ) -> List[History]:
     """Execute simulation tasks in parallel.
     
     Args:
         simulation_tasks: List of dictionaries containing simulation task parameters
         n_jobs: Number of parallel jobs for simulation
+        simulation_deployment: The deployment strategy to use
         
     Returns:
         List of History objects containing simulation results
@@ -352,7 +359,10 @@ def execute_parallel_simulations(
     start_time = time()
     
     histories_list = Parallel(n_jobs=n_jobs)(
-        delayed(run_and_cache_episode)(**task) for task in tqdm(
+        delayed(run_and_cache_episode)(
+            simulation_deployment=simulation_deployment,
+            **task
+        ) for task in tqdm(
             simulation_tasks,
             total=len(simulation_tasks),
             desc="Running parallel simulations",
@@ -403,6 +413,7 @@ def simulate_multiple_environments_and_policies_parallel(
     confidence_interval_level: float = 0.95,
     n_jobs: int = 1,
     cache_dir_path: Path = None,
+    deployment_type: DeploymentType = DeploymentType.LOCAL
 ) -> Dict[str, Dict[str, List[History]]]:
     """Simulate multiple policies on multiple environments in parallel at the episode level.
 
@@ -414,6 +425,7 @@ def simulate_multiple_environments_and_policies_parallel(
         confidence_interval_level: Confidence level for statistics
         n_jobs: Number of parallel jobs for simulation
         cache_dir_path: Path to store results (if None, uses current directory)
+        deployment_type: Type of deployment to use for simulations
 
     Returns:
         Dictionary mapping environment names to dictionaries of policy histories
@@ -428,20 +440,37 @@ def simulate_multiple_environments_and_policies_parallel(
         n_jobs=n_jobs
     )
 
+    # Initialize deployment based on type
+    if deployment_type == DeploymentType.LOCAL:
+        simulation_deployment = LocalSimulationDeployment(n_jobs=n_jobs)
+    elif deployment_type == DeploymentType.REMOTE_RAY:
+        simulation_deployment = RemoteRaySimulationDeployment(num_cpus=n_jobs)
+    else:
+        raise ValueError(f"Unsupported deployment type: {deployment_type}")
+
     # Create simulation tasks
     simulation_tasks = create_simulation_tasks(
         environment_belief_policy_tuples=environment_belief_policy_tuples,
         num_episodes=num_episodes,
         num_steps=num_steps,
-        cache_dir_path=cache_dir_path
+        cache_dir_path=cache_dir_path,
+        simulation_deployment=simulation_deployment
     )
 
-    # Execute simulations in parallel
-    histories_list = execute_parallel_simulations(
-        simulation_tasks=simulation_tasks,
-        n_jobs=n_jobs
-    )
-
+    # Execute simulations
+    try:
+        histories_list = simulation_deployment.run_multiple_episodes(
+            func=run_and_cache_episode,
+            episode_configs=simulation_tasks
+        )
+    except Exception as e:
+        logger.error(f"Error running simulations: {str(e)}")
+        raise e
+    finally:
+        # Close Redis connection if using remote Ray deployment
+        if deployment_type == DeploymentType.REMOTE_RAY:
+            del simulation_deployment
+        
     # Organize and return results
     return organize_simulation_results(
         histories_list=histories_list,
@@ -586,6 +615,7 @@ def compare_multiple_environments_policies(
     cache_dir_path: Path = None,
     experiment_name: str = "POMDP_Planning_Comparison",
     cache_visualizations: bool = True,
+    deployment_type: DeploymentType = DeploymentType.LOCAL
 ) -> Tuple[Dict[str, Dict[str, List[History]]], pd.DataFrame]:
     """Compare multiple policies on multiple environments and cache results in MLFlow."""
     # Validate inputs
@@ -613,6 +643,7 @@ def compare_multiple_environments_policies(
             confidence_interval_level=confidence_interval_level,
             n_jobs=n_jobs,
             cache_dir_path=cache_dir_path,
+            deployment_type=deployment_type
         )
         
         # Compute statistics
