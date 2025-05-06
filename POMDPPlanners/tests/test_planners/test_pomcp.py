@@ -4,6 +4,7 @@ from anytree import PostOrderIter
 
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
 
@@ -239,4 +240,38 @@ def test_tree_structure_construction(environment, discount_factor, depth, explor
     assert len(root_belief_node.children) == len(environment.get_actions())
     assert root_belief_node.visit_count == n_sims  # 
     assert root_belief_node.v_value is not None
+
+
+def test_sanity_pomdp_action_selection():
+    # Create environment and planner
+    environment = SanityPOMDP()
+    planner = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        n_simulations=1000,  # Use more simulations for better accuracy
+        name="TestPOMCP"
+    )
+    
+    # Get initial belief
+    belief = get_initial_belief(
+        pomdp=environment,
+        n_particles=100,
+        resampling=True
+    )
+    
+    # Run multiple trials to ensure consistent behavior
+    n_trials = 10
+    action_0_count = 0
+    
+    for _ in range(n_trials):
+        action = planner.action(belief)
+        if action == 0:  # Count how many times action 0 is selected
+            action_0_count += 1
+    
+    # Verify that action 0 (the better action) is selected most of the time
+    # We expect at least 80% of the time to select action 0
+    assert action_0_count >= 0.8 * n_trials, \
+        f"POMCP selected action 0 only {action_0_count}/{n_trials} times, expected at least {0.8 * n_trials}"
 

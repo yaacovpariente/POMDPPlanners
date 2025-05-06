@@ -6,6 +6,7 @@ from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 
 
 @pytest.fixture
@@ -327,3 +328,77 @@ def test_tree_structure_construction(planner, initial_belief, environment):
     assert len(root_action_nodes) == len(environment.get_actions())
     assert all(isinstance(node, ActionNode) for node in root_action_nodes)
     assert all(node.visit_count > 0 for node in root_action_nodes)
+
+
+def test_sanity_pomdp_action_selection():
+    """Test that SparsePFT correctly identifies the better action in SanityPOMDP"""
+    # Create environment and planner with appropriate parameters
+    environment = SanityPOMDP()
+    planner = SparsePFT(
+        environment=environment,
+        discount_factor=0.95,
+        gamma=0.95,
+        depth=3,
+        c_ucb=1.0,
+        beta_ucb=1.0,
+        belief_child_num=3,  # More belief children for better exploration
+        n_simulations=1000  # More simulations for better accuracy
+    )
+    
+    # Get initial belief
+    belief = get_initial_belief(
+        pomdp=environment,
+        n_particles=10,
+        resampling=True
+    )
+    
+    # Run multiple trials to ensure consistent behavior
+    n_trials = 10
+    action_0_count = 0
+    
+    for _ in range(n_trials):
+        action = planner.action(belief)
+        if action == 0:  # Count how many times action 0 is selected
+            action_0_count += 1
+    
+    # Verify that action 0 (the better action) is selected most of the time
+    # We expect at least 70% success rate since SparsePFT combines MCTS with particle filtering
+    assert action_0_count >= 0.7 * n_trials, \
+        f"SparsePFT selected action 0 only {action_0_count}/{n_trials} times, expected at least {0.7 * n_trials}"
+
+
+def test_sanity_pomdp_belief_children():
+    """Test that SparsePFT generates appropriate belief children for SanityPOMDP"""
+    environment = SanityPOMDP()
+    planner = SparsePFT(
+        environment=environment,
+        discount_factor=0.95,
+        gamma=0.95,
+        depth=3,
+        c_ucb=1.0,
+        beta_ucb=1.0,
+        belief_child_num=3,
+        n_simulations=10
+    )
+    
+    # Get initial belief and create nodes
+    belief = get_initial_belief(
+        pomdp=environment,
+        n_particles=100,
+        resampling=True
+    )
+    
+    belief_node = BeliefNode(belief=belief, observation=None)
+    action_node = ActionNode(action=0, parent=belief_node)  # Test with the better action
+    
+    # Generate a few belief children
+    for _ in range(3):
+        next_belief_node, _ = planner._generate_belief(action_node=action_node)
+        
+        # Verify the generated belief node
+        assert isinstance(next_belief_node, BeliefNode)
+        assert next_belief_node.parent == action_node
+        assert isinstance(next_belief_node.belief, WeightedParticleBelief)
+        assert len(next_belief_node.belief.particles) == 100
+        assert next_belief_node.observation in [0, 1]  # SanityPOMDP has binary observations
+        assert next_belief_node.immediate_cost is not None

@@ -1,7 +1,8 @@
 import pytest
 import numpy as np
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
 )
@@ -175,3 +176,35 @@ def test_invalid_depth():
             branching_factor=2,
             depth=0
         )
+
+
+def test_sanity_pomdp_action_selection():
+    """Test that the sparse sampling planner correctly identifies the better action in SanityPOMDP"""
+    # Create environment and planner with higher branching factor and depth for better accuracy
+    environment = SanityPOMDP()
+    planner = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=environment,
+        branching_factor=4,  # Higher branching factor for better exploration
+        depth=3  # Deeper tree for better planning
+    )
+    
+    # Get initial belief
+    belief = get_initial_belief(
+        pomdp=environment,
+        n_particles=100,
+        resampling=True
+    )
+    
+    # Run multiple trials to ensure consistent behavior
+    n_trials = 10
+    action_0_count = 0
+    
+    for _ in range(n_trials):
+        action = planner.action(belief)
+        if action == 0:  # Count how many times action 0 is selected
+            action_0_count += 1
+    
+    # Verify that action 0 (the better action) is selected most of the time
+    # We expect at least 70% success rate since sparse sampling is more systematic than MCTS
+    assert action_0_count >= 0.7 * n_trials, \
+        f"Sparse sampling planner selected action 0 only {action_0_count}/{n_trials} times, expected at least {0.7 * n_trials}"
