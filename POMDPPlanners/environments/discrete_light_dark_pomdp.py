@@ -12,7 +12,7 @@ from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
 from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.utils.statistics import confidence_interval
-
+from POMDPPlanners.core.belief import Belief
 class DiscreteLDObservationModel(ObservationModel):
     def __init__(
         self,
@@ -264,7 +264,7 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
     def get_actions(self) -> List[Any]:
         return self.actions
 
-    def visualize_path(self, path: List[np.ndarray], cache_path: Path):
+    def visualize_path(self, path: List[np.ndarray], agent_belief_path: List[DiscreteDistribution], cache_path: Path):
         assert isinstance(cache_path, Path)
         assert str(cache_path).endswith(".gif")
 
@@ -295,12 +295,16 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
         (path_line,) = ax.plot([], [], "r-", alpha=0.5, linewidth=2)
         # Initialize the action arrow
         arrow = plt.arrow(0, 0, 0, 0, color='red', width=0.1, head_width=0.3, head_length=0.3, length_includes_head=True)
+        # Initialize belief particles scatter plot
+        belief_scatter = ax.scatter([], [], c='purple', alpha=0.5, label='Belief Particles')
 
         def init():
             agent.set_data([], [])
             path_line.set_data([], [])
             arrow.set_data(x=0, y=0, dx=0, dy=0)
-            return agent, path_line, arrow
+            belief_scatter.set_offsets(np.empty((0, 2)))
+            belief_scatter.set_sizes([])
+            return agent, path_line, arrow, belief_scatter
 
         def update(frame):
             # Update current position
@@ -322,13 +326,26 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
             else:
                 arrow.set_data(x=x, y=y, dx=0, dy=0)
 
-            return agent, path_line, arrow
+            # Update belief particles
+            belief = agent_belief_path[frame]
+            if len(belief.values) > 0:
+                # Convert belief values to array of positions
+                positions = np.array(belief.values)
+                # Scale probabilities to reasonable sizes for visualization (multiply by 1000)
+                sizes = np.array(belief.probs) * 1000
+                belief_scatter.set_offsets(positions)
+                belief_scatter.set_sizes(sizes)
+            else:
+                belief_scatter.set_offsets(np.empty((0, 2)))
+                belief_scatter.set_sizes([])
+
+            return agent, path_line, arrow, belief_scatter
 
         ani = animation.FuncAnimation(
             fig, update, frames=len(path), init_func=init, blit=True, repeat=False
         )
         plt.legend()
-        plt.title("Agent Path Visualization")
+        plt.title("Agent Path and Belief Visualization")
 
         # Save the animation
         if cache_path is not None:
@@ -338,7 +355,9 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
 
     def cache_visualization(self, history: History, cache_path: Path) -> None:
         agent_path = [step.state for step in history.history]
-        self.visualize_path(path=agent_path, cache_path=cache_path)
+        agent_belief_path = [step.belief.to_unique_support_distribution() for step in history.history]
+        
+        self.visualize_path(path=agent_path, agent_belief_path=agent_belief_path, cache_path=cache_path)
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return np.array_equal(observation1, observation2)
