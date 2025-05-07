@@ -1,6 +1,9 @@
-from typing import Any, NamedTuple, Union
+from typing import Any, NamedTuple, Union, TYPE_CHECKING
 from dataclasses import dataclass
 from typing import List
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.belief import Belief
 
 
 class StepData(NamedTuple):
@@ -9,6 +12,7 @@ class StepData(NamedTuple):
     next_state: Any
     observation: Any
     reward: float
+    belief: 'Belief'
 
 
 @dataclass(frozen=True)

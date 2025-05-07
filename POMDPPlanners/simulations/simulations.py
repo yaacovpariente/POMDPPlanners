@@ -66,6 +66,7 @@ def run_episode(
                     next_state=None,
                     observation=None,
                     reward=None,
+                    belief=belief,
                 )
             )
             break
@@ -101,6 +102,7 @@ def run_episode(
                 next_state=next_state,
                 observation=observation,
                 reward=reward,
+                belief=belief,
             )
         )
 
