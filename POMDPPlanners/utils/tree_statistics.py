@@ -1,6 +1,6 @@
 import numpy as np
 
-from POMDPPlanners.planners.research_planners.icvar_pomcp import ActionNode
+from POMDPPlanners.core.tree import ActionNode
 
 def get_v_values_sample(action_node: ActionNode) -> np.ndarray:
     if not action_node.is_leaf:
