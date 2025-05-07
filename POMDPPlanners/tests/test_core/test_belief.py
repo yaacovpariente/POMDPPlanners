@@ -1,6 +1,129 @@
 import pytest
 import numpy as np
-from POMDPPlanners.core.belief import WeightedParticleBelief, UnweightedParticleBelief
+from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
+
+def test_belief_config_id_deterministic():
+    """Test that config_id is deterministic for identical beliefs."""
+    class TestBelief(Belief):
+        def __init__(self, value):
+            self.value = value
+            
+        def update(self, action, observation, pomdp):
+            return self
+            
+        def sample(self):
+            return self.value
+    
+    # Create two identical beliefs
+    belief1 = TestBelief(value=42)
+    belief2 = TestBelief(value=42)
+    
+    # Config IDs should be identical for identical beliefs
+    assert belief1.config_id == belief2.config_id
+
+def test_belief_config_id_changes_with_value():
+    """Test that config_id changes when belief values change."""
+    class TestBelief(Belief):
+        def __init__(self, value):
+            self.value = value
+            
+        def update(self, action, observation, pomdp):
+            return self
+            
+        def sample(self):
+            return self.value
+    
+    # Create two beliefs with different values
+    belief1 = TestBelief(value=42)
+    belief2 = TestBelief(value=43)
+    
+    # Config IDs should be different
+    assert belief1.config_id != belief2.config_id
+
+def test_belief_config_id_with_numpy_values():
+    """Test config_id with numpy array values."""
+    class TestBelief(Belief):
+        def __init__(self, value):
+            self.value = value
+            
+        def update(self, action, observation, pomdp):
+            return self
+            
+        def sample(self):
+            return self.value
+    
+    # Create two beliefs with identical numpy arrays
+    belief1 = TestBelief(value=np.array([1, 2, 3]))
+    belief2 = TestBelief(value=np.array([1, 2, 3]))
+    
+    # Config IDs should be identical
+    assert belief1.config_id == belief2.config_id
+
+def test_belief_hashable():
+    """Test that beliefs are hashable."""
+    class TestBelief(Belief):
+        def __init__(self, value):
+            self.value = value
+            
+        def update(self, action, observation, pomdp):
+            return self
+            
+        def sample(self):
+            return self.value
+    
+    # Create two identical beliefs
+    belief1 = TestBelief(value=42)
+    belief2 = TestBelief(value=42)
+    
+    # Test that beliefs can be used in a set
+    belief_set = {belief1, belief2}
+    assert len(belief_set) == 1  # Should only have one unique belief
+    
+    # Test that beliefs can be used as dictionary keys
+    belief_dict = {belief1: "value1"}
+    assert belief_dict[belief2] == "value1"  # Should be able to access using belief2
+
+def test_belief_equality():
+    """Test belief equality."""
+    class TestBelief(Belief):
+        def __init__(self, value):
+            self.value = value
+            
+        def update(self, action, observation, pomdp):
+            return self
+            
+        def sample(self):
+            return self.value
+    
+    # Create two identical beliefs
+    belief1 = TestBelief(value=42)
+    belief2 = TestBelief(value=42)
+    
+    # Test equality
+    assert belief1 == belief2
+    assert belief2 == belief1
+    
+    # Test inequality with different values
+    belief3 = TestBelief(value=43)
+    assert belief1 != belief3
+
+def test_belief_equality_with_different_types():
+    """Test equality comparison with different types."""
+    class TestBelief(Belief):
+        def __init__(self, value):
+            self.value = value
+            
+        def update(self, action, observation, pomdp):
+            return self
+            
+        def sample(self):
+            return self.value
+    
+    belief = TestBelief(value=42)
+    
+    # Should return NotImplemented for non-Belief types
+    assert belief.__eq__(42) == NotImplemented
+    assert belief.__eq__("not a belief") == NotImplemented
 
 def test_weighted_particle_belief_config_id_deterministic():
     # Create two identical beliefs
