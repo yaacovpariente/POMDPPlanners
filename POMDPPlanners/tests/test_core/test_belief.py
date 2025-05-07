@@ -325,3 +325,127 @@ def test_weighted_particle_belief_equality_with_different_types():
     # Should return NotImplemented for non-Belief types
     assert belief.__eq__(42) == NotImplemented
     assert belief.__eq__("not a belief") == NotImplemented
+
+def test_to_DiscreteDistribution_basic():
+    """Test basic conversion to DiscreteDistribution with simple particles."""
+    particles = [1, 2, 3]
+    log_weights = np.array([0.1, 0.2, 0.3])
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+    
+    distribution = belief.to_unique_support_distribution()
+    
+    # Check that we have the same number of unique particles
+    assert len(distribution.values) == 3
+    # Check that weights sum to 1
+    assert np.isclose(np.sum(distribution.probs), 1.0)
+    # Check that all particles are present
+    assert set(distribution.values) == set(particles)
+
+def test_to_DiscreteDistribution_duplicate_particles():
+    """Test conversion with duplicate particles that should be combined."""
+    particles = [1, 1, 2, 2, 2, 3]  # Duplicate particles
+    log_weights = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+    
+    distribution = belief.to_unique_support_distribution()
+    
+    # Check that we have only unique particles
+    assert len(distribution.values) == 3
+    # Check that weights sum to 1
+    assert np.isclose(np.sum(distribution.probs), 1.0)
+    # Check that all unique particles are present
+    assert set(distribution.values) == {1, 2, 3}
+    
+    # Find the weights for each particle
+    particle_weights = {}
+    for value, prob in zip(distribution.values, distribution.probs):
+        particle_weights[value] = prob
+    
+    # Check that weights for duplicate particles are combined correctly
+    # The weights should be proportional to the sum of their log weights
+    assert particle_weights[1] > 0  # Combined weight of 0.1 and 0.2
+    assert particle_weights[2] > 0  # Combined weight of 0.3, 0.4, and 0.5
+    assert particle_weights[3] > 0  # Weight of 0.6
+
+def test_to_DiscreteDistribution_numpy_particles():
+    """Test conversion with numpy array particles."""
+    particles = [
+        np.array([1, 2]),
+        np.array([1, 2]),  # Duplicate
+        np.array([3, 4])
+    ]
+    log_weights = np.array([0.1, 0.2, 0.3])
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+    
+    distribution = belief.to_unique_support_distribution()
+    
+    # Check that we have only unique particles
+    assert len(distribution.values) == 2
+    # Check that weights sum to 1
+    assert np.isclose(np.sum(distribution.probs), 1.0)
+    
+    # Check that numpy arrays are preserved and duplicates are combined
+    found_12 = False
+    found_34 = False
+    for value, prob in zip(distribution.values, distribution.probs):
+        if np.array_equal(value, np.array([1, 2])):
+            found_12 = True
+            assert prob > 0  # Combined weight of 0.1 and 0.2
+        elif np.array_equal(value, np.array([3, 4])):
+            found_34 = True
+            assert prob > 0  # Weight of 0.3
+    
+    assert found_12 and found_34
+
+def test_to_DiscreteDistribution_mixed_particles():
+    """Test conversion with mixed type particles."""
+    particles = [
+        1,
+        "test",
+        np.array([1, 2]),
+        1,  # Duplicate
+        "test",  # Duplicate
+        np.array([1, 2])  # Duplicate
+    ]
+    log_weights = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+    
+    distribution = belief.to_unique_support_distribution()
+    
+    # Check that we have only unique particles
+    assert len(distribution.values) == 3
+    # Check that weights sum to 1
+    assert np.isclose(np.sum(distribution.probs), 1.0)
+    
+    # Check that all unique particles are present with correct types
+    found_int = False
+    found_str = False
+    found_array = False
+    
+    for value, prob in zip(distribution.values, distribution.probs):
+        if isinstance(value, int) and value == 1:
+            found_int = True
+            assert prob > 0  # Combined weight of 0.1 and 0.4
+        elif isinstance(value, str) and value == "test":
+            found_str = True
+            assert prob > 0  # Combined weight of 0.2 and 0.5
+        elif isinstance(value, np.ndarray) and np.array_equal(value, np.array([1, 2])):
+            found_array = True
+            assert prob > 0  # Combined weight of 0.3 and 0.6
+    
+    assert found_int and found_str and found_array
+
+def test_to_DiscreteDistribution_weight_normalization():
+    """Test that weights are properly normalized in the output distribution."""
+    particles = [1, 2, 3]
+    log_weights = np.array([1.0, 2.0, 3.0])  # Large log weights
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+    
+    distribution = belief.to_unique_support_distribution()
+    
+    # Check that weights sum to 1
+    assert np.isclose(np.sum(distribution.probs), 1.0)
+    # Check that all weights are positive
+    assert np.all(distribution.probs > 0)
+    # Check that weights are properly normalized (larger log weight = larger probability)
+    assert distribution.probs[2] > distribution.probs[1] > distribution.probs[0]

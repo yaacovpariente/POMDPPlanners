@@ -7,6 +7,7 @@ import json
 import numpy as np
 
 from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.distributions import DiscreteDistribution
 
 class Belief(ABC):
     @property
@@ -148,6 +149,47 @@ class WeightedParticleBelief(Belief):
         self.ess_threshold = ess_threshold
 
         self.eps = 1e-10
+
+    def to_unique_support_distribution(self) -> "DiscreteDistribution":
+        """Convert the belief to a DiscreteDistribution with unique particles.
+        
+        Returns:
+            DiscreteDistribution: A distribution where each particle appears only once,
+            with its probability being the sum of all its occurrences in the original belief.
+        """
+        
+        # Create a dictionary to store unique particles and their combined weights
+        unique_particles = {}
+        
+        # Iterate through particles and their weights
+        for particle, weight in zip(self.particles, self.normalized_weights):
+            # Convert particle to tuple if it's a numpy array for hashability
+            if isinstance(particle, np.ndarray):
+                particle_key = tuple(particle.tolist())
+            else:
+                particle_key = particle
+                
+            # Add or update the weight for this particle
+            if particle_key in unique_particles:
+                unique_particles[particle_key] += weight
+            else:
+                unique_particles[particle_key] = weight
+        
+        # Convert back to original particle types and create arrays
+        particles = []
+        weights = []
+        for particle_key, weight in unique_particles.items():
+            if isinstance(particle_key, tuple):
+                particles.append(np.array(particle_key))
+            else:
+                particles.append(particle_key)
+            weights.append(weight)
+            
+        # Convert to numpy array and normalize to ensure sum is exactly 1
+        weights = np.array(weights)
+        weights = weights / np.sum(weights)  # Normalize to sum to 1
+        
+        return DiscreteDistribution(values=particles, probs=weights)
 
     @property
     def config_id(self) -> str:

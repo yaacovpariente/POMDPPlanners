@@ -19,7 +19,7 @@ class DiscreteDistribution(Distribution):
         assert isinstance(probs, np.ndarray)
 
         assert len(values) == len(probs)
-        assert sum(probs) == 1
+        assert np.isclose(np.sum(probs), 1.0, rtol=1e-10)
 
         self.values = values
         self.probs = probs
