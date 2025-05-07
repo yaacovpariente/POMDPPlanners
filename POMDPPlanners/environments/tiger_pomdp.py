@@ -9,7 +9,7 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
-from POMDPPlanners.core.simulation import History
+from POMDPPlanners.core.simulation import History, MetricValue
 
 STATES = ["tiger_left", "tiger_right"]
 ACTIONS = ["listen", "open_left", "open_right"]
@@ -173,3 +173,51 @@ class TigerPOMDP(DiscreteActionsEnvironment):
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return observation1 == observation2
+
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute Tiger POMDP specific metrics from simulation histories.
+        
+        Args:
+            histories: List of simulation histories
+            
+        Returns:
+            List of MetricValue objects containing the computed metrics
+        """
+        # Calculate success rate (opening correct door)
+        success_count = 0
+        total_episodes = len(histories)
+        
+        for history in histories:
+            # Check if the last action was opening a door
+            last_step = history.history[-1]
+            if last_step.action in ["open_left", "open_right"]:
+                # Check if the door opened was correct
+                if (last_step.action == "open_left" and last_step.state == "tiger_right") or \
+                   (last_step.action == "open_right" and last_step.state == "tiger_left"):
+                    success_count += 1
+        
+        success_rate = success_count / total_episodes if total_episodes > 0 else 0.0
+        
+        # Calculate average number of listens before opening a door
+        listen_counts = []
+        for history in histories:
+            listen_count = sum(1 for step in history.history if step.action == "listen")
+            listen_counts.append(listen_count)
+        
+        avg_listens = sum(listen_counts) / len(listen_counts) if listen_counts else 0.0
+        
+        # Create MetricValue objects
+        return [
+            MetricValue(
+                name="success_rate",
+                value=success_rate,
+                lower_confidence_bound=success_rate,  # Simple implementation, could be improved with proper confidence intervals
+                upper_confidence_bound=success_rate
+            ),
+            MetricValue(
+                name="average_listens",
+                value=avg_listens,
+                lower_confidence_bound=avg_listens,
+                upper_confidence_bound=avg_listens
+            )
+        ]
