@@ -607,6 +607,38 @@ def cache_episode_visualizations(
         except Exception as e:
             logger.warning(f"Visualization failed for episode {episode_idx}: {str(e)}")
 
+def create_policy_configurations_df(
+    environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]]
+) -> pd.DataFrame:
+    """Create a DataFrame containing policy configurations for all environment-policy pairs.
+    
+    Args:
+        environment_belief_policy_tuples: List of tuples containing (environment, belief, policies)
+        
+    Returns:
+        DataFrame where each row represents an environment-policy pair and columns are configuration parameters
+    """
+    policy_configs = []
+    for env, belief, policies in environment_belief_policy_tuples:
+        for policy in policies:
+            # Get policy parameters
+            policy_params = {
+                key: value 
+                for key, value in policy.__dict__.items()
+                if isinstance(value, (int, float, str, bool))
+            }
+            
+            # Create row with environment and policy info
+            row_data = {
+                'environment': env.name,
+                'policy': policy.name,
+                'policy_type': policy.__class__.__name__,
+                **policy_params  # Add all policy parameters
+            }
+            policy_configs.append(row_data)
+    
+    return pd.DataFrame(policy_configs)
+
 def compare_multiple_environments_policies(
     environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
     num_episodes: int,
@@ -656,8 +688,17 @@ def compare_multiple_environments_policies(
             confidence_interval_level=confidence_interval_level,
         )
 
-        # Log statistics
-        mlflow.log_table(statistics_df, "statistics/comparison_results.json")
+        # Create and merge policy configurations
+        policy_configs_df = create_policy_configurations_df(environment_belief_policy_tuples)
+        merged_df = pd.merge(
+            statistics_df,
+            policy_configs_df,
+            on=['environment', 'policy']
+        )
+
+        # Log statistics and configurations
+        mlflow.log_table(merged_df, "statistics/comparison_results.json")
+        mlflow.log_table(policy_configs_df, "statistics/policy_configurations.json")
 
         # Create results directory and visualizations
         results_dir = cache_dir_path / "results"
@@ -679,4 +720,4 @@ def compare_multiple_environments_policies(
         # Log all artifacts
         mlflow.log_artifact(str(results_dir), ".")
 
-    return histories, statistics_df
+    return histories, merged_df
