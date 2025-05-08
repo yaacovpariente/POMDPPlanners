@@ -33,6 +33,23 @@ class MockBelief:
     @property
     def __class__(self):
         return type("MockBelief", (), {"__name__": "MockBelief"})
+    
+    def to_dict(self):
+        """Convert belief to dictionary for serialization."""
+        return {
+            "name": self.name,
+            "type": "MockBelief"
+        }
+    
+    @classmethod
+    def from_dict(cls, data):
+        """Create belief from dictionary."""
+        return cls(name=data["name"])
+
+    def __eq__(self, other):
+        if not isinstance(other, MockBelief):
+            return False
+        return self.name == other.name
 
 
 @pytest.fixture
@@ -70,7 +87,8 @@ def sample_history():
         action="action1",
         next_state="state2",
         observation="obs1",
-        reward=1.0
+        reward=1.0,
+        belief=MockBelief()
     )
     return History(
         history=[step_data],
@@ -131,9 +149,27 @@ def test_save_and_load_episode_results(deployment, sample_history, mock_redis_cl
     saved_data = json.loads(mock_redis_client.return_value.set.call_args[0][1])
     assert len(saved_data) == 1
     assert saved_data[0]['discount_factor'] == sample_history.discount_factor
+    assert saved_data[0]['history'][0]['belief']['type'] == 'MockBelief'
 
-    # Mock Redis get to return the saved data
-    mock_redis_client.return_value.get.return_value = json.dumps([sample_history.to_dict()])
+    # Mock Redis get to return the serialized data
+    mock_redis_client.return_value.get.return_value = json.dumps([{
+        'history': [{
+            'state': "state1",
+            'action': "action1",
+            'next_state': "state2",
+            'observation': "obs1",
+            'reward': 1.0,
+            'belief': {'name': "test_belief", 'type': "MockBelief"}
+        }],
+        'discount_factor': 0.9,
+        'average_state_sampling_time': 0.1,
+        'average_action_time': 0.2,
+        'average_observation_time': 0.3,
+        'average_belief_update_time': 0.4,
+        'average_reward_time': 0.5,
+        'actual_num_steps': 1,
+        'reach_terminal_state': True
+    }])
 
     # Load results
     loaded_results = deployment.load_episode_simulation_results(
@@ -149,6 +185,7 @@ def test_save_and_load_episode_results(deployment, sample_history, mock_redis_cl
     assert isinstance(loaded_results[0], History)
     assert loaded_results[0].discount_factor == sample_history.discount_factor
     assert loaded_results[0].actual_num_steps == sample_history.actual_num_steps
+    assert isinstance(loaded_results[0].history[0].belief, MockBelief)
 
 
 def test_load_empty_results(deployment, mock_redis_client):

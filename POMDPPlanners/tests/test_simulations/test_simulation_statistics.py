@@ -7,10 +7,28 @@ from POMDPPlanners.simulations.simulation_statistics import (
     compute_statistics_environments_policies_comparison
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.core.belief import WeightedParticleBelief
 
 
 def create_test_history(rewards: List[float], discount_factor: float = 0.95) -> History:
-    steps = [StepData(None, None, None, None, r) for r in rewards]
+    # Create a simple belief for testing
+    def create_test_belief(state):
+        return WeightedParticleBelief(
+            particles=[state],
+            log_weights=np.array([1.0]),  # Using non-zero log weight
+            resampling=False
+        )
+    
+    steps = [
+        StepData(
+            state="tiger_left",
+            action="listen",
+            next_state="tiger_left",
+            observation="hear_left",
+            reward=r,
+            belief=create_test_belief("tiger_left")
+        ) for r in rewards
+    ]
     history = History(
         history=steps,
         discount_factor=discount_factor,
@@ -148,6 +166,14 @@ def test_compute_statistics_environment_policy_pair():
     # Create a simple environment
     environment = TigerPOMDP(discount_factor=0.95)
     
+    # Create a simple belief for testing
+    def create_test_belief(state):
+        return WeightedParticleBelief(
+            particles=[state],
+            log_weights=np.array([1.0]),  # Using non-zero log weight
+            resampling=False
+        )
+    
     # Create multiple histories to satisfy confidence interval requirement
     histories = [
         History(
@@ -157,14 +183,16 @@ def test_compute_statistics_environment_policy_pair():
                     action="listen",
                     next_state="tiger_left",
                     observation="hear_left",
-                    reward=-1.0
+                    reward=-1.0,
+                    belief=create_test_belief("tiger_left")
                 ),
                 StepData(
                     state="tiger_left",
                     action="open_right",
                     next_state="tiger_right",
                     observation="hear_nothing",
-                    reward=10.0
+                    reward=10.0,
+                    belief=create_test_belief("tiger_left")
                 )
             ],
             discount_factor=0.95,
@@ -183,14 +211,16 @@ def test_compute_statistics_environment_policy_pair():
                     action="listen",
                     next_state="tiger_left",
                     observation="hear_left",
-                    reward=-1.0
+                    reward=-1.0,
+                    belief=create_test_belief("tiger_left")
                 ),
                 StepData(
                     state="tiger_left",
                     action="open_right",
                     next_state="tiger_right",
                     observation="hear_nothing",
-                    reward=10.0
+                    reward=10.0,
+                    belief=create_test_belief("tiger_left")
                 )
             ],
             discount_factor=0.95,
@@ -226,6 +256,14 @@ def test_compute_statistics_environments_policies_comparison():
     env1 = TigerPOMDP(discount_factor=0.95, name="TigerPOMDP_1")
     env2 = TigerPOMDP(discount_factor=0.99, name="TigerPOMDP_2")
     
+    # Create a simple belief for testing
+    def create_test_belief(state):
+        return WeightedParticleBelief(
+            particles=[state],
+            log_weights=np.array([1.0]),  # Using non-zero log weight
+            resampling=False
+        )
+    
     # Create histories with multiple samples for each policy
     history1 = [
         History(
@@ -235,7 +273,8 @@ def test_compute_statistics_environments_policies_comparison():
                     action="listen",
                     next_state="tiger_left",
                     observation="hear_left",
-                    reward=-1.0
+                    reward=-1.0,
+                    belief=create_test_belief("tiger_left")
                 )
             ],
             discount_factor=0.95,
@@ -254,7 +293,8 @@ def test_compute_statistics_environments_policies_comparison():
                     action="listen",
                     next_state="tiger_left",
                     observation="hear_left",
-                    reward=-1.0
+                    reward=-1.0,
+                    belief=create_test_belief("tiger_left")
                 )
             ],
             discount_factor=0.95,
@@ -276,7 +316,8 @@ def test_compute_statistics_environments_policies_comparison():
                     action="listen",
                     next_state="tiger_right",
                     observation="hear_right",
-                    reward=-1.0
+                    reward=-1.0,
+                    belief=create_test_belief("tiger_right")
                 )
             ],
             discount_factor=0.99,
@@ -295,7 +336,8 @@ def test_compute_statistics_environments_policies_comparison():
                     action="listen",
                     next_state="tiger_right",
                     observation="hear_right",
-                    reward=-1.0
+                    reward=-1.0,
+                    belief=create_test_belief("tiger_right")
                 )
             ],
             discount_factor=0.99,
