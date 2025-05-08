@@ -555,10 +555,16 @@ def test_visualize_path(tmp_path):
     """Test path visualization"""
     env = DiscreteLightDarkPOMDP(discount_factor=0.95)
     path = [np.array([0, 5]), np.array([1, 5]), np.array([2, 5]), np.array([3, 5])]
+    
+    # Create a simple belief path for testing
+    agent_belief_path = [
+        DiscreteDistribution(values=[path[i]], probs=np.array([1.0]))
+        for i in range(len(path))
+    ]
 
     # Test visualization with temporary path
     cache_path = tmp_path / "test_animation.gif"
-    env.visualize_path(path, cache_path)
+    env.visualize_path(path=path, agent_belief_path=agent_belief_path, cache_path=cache_path)
 
     # Verify file was created
     assert cache_path.exists()
@@ -570,30 +576,130 @@ def test_compute_metrics():
     
     # Create test histories
     from POMDPPlanners.core.simulation import History, StepData
+    from POMDPPlanners.core.belief import WeightedParticleBelief
+    
+    # Create a simple belief for testing
+    def create_test_belief(state):
+        return WeightedParticleBelief(
+            particles=[state],
+            log_weights=np.array([1.0]),  # Using non-zero log weight
+            resampling=False
+        )
     
     # History 1: Reaches goal in 3 steps
     history1 = History([
-        StepData(state=np.array([0, 5]), action="right", next_state=np.array([1, 5]), observation=np.array([1, 5]), reward=-2.0),
-        StepData(state=np.array([1, 5]), action="right", next_state=np.array([2, 5]), observation=np.array([2, 5]), reward=-2.0),
-        StepData(state=np.array([2, 5]), action="right", next_state=np.array([3, 5]), observation=np.array([3, 5]), reward=-2.0),
-        StepData(state=np.array([10, 5]), action="right", next_state=np.array([10, 5]), observation=np.array([10, 5]), reward=8.0),  # Goal state
+        StepData(
+            state=np.array([0, 5]),
+            action="right",
+            next_state=np.array([1, 5]),
+            observation=np.array([1, 5]),
+            reward=-2.0,
+            belief=create_test_belief(np.array([0, 5]))
+        ),
+        StepData(
+            state=np.array([1, 5]),
+            action="right",
+            next_state=np.array([2, 5]),
+            observation=np.array([2, 5]),
+            reward=-2.0,
+            belief=create_test_belief(np.array([1, 5]))
+        ),
+        StepData(
+            state=np.array([2, 5]),
+            action="right",
+            next_state=np.array([3, 5]),
+            observation=np.array([3, 5]),
+            reward=-2.0,
+            belief=create_test_belief(np.array([2, 5]))
+        ),
+        StepData(
+            state=np.array([10, 5]),
+            action="right",
+            next_state=np.array([10, 5]),
+            observation=np.array([10, 5]),
+            reward=8.0,  # Goal state
+            belief=create_test_belief(np.array([10, 5]))
+        ),
     ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=4, reach_terminal_state=True)
     
     # History 2: Hits obstacle
     history2 = History([
-        StepData(state=np.array([0, 5]), action="right", next_state=np.array([1, 5]), observation=np.array([1, 5]), reward=-2.0),
-        StepData(state=np.array([1, 5]), action="right", next_state=np.array([2, 5]), observation=np.array([2, 5]), reward=-2.0),
-        StepData(state=np.array([3, 5]), action="right", next_state=np.array([3, 5]), observation=np.array([3, 5]), reward=-12.0),  # Obstacle state
+        StepData(
+            state=np.array([0, 5]),
+            action="right",
+            next_state=np.array([1, 5]),
+            observation=np.array([1, 5]),
+            reward=-2.0,
+            belief=create_test_belief(np.array([0, 5]))
+        ),
+        StepData(
+            state=np.array([1, 5]),
+            action="right",
+            next_state=np.array([2, 5]),
+            observation=np.array([2, 5]),
+            reward=-2.0,
+            belief=create_test_belief(np.array([1, 5]))
+        ),
+        StepData(
+            state=np.array([3, 5]),
+            action="right",
+            next_state=np.array([3, 5]),
+            observation=np.array([3, 5]),
+            reward=-12.0,  # Obstacle state
+            belief=create_test_belief(np.array([3, 5]))
+        ),
     ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=3, reach_terminal_state=True)
     
     # History 3: Reaches goal in 5 steps, avoiding obstacle by going up
     history3 = History([
-        StepData(state=np.array([0, 5]), action="right", next_state=np.array([1, 5]), observation=np.array([1, 5]), reward=-2.0),
-        StepData(state=np.array([1, 5]), action="right", next_state=np.array([2, 5]), observation=np.array([2, 5]), reward=-2.0),
-        StepData(state=np.array([2, 5]), action="up", next_state=np.array([2, 6]), observation=np.array([2, 6]), reward=-2.0),
-        StepData(state=np.array([2, 6]), action="right", next_state=np.array([3, 6]), observation=np.array([3, 6]), reward=-2.0),
-        StepData(state=np.array([3, 6]), action="right", next_state=np.array([4, 6]), observation=np.array([4, 6]), reward=-2.0),
-        StepData(state=np.array([10, 5]), action="right", next_state=np.array([10, 5]), observation=np.array([10, 5]), reward=8.0),  # Goal state
+        StepData(
+            state=np.array([0, 5]),
+            action="right",
+            next_state=np.array([1, 5]),
+            observation=np.array([1, 5]),
+            reward=-2.0,
+            belief=create_test_belief(np.array([0, 5]))
+        ),
+        StepData(
+            state=np.array([1, 5]),
+            action="right",
+            next_state=np.array([2, 5]),
+            observation=np.array([2, 5]),
+            reward=-2.0,
+            belief=create_test_belief(np.array([1, 5]))
+        ),
+        StepData(
+            state=np.array([2, 5]),
+            action="up",
+            next_state=np.array([2, 6]),
+            observation=np.array([2, 6]),
+            reward=-2.0,
+            belief=create_test_belief(np.array([2, 5]))
+        ),
+        StepData(
+            state=np.array([2, 6]),
+            action="right",
+            next_state=np.array([3, 6]),
+            observation=np.array([3, 6]),
+            reward=-2.0,
+            belief=create_test_belief(np.array([2, 6]))
+        ),
+        StepData(
+            state=np.array([3, 6]),
+            action="right",
+            next_state=np.array([4, 6]),
+            observation=np.array([4, 6]),
+            reward=-2.0,
+            belief=create_test_belief(np.array([3, 6]))
+        ),
+        StepData(
+            state=np.array([10, 5]),
+            action="right",
+            next_state=np.array([10, 5]),
+            observation=np.array([10, 5]),
+            reward=8.0,  # Goal state
+            belief=create_test_belief(np.array([10, 5]))
+        ),
     ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=6, reach_terminal_state=True)
     
     # Compute metrics
