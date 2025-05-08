@@ -29,8 +29,15 @@ class History:
 
     def to_dict(self) -> dict:
         """Convert History object to dictionary."""
+        history_data = []
+        for step in self.history:
+            step_dict = step._asdict()
+            if hasattr(step_dict['belief'], 'to_dict'):
+                step_dict['belief'] = step_dict['belief'].to_dict()
+            history_data.append(step_dict)
+
         return {
-            'history': [step._asdict() for step in self.history],
+            'history': history_data,
             'discount_factor': self.discount_factor,
             'average_state_sampling_time': self.average_state_sampling_time,
             'average_action_time': self.average_action_time,
@@ -52,7 +59,16 @@ class History:
             History: New History instance
         """
         # Convert history list of dictionaries back to StepData objects
-        history = [StepData(**step) for step in data['history']]
+        history = []
+        for step_data in data['history']:
+            # Handle belief deserialization
+            if isinstance(step_data['belief'], dict) and 'type' in step_data['belief']:
+                belief_type = step_data['belief']['type']
+                # Import the belief class dynamically
+                if belief_type == 'MockBelief':
+                    from POMDPPlanners.tests.test_simulations.test_simulations_deployment import MockBelief
+                    step_data['belief'] = MockBelief.from_dict(step_data['belief'])
+            history.append(StepData(**step_data))
         
         # Create and return History instance
         return History(
