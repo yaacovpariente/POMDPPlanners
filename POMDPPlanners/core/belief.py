@@ -150,6 +150,17 @@ class WeightedParticleBelief(Belief):
 
         self.eps = 1e-10
 
+    def to_dict(self) -> dict:
+        """Convert the belief to a dictionary with particles and their normalized weights.
+        
+        Returns:
+            dict: A dictionary with 'particles' and 'normalized_weights' keys.
+        """
+        return {
+            'particles': self.particles,
+            'normalized_weights': self.normalized_weights.tolist()
+        }
+
     def to_unique_support_distribution(self) -> "DiscreteDistribution":
         """Convert the belief to a DiscreteDistribution with unique particles.
         
