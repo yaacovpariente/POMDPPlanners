@@ -324,4 +324,94 @@ def test_compute_metrics():
     assert metrics_dict["safety_violation_rate"].lower_confidence_bound <= metrics_dict["safety_violation_rate"].value
     assert metrics_dict["safety_violation_rate"].upper_confidence_bound >= metrics_dict["safety_violation_rate"].value
     assert metrics_dict["critical_violation_rate"].lower_confidence_bound <= metrics_dict["critical_violation_rate"].value
-    assert metrics_dict["critical_violation_rate"].upper_confidence_bound >= metrics_dict["critical_violation_rate"].value 
+    assert metrics_dict["critical_violation_rate"].upper_confidence_bound >= metrics_dict["critical_violation_rate"].value
+
+def test_environment_equality():
+    # Create two identical environments
+    env1 = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
+        safe_velocity_threshold=2.0,
+        max_force=1.0,
+        dt=0.1,
+        mass=1.0,
+        damping=0.1,
+        position_noise=0.1,
+        velocity_noise=0.2,
+        safety_violation_penalty=-100.0,
+        movement_reward_scale=1.0,
+    )
+    env2 = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
+        safe_velocity_threshold=2.0,
+        max_force=1.0,
+        dt=0.1,
+        mass=1.0,
+        damping=0.1,
+        position_noise=0.1,
+        velocity_noise=0.2,
+        safety_violation_penalty=-100.0,
+        movement_reward_scale=1.0,
+    )
+    
+    # Test equality
+    assert env1 == env2
+    
+    # Test inequality with different parameters
+    env3 = SafeAntVelocityPOMDP(
+        discount_factor=0.9,  # Different discount factor
+        safe_velocity_threshold=2.0,
+        max_force=1.0,
+        dt=0.1,
+        mass=1.0,
+        damping=0.1,
+        position_noise=0.1,
+        velocity_noise=0.2,
+        safety_violation_penalty=-100.0,
+        movement_reward_scale=1.0,
+    )
+    assert env1 != env3
+
+def test_config_id():
+    # Create two environments with same parameters
+    env1 = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
+        safe_velocity_threshold=2.0,
+        max_force=1.0,
+        dt=0.1,
+        mass=1.0,
+        damping=0.1,
+        position_noise=0.1,
+        velocity_noise=0.2,
+        safety_violation_penalty=-100.0,
+        movement_reward_scale=1.0,
+    )
+    env2 = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
+        safe_velocity_threshold=2.0,
+        max_force=1.0,
+        dt=0.1,
+        mass=1.0,
+        damping=0.1,
+        position_noise=0.1,
+        velocity_noise=0.2,
+        safety_violation_penalty=-100.0,
+        movement_reward_scale=1.0,
+    )
+    
+    # Test same config_id for identical environments
+    assert env1.config_id == env2.config_id
+    
+    # Test different config_id for different environments
+    env3 = SafeAntVelocityPOMDP(
+        discount_factor=0.9,  # Different discount factor
+        safe_velocity_threshold=2.0,
+        max_force=1.0,
+        dt=0.1,
+        mass=1.0,
+        damping=0.1,
+        position_noise=0.1,
+        velocity_noise=0.2,
+        safety_violation_penalty=-100.0,
+        movement_reward_scale=1.0,
+    )
+    assert env1.config_id != env3.config_id 
