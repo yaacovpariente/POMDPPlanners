@@ -121,7 +121,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         self.actions = [0, 1, 2, 3]  # 0: no force, 1: small, 2: medium, 3: large
 
     def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
-        return SafeVelocityStateTransition(
+        return SafeAntVelocityStateTransition(
             state=state,
             action=action,
             dt=self.dt,

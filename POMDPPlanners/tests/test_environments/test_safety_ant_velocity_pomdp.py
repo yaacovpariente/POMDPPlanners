@@ -3,14 +3,14 @@ import pytest
 from pathlib import Path
 
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
-    SafeVelocityPOMDP,
-    SafeVelocityStateTransition,
-    SafeVelocityObservation,
+    SafeAntVelocityPOMDP,
+    SafeAntVelocityStateTransition,
+    SafeAntVelocityObservation,
 )
 
 def test_safe_velocity_pomdp_initialization():
     # Test basic initialization
-    env = SafeVelocityPOMDP(
+    env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
         safe_velocity_threshold=2.0,
         max_force=1.0,
@@ -44,7 +44,7 @@ def test_state_transition():
     damping = 0.1
     max_force = 1.0
 
-    transition = SafeVelocityStateTransition(
+    transition = SafeAntVelocityStateTransition(
         state=state,
         action=action,
         dt=dt,
@@ -73,7 +73,7 @@ def test_state_transition_no_force():
     damping = 0.1
     max_force = 1.0
 
-    transition = SafeVelocityStateTransition(
+    transition = SafeAntVelocityStateTransition(
         state=state,
         action=action,
         dt=dt,
@@ -94,7 +94,7 @@ def test_observation_model():
     position_noise = 0.1
     velocity_noise = 0.2
 
-    observation_model = SafeVelocityObservation(
+    observation_model = SafeAntVelocityObservation(
         next_state=state,
         action=action,
         position_noise=position_noise,
@@ -113,7 +113,7 @@ def test_observation_model():
     assert not np.array_equal(observation[2:], state[2:])
 
 def test_reward_function():
-    env = SafeVelocityPOMDP(
+    env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
         safe_velocity_threshold=2.0,
         safety_violation_penalty=-100.0,
@@ -131,7 +131,7 @@ def test_reward_function():
     assert reward_unsafe < 0  # Negative reward due to safety violation
 
 def test_terminal_state():
-    env = SafeVelocityPOMDP(
+    env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
         safe_velocity_threshold=2.0,
     )
@@ -145,7 +145,7 @@ def test_terminal_state():
     assert env.is_terminal(state_unsafe)
 
 def test_initial_state_distribution():
-    env = SafeVelocityPOMDP(discount_factor=0.95)
+    env = SafeAntVelocityPOMDP(discount_factor=0.95)
     initial_dist = env.initial_state_dist()
     
     # Test multiple samples
@@ -163,7 +163,7 @@ def test_initial_state_distribution():
         assert np.allclose(state[2:], 0)
 
 def test_get_actions():
-    env = SafeVelocityPOMDP(discount_factor=0.95)
+    env = SafeAntVelocityPOMDP(discount_factor=0.95)
     actions = env.get_actions()
     
     assert len(actions) == 4
@@ -171,7 +171,7 @@ def test_get_actions():
     assert 3 in actions  # Maximum force
 
 def test_is_equal_observation():
-    env = SafeVelocityPOMDP(discount_factor=0.95)
+    env = SafeAntVelocityPOMDP(discount_factor=0.95)
     
     # Test equal observations
     obs1 = np.array([0.0, 0.0, 1.0, 1.0])
@@ -183,7 +183,7 @@ def test_is_equal_observation():
     assert not env.is_equal_observation(obs1, obs3)
 
 def test_sample_next_step():
-    env = SafeVelocityPOMDP(discount_factor=0.95)
+    env = SafeAntVelocityPOMDP(discount_factor=0.95)
     state = np.array([0.0, 0.0, 1.0, 1.0])
     action = 2  # Medium force
     
@@ -210,7 +210,7 @@ def test_sample_next_step():
 def test_compute_metrics():
     from POMDPPlanners.core.simulation import History, StepData
 
-    env = SafeVelocityPOMDP(
+    env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
         safe_velocity_threshold=2.0,
     )
