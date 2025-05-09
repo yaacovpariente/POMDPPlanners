@@ -11,7 +11,7 @@ from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.simulation import History, StepData, MetricValue
 from POMDPPlanners.utils.statistics import confidence_interval
 
-class SafeVelocityStateTransition(StateTransitionModel):
+class SafeAntVelocityStateTransition(StateTransitionModel):
     def __init__(
         self,
         state: np.ndarray,
@@ -55,7 +55,7 @@ class SafeVelocityStateTransition(StateTransitionModel):
         next_state = np.concatenate([new_position, new_velocity])
         return next_state
 
-class SafeVelocityObservation(ObservationModel):
+class SafeAntVelocityObservation(ObservationModel):
     def __init__(
         self,
         next_state: np.ndarray,
@@ -90,7 +90,7 @@ class SafeVelocityObservation(ObservationModel):
         
         return np.exp(position_log_prob + velocity_log_prob)
 
-class SafeVelocityPOMDP(DiscreteActionsEnvironment):
+class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
     def __init__(
         self,
         discount_factor: float,
@@ -131,7 +131,7 @@ class SafeVelocityPOMDP(DiscreteActionsEnvironment):
         )
 
     def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
-        return SafeVelocityObservation(
+        return SafeAntVelocityObservation(
             next_state=next_state,
             action=action,
             position_noise=self.position_noise,
