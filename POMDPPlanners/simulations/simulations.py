@@ -203,7 +203,7 @@ def run_and_cache_episode(
     )
 
     if cache_dir_path is not None:
-        general_config = {'episode_id': episode_id, 'num_steps': num_steps}
+        general_config = {'episode_id': episode_id, 'num_steps': num_steps, 'seed': seed}
 
         # Try to load from cache
         try:
