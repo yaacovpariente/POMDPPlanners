@@ -275,7 +275,7 @@ class WeightedParticleBelief(Belief):
         return self.particles[idx]
 
 class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
-    def __init__(self, particles: list, log_weights: np.ndarray, resampling: bool = False, ess_threshold: float = 0.5, reinvigoration_fraction: float = 0.2):
+    def __init__(self, particles: list, log_weights: np.ndarray, resampling: bool = True, ess_threshold: float = 0.5, reinvigoration_fraction: float = 0.2):
         super().__init__(
             particles=particles, 
             log_weights=log_weights, 
@@ -320,7 +320,7 @@ def sample_next_belief(
 
 
 def get_initial_belief(
-    pomdp: Environment, n_particles: int, resampling: bool = False
+    pomdp: Environment, n_particles: int, resampling: bool = True
 ) -> Belief:
     assert isinstance(n_particles, int)
     assert n_particles > 0
