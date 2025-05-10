@@ -264,7 +264,7 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
     def get_actions(self) -> List[Any]:
         return self.actions
 
-    def visualize_path(self, path: List[np.ndarray], agent_belief_path: List[DiscreteDistribution], cache_path: Path):
+    def visualize_path(self, path: List[np.ndarray], agent_belief_path: List[DiscreteDistribution], actions: List[str], cache_path: Path):
         assert isinstance(cache_path, Path)
         assert str(cache_path).endswith(".gif")
 
@@ -317,11 +317,10 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
             path_y = [float(p[1]) for p in path[: frame + 1]]
             path_line.set_data(path_x, path_y)
 
-            # Update action arrow
-            if frame < len(path) - 1:
-                next_pos = path[frame + 1]
-                dx = next_pos[0] - x
-                dy = next_pos[1] - y
+            # Update action arrow based on the action vector
+            if frame < len(actions):
+                action = actions[frame]
+                dx, dy = self.action_to_vector[action]
                 arrow.set_data(x=x, y=y, dx=dx, dy=dy)
             else:
                 arrow.set_data(x=x, y=y, dx=0, dy=0)
@@ -356,8 +355,9 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
     def cache_visualization(self, history: History, cache_path: Path) -> None:
         agent_path = [step.state for step in history.history]
         agent_belief_path = [step.belief.to_unique_support_distribution() for step in history.history]
+        actions = [step.action for step in history.history]
         
-        self.visualize_path(path=agent_path, agent_belief_path=agent_belief_path, cache_path=cache_path)
+        self.visualize_path(path=agent_path, agent_belief_path=agent_belief_path, actions=actions, cache_path=cache_path)
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return np.array_equal(observation1, observation2)

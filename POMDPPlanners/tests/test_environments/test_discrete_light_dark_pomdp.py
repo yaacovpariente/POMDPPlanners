@@ -562,9 +562,12 @@ def test_visualize_path(tmp_path):
         for i in range(len(path))
     ]
 
+    # Create actions corresponding to the path
+    actions = ["right", "right", "right"]  # 0->1, 1->2, 2->3
+
     # Test visualization with temporary path
     cache_path = tmp_path / "test_animation.gif"
-    env.visualize_path(path=path, agent_belief_path=agent_belief_path, cache_path=cache_path)
+    env.visualize_path(path=path, agent_belief_path=agent_belief_path, actions=actions, cache_path=cache_path)
 
     # Verify file was created
     assert cache_path.exists()
