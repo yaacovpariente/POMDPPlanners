@@ -491,7 +491,7 @@ def test_observation_model():
 
 def test_reward_function():
     """Test reward function"""
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+    env = DiscreteLightDarkPOMDP(discount_factor=0.95, obstacle_hit_probability=1.0)
 
     # Test goal state reward
     state = np.array([9, 5])
@@ -501,7 +501,7 @@ def test_reward_function():
     # Test obstacle hit reward
     state = np.array([2, 5])
     reward = env.reward(state, "right")  # Moves to [3, 5] which is obstacle
-    assert reward == env.obstacle_reward - env.fuel_cost - np.linalg.norm(np.array([3, 5]) - env.goal_state)
+    assert reward == -env.fuel_cost - np.linalg.norm(np.array([3, 5]) - env.goal_state) + env.obstacle_reward
 
     # Test normal movement reward
     state = np.array([1, 1])

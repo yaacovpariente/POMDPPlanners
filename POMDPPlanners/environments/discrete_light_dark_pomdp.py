@@ -239,7 +239,10 @@ class DiscreteLightDarkPOMDP(DiscreteActionsEnvironment):
 
         if is_goal_state:
             reward += self.goal_reward
-        elif is_obstacle_hit or is_out_of_grid:
+        elif is_obstacle_hit:
+            if np.random.rand() < self.obstacle_hit_probability:
+                reward += self.obstacle_reward
+        elif is_out_of_grid:
             reward += self.obstacle_reward
 
         return reward
