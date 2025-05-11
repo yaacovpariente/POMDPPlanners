@@ -18,7 +18,7 @@ from POMDPPlanners.simulations.simulations import (
     compare_multiple_environments_policies,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import DiscreteLightDarkPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.simulation import History, StepData
@@ -54,7 +54,7 @@ def test_run_episode_returns_history():
 
 def test_run_episode_timing_statistics():
     # Setup
-    environment = MountainCarPOMDP(discount_factor=0.95)
+    environment = DiscreteLightDarkPOMDP(discount_factor=0.95)
     policy = POMCP(
         environment=environment,
         discount_factor=0.95,
@@ -63,7 +63,7 @@ def test_run_episode_timing_statistics():
         name="TestPolicy",
         n_simulations=2
     )
-    initial_belief = get_initial_belief(environment, n_particles=3)
+    initial_belief = get_initial_belief(environment, n_particles=100)
     num_steps = 5
 
     # Execute
