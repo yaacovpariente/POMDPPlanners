@@ -110,21 +110,6 @@ class UnweightedParticleBelief(Belief):
         """This method should be implemented specifically for each environment."""
         pass
 
-# class UnweightedParticleBelief(Belief):
-#     def __init__(self, particles: list):
-#         assert isinstance(particles, list)
-#         self.particles = particles
-
-#     def update(self, action, observation, pomdp: Environment) -> "UnweightedParticleBelief":
-#         state = self.sample()
-#         next_state = pomdp.state_transition_model(state=state, action=action).sample()
-#         next_observation = pomdp.observation_model(next_state=next_state, action=action).sample()
-                
-
-#     def sample(self):
-#         idx = random.randint(0, len(self.particles))
-#         return self.particles[idx]
-
 class WeightedParticleBelief(Belief):
     def __init__(
         self, particles: list, log_weights: np.ndarray, resampling: bool = False, ess_threshold: float = 0.5
@@ -229,7 +214,34 @@ class WeightedParticleBelief(Belief):
         config_str = json.dumps(config_dict, sort_keys=True)
         return hashlib.sha256(config_str.encode()).hexdigest()
 
-    def update(self, action, observation, pomdp: Environment) -> "WeightedParticleBelief":
+    def _resample(self, particles: list, log_weights: np.ndarray) -> Tuple[list, np.ndarray]:
+        """Resample particles based on their weights if effective sample size is below threshold.
+        
+        Args:
+            particles: List of particles to potentially resample
+            log_weights: Log weights of the particles
+            
+        Returns:
+            Tuple containing:
+            - Resampled particles (or original if no resampling needed)
+            - New log weights (or original if no resampling needed)
+        """
+        normalized_weights = np.exp(log_weights - np.max(log_weights))
+        normalized_weights = normalized_weights / np.sum(normalized_weights)
+        
+        effective_sample_size = 1 / np.sum(np.square(normalized_weights))
+        if effective_sample_size < self.ess_threshold:
+            sampled_indexes = random.choices(
+                range(len(particles)),
+                weights=normalized_weights,
+                k=len(particles),
+            )
+            resampled_particles = [particles[i] for i in sampled_indexes]
+            new_log_weights = np.log(np.ones(len(resampled_particles)) / len(resampled_particles))
+            return resampled_particles, new_log_weights
+        return particles, log_weights
+    
+    def _update_weights(self, action: Any, observation: Any, pomdp: Environment) -> Tuple[list, np.ndarray]:
         next_particles = [
             pomdp.state_transition_model(state=particle, action=action).sample()
             for particle in self.particles
@@ -246,23 +258,13 @@ class WeightedParticleBelief(Belief):
             )
         )
 
+        return next_particles, next_log_weights
+
+    def update(self, action, observation, pomdp: Environment) -> "WeightedParticleBelief":
+        next_particles, next_log_weights = self._update_weights(action=action, observation=observation, pomdp=pomdp)
+        
         if self.resampling:
-            effective_sample_size = 1 / np.sum(np.square(self.normalized_weights))
-            if effective_sample_size < self.ess_threshold:
-                normalized_next_weights = np.exp(
-                    next_log_weights - np.max(next_log_weights)
-                )
-                normalized_next_weights = normalized_next_weights / np.sum(
-                    normalized_next_weights
-                )
-                sampled_indexes = random.choices(
-                    range(len(next_particles)),
-                    weights=normalized_next_weights,
-                    k=len(next_particles),
-                )
-                state_sample = [next_particles[i] for i in sampled_indexes]
-                next_log_weights = np.log(np.ones(len(state_sample)) / len(state_sample))
-                next_particles = state_sample
+            next_particles, next_log_weights = self._resample(next_particles, next_log_weights)
                 
         return WeightedParticleBelief(
             particles=next_particles,
