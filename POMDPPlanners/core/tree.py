@@ -15,6 +15,7 @@ class BaseNode(NodeMixin):
         self.lower_confidence_bound = 0.0
         self.upper_confidence_bound = 0.0
         self.immediate_cost = None
+        self.immediate_reward = None
         self.sample = []
 class ActionNode(BaseNode):
     def __init__(self, action, parent=None, children=tuple(), data: Any = None):
@@ -24,7 +25,7 @@ class ActionNode(BaseNode):
 
     @property
     def spec(self):
-        return f"ActionNode: action={self.action}, q_value={self.q_value}, visit_count={self.visit_count}, immediate_cost={self.immediate_cost}, lower_confidence_bound={self.lower_confidence_bound}, upper_confidence_bound={self.upper_confidence_bound}, depth={self.depth}"
+        return f"ActionNode: action={self.action}, q_value={self.q_value}, visit_count={self.visit_count}, immediate_cost={self.immediate_cost}, immediate_reward={self.immediate_reward}, lower_confidence_bound={self.lower_confidence_bound}, upper_confidence_bound={self.upper_confidence_bound}, depth={self.depth}"
 
     @property
     def name(self):
