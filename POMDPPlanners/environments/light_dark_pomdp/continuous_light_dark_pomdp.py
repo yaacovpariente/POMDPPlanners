@@ -79,11 +79,11 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         assert beacon_radius > 0, "beacon_radius must be greater than 0"
         assert obstacle_radius > 0, "obstacle_radius must be greater than 0"
 
-    def state_transition_model(self, state: np.ndarray, action: Any) -> Distribution:
+    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> Distribution:
         assert state.shape == (2,), "state must be a 2D vector"
+        assert action.shape == (2,), "action must be a 2D vector"
         
-        action_vector = self.action_to_vector[action]
-        deterministic_next_state = state + action_vector
+        deterministic_next_state = state + action
         noise = np.random.multivariate_normal(
             mean=np.zeros(2),
             cov=self.state_transition_cov_matrix
@@ -94,8 +94,9 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         
         return DiscreteDistribution(values=[next_state], probs=np.array([1.0]))
 
-    def observation_model(self, next_state: np.ndarray, action: Any) -> Distribution:
+    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> Distribution:
         assert next_state.shape == (2,), "next_state must be a 2D vector"
+        assert action.shape == (2,), "action must be a 2D vector"
         
         noise = np.random.multivariate_normal(
             mean=np.zeros(2),
@@ -107,11 +108,11 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         
         return DiscreteDistribution(values=[observation], probs=np.array([1.0]))
 
-    def reward(self, state: np.ndarray, action: Any) -> float:
+    def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         assert state.shape == (2,), "state must be a 2D vector"
+        assert action.shape == (2,), "action must be a 2D vector"
 
-        action_vector = self.action_to_vector[action]
-        next_state = state + action_vector
+        next_state = state + action
 
         is_goal_state = np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius
         
@@ -190,7 +191,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         ]
 
     def __eq__(self, other):
-        if not isinstance(other, ContinuousLightDarkPOMDP):
+        if not isinstance(other, ContinuousLightDarkPOMDPDiscreteActions):
             return False
         
         if not super().__eq__(other):
@@ -204,3 +205,64 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             self.obstacle_radius == other.obstacle_radius
         )
 
+class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
+    def __init__(
+        self,
+        discount_factor: float,
+        state_transition_cov_matrix: np.ndarray = np.eye(2),
+        observation_cov_matrix: np.ndarray = np.eye(2),
+        obstacle_hit_probability: float = 0.2,
+        obstacle_reward: float = -10.0,
+        goal_reward: float = 10.0,
+        fuel_cost: float = 2.0,
+        grid_size: int = 11,
+        goal_state_radius: float = 1.5,
+        beacon_radius: float = 1.0,
+        obstacle_radius: float = 1.5,
+        name: str = "ContinuousLightDarkPOMDPDiscreteActions",
+        beacons: np.ndarray = np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]),
+        goal_state: np.ndarray = np.array([10, 5]),
+        start_state: np.ndarray = np.array([0, 5]),
+        obstacles: np.ndarray = np.array([[3, 7], [5, 5]]),
+    ):
+        super().__init__(
+            discount_factor=discount_factor,
+            name=name,
+            state_transition_cov_matrix=state_transition_cov_matrix,
+            observation_cov_matrix=observation_cov_matrix,
+            beacons=beacons,
+            goal_state=goal_state,
+            start_state=start_state,
+            obstacles=obstacles,
+            obstacle_hit_probability=obstacle_hit_probability,
+            obstacle_reward=obstacle_reward,
+            goal_reward=goal_reward,
+            fuel_cost=fuel_cost,
+            grid_size=grid_size,
+            goal_state_radius=goal_state_radius,
+            beacon_radius=beacon_radius,
+            obstacle_radius=obstacle_radius,
+        )
+
+        self.actions = ["up", "down", "right", "left"]
+        self.action_to_vector = {
+            "up": np.array([0, 1]),
+            "down": np.array([0, -1]),
+            "right": np.array([1, 0]),
+            "left": np.array([-1, 0]),
+        }
+
+    def get_actions(self) -> List[Any]:
+        return self.actions
+
+    def state_transition_model(self, state: str, action: Any) -> Distribution:
+        action_vector = self.action_to_vector[action]
+        return super().state_transition_model(state, action_vector)
+
+    def observation_model(self, next_state: str, action: Any) -> Distribution:
+        action_vector = self.action_to_vector[action]
+        return super().observation_model(next_state, action_vector)
+
+    def reward(self, state: str, action: Any) -> float:
+        action_vector = self.action_to_vector[action]
+        return super().reward(state, action_vector)
