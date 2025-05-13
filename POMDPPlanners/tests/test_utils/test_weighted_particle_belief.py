@@ -5,7 +5,7 @@ from POMDPPlanners.utils.weighted_particle_beliefs import (
     WeightedParticleBeliefDiscreteLightDarkFullCoverage,
     WeightedParticleBeliefContinuousLightDarkFullCoverage
 )
-from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDPDiscreteActions
 
 def test_initialization():
     """Test proper initialization of WeightedParticleBeliefDiscreteLightDark"""
@@ -47,7 +47,7 @@ def test_reinvigoration():
     )
     
     # Create ContinuousLightDarkPOMDP environment
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
     
     # Test reinvigoration
     action = "up"
@@ -144,7 +144,7 @@ def test_full_coverage_reinvigoration():
     )
     
     # Create ContinuousLightDarkPOMDP environment
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
     
     # Test reinvigoration
     action = "up"
@@ -197,7 +197,7 @@ def test_full_coverage_resampling():
     )
     
     # Create ContinuousLightDarkPOMDP environment
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
     
     # Test reinvigoration
     action = "up"
@@ -260,7 +260,7 @@ def test_continuous_full_coverage_reinvigoration():
     )
     
     # Create ContinuousLightDarkPOMDP environment
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
     
     # Test reinvigoration
     action = "up"
@@ -324,7 +324,7 @@ def test_continuous_full_coverage_resampling():
     )
     
     # Create ContinuousLightDarkPOMDP environment
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
     
     # Test reinvigoration
     action = "up"
@@ -361,7 +361,7 @@ def test_continuous_full_coverage_gmm_sampling():
     )
     
     # Create ContinuousLightDarkPOMDP environment
-    env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
     
     # Test reinvigoration
     action = "up"
