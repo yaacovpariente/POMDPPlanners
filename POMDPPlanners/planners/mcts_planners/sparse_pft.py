@@ -50,7 +50,7 @@ class SparsePFT(Policy):
             
             state = belief_node.belief.sample()
             belief_node.visit_count += 1
-            # TODO: not sure that to do if state is terminal    
+
             return self.random_rollout(state=state, depth=depth)
         
         action_node = self.get_explored_action_node(belief_node=belief_node)
