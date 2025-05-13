@@ -7,8 +7,7 @@ import random
 import numpy as np
 
 from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.tree import BeliefNode, ActionNode, get_optimal_action_reward_setting
-from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.tree import BeliefNode, ActionNode
 from POMDPPlanners.core.cost import belief_expectation_reward
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
 
