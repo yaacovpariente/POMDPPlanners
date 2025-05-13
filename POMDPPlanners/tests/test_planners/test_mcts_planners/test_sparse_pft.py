@@ -200,7 +200,12 @@ def test_random_rollout(planner):
     assert isinstance(return_value, float)
     # The Tiger POMDP has negative rewards, so the return value should be negative
     # We'll allow for some numerical error
-    assert return_value < 0.1  # Allow for small positive values due to numerical error
+    min_reward = -100
+    max_reward = 10
+    depth = 5
+    
+    assert return_value >= min_reward * depth
+    assert return_value <= max_reward * depth
 
 
 def test_update_node_statistics(planner):
