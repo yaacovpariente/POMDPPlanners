@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-from POMDPPlanners.core.environment import DiscreteActionsEnvironment, ObservationModel
+from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
 from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.simulation import MetricValue
@@ -16,7 +16,7 @@ from POMDPPlanners.utils.statistics import confidence_interval
 from POMDPPlanners.core.belief import Belief
 
 
-class BaseLightDarkPOMDP(DiscreteActionsEnvironment, ABC):
+class BaseLightDarkPOMDP(Environment, ABC):
     def __init__(
         self,
         discount_factor: float,
@@ -62,14 +62,6 @@ class BaseLightDarkPOMDP(DiscreteActionsEnvironment, ABC):
         self.fuel_cost = fuel_cost
         self.grid_size = grid_size
         
-        self.actions = ["up", "down", "right", "left"]
-        self.action_to_vector = {
-            "up": np.array([0, 1]),
-            "down": np.array([0, -1]),
-            "right": np.array([1, 0]),
-            "left": np.array([-1, 0]),
-        }
-
     def __type_check(
         self,
         discount_factor: float,
@@ -142,9 +134,6 @@ class BaseLightDarkPOMDP(DiscreteActionsEnvironment, ABC):
 
     def initial_observation_dist(self) -> Distribution:
         return DiscreteDistribution(values=[1.0], probs=np.array([1.0]))
-
-    def get_actions(self) -> List[Any]:
-        return self.actions
     
     def visualize_path(self, path: List[np.ndarray], agent_belief_path: List[DiscreteDistribution], actions: List[str], cache_path: Path):
         assert isinstance(cache_path, Path)
@@ -287,4 +276,49 @@ class BaseLightDarkPOMDP(DiscreteActionsEnvironment, ABC):
         # Create a deterministic string representation and hash it
         config_str = json.dumps(config_dict, sort_keys=True)
         return hashlib.sha256(config_str.encode()).hexdigest()
+
+
+class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
+    def __init__(
+        self,
+        discount_factor: float,
+        name,
+        beacons: np.ndarray = np.array(
+            [[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]
+        ),
+        goal_state: np.ndarray = np.array([10, 5]),
+        start_state: np.ndarray = np.array([0, 5]),
+        obstacles: np.ndarray = np.array([[3, 7], [5, 5]]),
+        obstacle_hit_probability: float = 0.2,
+        obstacle_reward: float = -10.0,
+        goal_reward: float = 10.0,
+        beacon_radius: float = 1.0,
+        fuel_cost: float = 2.0,
+        grid_size: int = 11,
+    ):
+        super().__init__(
+            discount_factor=discount_factor,
+            name=name,
+            beacons=beacons,
+            goal_state=goal_state,
+            start_state=start_state,
+            obstacles=obstacles,
+            obstacle_hit_probability=obstacle_hit_probability,
+            obstacle_reward=obstacle_reward,
+            goal_reward=goal_reward,
+            beacon_radius=beacon_radius,
+            fuel_cost=fuel_cost,
+            grid_size=grid_size,
+        )
+        
+        self.actions = ["up", "down", "right", "left"]
+        self.action_to_vector = {
+            "up": np.array([0, 1]),
+            "down": np.array([0, -1]),
+            "right": np.array([1, 0]),
+            "left": np.array([-1, 0]),
+        }
+
+    def get_actions(self) -> List[Any]:
+        return self.actions
 

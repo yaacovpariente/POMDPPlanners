@@ -14,7 +14,7 @@ from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.utils.statistics import confidence_interval
 from POMDPPlanners.core.belief import Belief
 
-from POMDPPlanners.environments.light_dark_pomdp.base_light_dark_pomdp import BaseLightDarkPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.base_light_dark_pomdp import BaseLightDarkPOMDP, BaseLightDarkPOMDPDiscreteActions
 
 class DiscreteLDObservationModel(ObservationModel):
     def __init__(
@@ -70,7 +70,7 @@ class DiscreteLDObservationModel(ObservationModel):
         return self.distribution.probability(next_observation)
 
 
-class DiscreteLightDarkPOMDP(BaseLightDarkPOMDP):
+class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions):
     def __init__(
         self,
         discount_factor: float,
