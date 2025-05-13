@@ -101,5 +101,13 @@ class MetricValue(NamedTuple):
     lower_confidence_bound: float
     upper_confidence_bound: float
 
+
+class EnvironmentRunParams(NamedTuple):
+    environment: Any  # Use Any to avoid circular import
+    belief: Any
+    policies: list[Any]
+    num_episodes: int
+    num_steps: int
+
 def history_to_discounted_return_value(history: History) -> float:
     return sum(step.reward * history.discount_factor ** i for i, step in enumerate(history.history) if step.reward is not None)
