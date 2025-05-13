@@ -21,7 +21,6 @@ class ActionNode(BaseNode):
         super().__init__(parent=parent, children=children, data=data)
         self.action = action
         self.q_value = 0.0
-        
 
     @property
     def spec(self):
@@ -33,6 +32,7 @@ class ActionNode(BaseNode):
 
     def print(self):
         print_tree(self)        
+
 class BeliefNode(BaseNode):
     def __init__(self, belief: Belief, observation: Any = None, parent=None, children=tuple(), data: Any = None):
         assert isinstance(belief, Belief)
