@@ -23,6 +23,7 @@ from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.simulations.simulations_deployment import LocalSimulationDeployment, DeploymentType
+from POMDPPlanners.simulations.simulations import EnvironmentRunParams
 
 
 def test_run_episode_returns_history():
@@ -370,33 +371,49 @@ def test_simulate_multiple_environments_and_policies_parallel_parameter_validati
     # Test invalid parameters
     with pytest.raises(AssertionError):
         simulate_multiple_environments_and_policies_parallel(
-            environment_belief_policy_tuples=[("not_an_environment", initial_belief, [policy])],
-            num_episodes=10,
-            num_steps=5,
+            environment_run_params=[
+                EnvironmentRunParams(
+                    environment="not_an_environment",
+                    belief=initial_belief,
+                    policies=[policy],
+                    num_episodes=10,
+                    num_steps=5
+                )
+            ],
             alpha=0.1,
         )
 
     with pytest.raises(AssertionError):
         simulate_multiple_environments_and_policies_parallel(
-            environment_belief_policy_tuples=[],  # Empty list
-            num_episodes=10,
-            num_steps=5,
+            environment_run_params=[],  # Empty list
             alpha=0.1,
         )
 
     with pytest.raises(AssertionError):
         simulate_multiple_environments_and_policies_parallel(
-            environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
-            num_episodes=0,  # Invalid num_episodes
-            num_steps=5,
+            environment_run_params=[
+                EnvironmentRunParams(
+                    environment=environment,
+                    belief=initial_belief,
+                    policies=[policy],
+                    num_episodes=0,  # Invalid num_episodes
+                    num_steps=5
+                )
+            ],
             alpha=0.1,
         )
 
     with pytest.raises(AssertionError):
         simulate_multiple_environments_and_policies_parallel(
-            environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
-            num_episodes=10,
-            num_steps=5,
+            environment_run_params=[
+                EnvironmentRunParams(
+                    environment=environment,
+                    belief=initial_belief,
+                    policies=[policy],
+                    num_episodes=10,
+                    num_steps=5
+                )
+            ],
             alpha=0.1,
             confidence_interval_level=1.5,  # Invalid confidence interval
         )
@@ -419,9 +436,15 @@ def test_simulate_multiple_environments_and_policies_parallel_single_environment
 
     # Execute
     results = simulate_multiple_environments_and_policies_parallel(
-        environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
-        num_episodes=num_episodes,
-        num_steps=num_steps,
+        environment_run_params=[
+            EnvironmentRunParams(
+                environment=environment,
+                belief=initial_belief,
+                policies=[policy],
+                num_episodes=num_episodes,
+                num_steps=num_steps
+            )
+        ],
         alpha=0.1,
         cache_dir_path=temp_cache_dir,
         deployment_type=DeploymentType.LOCAL
@@ -468,12 +491,22 @@ def test_simulate_multiple_environments_and_policies_parallel_multiple_environme
 
     # Execute
     results = simulate_multiple_environments_and_policies_parallel(
-        environment_belief_policy_tuples=[
-            (environment1, initial_belief1, [policy1]),
-            (environment2, initial_belief2, [policy2])
+        environment_run_params=[
+            EnvironmentRunParams(
+                environment=environment1,
+                belief=initial_belief1,
+                policies=[policy1],
+                num_episodes=num_episodes,
+                num_steps=num_steps
+            ),
+            EnvironmentRunParams(
+                environment=environment2,
+                belief=initial_belief2,
+                policies=[policy2],
+                num_episodes=num_episodes,
+                num_steps=num_steps
+            )
         ],
-        num_episodes=num_episodes,
-        num_steps=num_steps,
         alpha=0.1,
         cache_dir_path=temp_cache_dir,
         deployment_type=DeploymentType.LOCAL
@@ -517,9 +550,15 @@ def test_simulate_multiple_environments_and_policies_parallel_caching(temp_cache
 
     # First run - should execute and cache
     results1 = simulate_multiple_environments_and_policies_parallel(
-        environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
-        num_episodes=num_episodes,
-        num_steps=num_steps,
+        environment_run_params=[
+            EnvironmentRunParams(
+                environment=environment,
+                belief=initial_belief,
+                policies=[policy],
+                num_episodes=num_episodes,
+                num_steps=num_steps
+            )
+        ],
         alpha=0.1,
         cache_dir_path=temp_cache_dir,
         deployment_type=DeploymentType.LOCAL
@@ -527,9 +566,15 @@ def test_simulate_multiple_environments_and_policies_parallel_caching(temp_cache
 
     # Second run - should load from cache
     results2 = simulate_multiple_environments_and_policies_parallel(
-        environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
-        num_episodes=num_episodes,
-        num_steps=num_steps,
+        environment_run_params=[
+            EnvironmentRunParams(
+                environment=environment,
+                belief=initial_belief,
+                policies=[policy],
+                num_episodes=num_episodes,
+                num_steps=num_steps
+            )
+        ],
         alpha=0.1,
         cache_dir_path=temp_cache_dir,
         deployment_type=DeploymentType.LOCAL
@@ -556,18 +601,30 @@ def test_parallel_execution_maintains_statistical_properties():
 
     # Run with different numbers of jobs
     results_1job = simulate_multiple_environments_and_policies_parallel(
-        environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
-        num_episodes=num_episodes,
-        num_steps=num_steps,
+        environment_run_params=[
+            EnvironmentRunParams(
+                environment=environment,
+                belief=initial_belief,
+                policies=[policy],
+                num_episodes=num_episodes,
+                num_steps=num_steps
+            )
+        ],
         alpha=0.1,
         n_jobs=1,
         deployment_type=DeploymentType.LOCAL
     )
 
     results_2jobs = simulate_multiple_environments_and_policies_parallel(
-        environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
-        num_episodes=num_episodes,
-        num_steps=num_steps,
+        environment_run_params=[
+            EnvironmentRunParams(
+                environment=environment,
+                belief=initial_belief,
+                policies=[policy],
+                num_episodes=num_episodes,
+                num_steps=num_steps
+            )
+        ],
         alpha=0.1,
         n_jobs=2,
         deployment_type=DeploymentType.LOCAL
@@ -756,9 +813,15 @@ def test_compare_multiple_environments_policies_with_configurations(temp_cache_d
 
     # Execute
     _, merged_df = compare_multiple_environments_policies(
-        environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
-        num_episodes=num_episodes,
-        num_steps=num_steps,
+        environment_run_params=[
+            EnvironmentRunParams(
+                environment=environment,
+                belief=initial_belief,
+                policies=[policy],
+                num_episodes=num_episodes,
+                num_steps=num_steps
+            )
+        ],
         alpha=0.1,
         cache_dir_path=temp_cache_dir,
         deployment_type=DeploymentType.LOCAL
@@ -812,12 +875,22 @@ def test_compare_multiple_environments_policies_configurations_multiple_policies
 
     # Execute
     _, merged_df = compare_multiple_environments_policies(
-        environment_belief_policy_tuples=[
-            (environment1, initial_belief1, [policy1]),
-            (environment2, initial_belief2, [policy2])
+        environment_run_params=[
+            EnvironmentRunParams(
+                environment=environment1,
+                belief=initial_belief1,
+                policies=[policy1],
+                num_episodes=num_episodes,
+                num_steps=num_steps
+            ),
+            EnvironmentRunParams(
+                environment=environment2,
+                belief=initial_belief2,
+                policies=[policy2],
+                num_episodes=num_episodes,
+                num_steps=num_steps
+            )
         ],
-        num_episodes=num_episodes,
-        num_steps=num_steps,
         alpha=0.1,
         cache_dir_path=temp_cache_dir,
         deployment_type=DeploymentType.LOCAL

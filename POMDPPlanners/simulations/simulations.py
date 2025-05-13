@@ -1,4 +1,5 @@
 from typing import List, Type, Tuple, Dict
+from typing import NamedTuple
 import copy
 from time import time
 from pathlib import Path
@@ -16,6 +17,7 @@ from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation import (
     History,
     StepData,
+    EnvironmentRunParams
 )
 from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environments_policies_comparison
 from POMDPPlanners.simulations.simulations_deployment import LocalSimulationDeployment, RemoteRaySimulationDeployment, DeploymentType, SimulationDeployment
@@ -254,9 +256,7 @@ def run_and_cache_episode(
         np.random.set_state(state)
 
 def validate_parallel_simulation_inputs(
-    environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
-    num_episodes: int,
-    num_steps: int,
+    environment_run_params: List[EnvironmentRunParams],
     alpha: float,
     confidence_interval_level: float,
     n_jobs: int
@@ -264,9 +264,7 @@ def validate_parallel_simulation_inputs(
     """Validate all input parameters for parallel simulation.
     
     Args:
-        environment_belief_policy_tuples: List of tuples containing (environment, belief, policies)
-        num_episodes: Number of episodes to run per policy
-        num_steps: Number of steps per episode
+        environment_run_params: List of EnvironmentRunParams containing environment, belief, policies and run parameters
         alpha: Alpha value for statistics computation
         confidence_interval_level: Confidence level for statistics
         n_jobs: Number of parallel jobs for simulation
@@ -274,43 +272,43 @@ def validate_parallel_simulation_inputs(
     Raises:
         AssertionError: If any of the inputs are invalid
     """
-    assert isinstance(environment_belief_policy_tuples, list), "environment_belief_policy_tuples must be a list"
-    assert len(environment_belief_policy_tuples) > 0, "environment_belief_policy_tuples cannot be empty"
+    assert isinstance(environment_run_params, list), "environment_run_params must be a list"
+    assert len(environment_run_params) > 0, "environment_run_params cannot be empty"
     
-    for env, belief, policies in environment_belief_policy_tuples:
-        assert isinstance(env, Environment), f"Expected Environment, got {type(env)}"
-        assert isinstance(belief, Belief), f"Expected Belief, got {type(belief)}"
-        assert isinstance(policies, list), f"Expected list of policies, got {type(policies)}"
-        assert len(policies) > 0, "Policy list cannot be empty"
-        for policy in policies:
+    for params in environment_run_params:
+        assert isinstance(params, EnvironmentRunParams), f"Expected EnvironmentRunParams, got {type(params)}"
+        assert isinstance(params.environment, Environment), f"Expected Environment, got {type(params.environment)}"
+        assert isinstance(params.belief, Belief), f"Expected Belief, got {type(params.belief)}"
+        assert isinstance(params.policies, list), f"Expected list of policies, got {type(params.policies)}"
+        assert len(params.policies) > 0, "Policy list cannot be empty"
+        for policy in params.policies:
             assert isinstance(policy, Policy), f"Expected Policy, got {type(policy)}"
+        assert isinstance(params.num_episodes, int) and params.num_episodes > 0, "num_episodes must be a positive integer"
+        assert isinstance(params.num_steps, int) and params.num_steps > 0, "num_steps must be a positive integer"
 
     # Verify unique environment names
-    env_names = [env.name for env, _, _ in environment_belief_policy_tuples]
+    env_names = [params.environment.name for params in environment_run_params]
     assert len(env_names) == len(set(env_names)), "All environments must have unique names"
 
     # Verify unique policy names across all environments
-    all_policies = [policy for _, _, policies in environment_belief_policy_tuples for policy in policies]
+    all_policies = [policy for params in environment_run_params for policy in params.policies]
     policy_names = [policy.name for policy in all_policies]
     assert len(policy_names) == len(set(policy_names)), "All policies must have unique names"
 
-    assert num_episodes > 0, "num_episodes must be positive"
-    assert num_steps > 0, "num_steps must be positive"
+    assert isinstance(alpha, float), "alpha must be a float"
+    assert isinstance(confidence_interval_level, float), "confidence_interval_level must be a float"
     assert 0 <= confidence_interval_level <= 1, "confidence_interval_level must be between 0 and 1"
+    assert isinstance(n_jobs, int) and n_jobs > 0, "n_jobs must be a positive integer"
 
 def create_simulation_tasks(
-    environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
-    num_episodes: int,
-    num_steps: int,
+    environment_run_params: List[EnvironmentRunParams],
     cache_dir_path: Path,
     simulation_deployment: SimulationDeployment
 ) -> List[Dict]:
     """Create list of simulation tasks with deterministic ordering.
     
     Args:
-        environment_belief_policy_tuples: List of tuples containing (environment, belief, policies)
-        num_episodes: Number of episodes to run per policy
-        num_steps: Number of steps per episode
+        environment_run_params: List of EnvironmentRunParams containing environment, belief, policies and run parameters
         cache_dir_path: Path to store results
         simulation_deployment: The deployment strategy to use
         
@@ -320,15 +318,15 @@ def create_simulation_tasks(
     simulation_tasks = []
     total_tasks = 0
     
-    for environment, initial_belief, policies in environment_belief_policy_tuples:
-        for policy in policies:
-            for episode_id in range(num_episodes):
-                seed = hash(f"{environment.name}_{policy.name}_{episode_id}") % (2**32)
+    for params in environment_run_params:
+        for policy in params.policies:
+            for episode_id in range(params.num_episodes):
+                seed = hash(f"{params.environment.name}_{policy.name}_{episode_id}") % (2**32)
                 simulation_tasks.append({
-                    'environment': environment,
+                    'environment': params.environment,
                     'policy': policy,
-                    'initial_belief': initial_belief,
-                    'num_steps': num_steps,
+                    'initial_belief': params.belief,
+                    'num_steps': params.num_steps,
                     'episode_id': episode_id,
                     'seed': seed,
                     'cache_dir_path': cache_dir_path,
@@ -337,8 +335,8 @@ def create_simulation_tasks(
                 total_tasks += 1
 
     simulation_tasks.sort(key=lambda x: x['seed'])
-    logger.info(f"Created {total_tasks} simulation tasks across {len(set(env.name for env, _, _ in environment_belief_policy_tuples))} "
-                f"environments and {len(set(p.name for _, _, policies in environment_belief_policy_tuples for p in policies))} policies")
+    logger.info(f"Created {total_tasks} simulation tasks across {len(set(params.environment.name for params in environment_run_params))} "
+                f"environments and {len(set(p.name for params in environment_run_params for p in params.policies))} policies")
     
     return simulation_tasks
 
@@ -408,9 +406,7 @@ def organize_simulation_results(
     return results
 
 def simulate_multiple_environments_and_policies_parallel(
-    environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
-    num_episodes: int,
-    num_steps: int,
+    environment_run_params: List[EnvironmentRunParams],
     alpha: float,
     confidence_interval_level: float = 0.95,
     n_jobs: int = 1,
@@ -420,9 +416,7 @@ def simulate_multiple_environments_and_policies_parallel(
     """Simulate multiple policies on multiple environments in parallel at the episode level.
 
     Args:
-        environment_belief_policy_tuples: List of tuples containing (environment, belief, policies)
-        num_episodes: Number of episodes to run per policy
-        num_steps: Number of steps per episode
+        environment_run_params: List of EnvironmentRunParams containing environment, belief, policies and run parameters
         alpha: Alpha value for statistics computation
         confidence_interval_level: Confidence level for statistics
         n_jobs: Number of parallel jobs for simulation
@@ -434,9 +428,7 @@ def simulate_multiple_environments_and_policies_parallel(
     """
     # Validate inputs
     validate_parallel_simulation_inputs(
-        environment_belief_policy_tuples=environment_belief_policy_tuples,
-        num_episodes=num_episodes,
-        num_steps=num_steps,
+        environment_run_params=environment_run_params,
         alpha=alpha,
         confidence_interval_level=confidence_interval_level,
         n_jobs=n_jobs
@@ -452,9 +444,7 @@ def simulate_multiple_environments_and_policies_parallel(
 
     # Create simulation tasks
     simulation_tasks = create_simulation_tasks(
-        environment_belief_policy_tuples=environment_belief_policy_tuples,
-        num_episodes=num_episodes,
-        num_steps=num_steps,
+        environment_run_params=environment_run_params,
         cache_dir_path=cache_dir_path,
         simulation_deployment=simulation_deployment
     )
@@ -476,45 +466,57 @@ def simulate_multiple_environments_and_policies_parallel(
     # Organize and return results
     return organize_simulation_results(
         histories_list=histories_list,
-        environment_belief_policy_tuples=environment_belief_policy_tuples,
-        num_episodes=num_episodes
+        environment_belief_policy_tuples=[(params.environment, params.belief, params.policies) for params in environment_run_params],
+        num_episodes=environment_run_params[0].num_episodes
     )
 
 def validate_comparison_inputs(
-    environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
-    num_episodes: int,
-    num_steps: int,
+    environment_run_params: List[EnvironmentRunParams],
     confidence_interval_level: float,
     cache_dir_path: Path = None,
     experiment_name: str = None
 ) -> None:
-    """Validate all input parameters for the comparison function."""
-    assert isinstance(environment_belief_policy_tuples, list)
-    assert all(isinstance(tup, tuple) and len(tup) == 3 for tup in environment_belief_policy_tuples)
-    assert all(isinstance(env, Environment) and isinstance(belief, Belief) and isinstance(policies, list) 
-              for env, belief, policies in environment_belief_policy_tuples)
-    assert all(all(isinstance(policy, Policy) for policy in policies) 
-              for _, _, policies in environment_belief_policy_tuples)
-    assert isinstance(num_episodes, int)
-    assert isinstance(num_steps, int)
-    assert isinstance(confidence_interval_level, float)
-    if cache_dir_path is not None:
-        assert isinstance(cache_dir_path, Path)
-    if experiment_name is not None:
-        assert isinstance(experiment_name, str)
+    """Validate all input parameters for the comparison function.
+    
+    Args:
+        environment_run_params: List of EnvironmentRunParams containing environment, belief, policies and run parameters
+        confidence_interval_level: Confidence level for statistics
+        cache_dir_path: Path to store results (if None, uses current directory)
+        experiment_name: Name of the MLFlow experiment
+        
+    Raises:
+        AssertionError: If any of the inputs are invalid
+    """
+    assert isinstance(environment_run_params, list), "environment_run_params must be a list"
+    assert len(environment_run_params) > 0, "environment_run_params cannot be empty"
+    
+    for params in environment_run_params:
+        assert isinstance(params, EnvironmentRunParams), f"Expected EnvironmentRunParams, got {type(params)}"
+        assert isinstance(params.environment, Environment), f"Expected Environment, got {type(params.environment)}"
+        assert isinstance(params.belief, Belief), f"Expected Belief, got {type(params.belief)}"
+        assert isinstance(params.policies, list), f"Expected list of policies, got {type(params.policies)}"
+        assert len(params.policies) > 0, "Policy list cannot be empty"
+        for policy in params.policies:
+            assert isinstance(policy, Policy), f"Expected Policy, got {type(policy)}"
+        assert isinstance(params.num_episodes, int) and params.num_episodes > 0, "num_episodes must be a positive integer"
+        assert isinstance(params.num_steps, int) and params.num_steps > 0, "num_steps must be a positive integer"
 
     # Verify unique environment names
-    env_names = [env.name for env, _, _ in environment_belief_policy_tuples]
+    env_names = [params.environment.name for params in environment_run_params]
     assert len(env_names) == len(set(env_names)), "All environments must have unique names"
 
     # Verify unique policy names across all environments
-    all_policies = [policy for _, _, policies in environment_belief_policy_tuples for policy in policies]
+    all_policies = [policy for params in environment_run_params for policy in params.policies]
     policy_names = [policy.name for policy in all_policies]
     assert len(policy_names) == len(set(policy_names)), "All policies must have unique names"
 
-    assert num_episodes > 0
-    assert num_steps > 0
-    assert 0 <= confidence_interval_level <= 1
+    assert isinstance(confidence_interval_level, float)
+    assert 0 <= confidence_interval_level <= 1, "confidence_interval_level must be between 0 and 1"
+    
+    if cache_dir_path is not None:
+        assert isinstance(cache_dir_path, Path), "cache_dir_path must be a Path instance"
+    if experiment_name is not None:
+        assert isinstance(experiment_name, str), "experiment_name must be a string"
 
 def setup_mlflow_tracking(cache_dir_path: Path, experiment_name: str) -> Path:
     """Configure MLFlow tracking and return tracking URI."""
@@ -639,10 +641,10 @@ def create_policy_configurations_df(
     
     return pd.DataFrame(policy_configs)
 
+
+
 def compare_multiple_environments_policies(
-    environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
-    num_episodes: int,
-    num_steps: int,
+    environment_run_params: List[EnvironmentRunParams],
     alpha: float,
     confidence_interval_level: float = 0.95,
     n_jobs: int = 1,
@@ -651,12 +653,26 @@ def compare_multiple_environments_policies(
     cache_visualizations: bool = True,
     deployment_type: DeploymentType = DeploymentType.LOCAL
 ) -> Tuple[Dict[str, Dict[str, List[History]]], pd.DataFrame]:
-    """Compare multiple policies on multiple environments and cache results in MLFlow."""
+    """Compare multiple policies on multiple environments and cache results in MLFlow.
+    
+    Args:
+        environment_run_params: List of EnvironmentRunParams containing environment, belief, policies and run parameters
+        alpha: Alpha value for statistics computation
+        confidence_interval_level: Confidence level for statistics
+        n_jobs: Number of parallel jobs for simulation
+        cache_dir_path: Path to store results (if None, uses current directory)
+        experiment_name: Name of the MLFlow experiment
+        cache_visualizations: Whether to cache visualizations
+        deployment_type: Type of deployment to use for simulations
+
+    Returns:
+        Tuple containing:
+        - Dictionary mapping environment names to dictionaries of policy histories
+        - DataFrame with statistics and policy configurations
+    """
     # Validate inputs
     validate_comparison_inputs(
-        environment_belief_policy_tuples=environment_belief_policy_tuples,
-        num_episodes=num_episodes,
-        num_steps=num_steps,
+        environment_run_params=environment_run_params,
         confidence_interval_level=confidence_interval_level,
         cache_dir_path=cache_dir_path,
         experiment_name=experiment_name
@@ -670,9 +686,7 @@ def compare_multiple_environments_policies(
     with mlflow.start_run(run_name="environment_policy_comparison"):
         # Run simulations
         histories = simulate_multiple_environments_and_policies_parallel(
-            environment_belief_policy_tuples=environment_belief_policy_tuples,
-            num_episodes=num_episodes,
-            num_steps=num_steps,
+            environment_run_params=environment_run_params,
             alpha=alpha,
             confidence_interval_level=confidence_interval_level,
             n_jobs=n_jobs,
@@ -683,13 +697,13 @@ def compare_multiple_environments_policies(
         # Compute statistics
         statistics_df = compute_statistics_environments_policies_comparison(
             histories=histories,
-            environments=[env for env, _, _ in environment_belief_policy_tuples],
+            environments=[params.environment for params in environment_run_params],
             alpha=alpha,
             confidence_interval_level=confidence_interval_level,
         )
 
         # Create and merge policy configurations
-        policy_configs_df = create_policy_configurations_df(environment_belief_policy_tuples)
+        policy_configs_df = create_policy_configurations_df([(params.environment, params.belief, params.policies) for params in environment_run_params])
         merged_df = pd.merge(
             statistics_df,
             policy_configs_df,
@@ -705,8 +719,8 @@ def compare_multiple_environments_policies(
         results_dir.mkdir(exist_ok=True)
         
         for env_name, policy_histories_dict in histories.items():
-            environment = next(env for env, _, _ in environment_belief_policy_tuples if env.name == env_name)
-            policies = [p for _, _, ps in environment_belief_policy_tuples for p in ps if p.name in policy_histories_dict]
+            environment = next(params.environment for params in environment_run_params if params.environment.name == env_name)
+            policies = [p for params in environment_run_params for p in params.policies if p.name in policy_histories_dict]
             
             create_environment_visualizations(
                 env_name=env_name,
