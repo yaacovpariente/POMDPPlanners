@@ -10,6 +10,7 @@ import numpy as np
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.simulation import MetricValue
+from POMDPPlanners.core.config_types import EnvironmentConfig
 
 class ObservationModel(Distribution, ABC):
     def __init__(self, next_state, action):
@@ -39,6 +40,19 @@ class StateTransitionModel(Distribution, ABC):
 
 
 class Environment(ABC):
+    @classmethod
+    def from_config(cls, config: 'EnvironmentConfig') -> 'Environment':
+        """Instantiate an Environment subclass from a config dataclass, searching all subclass levels."""
+        def all_subclasses(base):
+            subclasses = set(base.__subclasses__())
+            for subclass in base.__subclasses__():
+                subclasses.update(all_subclasses(subclass))
+            return subclasses
+        for subclass in all_subclasses(cls):
+            if subclass.__name__ == config.class_name:
+                return subclass(**config.params)
+        raise ValueError(f"Environment class '{config.class_name}' not found")
+
     def __init__(self, discount_factor: float, name: str):
         self.discount_factor = discount_factor
         self.name = name

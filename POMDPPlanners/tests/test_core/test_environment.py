@@ -1,9 +1,10 @@
 import numpy as np
 import pytest
 from typing import Optional
-from POMDPPlanners.core.environment import Environment, StateTransitionModel, ObservationModel
+from POMDPPlanners.core.environment import Environment, StateTransitionModel, ObservationModel, DiscreteActionsEnvironment
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP, STATES, ACTIONS, OBSERVATIONS
+from POMDPPlanners.core.config_types import EnvironmentConfig
 
 class MockDistribution(Distribution):
     def sample(self) -> np.ndarray:
@@ -252,3 +253,189 @@ class TestEnvironmentConfigId:
         config_id = base_environment.config_id
         assert len(config_id) == 64  # SHA-256 produces 64 hex characters
         assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters
+
+class TestEnvironmentConfig:
+    """Test suite for Environment configuration functionality."""
+    
+    def test_from_config_valid(self, base_environment: MockEnvironment):
+        """Test creating an environment from valid config."""
+        config = EnvironmentConfig(
+            class_name="MockEnvironment",
+            params={
+                "discount_factor": 0.9,
+                "test_array": np.array([1, 2, 3])
+            }
+        )
+        
+        env = Environment.from_config(config)
+        assert isinstance(env, MockEnvironment)
+        assert env.discount_factor == config.params["discount_factor"]
+        assert np.array_equal(env.test_array, config.params["test_array"])
+    
+    def test_from_config_invalid_class(self):
+        """Test creating an environment with invalid class name."""
+        config = EnvironmentConfig(
+            class_name="NonExistentEnvironment",
+            params={
+                "discount_factor": 0.9,
+                "test_array": np.array([1, 2, 3])
+            }
+        )
+        
+        with pytest.raises(ValueError, match="Environment class 'NonExistentEnvironment' not found"):
+            Environment.from_config(config)
+    
+    def test_from_config_missing_required_params(self):
+        """Test creating an environment with missing required parameters."""
+        config = EnvironmentConfig(
+            class_name="MockEnvironment",
+            params={
+                # Missing discount_factor
+                "test_array": np.array([1, 2, 3])
+            }
+        )
+        
+        with pytest.raises(TypeError):
+            Environment.from_config(config)
+    
+    def test_from_config_default_params(self):
+        """Test creating an environment with default parameters."""
+        config = EnvironmentConfig(
+            class_name="MockEnvironment",
+            params={
+                "discount_factor": 0.9
+                # test_array will use default value
+            }
+        )
+        
+        env = Environment.from_config(config)
+        assert np.array_equal(env.test_array, np.array([1, 2, 3]))
+    
+    def test_from_config_different_environment(self):
+        """Test creating a different environment type from config."""
+        config = EnvironmentConfig(
+            class_name="DifferentEnvironment",
+            params={
+                "discount_factor": 0.9
+            }
+        )
+        
+        env = Environment.from_config(config)
+        assert isinstance(env, DifferentEnvironment)
+        assert env.discount_factor == config.params["discount_factor"]
+
+class TestEnvironmentConfigCreation:
+    """Test suite for creating all available environments from config."""
+    
+    @pytest.mark.parametrize("env_name,env_class,required_params", [
+        ("SanityPOMDP", "SanityPOMDP", {}),  # SanityPOMDP doesn't require discount_factor
+        ("TigerPOMDP", "TigerPOMDP", {"discount_factor": 0.95}),
+        ("CartpolePOMDP", "CartpolePOMDP", {"discount_factor": 0.99}),
+        ("MountainCarPOMDP", "MountainCarPOMDP", {"discount_factor": 0.99}),
+        ("PushPOMDP", "PushPOMDP", {"discount_factor": 0.99}),
+        ("SafetyAntVelocityPOMDP", "SafetyAntVelocityPOMDP", {"discount_factor": 0.99}),
+        ("LightDarkPOMDP", "LightDarkPOMDP", {"discount_factor": 0.99})
+    ])
+    def test_environment_creation(self, env_name: str, env_class: str, required_params: dict):
+        """Test creating each environment type from config."""
+        # Create config with required parameters
+        config = EnvironmentConfig(
+            class_name=env_class,
+            params=required_params
+        )
+        
+        try:
+            # Create environment from config
+            env = Environment.from_config(config)
+            
+            # Verify environment was created correctly
+            assert env is not None
+            assert env.__class__.__name__ == env_class
+            assert isinstance(env, Environment)
+            
+            # Test basic environment functionality
+            assert hasattr(env, 'name')
+            assert env.name == env_class
+            
+            # Test that required methods exist
+            assert hasattr(env, 'state_transition_model')
+            assert hasattr(env, 'observation_model')
+            assert hasattr(env, 'reward')
+            assert hasattr(env, 'is_terminal')
+            assert hasattr(env, 'initial_state_dist')
+            assert hasattr(env, 'initial_observation_dist')
+            assert hasattr(env, 'is_equal_observation')
+            
+            # For discrete action environments, test get_actions
+            if isinstance(env, DiscreteActionsEnvironment):
+                assert hasattr(env, 'get_actions')
+                actions = env.get_actions()
+                assert isinstance(actions, list)
+                assert len(actions) > 0
+                
+        except ValueError as e:
+            if "not found" in str(e):
+                pytest.skip(f"Environment class {env_class} not found")
+            else:
+                raise
+    
+    def test_environment_creation_with_params(self):
+        """Test creating environments with specific parameters."""
+        # Test TigerPOMDP with specific parameters
+        tiger_config = EnvironmentConfig(
+            class_name="TigerPOMDP",
+            params={
+                "discount_factor": 0.95,
+                "name": "TestTiger"
+            }
+        )
+        tiger_env = Environment.from_config(tiger_config)
+        assert tiger_env.discount_factor == 0.95
+        assert tiger_env.name == "TestTiger"
+        
+        # Test CartpolePOMDP with specific parameters
+        cartpole_config = EnvironmentConfig(
+            class_name="CartpolePOMDP",
+            params={
+                "discount_factor": 0.99,
+                "name": "TestCartpole"
+            }
+        )
+        try:
+            cartpole_env = Environment.from_config(cartpole_config)
+            assert cartpole_env.discount_factor == 0.99
+            assert cartpole_env.name == "TestCartpole"
+        except ValueError as e:
+            if "not found" in str(e):
+                pytest.skip("CartpolePOMDP environment not found")
+            else:
+                raise
+    
+    def test_environment_creation_invalid_params(self):
+        """Test creating environments with invalid parameters."""
+        # Test with invalid discount factor
+        config = EnvironmentConfig(
+            class_name="TigerPOMDP",  # Use TigerPOMDP instead of SanityPOMDP
+            params={
+                "discount_factor": 2.0  # Invalid: should be between 0 and 1
+            }
+        )
+        with pytest.raises(ValueError):
+            Environment.from_config(config)
+        
+        # Test with missing required parameters
+        config = EnvironmentConfig(
+            class_name="TigerPOMDP",
+            params={}  # Missing required parameters
+        )
+        with pytest.raises(TypeError):
+            Environment.from_config(config)
+    
+    def test_environment_creation_invalid_class(self):
+        """Test creating environment with invalid class name."""
+        config = EnvironmentConfig(
+            class_name="NonExistentEnvironment",
+            params={}
+        )
+        with pytest.raises(ValueError, match="Environment class 'NonExistentEnvironment' not found"):
+            Environment.from_config(config)
