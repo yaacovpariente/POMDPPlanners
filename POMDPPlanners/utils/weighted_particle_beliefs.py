@@ -3,39 +3,29 @@ from typing import Any, Dict
 import numpy as np
 
 from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.belief import WeightedParticleBeliefReinvigoration
+from POMDPPlanners.core.belief import WeightedParticleBeliefReinvigoration, Belief
+from POMDPPlanners.core.config_types import BeliefConfig
 
-def create_belief(environment: Environment, belief_config: Dict) -> WeightedParticleBeliefReinvigoration:
+def create_belief(environment: Environment, belief_config: BeliefConfig) -> WeightedParticleBeliefReinvigoration:
     """Create a belief instance from configuration.
     
     Args:
         environment: The POMDP environment
-        belief_config: Dictionary containing 'type' and 'params' for the belief
+        belief_config: BeliefConfig object for the belief
         
     Returns:
         An instance of the specified belief class
     """
-    belief_type = belief_config['type']
-    belief_params = belief_config['params'].copy()
-    
-    # Create initial particles and weights
+    belief_params = belief_config.params.copy()
     n_particles = belief_params.pop('n_particles')
     particles = [environment.initial_state_dist().sample() for _ in range(n_particles)]
     log_weights = np.log(np.ones(n_particles) / n_particles)
-    
-    # Instantiate the belief class
-    belief_class = {
-        'WeightedParticleBeliefDiscreteLightDark': WeightedParticleBeliefDiscreteLightDark,
-        'WeightedParticleBeliefDiscreteLightDarkFullCoverage': WeightedParticleBeliefDiscreteLightDarkFullCoverage,
-        'WeightedParticleBeliefContinuousLightDarkFullCoverage': WeightedParticleBeliefContinuousLightDarkFullCoverage,
-        'WeightedParticleBeliefSanityPOMDP': WeightedParticleBeliefSanityPOMDP
-    }[belief_type]
-    
-    return belief_class(
-        particles=particles,
-        log_weights=log_weights,
-        **belief_params
-    )
+    # Inject particles and log_weights into params
+    belief_params['particles'] = particles
+    belief_params['log_weights'] = log_weights
+    # Create a new config with updated params
+    updated_config = BeliefConfig(class_name=belief_config.class_name, params=belief_params)
+    return Belief.from_config(updated_config)
 
 class WeightedParticleBeliefDiscreteLightDark(WeightedParticleBeliefReinvigoration):
     def __init__(
