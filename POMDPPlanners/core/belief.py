@@ -10,6 +10,21 @@ from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.distributions import DiscreteDistribution
 
 class Belief(ABC):
+    @classmethod
+    def from_config(cls, config):
+        # Get all subclasses of Belief recursively
+        def get_all_subclasses(c):
+            subclasses = c.__subclasses__()
+            for subclass in subclasses:
+                subclasses.extend(get_all_subclasses(subclass))
+            return subclasses
+
+        all_subclasses = get_all_subclasses(cls)
+        for subclass in all_subclasses:
+            if subclass.__name__ == config.class_name:
+                return subclass(**config.params)
+        raise ValueError(f"Belief class '{config.class_name}' not found")
+
     @property
     def config_id(self) -> str:
         """Generate a deterministic identifier based on belief configuration."""

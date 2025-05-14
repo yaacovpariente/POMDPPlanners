@@ -1,6 +1,9 @@
 import pytest
 import numpy as np
 from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
+from POMDPPlanners.core.config_types import BeliefConfig
+from POMDPPlanners.utils.weighted_particle_beliefs import create_belief, WeightedParticleBeliefDiscreteLightDark, WeightedParticleBeliefDiscreteLightDarkFullCoverage, WeightedParticleBeliefContinuousLightDarkFullCoverage, WeightedParticleBeliefSanityPOMDP
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
 def test_belief_config_id_deterministic():
     """Test that config_id is deterministic for identical beliefs."""
@@ -449,3 +452,105 @@ def test_to_DiscreteDistribution_weight_normalization():
     assert np.all(distribution.probs > 0)
     # Check that weights are properly normalized (larger log weight = larger probability)
     assert distribution.probs[2] > distribution.probs[1] > distribution.probs[0]
+
+def test_create_belief_from_config_basic():
+    config = BeliefConfig(
+        class_name='WeightedParticleBelief',
+        params={
+            'n_particles': 5,
+            'resampling': True,
+            'ess_threshold': 0.5
+        }
+    )
+    env = TigerPOMDP(discount_factor=0.95)
+    belief = create_belief(env, config)
+    assert isinstance(belief, WeightedParticleBelief)
+    assert len(belief.particles) == 5
+    assert np.isclose(np.sum(np.exp(belief.log_weights - np.max(belief.log_weights))), 5)
+    assert all(p in env.states for p in belief.particles)
+    assert belief.resampling is True
+    assert belief.ess_threshold == 0.5
+
+def test_create_belief_particles_and_weights():
+    config = BeliefConfig(
+        class_name='WeightedParticleBelief',
+        params={
+            'n_particles': 3,
+            'resampling': False,
+            'ess_threshold': 0.1
+        }
+    )
+    env = TigerPOMDP(discount_factor=0.95)
+    belief = create_belief(env, config)
+    assert len(belief.particles) == 3
+    assert all(p in env.states for p in belief.particles)
+    assert np.allclose(np.exp(belief.log_weights - np.max(belief.log_weights)), np.ones(3))
+    assert belief.resampling is False
+    assert belief.ess_threshold == 0.1
+
+def test_reinvigoration_discrete_light_dark():
+    config = BeliefConfig(
+        class_name='WeightedParticleBeliefDiscreteLightDark',
+        params={
+            'n_particles': 5,
+            'resampling': True,
+            'ess_threshold': 0.5,
+            'reinvigoration_fraction': 0.2
+        }
+    )
+    env = TigerPOMDP(discount_factor=0.95)
+    belief = create_belief(env, config)
+    assert isinstance(belief, WeightedParticleBeliefDiscreteLightDark)
+    # Call reinvigorate with dummy action and observation
+    reinvigorated = belief.reinvigorate(action="up", observation=np.array([0, 0]), pomdp=env, belief=belief)
+    assert reinvigorated is belief
+
+def test_reinvigoration_discrete_light_dark_full_coverage():
+    config = BeliefConfig(
+        class_name='WeightedParticleBeliefDiscreteLightDarkFullCoverage',
+        params={
+            'n_particles': 5,
+            'ess_threshold': 0.5,
+            'reinvigoration_fraction': 0.05
+        }
+    )
+    env = TigerPOMDP(discount_factor=0.95)
+    belief = create_belief(env, config)
+    assert isinstance(belief, WeightedParticleBeliefDiscreteLightDarkFullCoverage)
+    # Call reinvigorate with dummy action and observation
+    reinvigorated = belief.reinvigorate(action="up", observation=np.array([0, 0]), pomdp=env, belief=belief)
+    assert reinvigorated is belief
+
+def test_reinvigoration_continuous_light_dark_full_coverage():
+    config = BeliefConfig(
+        class_name='WeightedParticleBeliefContinuousLightDarkFullCoverage',
+        params={
+            'n_particles': 5,
+            'ess_threshold': 0.5,
+            'reinvigoration_fraction': 0.05,
+            'reinvigoration_cov_matrix': np.eye(2)
+        }
+    )
+    env = TigerPOMDP(discount_factor=0.95)
+    belief = create_belief(env, config)
+    assert isinstance(belief, WeightedParticleBeliefContinuousLightDarkFullCoverage)
+    # Call reinvigorate with dummy action and observation
+    reinvigorated = belief.reinvigorate(action="up", observation=np.array([0, 0]), pomdp=env, belief=belief)
+    assert reinvigorated is belief
+
+def test_reinvigoration_sanity_pomdp():
+    config = BeliefConfig(
+        class_name='WeightedParticleBeliefSanityPOMDP',
+        params={
+            'n_particles': 5,
+            'resampling': True,
+            'ess_threshold': 0.5,
+            'reinvigoration_fraction': 0.2
+        }
+    )
+    env = TigerPOMDP(discount_factor=0.95)
+    belief = create_belief(env, config)
+    assert isinstance(belief, WeightedParticleBeliefSanityPOMDP)
+    # Call reinvigorate with dummy action and observation
+    reinvigorated = belief.reinvigorate(action="up", observation=np.array([0, 0]), pomdp=env, belief=belief)
+    assert reinvigorated is belief
