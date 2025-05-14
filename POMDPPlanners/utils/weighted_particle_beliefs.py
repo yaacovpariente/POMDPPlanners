@@ -1,9 +1,41 @@
-from typing import Any
+from typing import Any, Dict
 
 import numpy as np
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.belief import WeightedParticleBeliefReinvigoration
+
+def create_belief(environment: Environment, belief_config: Dict) -> WeightedParticleBeliefReinvigoration:
+    """Create a belief instance from configuration.
+    
+    Args:
+        environment: The POMDP environment
+        belief_config: Dictionary containing 'type' and 'params' for the belief
+        
+    Returns:
+        An instance of the specified belief class
+    """
+    belief_type = belief_config['type']
+    belief_params = belief_config['params'].copy()
+    
+    # Create initial particles and weights
+    n_particles = belief_params.pop('n_particles')
+    particles = [environment.initial_state_dist().sample() for _ in range(n_particles)]
+    log_weights = np.log(np.ones(n_particles) / n_particles)
+    
+    # Instantiate the belief class
+    belief_class = {
+        'WeightedParticleBeliefDiscreteLightDark': WeightedParticleBeliefDiscreteLightDark,
+        'WeightedParticleBeliefDiscreteLightDarkFullCoverage': WeightedParticleBeliefDiscreteLightDarkFullCoverage,
+        'WeightedParticleBeliefContinuousLightDarkFullCoverage': WeightedParticleBeliefContinuousLightDarkFullCoverage,
+        'WeightedParticleBeliefSanityPOMDP': WeightedParticleBeliefSanityPOMDP
+    }[belief_type]
+    
+    return belief_class(
+        particles=particles,
+        log_weights=log_weights,
+        **belief_params
+    )
 
 class WeightedParticleBeliefDiscreteLightDark(WeightedParticleBeliefReinvigoration):
     def __init__(
@@ -138,3 +170,34 @@ class WeightedParticleBeliefContinuousLightDarkFullCoverage(WeightedParticleBeli
             self.particles[-n_reinvigorate:] = reinvigorated_states.tolist()
         
         return self
+
+class WeightedParticleBeliefSanityPOMDP(WeightedParticleBeliefReinvigoration):
+    def __init__(
+        self, 
+        particles: list, 
+        log_weights: np.ndarray, 
+        resampling: bool = False, 
+        ess_threshold: float = 0.5,
+        reinvigoration_fraction: float = 0.2
+    ):
+        super().__init__(
+            particles=particles,
+            log_weights=log_weights,
+            resampling=resampling,
+            ess_threshold=ess_threshold
+        )
+        
+        self.reinvigoration_fraction = reinvigoration_fraction
+
+    def reinvigorate(self, action: Any, observation: Any, pomdp: Environment, belief: WeightedParticleBeliefReinvigoration) -> WeightedParticleBeliefReinvigoration:
+        effective_sample_size = 1 / np.sum(np.square(self.normalized_weights))
+        
+        if effective_sample_size > self.ess_threshold:
+            # For SanityPOMDP, we can reinvigorate by sampling from the initial state distribution
+            n_reinvigorate = int(self.reinvigoration_fraction * len(belief.particles))
+            reinvigorated_states = [pomdp.initial_state_dist().sample() for _ in range(n_reinvigorate)]
+            
+            replace_indices = np.random.choice(len(belief.particles), size=n_reinvigorate, replace=True)
+            belief.particles[:len(replace_indices)] = reinvigorated_states
+                
+        return belief
