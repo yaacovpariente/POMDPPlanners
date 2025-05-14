@@ -33,7 +33,9 @@ def minimal_config():
                     'depth': 10,  # Maximum depth for MCTS
                     'exploration_constant': 1.0,
                     'n_simulations': 10,  # Number of simulations per action
-                    'min_samples_per_node': 10
+                    'min_samples_per_node': 10,
+                    'discount_factor': 0.95,  # Match environment's discount factor
+                    'name': 'TestPOMCP'  # Add a name for the policy
                 }
             }
         ],
@@ -111,10 +113,14 @@ def test_missing_environment_config():
                 'type': 'POMCP',
                 'params': {
                     'num_simulations': 10,
-                    'exploration_constant': 1.0
+                    'exploration_constant': 1.0,
+                    'discount_factor': 0.95,
+                    'name': 'TestPOMCP'
                 }
             }
-        ]
+        ],
+        'num_steps': 10,
+        'num_episodes': 2
     }
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
@@ -122,9 +128,8 @@ def test_missing_environment_config():
         temp_path = f.name
     
     try:
-        runner = ExperimentRunner(temp_path)
-        with pytest.raises(KeyError):
-            runner.setup_environment()
+        with pytest.raises(KeyError, match="Missing required 'environment' or 'type' in configuration"):
+            ExperimentRunner(temp_path)
     finally:
         Path(temp_path).unlink()
 
@@ -141,7 +146,9 @@ def test_missing_policies_config():
                 'n_particles': 10,
                 'resampling': True
             }
-        }
+        },
+        'num_steps': 10,
+        'num_episodes': 2
     }
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
@@ -149,9 +156,8 @@ def test_missing_policies_config():
         temp_path = f.name
     
     try:
-        runner = ExperimentRunner(temp_path)
-        with pytest.raises(KeyError):
-            runner.setup_policies()
+        with pytest.raises(KeyError, match="Missing required 'policies' list in configuration"):
+            ExperimentRunner(temp_path)
     finally:
         Path(temp_path).unlink()
 
@@ -168,10 +174,14 @@ def test_missing_belief_config():
                 'params': {
                     'depth': 10,
                     'exploration_constant': 1.0,
-                    'n_simulations': 10
+                    'n_simulations': 10,
+                    'discount_factor': 0.95,
+                    'name': 'TestPOMCP'
                 }
             }
-        ]
+        ],
+        'num_steps': 10,
+        'num_episodes': 2
     }
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
@@ -179,9 +189,8 @@ def test_missing_belief_config():
         temp_path = f.name
     
     try:
-        runner = ExperimentRunner(temp_path)
-        with pytest.raises(KeyError):
-            runner.run_experiment()
+        with pytest.raises(KeyError, match="Missing required 'belief' or 'type' in configuration"):
+            ExperimentRunner(temp_path)
     finally:
         Path(temp_path).unlink()
 
@@ -205,10 +214,14 @@ def test_invalid_belief_type():
                 'params': {
                     'depth': 10,
                     'exploration_constant': 1.0,
-                    'n_simulations': 10
+                    'n_simulations': 10,
+                    'discount_factor': 0.95,
+                    'name': 'TestPOMCP'
                 }
             }
-        ]
+        ],
+        'num_steps': 10,
+        'num_episodes': 2
     }
     
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
@@ -217,7 +230,7 @@ def test_invalid_belief_type():
     
     try:
         runner = ExperimentRunner(temp_path)
-        with pytest.raises(KeyError):
+        with pytest.raises(ValueError, match="Belief class 'InvalidBeliefType' not found"):
             runner.run_experiment()
     finally:
         Path(temp_path).unlink() 
