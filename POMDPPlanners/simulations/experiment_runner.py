@@ -20,17 +20,19 @@ import pandas as pd
 
 
 class ExperimentRunner:
-    def __init__(self, config_path: str):
+    def __init__(self, config_path: str, debug: bool = False):
         """
         Initialize the experiment runner with a configuration file.
         
         Args:
             config_path: Path to the YAML configuration file
+            debug: If True, runs a minimal experiment with 2 episodes and 2 steps
         """
         logger.info(f"Initializing experiment runner with config: {config_path}")
         self.config = load_config(config_path)
         self.environment = None
         self.policies = []
+        self.debug = debug
         logger.debug(f"Loaded configuration: {self.config}")
         
     def setup_environment(self):
@@ -89,8 +91,16 @@ class ExperimentRunner:
         """
         if 'num_episodes' not in self.config or 'num_steps' not in self.config:
             raise KeyError("Both 'num_episodes' and 'num_steps' must be specified as top-level keys in the YAML config.")
-        num_episodes = self.config['num_episodes']
-        num_steps = self.config['num_steps']
+        
+        # Override num_episodes and num_steps if in debug mode
+        if self.debug:
+            num_episodes = 2
+            num_steps = 2
+            logger.info("Running in debug mode with 2 episodes and 2 steps")
+        else:
+            num_episodes = self.config['num_episodes']
+            num_steps = self.config['num_steps']
+            
         logger.info(f"Starting experiment with {num_episodes} episodes, {num_steps} steps per episode, {n_jobs} parallel jobs")
         
         # Setup environment and policies
