@@ -1,9 +1,16 @@
 import numpy as np
 import pytest
-from typing import Optional
-from POMDPPlanners.core.environment import Environment, StateTransitionModel, ObservationModel, DiscreteActionsEnvironment
+from typing import Optional, Any
+from POMDPPlanners.core.environment import (
+    Environment,
+    StateTransitionModel,
+    ObservationModel,
+    DiscreteActionsEnvironment,
+    SpaceInfo,
+    SpaceType
+)
 from POMDPPlanners.core.distributions import Distribution
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP, STATES, ACTIONS, OBSERVATIONS
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.core.config_types import EnvironmentConfig
 
 class MockDistribution(Distribution):
@@ -29,7 +36,11 @@ class MockObservationModel(ObservationModel):
 
 class MockEnvironment(Environment):
     def __init__(self, discount_factor: float, test_array: Optional[np.ndarray] = None):
-        super().__init__(discount_factor=discount_factor, name="MockEnvironment")
+        space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.DISCRETE
+        )
+        super().__init__(discount_factor=discount_factor, name="MockEnvironment", space_info=space_info)
         self.test_array = test_array if test_array is not None else np.array([1, 2, 3])
     
     def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
@@ -55,7 +66,11 @@ class MockEnvironment(Environment):
 
 class DifferentEnvironment(Environment):
     def __init__(self, discount_factor: float):
-        super().__init__(discount_factor=discount_factor, name="DifferentEnvironment")
+        space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.DISCRETE
+        )
+        super().__init__(discount_factor=discount_factor, name="DifferentEnvironment", space_info=space_info)
     
     def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
         return MockStateTransitionModel(state, action)

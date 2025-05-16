@@ -3,13 +3,17 @@
 import pytest
 import numpy as np
 from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.environment import Environment, StateTransitionModel, ObservationModel, SpaceInfo, SpaceType
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.config_types import PolicyConfig
 
 class MockEnvironment(Environment):
     def __init__(self, discount_factor: float, name: str):
-        super().__init__(discount_factor, name)
+        space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.DISCRETE
+        )
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
     
     def state_transition_model(self, state, action):
         pass
