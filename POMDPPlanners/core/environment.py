@@ -18,6 +18,7 @@ class SpaceType(Enum):
     """Enum representing different types of spaces in the environment."""
     DISCRETE = "discrete"
     CONTINUOUS = "continuous"
+    MIXED = "mixed"
 
 @dataclass
 class SpaceInfo:

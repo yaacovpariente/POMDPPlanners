@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from time import time
 from typing import TYPE_CHECKING
 import hashlib
@@ -7,10 +8,15 @@ import json
 if TYPE_CHECKING:
     from POMDPPlanners.core.environment import Environment
     from POMDPPlanners.core.belief import Belief
-    from POMDPPlanners.core.environment import SpaceInfo
+    from POMDPPlanners.core.environment import SpaceType
     
 from POMDPPlanners.core.config_types import PolicyConfig
 
+
+@dataclass
+class PolicySpaceInfo:
+    action_space: 'SpaceType'
+    observation_space: 'SpaceType'
 
 class Policy(ABC):
     @classmethod
@@ -68,4 +74,9 @@ class Policy(ABC):
 
     @abstractmethod
     def action(self, belief: "Belief"):
+        pass
+    
+    @classmethod
+    @abstractmethod
+    def get_space_info(cls) -> PolicySpaceInfo:
         pass
