@@ -6,10 +6,13 @@ from POMDPPlanners.core.environment import (
     ObservationModel,
     StateTransitionModel,
     DiscreteActionsEnvironment,
+    SpaceInfo,
+    SpaceType
 )
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.simulation import History, StepData, MetricValue
 from POMDPPlanners.utils.statistics import confidence_interval
+
 
 class SafeAntVelocityStateTransition(StateTransitionModel):
     def __init__(
@@ -55,6 +58,7 @@ class SafeAntVelocityStateTransition(StateTransitionModel):
         next_state = np.concatenate([new_position, new_velocity])
         return next_state
 
+
 class SafeAntVelocityObservation(ObservationModel):
     def __init__(
         self,
@@ -90,6 +94,7 @@ class SafeAntVelocityObservation(ObservationModel):
         
         return np.exp(position_log_prob + velocity_log_prob)
 
+
 class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
     def __init__(
         self,
@@ -105,8 +110,6 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         movement_reward_scale: float = 1.0,
         name: str = "SafeVelocityPOMDP",
     ):
-        super().__init__(discount_factor=discount_factor, name=name)
-        
         self.safe_velocity_threshold = safe_velocity_threshold
         self.max_force = max_force
         self.dt = dt
@@ -119,6 +122,13 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         
         # Define actions (different force magnitudes)
         self.actions = [0, 1, 2, 3]  # 0: no force, 1: small, 2: medium, 3: large
+
+        # Create space info with appropriate bounds
+        space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE,  # Action space is discrete force magnitudes
+            observation_space=SpaceType.CONTINUOUS  # Observation space is positions and velocities with noise
+        )
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
 
     def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
         return SafeAntVelocityStateTransition(

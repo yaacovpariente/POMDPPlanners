@@ -10,6 +10,8 @@ from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     StateTransitionModel,
     ObservationModel,
+    SpaceInfo,
+    SpaceType
 )
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import StepData
@@ -83,8 +85,6 @@ class MountainCarObservation(ObservationModel):
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
     def __init__(self, discount_factor: float, name: str = "MountainCarPOMDP"):
-        super().__init__(discount_factor=discount_factor, name=name)
-
         self.min_position = -1.2
         self.max_position = 0.6
         self.max_speed = 0.07
@@ -103,6 +103,12 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         self.cov_matrix = np.array(
             [[self.position_noise**2, 0], [0, self.velocity_noise**2]]
         )
+
+        space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE,  # Action space is [-1, 0, 1]
+            observation_space=SpaceType.CONTINUOUS  # Observation space is position and velocity
+        )
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
 
     def state_transition_model(
         self, state: Tuple[float, float], action: int

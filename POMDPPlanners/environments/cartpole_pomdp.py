@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Any
 import math
 
 import numpy as np
@@ -7,6 +7,8 @@ from POMDPPlanners.core.environment import (
     ObservationModel,
     StateTransitionModel,
     DiscreteActionsEnvironment,
+    SpaceInfo,
+    SpaceType
 )
 from POMDPPlanners.core.distributions import Distribution
 
@@ -70,7 +72,6 @@ class CartPoleStateTransition(StateTransitionModel):
 class CartPoleObservation(ObservationModel):
     def __init__(self, next_state: np.ndarray, action: int, noise_cov: np.ndarray):
         super().__init__(next_state=next_state, action=action)
-
         self.noise_cov = noise_cov
 
     def sample(self) -> np.ndarray:
@@ -92,8 +93,6 @@ class CartPoleInitialStateDistribution(Distribution):
 
 class CartPolePOMDP(DiscreteActionsEnvironment):
     def __init__(self, discount_factor: float, noise_cov: np.ndarray, name: str = "CartPolePOMDP"):
-        super().__init__(discount_factor=discount_factor, name=name)
-
         self.noise_cov = noise_cov
 
         self.gravity = 9.8
@@ -122,6 +121,12 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             dtype=np.float32,
         )
 
+        space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE,  # Binary action space
+            observation_space=SpaceType.CONTINUOUS  # Continuous state space
+        )
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
+
         self.screen_width = 600
         self.screen_height = 400
         self.screen = None
@@ -144,9 +149,9 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             masspole=self.masspole,
         )
 
-    def observation_model(self, state: np.ndarray, action: int) -> ObservationModel:
+    def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
         return CartPoleObservation(
-            next_state=state, action=action, noise_cov=self.noise_cov
+            next_state=next_state, action=action, noise_cov=self.noise_cov
         )
 
     def reward(self, state: np.ndarray, action: int) -> float:

@@ -6,9 +6,12 @@ from POMDPPlanners.core.environment import (
     ObservationModel,
     StateTransitionModel,
     DiscreteActionsEnvironment,
+    SpaceInfo,
+    SpaceType
 )
 from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
 from POMDPPlanners.core.simulation import History, StepData
+
 
 class PushStateTransition(StateTransitionModel):
     def __init__(
@@ -62,6 +65,7 @@ class PushStateTransition(StateTransitionModel):
         next_state = np.concatenate([new_robot_pos, new_object_pos, self.target_pos])
         return next_state
 
+
 class PushObservation(ObservationModel):
     def __init__(
         self,
@@ -94,6 +98,7 @@ class PushObservation(ObservationModel):
         log_prob = -0.5 * np.sum(object_pos_diff**2) / (self.observation_noise**2)
         return np.exp(log_prob)
 
+
 class PushPOMDP(DiscreteActionsEnvironment):
     def __init__(
         self,
@@ -104,8 +109,6 @@ class PushPOMDP(DiscreteActionsEnvironment):
         observation_noise: float = 0.1,
         name: str = "PushPOMDP",
     ):
-        super().__init__(discount_factor=discount_factor, name=name)
-        
         self.grid_size = grid_size
         self.push_threshold = push_threshold
         self.friction_coefficient = friction_coefficient
@@ -116,6 +119,12 @@ class PushPOMDP(DiscreteActionsEnvironment):
         
         # Initialize target position (fixed)
         self.target_pos = np.array([grid_size - 1, grid_size - 1])
+
+        space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE,  # Action space is discrete positions
+            observation_space=SpaceType.CONTINUOUS  # Observation space is positions with noise
+        )
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
 
     def state_transition_model(self, state: np.ndarray, action: str) -> StateTransitionModel:
         return PushStateTransition(

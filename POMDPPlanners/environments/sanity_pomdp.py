@@ -1,7 +1,7 @@
 from typing import Any, List
 import numpy as np
 
-from POMDPPlanners.core.environment import DiscreteActionsEnvironment
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceInfo, SpaceType
 from POMDPPlanners.core.distributions import Distribution
 
 class SanityStateTransitionModel(Distribution):
@@ -52,7 +52,11 @@ class SanityInitialObservationDist(Distribution):
 
 class SanityPOMDP(DiscreteActionsEnvironment):
     def __init__(self):
-        super().__init__(discount_factor=0.95, name="SanityPOMDP")
+        space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE,  # Binary action space
+            observation_space=SpaceType.DISCRETE  # Binary observation space
+        )
+        super().__init__(discount_factor=0.95, name="SanityPOMDP", space_info=space_info)
         
     def state_transition_model(self, state: int, action: int) -> SanityStateTransitionModel:
         return SanityStateTransitionModel(state, action)

@@ -7,6 +7,8 @@ from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     ObservationModel,
     StateTransitionModel,
+    SpaceInfo,
+    SpaceType
 )
 from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
 from POMDPPlanners.core.simulation import History, MetricValue
@@ -16,7 +18,7 @@ ACTIONS = ["listen", "open_left", "open_right"]
 OBSERVATIONS = ["hear_left", "hear_right", "hear_nothing"]
 
 
-class TigerTransition(StateTransitionModel):
+class TigerStateTransition(StateTransitionModel):
     def __init__(self, state: str, action: str):
         self.state = state
         self.action = action
@@ -66,13 +68,20 @@ class TigerObservation(ObservationModel):
 
 class TigerPOMDP(DiscreteActionsEnvironment):
     def __init__(self, discount_factor: float, name: str = "TigerPOMDP"):
-        super().__init__(discount_factor=discount_factor, name=name)
+        if not (0.0 <= discount_factor <= 1.0):
+            raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
+        
+        space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE,  # Actions are discrete: listen, open_left, open_right
+            observation_space=SpaceType.DISCRETE  # Observations are discrete: hear_left, hear_right, hear_nothing
+        )
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
         self.states = STATES
         self.actions = ACTIONS
         self.observations = OBSERVATIONS
 
     def state_transition_model(self, state: str, action: str) -> Distribution:
-        return TigerTransition(state=state, action=action)
+        return TigerStateTransition(state=state, action=action)
 
     def observation_model(self, next_state: str, action: str) -> Distribution:
         return TigerObservation(next_state=next_state, action=action)
