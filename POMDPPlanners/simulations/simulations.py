@@ -645,7 +645,7 @@ def create_policy_configurations_df(
 
 def compare_multiple_environments_policies(
     environment_run_params: List[EnvironmentRunParams],
-    alpha: float,
+    alpha: float = 0.1,
     confidence_interval_level: float = 0.95,
     n_jobs: int = 1,
     cache_dir_path: Path = None,

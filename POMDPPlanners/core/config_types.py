@@ -3,6 +3,10 @@
 from typing import Any, List, Dict
 from dataclasses import dataclass
 
+from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.belief import Belief
+
 @dataclass
 class EnvironmentConfig:
     class_name: str
@@ -20,8 +24,8 @@ class BeliefConfig:
 
 @dataclass
 class ExperimentConfig:
-    environment: EnvironmentConfig
-    policies: List[PolicyConfig]
-    belief: BeliefConfig
+    environment: Environment
+    policies: List[Policy]
+    belief: Belief
     num_episodes: int
     num_steps: int 
