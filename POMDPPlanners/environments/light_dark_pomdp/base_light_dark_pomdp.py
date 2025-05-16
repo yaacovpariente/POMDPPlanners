@@ -8,7 +8,11 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.environment import (
+    Environment,
+    SpaceInfo,
+    SpaceType
+)
 from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
 from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.simulation import MetricValue
@@ -20,7 +24,8 @@ class BaseLightDarkPOMDP(Environment, ABC):
     def __init__(
         self,
         discount_factor: float,
-        name,
+        name: str,
+        space_info: SpaceInfo,
         beacons: np.ndarray = np.array(
             [[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]
         ),
@@ -49,7 +54,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
             grid_size=grid_size,
         )
         
-        super().__init__(discount_factor=discount_factor, name=name)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
         
         self.beacons = beacons
         self.goal_state = goal_state
@@ -282,7 +287,8 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
     def __init__(
         self,
         discount_factor: float,
-        name,
+        name: str,
+        is_discrete_observations: bool,
         beacons: np.ndarray = np.array(
             [[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]
         ),
@@ -296,9 +302,14 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
         fuel_cost: float = 2.0,
         grid_size: int = 11,
     ):
+        space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.DISCRETE if is_discrete_observations else SpaceType.CONTINUOUS
+        )
         super().__init__(
             discount_factor=discount_factor,
             name=name,
+            space_info=space_info,
             beacons=beacons,
             goal_state=goal_state,
             start_state=start_state,

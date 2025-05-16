@@ -4,7 +4,7 @@ from pathlib import Path
 
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDPDiscreteActions, ContinuousLightDarkPOMDP
 from POMDPPlanners.core.distributions import DiscreteDistribution
-from POMDPPlanners.core.environment import ObservationModel
+from POMDPPlanners.core.environment import ObservationModel, SpaceInfo, SpaceType
 
 
 @pytest.fixture

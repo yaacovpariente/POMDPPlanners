@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-from POMDPPlanners.core.environment import DiscreteActionsEnvironment, ObservationModel
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment, ObservationModel, SpaceInfo, SpaceType
 from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
 from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.simulation import MetricValue
@@ -98,6 +98,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions):
         super().__init__(
             discount_factor=discount_factor,
             name=name,
+            is_discrete_observations=True,
             beacons=beacons,
             goal_state=goal_state,
             start_state=start_state,

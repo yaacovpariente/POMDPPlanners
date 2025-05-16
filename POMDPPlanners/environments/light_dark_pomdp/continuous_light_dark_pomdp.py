@@ -7,7 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-from POMDPPlanners.core.environment import DiscreteActionsEnvironment, ObservationModel
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment, ObservationModel, SpaceInfo, SpaceType
 from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
 from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.simulation import MetricValue
@@ -37,18 +37,24 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         beacon_radius: float = 1.0,
         obstacle_radius: float = 1.5,
     ):
+        space_info = SpaceInfo(
+            action_space=SpaceType.CONTINUOUS,
+            observation_space=SpaceType.CONTINUOUS
+        )
         super().__init__(
-            discount_factor=discount_factor, 
-            name=name, 
-            beacons=beacons, 
-            goal_state=goal_state, 
-            start_state=start_state, 
-            obstacles=obstacles, 
-            obstacle_hit_probability=obstacle_hit_probability, 
-            obstacle_reward=obstacle_reward, 
-            goal_reward=goal_reward, 
-            fuel_cost=fuel_cost, 
-            grid_size=grid_size
+            discount_factor=discount_factor,
+            name=name,
+            space_info=space_info,
+            beacons=beacons,
+            goal_state=goal_state,
+            start_state=start_state,
+            obstacles=obstacles,
+            obstacle_hit_probability=obstacle_hit_probability,
+            obstacle_reward=obstacle_reward,
+            goal_reward=goal_reward,
+            beacon_radius=beacon_radius,
+            fuel_cost=fuel_cost,
+            grid_size=grid_size,
         )
         
         self.__type_check(
@@ -244,6 +250,12 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
             obstacle_radius=obstacle_radius,
         )
 
+        # Override space info
+        self.space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.CONTINUOUS
+        )
+        
         self.actions = ["up", "down", "right", "left"]
         self.action_to_vector = {
             "up": np.array([0, 1]),
