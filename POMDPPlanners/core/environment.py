@@ -1,7 +1,9 @@
 from typing import Any, List, Tuple
 from pathlib import Path
-import gymnasium as gym
 from abc import ABC, abstractmethod
+from enum import Enum
+from dataclasses import dataclass
+
 import json
 import hashlib
 
@@ -11,6 +13,17 @@ from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.core.config_types import EnvironmentConfig
+
+class SpaceType(Enum):
+    """Enum representing different types of spaces in the environment."""
+    DISCRETE = "discrete"
+    CONTINUOUS = "continuous"
+
+@dataclass
+class SpaceInfo:
+    """Class containing information about the environment's spaces."""
+    action_space: SpaceType
+    observation_space: SpaceType
 
 class ObservationModel(Distribution, ABC):
     def __init__(self, next_state, action):
@@ -38,24 +51,27 @@ class StateTransitionModel(Distribution, ABC):
     def probability(self, next_state: Any) -> float:
         pass
 
-
 class Environment(ABC):
     @classmethod
     def from_config(cls, config: 'EnvironmentConfig') -> 'Environment':
         """Instantiate an Environment subclass from a config dataclass, searching all subclass levels."""
-        def all_subclasses(base):
-            subclasses = set(base.__subclasses__())
-            for subclass in base.__subclasses__():
-                subclasses.update(all_subclasses(subclass))
-            return subclasses
-        for subclass in all_subclasses(cls):
-            if subclass.__name__ == config.class_name:
-                return subclass(**config.params)
+        # First try to instantiate this class if it matches
+        if cls.__name__ == config.class_name:
+            return cls(**config.params)
+            
+        # If not, try all subclasses recursively
+        for subclass in cls.__subclasses__():
+            try:
+                return subclass.from_config(config)
+            except ValueError:
+                continue
+                
         raise ValueError(f"Environment class '{config.class_name}' not found")
 
-    def __init__(self, discount_factor: float, name: str):
+    def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo):
         self.discount_factor = discount_factor
         self.name = name
+        self.space_info = space_info
 
     def __eq__(self, other):
         if not isinstance(other, Environment):
@@ -178,8 +194,8 @@ class Environment(ABC):
 
 
 class DiscreteActionsEnvironment(Environment):
-    def __init__(self, discount_factor: float, name: str):
-        super().__init__(discount_factor=discount_factor, name=name)
+    def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo):
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
 
     @abstractmethod
     def state_transition_model(self, state: Any, action: Any) -> StateTransitionModel:

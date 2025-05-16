@@ -7,19 +7,25 @@ import json
 if TYPE_CHECKING:
     from POMDPPlanners.core.environment import Environment
     from POMDPPlanners.core.belief import Belief
+    from POMDPPlanners.core.environment import SpaceInfo
+    
 from POMDPPlanners.core.config_types import PolicyConfig
 
 
 class Policy(ABC):
     @classmethod
     def from_config(cls, config: PolicyConfig) -> 'Policy':
-        # Get all subclasses of Policy
-        subclasses = cls.__subclasses__()
-        
-        # Find the matching subclass
-        for subclass in subclasses:
-            if subclass.__name__ == config.class_name:
-                return subclass(**config.params)
+        """Instantiate a Policy subclass from a config dataclass, searching all subclass levels."""
+        # First try to instantiate this class if it matches
+        if cls.__name__ == config.class_name:
+            return cls(**config.params)
+            
+        # If not, try all subclasses recursively
+        for subclass in cls.__subclasses__():
+            try:
+                return subclass.from_config(config)
+            except ValueError:
+                continue
                 
         raise ValueError(f"Policy class '{config.class_name}' not found")
 
