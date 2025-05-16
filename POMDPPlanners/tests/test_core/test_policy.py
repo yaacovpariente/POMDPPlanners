@@ -2,7 +2,7 @@
 
 import pytest
 import numpy as np
-from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
 from POMDPPlanners.core.environment import Environment, StateTransitionModel, ObservationModel, SpaceInfo, SpaceType
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.config_types import PolicyConfig
@@ -54,12 +54,26 @@ class MockPolicy(Policy):
     def action(self, belief: Belief):
         pass
 
+    @classmethod
+    def get_space_info(cls) -> PolicySpaceInfo:
+        return PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.DISCRETE
+        )
+
 class DifferentPolicy(Policy):
     def __init__(self, environment: Environment, discount_factor: float, name: str):
         super().__init__(environment, discount_factor, name)
     
     def action(self, belief: Belief):
         pass
+
+    @classmethod
+    def get_space_info(cls) -> PolicySpaceInfo:
+        return PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.DISCRETE
+        )
 
 @pytest.fixture
 def base_environment():
