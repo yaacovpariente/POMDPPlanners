@@ -12,7 +12,6 @@ import numpy as np
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.simulation import MetricValue
-from POMDPPlanners.core.config_types import EnvironmentConfig
 
 class SpaceType(Enum):
     """Enum representing different types of spaces in the environment."""
@@ -53,22 +52,6 @@ class StateTransitionModel(Distribution, ABC):
         pass
 
 class Environment(ABC):
-    @classmethod
-    def from_config(cls, config: 'EnvironmentConfig') -> 'Environment':
-        """Instantiate an Environment subclass from a config dataclass, searching all subclass levels."""
-        # First try to instantiate this class if it matches
-        if cls.__name__ == config.class_name:
-            return cls(**config.params)
-            
-        # If not, try all subclasses recursively
-        for subclass in cls.__subclasses__():
-            try:
-                return subclass.from_config(config)
-            except ValueError:
-                continue
-                
-        raise ValueError(f"Environment class '{config.class_name}' not found")
-
     def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo):
         self.discount_factor = discount_factor
         self.name = name
