@@ -10,8 +10,6 @@ if TYPE_CHECKING:
     from POMDPPlanners.core.belief import Belief
     from POMDPPlanners.core.environment import SpaceType
     
-from POMDPPlanners.core.config_types import PolicyConfig
-
 
 @dataclass
 class PolicySpaceInfo:
@@ -19,22 +17,6 @@ class PolicySpaceInfo:
     observation_space: 'SpaceType'
 
 class Policy(ABC):
-    @classmethod
-    def from_config(cls, config: PolicyConfig) -> 'Policy':
-        """Instantiate a Policy subclass from a config dataclass, searching all subclass levels."""
-        # First try to instantiate this class if it matches
-        if cls.__name__ == config.class_name:
-            return cls(**config.params)
-            
-        # If not, try all subclasses recursively
-        for subclass in cls.__subclasses__():
-            try:
-                return subclass.from_config(config)
-            except ValueError:
-                continue
-                
-        raise ValueError(f"Policy class '{config.class_name}' not found")
-
     def __init__(self, environment: "Environment", discount_factor: float, name: str):
         self.environment = environment
         self.discount_factor = discount_factor
