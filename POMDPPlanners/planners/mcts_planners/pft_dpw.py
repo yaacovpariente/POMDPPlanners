@@ -6,9 +6,10 @@ import random
 
 import numpy as np
 
-from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
 from POMDPPlanners.core.cost import belief_expectation_reward
+from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
 
 
@@ -149,3 +150,9 @@ class PFT_DPW(PathSimulationPolicy):
         action_node.visit_count += 1
         action_node.q_value += (total - action_node.q_value) / action_node.visit_count
         belief_node.v_value = np.max([child.q_value for child in belief_node.children])
+
+    def get_space_info(self) -> PolicySpaceInfo:
+        return PolicySpaceInfo(
+            action_space=SpaceType.CONTINUOUS,
+            observation_space=SpaceType.MIXED
+        )

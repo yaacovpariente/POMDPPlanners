@@ -4,7 +4,9 @@ from abc import ABC, abstractmethod
 import numpy as np
 from anytree import PostOrderIter
 
-from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceType
+
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action_cost_setting
@@ -120,6 +122,12 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
     def _set_last_belief_node(self, node: BeliefNode):
         for action in self.environment.get_actions():
             child = ActionNode(action=action, parent=node, children=tuple(), data=None)
+            
+    def get_space_info(self) -> PolicySpaceInfo:
+        return PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.MIXED
+        )
 
 
 class StandardSparseSamplingDiscreteActionsPlanner(

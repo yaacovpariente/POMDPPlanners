@@ -3,8 +3,8 @@ import random
 import time
 import numpy as np
 
-from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
+from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.tree import ActionNode, get_optimal_action_reward_setting, BeliefNode
 
@@ -130,3 +130,9 @@ class POMCP(Policy):
         action_node.visit_count += 1
         action_node.q_value += (return_sample - action_node.q_value) / action_node.visit_count
         belief_node.v_value = np.max([child.q_value for child in belief_node.children if child.visit_count > 0])
+
+    def get_space_info(self) -> PolicySpaceInfo:
+        return PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.DISCRETE
+        )

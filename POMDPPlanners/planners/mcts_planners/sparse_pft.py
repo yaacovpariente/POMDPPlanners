@@ -3,7 +3,8 @@ from typing import Any, Tuple
 
 import numpy as np
 
-from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
+from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.tree import BeliefNode, ActionNode, get_optimal_action_reward_setting, sample_belief_node_child
@@ -138,3 +139,8 @@ class SparsePFT(Policy):
         action_node.q_value += (return_sample - action_node.q_value) / action_node.visit_count
         belief_node.v_value = max(child.q_value for child in belief_node.children)
         
+    def get_space_info(self) -> PolicySpaceInfo:
+        return PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.MIXED
+        )
