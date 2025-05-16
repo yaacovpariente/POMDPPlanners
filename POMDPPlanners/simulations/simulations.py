@@ -670,6 +670,7 @@ def compare_multiple_environments_policies(
         - Dictionary mapping environment names to dictionaries of policy histories
         - DataFrame with statistics and policy configurations
     """
+    assert cache_dir_path is not None, "cache_dir_path must be specified (use --output flag or set in code)"
     # Validate inputs
     validate_comparison_inputs(
         environment_run_params=environment_run_params,
