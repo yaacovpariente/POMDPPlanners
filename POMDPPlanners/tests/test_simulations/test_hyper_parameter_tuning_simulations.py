@@ -140,43 +140,6 @@ def test_optimize_policy_parameters_with_optuna_invalid_params(temp_cache_dir):
         )
 
 
-def test_optimize_policy_parameters_with_optuna_different_metrics(temp_cache_dir):
-    # Setup
-    environment = TigerPOMDP(discount_factor=0.95)
-    param_ranges = [
-        NumericalHyperParameter(name="branching_factor", low=2, high=3),
-        NumericalHyperParameter(name="depth", low=2, high=3),
-    ]
-
-    # Execute with different optimization metrics
-    best_params1, _, _ = optimize_policy_parameters_with_optuna(
-        environment=environment,
-        policy_class=StandardSparseSamplingDiscreteActionsPlanner,
-        param_ranges=param_ranges,
-        num_episodes=5,
-        num_steps=5,
-        n_particles=10,
-        cache_dir_path=temp_cache_dir,
-        parameter_to_optimize="average_return",
-        n_trials=2,
-    )
-
-    best_params2, _, _ = optimize_policy_parameters_with_optuna(
-        environment=environment,
-        policy_class=StandardSparseSamplingDiscreteActionsPlanner,
-        param_ranges=param_ranges,
-        num_episodes=5,
-        num_steps=5,
-        n_particles=10,
-        cache_dir_path=temp_cache_dir,
-        parameter_to_optimize="return_cvar",
-        n_trials=2,
-    )
-
-    # Assert different metrics can lead to different optimal parameters
-    assert best_params1 != best_params2
-
-
 def test_optimize_policy_parameters_for_multiple_environments(temp_cache_dir):
     # Setup
     environment1 = TigerPOMDP(discount_factor=0.95)

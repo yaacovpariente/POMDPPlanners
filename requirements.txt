@@ -13,4 +13,5 @@ plotly>=5.0.0
 diskcache>=5.0.0
 joblib>=1.0.0
 tqdm>=4.62.0
-optuna>=2.0.0 
+optuna>=2.0.0
+pyyaml>=6.0.0 
