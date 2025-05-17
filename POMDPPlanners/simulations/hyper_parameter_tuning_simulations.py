@@ -237,7 +237,7 @@ def optimize_policy_parameters_with_optuna(
     assert isinstance(policy_class, type)
     assert issubclass(policy_class, Policy)
     assert isinstance(param_ranges, list)
-    assert all(isinstance(param, HyperParameterFeatures) for param in param_ranges)
+    assert all(isinstance(param, (CategoricalHyperParameter, NumericalHyperParameter)) for param in param_ranges)
     assert isinstance(num_episodes, int)
     assert isinstance(num_steps, int)
     assert isinstance(n_particles, int)
@@ -353,7 +353,7 @@ def optimize_policy_parameters_for_multiple_environments(
     )
     assert all(
         isinstance(param_ranges, list)
-        and all(isinstance(param, HyperParameterFeatures) for param in param_ranges)
+        and all(isinstance(param, (CategoricalHyperParameter, NumericalHyperParameter)) for param in param_ranges)
         for _, (_, param_ranges) in environment_policy_pairs
     )
     assert isinstance(num_episodes, int)
