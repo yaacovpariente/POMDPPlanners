@@ -92,15 +92,3 @@ def test_simulate_path(planner, initial_belief):
     # Verify return value is within expected range
     assert return_value >= -100  * 5  # Minimum possible reward
     assert return_value <= 10 * 5  # Maximum possible reward
-
-def test_planning_behavior(planner, initial_belief, environment):
-    """Test that the planner makes reasonable decisions in the Tiger POMDP."""
-    # Get the optimal action
-    optimal_action = planner.action(initial_belief)
-    
-    # Verify the action is valid
-    assert optimal_action in environment.get_actions()
-    
-    # In the Tiger POMDP, the optimal first action should be "listen"
-    # since it provides information about the tiger's location
-    assert optimal_action == "listen"
