@@ -1,6 +1,7 @@
 from typing import Any, NamedTuple, Union, TYPE_CHECKING
 from dataclasses import dataclass
 from typing import List
+import numpy as np
 
 if TYPE_CHECKING:
     from POMDPPlanners.core.belief import Belief
@@ -33,7 +34,9 @@ class History:
         for step in self.history:
             step_dict = step._asdict()
             if hasattr(step_dict['belief'], 'to_dict'):
-                step_dict['belief'] = step_dict['belief'].to_dict()
+                belief_dict = step_dict['belief'].to_dict()
+                belief_dict['type'] = step_dict['belief'].__class__.__name__
+                step_dict['belief'] = belief_dict
             history_data.append(step_dict)
 
         return {
@@ -65,9 +68,13 @@ class History:
             if isinstance(step_data['belief'], dict) and 'type' in step_data['belief']:
                 belief_type = step_data['belief']['type']
                 # Import the belief class dynamically
-                if belief_type == 'MockBelief':
-                    from POMDPPlanners.tests.test_simulations.test_simulations_deployment import MockBelief
-                    step_data['belief'] = MockBelief.from_dict(step_data['belief'])
+                if belief_type == 'WeightedParticleBelief':
+                    from POMDPPlanners.core.belief import WeightedParticleBelief
+                    step_data['belief'] = WeightedParticleBelief(
+                        particles=step_data['belief']['particles'],
+                        log_weights=np.array(step_data['belief']['log_weights']),
+                        resampling=step_data['belief'].get('resampling', False)
+                    )
             history.append(StepData(**step_data))
         
         # Create and return History instance
