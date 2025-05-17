@@ -733,6 +733,6 @@ def compare_multiple_environments_policies(
             )
         
         # Log all artifacts
-        mlflow.log_artifact(str(results_dir), ".")
+        mlflow.log_artifact(str(results_dir), "results")
 
     return histories, merged_df
