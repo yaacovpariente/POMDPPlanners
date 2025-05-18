@@ -18,6 +18,7 @@ from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.utils.statistics import confidence_interval
 from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.utils.config_to_id import config_to_id
 
 
 class BaseLightDarkPOMDP(Environment, ABC):
@@ -278,9 +279,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         # Sort dictionary to ensure consistent ordering
         config_dict = dict(sorted(config_dict.items()))
         
-        # Create a deterministic string representation and hash it
-        config_str = json.dumps(config_dict, sort_keys=True)
-        return hashlib.sha256(config_str.encode()).hexdigest()
+        return config_to_id(config_dict)
 
 
 class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):

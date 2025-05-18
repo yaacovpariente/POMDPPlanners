@@ -70,7 +70,7 @@ class DiscreteLDObservationModel(ObservationModel):
         return self.distribution.probability(next_observation)
 
 
-class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions):
+class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsEnvironment):
     def __init__(
         self,
         discount_factor: float,
