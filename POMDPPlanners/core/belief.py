@@ -8,6 +8,7 @@ import numpy as np
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.distributions import DiscreteDistribution
+from POMDPPlanners.utils.config_to_id import config_to_id
 
 class Belief(ABC):
     @classmethod
@@ -28,36 +29,28 @@ class Belief(ABC):
     @property
     def config_id(self) -> str:
         """Generate a deterministic identifier based on belief configuration."""
-        config_dict = {}
+        def serialize_value(value):
+            """Helper function to serialize values in a deterministic way."""
+            if isinstance(value, np.ndarray):
+                return value.tolist()
+            elif isinstance(value, (str, int, float, bool)):
+                return value
+            elif isinstance(value, (list, tuple)):
+                return [serialize_value(v) for v in value]
+            elif isinstance(value, dict):
+                return {str(k): serialize_value(v) for k, v in sorted(value.items())}
+            elif hasattr(value, '__dict__'):
+                return serialize_value(value.__dict__)
+            else:
+                return str(value)
         
-        # Include all public attributes that aren't callables
+        config_dict = {}
         for key, value in self.__dict__.items():
             if key.startswith('_') or callable(value):
                 continue
-                
-            # Handle numpy arrays
-            if isinstance(value, np.ndarray):
-                config_dict[key] = value.tolist()
-            # Handle basic Python types
-            elif isinstance(value, (str, int, float, bool, list, tuple)):
-                config_dict[key] = value
-            # Handle dictionaries
-            elif isinstance(value, dict):
-                # Only include serializable values
-                serializable_dict = {}
-                for k, v in value.items():
-                    if isinstance(v, (str, int, float, bool, list, tuple)):
-                        serializable_dict[k] = v
-                    elif isinstance(v, np.ndarray):
-                        serializable_dict[k] = v.tolist()
-                config_dict[key] = serializable_dict
-                
-        # Sort dictionary to ensure consistent ordering
+            config_dict[key] = serialize_value(value)
         config_dict = dict(sorted(config_dict.items()))
-        
-        # Create a deterministic string representation and hash it
-        config_str = json.dumps(config_dict, sort_keys=True)
-        return hashlib.sha256(config_str.encode()).hexdigest()
+        return config_to_id(config_dict)
 
     def __hash__(self) -> int:
         """Make the belief hashable by using its config_id."""
@@ -205,7 +198,20 @@ class WeightedParticleBelief(Belief):
     @property
     def config_id(self) -> str:
         """Generate a deterministic identifier based on belief configuration."""
-        config_dict = {}
+        def serialize_value(value):
+            """Helper function to serialize values in a deterministic way."""
+            if isinstance(value, np.ndarray):
+                return value.tolist()
+            elif isinstance(value, (str, int, float, bool)):
+                return value
+            elif isinstance(value, (list, tuple)):
+                return [serialize_value(v) for v in value]
+            elif isinstance(value, dict):
+                return {str(k): serialize_value(v) for k, v in sorted(value.items())}
+            elif hasattr(value, '__dict__'):
+                return serialize_value(value.__dict__)
+            else:
+                return str(value)
         
         # Create a list of particle-weight pairs to maintain order
         particle_weight_pairs = []
@@ -213,21 +219,18 @@ class WeightedParticleBelief(Belief):
             # Convert particle to a serializable format if needed
             if isinstance(particle, np.ndarray):
                 particle = particle.tolist()
-            particle_weight_pairs.append((particle, float(weight)))
+            particle_weight_pairs.append((serialize_value(particle), float(weight)))
         
         # Sort particle-weight pairs to make config_id invariant to order
         particle_weight_pairs.sort(key=lambda x: (str(x[0]), x[1]))
         
-        config_dict['particle_weight_pairs'] = particle_weight_pairs
-        config_dict['resampling'] = self.resampling
-        config_dict['ess_threshold'] = self.ess_threshold
-        
-        # Sort dictionary to ensure consistent ordering
+        config_dict = {
+            'particle_weight_pairs': particle_weight_pairs,
+            'resampling': self.resampling,
+            'ess_threshold': self.ess_threshold
+        }
         config_dict = dict(sorted(config_dict.items()))
-        
-        # Create a deterministic string representation and hash it
-        config_str = json.dumps(config_dict, sort_keys=True)
-        return hashlib.sha256(config_str.encode()).hexdigest()
+        return config_to_id(config_dict)
 
     def _resample(self, particles: list, log_weights: np.ndarray) -> Tuple[list, np.ndarray]:
         """Resample particles based on their weights if effective sample size is below threshold.

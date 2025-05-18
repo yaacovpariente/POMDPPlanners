@@ -12,6 +12,7 @@ import numpy as np
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.simulation import MetricValue
+from POMDPPlanners.utils.config_to_id import config_to_id
 
 class SpaceType(Enum):
     """Enum representing different types of spaces in the environment."""
@@ -102,36 +103,33 @@ class Environment(ABC):
     @property
     def config_id(self) -> str:
         """Generate a deterministic identifier based on environment configuration."""
+        def serialize_value(value):
+            if isinstance(value, np.ndarray):
+                return value.tolist()
+            elif isinstance(value, (str, int, float, bool)):
+                return value
+            elif isinstance(value, (list, tuple)):
+                return [serialize_value(v) for v in value]
+            elif isinstance(value, dict):
+                return {str(k): serialize_value(v) for k, v in sorted(value.items())}
+            elif isinstance(value, SpaceInfo):
+                return {
+                    'action_space': serialize_value(value.action_space),
+                    'observation_space': serialize_value(value.observation_space)
+                }
+            elif isinstance(value, Enum):
+                return value.value
+            elif hasattr(value, '__dict__'):
+                return serialize_value(value.__dict__)
+            else:
+                return str(value)
         config_dict = {}
-        
-        # Include all public attributes that aren't callables
         for key, value in self.__dict__.items():
             if key.startswith('_') or callable(value):
                 continue
-                
-            # Handle numpy arrays
-            if isinstance(value, np.ndarray):
-                config_dict[key] = value.tolist()
-            # Handle basic Python types
-            elif isinstance(value, (str, int, float, bool, list, tuple)):
-                config_dict[key] = value
-            # Handle dictionaries
-            elif isinstance(value, dict):
-                # Only include serializable values
-                serializable_dict = {}
-                for k, v in value.items():
-                    if isinstance(v, (str, int, float, bool, list, tuple)):
-                        serializable_dict[k] = v
-                    elif isinstance(v, np.ndarray):
-                        serializable_dict[k] = v.tolist()
-                config_dict[key] = serializable_dict
-                
-        # Sort dictionary to ensure consistent ordering
+            config_dict[key] = serialize_value(value)
         config_dict = dict(sorted(config_dict.items()))
-        
-        # Create a deterministic string representation and hash it
-        config_str = json.dumps(config_dict, sort_keys=True)
-        return hashlib.sha256(config_str.encode()).hexdigest()
+        return config_to_id(config_dict)
 
     @abstractmethod
     def state_transition_model(self, state: Any, action: Any) -> StateTransitionModel:
