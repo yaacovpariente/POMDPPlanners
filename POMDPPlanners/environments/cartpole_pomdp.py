@@ -93,8 +93,8 @@ class CartPoleInitialStateDistribution(Distribution):
 
 class CartPolePOMDP(DiscreteActionsEnvironment):
     def __init__(self, discount_factor: float, noise_cov: np.ndarray, name: str = "CartPolePOMDP"):
+        # Set all configuration parameters first
         self.noise_cov = noise_cov
-
         self.gravity = 9.8
         self.masscart = 1.0
         self.masspole = 0.1
@@ -104,34 +104,22 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         self.force_mag = 10.0
         self.tau = 0.02  # seconds between state updates
         self.kinematics_integrator = "euler"
-
-        # Angle at which to fail the episode
         self.theta_threshold_radians = 12 * 2 * math.pi / 360
         self.x_threshold = 2.4
-
-        # Angle limit set to 2 * theta_threshold_radians so failing observation
-        # is still within bounds.
-        high = np.array(
-            [
-                self.x_threshold * 2,
-                np.finfo(np.float32).max,
-                self.theta_threshold_radians * 2,
-                np.finfo(np.float32).max,
-            ],
-            dtype=np.float32,
-        )
-
-        space_info = SpaceInfo(
-            action_space=SpaceType.DISCRETE,  # Binary action space
-            observation_space=SpaceType.CONTINUOUS  # Continuous state space
-        )
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
-
         self.screen_width = 600
         self.screen_height = 400
         self.screen = None
         self.clock = None
         self.isopen = True
+
+        # Create space info
+        space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE,  # Binary action space
+            observation_space=SpaceType.CONTINUOUS  # Continuous state space
+        )
+        
+        # Call parent's __init__ last, which will generate the config_id
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
 
     def state_transition_model(
         self, state: np.ndarray, action: int
