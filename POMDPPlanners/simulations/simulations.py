@@ -4,6 +4,7 @@ import copy
 from time import time
 from pathlib import Path
 import mlflow
+import hashlib
 
 from joblib import Parallel, delayed
 from tqdm import tqdm
@@ -203,7 +204,6 @@ def run_and_cache_episode(
         episode_id=episode_id,
         seed=seed
     )
-
     if cache_dir_path is not None:
         general_config = {'episode_id': episode_id, 'num_steps': num_steps, 'seed': seed}
 
@@ -321,7 +321,7 @@ def create_simulation_tasks(
     for params in environment_run_params:
         for policy in params.policies:
             for episode_id in range(params.num_episodes):
-                seed = hash(f"{params.environment.name}_{policy.name}_{episode_id}") % (2**32)
+                seed = int(hashlib.md5(f"{params.environment.name}_{policy.name}_{episode_id}".encode()).hexdigest(), 16) % (2**32)
                 simulation_tasks.append({
                     'environment': params.environment,
                     'policy': policy,
