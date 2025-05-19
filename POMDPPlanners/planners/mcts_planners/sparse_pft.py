@@ -9,14 +9,17 @@ from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.tree import BeliefNode, ActionNode, get_optimal_action_reward_setting, sample_belief_node_child
 from POMDPPlanners.core.cost import belief_expectation_cost, belief_expectation_reward
+from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
 
 
-class SparsePFT(Policy):
+class SparsePFT(PathSimulationPolicy):
     def __init__(self, environment: Environment, discount_factor: float, gamma: float, depth: int, c_ucb: float, beta_ucb: float, belief_child_num: int, n_simulations: int, name: str = "SparsePFT"):
         super().__init__(
             environment=environment,
             discount_factor=discount_factor,
-            name=name
+            name=name,
+            n_simulations=n_simulations,
+            time_out_in_seconds=None
         )
         
         self.gamma = gamma
@@ -24,25 +27,14 @@ class SparsePFT(Policy):
         self.c_ucb = c_ucb
         self.beta_ucb = beta_ucb
         self.belief_child_num = belief_child_num
-        self.n_simulations = n_simulations
         
-    def action(self, belief: Belief):
-        tree = self._learn_tree(belief=belief)
-        return get_optimal_action_reward_setting(belief_node=tree)
-    
-    def _learn_tree(self, belief: Belief) -> BeliefNode:
-        tree = BeliefNode(belief=belief)
-        for _ in range(self.n_simulations):
-            self.simulate(belief_node=tree, depth=0)
-        
-        return tree
-            
-    def simulate(self, belief_node: BeliefNode, depth: int) -> float:
+    def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
         if depth > self.depth: 
             belief_node.parent = None
             return 0
         
         if self.is_terminal_belief(belief=belief_node.belief):
+            belief_node.visit_count += 1
             return 0
         
         if belief_node.is_leaf:
@@ -61,7 +53,7 @@ class SparsePFT(Policy):
         else:
             next_belief_node, immediate_reward = self._generate_belief(action_node=action_node)
             
-        return_sample = immediate_reward + self.gamma * self.simulate(belief_node=next_belief_node, depth=depth + 1)
+        return_sample = immediate_reward + self.gamma * self._simulate_path(belief_node=next_belief_node, depth=depth + 1)
         
         self.update_nodes(belief_node=belief_node, action_node=action_node, return_sample=return_sample)    
             
