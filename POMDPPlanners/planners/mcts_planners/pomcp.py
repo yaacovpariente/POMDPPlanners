@@ -89,7 +89,8 @@ class POMCP(Policy):
 
         if next_belief_node is None:
             next_belief_node = BeliefNode(belief=belief_node.belief, observation=next_observation, parent=action_node, children=tuple())
-        
+            next_belief_node.update_belief(action=action_node.action, observation=next_observation, pomdp=self.environment)
+            
         return_sample = reward + self.discount_factor * self.simulate(
             state=next_state, 
             belief_node=next_belief_node, 
@@ -123,9 +124,6 @@ class POMCP(Policy):
         return reward + self.discount_factor * self.random_rollout(state=next_state, depth=depth + 1)
         
     def update_nodes(self, belief_node: BeliefNode, action_node: ActionNode, return_sample: float):
-        if belief_node.observation is not None:
-            belief_node.update_belief(action=action_node.action, observation=belief_node.observation, pomdp=self.environment)
-        
         belief_node.visit_count += 1
         action_node.visit_count += 1
         action_node.q_value += (return_sample - action_node.q_value) / action_node.visit_count
