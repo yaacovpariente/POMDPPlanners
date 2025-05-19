@@ -25,7 +25,7 @@ pomcp_policies = [
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.0,
-        name="POMCP_Depth5",
+        name="POMCP_Depth3_Tiger",
         n_simulations=1000
     ),
     POMCP(
@@ -33,7 +33,7 @@ pomcp_policies = [
         discount_factor=0.95,
         depth=7,
         exploration_constant=1.0,
-        name="POMCP_Depth7",
+        name="POMCP_Depth7_Tiger",
         n_simulations=1000
     )
 ] 

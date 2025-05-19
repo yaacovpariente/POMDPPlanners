@@ -75,7 +75,7 @@ def create_environment_run_params(configs: List[ExperimentConfig], debug_mode: b
             belief=config.belief,
             policies=config.policies,
             num_episodes=2 if debug_mode else config.num_episodes,
-            num_steps=config.num_steps
+            num_steps=2 if debug_mode else config.num_steps
         )
         for config in configs
     ]
