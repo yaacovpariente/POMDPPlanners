@@ -76,6 +76,7 @@ class PFT_DPW(PathSimulationPolicy):
             return 0
         
         if self.environment.is_terminal(belief_node.belief.sample()):
+            belief_node.visit_count += 1
             return 0
         
         action_node = self.action_progressive_widening(belief_node=belief_node)
@@ -134,7 +135,7 @@ class PFT_DPW(PathSimulationPolicy):
         if depth > self.depth or self.environment.is_terminal(state=state):
             return 0
         
-        action = random.choice(self.environment.get_actions())
+        action = self.action_sampler.sample()
         next_state, next_observation, reward = self.environment.sample_next_step(state=state, action=action)
         
         return reward + self.discount_factor * self._random_rollout(state=next_state, depth=depth + 1)
