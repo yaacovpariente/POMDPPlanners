@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List
 import random
 import time
 import numpy as np
@@ -33,8 +33,8 @@ class POMCP(Policy):
         self.n_simulations = n_simulations
         self.min_samples_per_node = min_samples_per_node
 
-    def action(self, belief: Belief) -> Any:
-        return self.search(belief)
+    def action(self, belief: Belief) -> List[Any]:
+        return [self.search(belief)]
     
     def search(self, belief: Belief) -> Any:
         belief_node = BeliefNode(belief=belief, observation=None)

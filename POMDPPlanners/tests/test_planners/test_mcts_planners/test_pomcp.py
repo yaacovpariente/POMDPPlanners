@@ -110,7 +110,9 @@ def test_invalid_initialization(environment, discount_factor, depth, exploration
 
 def test_action_selection(planner, belief, environment):
     action = planner.action(belief)
-    assert action in environment.actions
+    assert isinstance(action, list)
+    assert len(action) == 1
+    assert action[0] in environment.actions
 
 
 def test_search_behavior_with_initial_belief(planner, belief, environment):
@@ -128,15 +130,17 @@ def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles)
     current_belief = belief
     for _ in range(5):
         action = planner.action(current_belief)
-        assert action in environment.actions
+        assert isinstance(action, list)
+        assert len(action) == 1
+        assert action[0] in environment.actions
         
         # Simulate environment step
         state = current_belief.sample()
-        next_state = environment.state_transition_model(state, action).sample()
-        observation = environment.observation_model(next_state, action).sample()
+        next_state = environment.state_transition_model(state, action[0]).sample()
+        observation = environment.observation_model(next_state, action[0]).sample()
         
         # Update belief
-        current_belief = current_belief.update(action, observation, environment)
+        current_belief = current_belief.update(action[0], observation, environment)
         
         # Verify belief is valid
         assert isinstance(current_belief, WeightedParticleBelief)
@@ -267,7 +271,9 @@ def test_sanity_pomdp_action_selection():
     
     for _ in range(n_trials):
         action = planner.action(belief)
-        if action == 0:  # Count how many times action 0 is selected
+        assert isinstance(action, list)
+        assert len(action) == 1
+        if action[0] == 0:  # Count how many times action 0 is selected
             action_0_count += 1
     
     # Verify that action 0 (the better action) is selected most of the time
