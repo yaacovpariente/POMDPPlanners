@@ -1,6 +1,6 @@
 from abc import abstractmethod
 import time
-from typing import Any
+from typing import Any, List
 
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.environment import Environment
@@ -27,10 +27,10 @@ class PathSimulationPolicy(Policy):
         
         assert not (n_simulations is not None and time_out_in_seconds is not None), "Cannot specify both n_simulations and time_out_in_seconds"
 
-    def action(self, belief: Belief) -> Any:
+    def action(self, belief: Belief) -> List[Any]:
         tree = self._learn_tree(belief=belief)
         action = get_optimal_action_reward_setting(belief_node=tree)
-        return action
+        return [action]
     
     def _learn_tree(self, belief: Belief) -> BeliefNode:
         tree = BeliefNode(belief=belief)
