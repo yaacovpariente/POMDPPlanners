@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, List
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -40,11 +40,12 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         self.branching_factor = branching_factor
         self.depth = depth
 
-    def action(self, belief: Belief) -> Any:
+    def action(self, belief: Belief) -> List[Any]:
         assert isinstance(belief, Belief)
 
         tree = self._learn_belief_tree(belief)
-        return get_optimal_action_cost_setting(tree)
+        action = get_optimal_action_cost_setting(tree)
+        return [action]
 
     def _learn_belief_tree(self, belief: Belief) -> BeliefNode:
         tree = BeliefNode(belief=belief)

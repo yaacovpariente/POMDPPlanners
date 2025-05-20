@@ -45,7 +45,9 @@ def test_initialization(planner, tiger_pomdp):
 def test_action_selection(planner, initial_belief):
     """Test that action selection returns a valid action"""
     action = planner.action(initial_belief)
-    assert action in planner.environment.get_actions()
+    assert isinstance(action, list)
+    assert len(action) == 1
+    assert action[0] in planner.environment.get_actions()
 
 
 def test_belief_tree_construction(planner, initial_belief):
@@ -201,7 +203,9 @@ def test_sanity_pomdp_action_selection():
     
     for _ in range(n_trials):
         action = planner.action(belief)
-        if action == 0:  # Count how many times action 0 is selected
+        assert isinstance(action, list)
+        assert len(action) == 1
+        if action[0] == 0:  # Count how many times action 0 is selected
             action_0_count += 1
     
     # Verify that action 0 (the better action) is selected most of the time
