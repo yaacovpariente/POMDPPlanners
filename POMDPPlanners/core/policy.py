@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from time import time
-from typing import TYPE_CHECKING
+from typing import Any, List, TYPE_CHECKING
+
 import numpy as np
 from POMDPPlanners.utils.config_to_id import config_to_id
 
@@ -51,7 +52,7 @@ class Policy(ABC):
         return config_to_id(config_dict)
 
     @abstractmethod
-    def action(self, belief: "Belief"):
+    def action(self, belief: "Belief") -> List[Any]:
         pass
     
     @classmethod
