@@ -4,7 +4,9 @@ from tqdm import tqdm
 
 import ray
 
-from POMDPPlanners.utils.logger import logger
+from POMDPPlanners.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def run_parallel_locally(

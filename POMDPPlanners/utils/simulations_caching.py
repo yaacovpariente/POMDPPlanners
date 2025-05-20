@@ -6,7 +6,9 @@ from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.utils.logger import logger
+from POMDPPlanners.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 def get_cache_key(
     environment: Environment,

@@ -5,6 +5,7 @@ from time import time
 from pathlib import Path
 import mlflow
 import hashlib
+import logging
 
 from joblib import Parallel, delayed
 from tqdm import tqdm
@@ -23,8 +24,9 @@ from POMDPPlanners.core.simulation import (
 from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environments_policies_comparison
 from POMDPPlanners.simulations.simulations_deployment import LocalSimulationDeployment, RemoteRaySimulationDeployment, DeploymentType, SimulationDeployment
 from POMDPPlanners.utils.visualization import plot_discounted_returns_histogram, plot_discounted_returns_histogram_multiple_policies
-from POMDPPlanners.utils.logger import logger
+from POMDPPlanners.utils.logger import get_logger
 
+logger = get_logger(__name__)
 
 def run_episode(
     environment: Environment, policy: Policy, initial_belief: Belief, num_steps: int,
@@ -651,7 +653,8 @@ def compare_multiple_environments_policies(
     cache_dir_path: Path = None,
     experiment_name: str = "POMDP_Planning_Comparison",
     cache_visualizations: bool = True,
-    deployment_type: DeploymentType = DeploymentType.LOCAL
+    deployment_type: DeploymentType = DeploymentType.LOCAL,
+    debug: bool = False
 ) -> Tuple[Dict[str, Dict[str, List[History]]], pd.DataFrame]:
     """Compare multiple policies on multiple environments and cache results in MLFlow.
     
@@ -664,6 +667,7 @@ def compare_multiple_environments_policies(
         experiment_name: Name of the MLFlow experiment
         cache_visualizations: Whether to cache visualizations
         deployment_type: Type of deployment to use for simulations
+        debug: Whether to enable debug logging (default: False)
 
     Returns:
         Tuple containing:
@@ -671,6 +675,10 @@ def compare_multiple_environments_policies(
         - DataFrame with statistics and policy configurations
     """
     assert cache_dir_path is not None, "cache_dir_path must be specified (use --output flag or set in code)"
+    
+    # Set logger level based on debug parameter
+    logger.setLevel(logging.DEBUG if debug else logging.INFO)
+    
     # Validate inputs
     validate_comparison_inputs(
         environment_run_params=environment_run_params,
