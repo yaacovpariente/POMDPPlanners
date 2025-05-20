@@ -6,14 +6,14 @@ import numpy as np
 from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment
 from POMDPPlanners.core.tree import BeliefNode, ActionNode, get_optimal_action_reward_setting, sample_belief_node_child
 from POMDPPlanners.core.cost import belief_expectation_cost, belief_expectation_reward
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
 
 
 class SparsePFT(PathSimulationPolicy):
-    def __init__(self, environment: Environment, discount_factor: float, gamma: float, depth: int, c_ucb: float, beta_ucb: float, belief_child_num: int, n_simulations: int, name: str = "SparsePFT"):
+    def __init__(self, environment: DiscreteActionsEnvironment, discount_factor: float, gamma: float, depth: int, c_ucb: float, beta_ucb: float, belief_child_num: int, n_simulations: int, name: str = "SparsePFT"):
         super().__init__(
             environment=environment,
             discount_factor=discount_factor,
@@ -21,6 +21,17 @@ class SparsePFT(PathSimulationPolicy):
             n_simulations=n_simulations,
             time_out_in_seconds=None
         )
+        
+        assert isinstance(environment, DiscreteActionsEnvironment)
+        assert isinstance(discount_factor, float)
+        assert isinstance(gamma, float)
+        assert isinstance(depth, int)
+        assert isinstance(c_ucb, float)
+        assert isinstance(beta_ucb, float)
+        assert isinstance(belief_child_num, int)
+        assert isinstance(n_simulations, int)
+        
+        assert 1 >= discount_factor >= 0
         
         self.gamma = gamma
         self.depth = depth
