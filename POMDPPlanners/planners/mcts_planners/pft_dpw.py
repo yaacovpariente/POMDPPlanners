@@ -15,7 +15,7 @@ from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSim
 
 class ActionSampler(ABC):
     @abstractmethod
-    def sample(self, belief_node: BeliefNode) -> Any:
+    def sample(self, belief_node: BeliefNode = None) -> Any:
         pass
 
 class PFT_DPW(PathSimulationPolicy):
