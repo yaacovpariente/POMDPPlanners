@@ -61,7 +61,9 @@ def run_episode(
     state = belief.sample()
 
     history = []
-    for i in range(1, num_steps + 1):
+    # for i in range(1, num_steps + 1):
+    i = 1
+    while i <= num_steps:
         if environment.is_terminal(state=state):
             reach_terminal_state = True
             history.append(
@@ -76,53 +78,60 @@ def run_episode(
             )
             break
 
-        action_start_time = time()
-        action = policy.action(belief)
-        action_time = time() - action_start_time
-        average_action_time = (average_action_time * (i - 1) + action_time) / i
-
-        reward_start_time = time()
-        reward = environment.reward(state, action)
-        reward_time = time() - reward_start_time
-        average_reward_time = (average_reward_time * (i - 1) + reward_time) / i
-
-        state_sampling_start_time = time()
-        next_state = environment.state_transition_model(state, action).sample()
-        state_sampling_time = time() - state_sampling_start_time
-        average_state_sampling_time = (
-            average_state_sampling_time * (i - 1) + state_sampling_time
-        ) / i
-
-        observation_start_time = time()
-        observation = environment.observation_model(next_state, action).sample()
-        observation_time = time() - observation_start_time
-        average_observation_time = (
-            average_observation_time * (i - 1) + observation_time
-        ) / i
-
-        history.append(
-            StepData(
-                state=state,
-                action=action,
-                next_state=next_state,
-                observation=observation,
-                reward=reward,
-                belief=belief,
-            )
-        )
-
-        belief_update_start_time = time()
-        belief = belief.update(
-            action=action, observation=observation, pomdp=environment
-        )
-        belief_update_time = time() - belief_update_start_time
-        average_belief_update_time = (
-            average_belief_update_time * (i - 1) + belief_update_time
-        ) / i
-
-        actual_num_steps += 1
-        state = next_state
+        actions_start_time = time()
+        actions = policy.action(belief)
+        actions_time = time() - actions_start_time
         
+        # TODO: adapt to multiple actions
+        average_action_time = (average_action_time * (i - 1) + actions_time) / (i - 1 + len(actions))
+
+        for action in actions:
+            reward_start_time = time()
+            reward = environment.reward(state, action)
+            reward_time = time() - reward_start_time
+            average_reward_time = (average_reward_time * (i - 1) + reward_time) / i
+
+            state_sampling_start_time = time()
+            next_state = environment.state_transition_model(state, action).sample()
+            state_sampling_time = time() - state_sampling_start_time
+            average_state_sampling_time = (
+                average_state_sampling_time * (i - 1) + state_sampling_time
+            ) / i
+
+            observation_start_time = time()
+            observation = environment.observation_model(next_state, action).sample()
+            observation_time = time() - observation_start_time
+            average_observation_time = (
+                average_observation_time * (i - 1) + observation_time
+            ) / i
+
+            history.append(
+                StepData(
+                    state=state,
+                    action=action,
+                    next_state=next_state,
+                    observation=observation,
+                    reward=reward,
+                    belief=belief,
+                )
+            )
+
+            belief_update_start_time = time()
+            belief = belief.update(
+                action=action, observation=observation, pomdp=environment
+            )
+            belief_update_time = time() - belief_update_start_time
+            average_belief_update_time = (
+                average_belief_update_time * (i - 1) + belief_update_time
+            ) / i
+
+            actual_num_steps += 1
+            state = next_state
+            i += 1
+            
+            if i > num_steps:
+                break
+
     logger.debug(f"Episode completed with average times: action={average_action_time:.4f}s, "
                 f"reward={average_reward_time:.4f}s, state_sampling={average_state_sampling_time:.4f}s, "
                 f"observation={average_observation_time:.4f}s, belief_update={average_belief_update_time:.4f}s")
