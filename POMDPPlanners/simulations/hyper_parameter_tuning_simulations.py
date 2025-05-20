@@ -28,7 +28,9 @@ from POMDPPlanners.simulations.simulation_statistics import compute_statistics_e
 from POMDPPlanners.utils.visualization import plot_metrics_comparison, plot_discounted_returns_histogram, plot_environment_policy_pair_comparison, plot_discounted_returns_histogram_multiple_policies
 from POMDPPlanners.simulations.simulations import run_and_cache_episode
 from POMDPPlanners.simulations.simulations_deployment import SimulationDeployment, LocalSimulationDeployment
-from POMDPPlanners.utils.logger import logger
+from POMDPPlanners.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 HyperParameterFeatures = Union[CategoricalHyperParameter, NumericalHyperParameter]
 

@@ -3,6 +3,7 @@ from typing import Dict, Any, Type
 from POMDPPlanners.environments.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import DiscreteLightDarkPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
@@ -12,6 +13,7 @@ __all__ = [
     "PushPOMDP",
     "SafeAntVelocityPOMDP",
     "DiscreteLightDarkPOMDP",
+    "ContinuousLightDarkPOMDP",
     "TigerPOMDP",
     "SanityPOMDP",
     "CartPolePOMDP",
@@ -26,7 +28,8 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
     "PushPOMDP": PushPOMDP,
     "SanityPOMDP": SanityPOMDP,
     "SafeAntVelocityPOMDP": SafeAntVelocityPOMDP,
-    "DiscreteLightDarkPOMDP": DiscreteLightDarkPOMDP
+    "DiscreteLightDarkPOMDP": DiscreteLightDarkPOMDP,
+    "ContinuousLightDarkPOMDP": ContinuousLightDarkPOMDP
 }
 
 def get_environment(env_type: str, **kwargs) -> Any:

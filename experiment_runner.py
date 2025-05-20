@@ -8,7 +8,9 @@ from POMDPPlanners.simulations.simulations import compare_multiple_environments_
 from POMDPPlanners.core.config_types import ExperimentConfig
 from POMDPPlanners.simulations.simulations import EnvironmentRunParams
 from POMDPPlanners.simulations.simulations_deployment import DeploymentType
-from POMDPPlanners.utils.logger import logger
+from POMDPPlanners.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 def load_config_module(config_path: Path) -> Any:
@@ -136,7 +138,8 @@ def main():
         cache_dir_path=output_dir,
         experiment_name=args.experiment_name,
         cache_visualizations=args.cache_visualizations,
-        deployment_type=deployment_type
+        deployment_type=deployment_type,
+        debug=args.debug
     )
     
     logger.info("Experiment completed successfully!")
