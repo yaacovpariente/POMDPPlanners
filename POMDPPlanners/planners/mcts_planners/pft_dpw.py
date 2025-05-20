@@ -97,8 +97,9 @@ class PFT_DPW(PathSimulationPolicy):
     
     def action_progressive_widening(self, belief_node: BeliefNode) -> ActionNode:
         if belief_node.visit_count == 0 or floor(belief_node.visit_count ** self.alpha_a) > floor((belief_node.visit_count - 1) ** self.alpha_a):
-            action = self.action_sampler.sample()
+            action = self.action_sampler.sample(belief_node=belief_node)
             action_node = ActionNode(action=action, parent=belief_node)
+            return action_node
         
         return self._explored_action_node(belief_node=belief_node)
         

@@ -3,27 +3,20 @@ import numpy as np
 import random
 from typing import Any
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW, ActionSampler
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDP
+from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.tree import BeliefNode
 from POMDPPlanners.core.environment import Environment
-
-
-class RandomActionSampler(ActionSampler):
-    def __init__(self, environment: Environment):
-        self.environment = environment
-        
-    def sample(self) -> Any:
-        return random.choice(self.environment.get_actions())
+from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 
 
 @pytest.fixture
 def environment():
-    return TigerPOMDP(discount_factor=0.95)
+    return ContinuousLightDarkPOMDP(discount_factor=0.95)
 
 @pytest.fixture
-def action_sampler(environment):
-    return RandomActionSampler(environment=environment)
+def action_sampler():
+    return UnitCircleActionSampler(max_action_magnitude=1.0)
 
 @pytest.fixture
 def planner(environment, action_sampler):
@@ -44,11 +37,12 @@ def planner(environment, action_sampler):
     )
 
 @pytest.fixture
-def initial_belief():
-    return WeightedParticleBelief(
-        particles=["tiger_left", "tiger_right"],
-        log_weights=np.array([-0.69314718, -0.69314718])
-    )
+def initial_belief(environment):
+    return get_initial_belief(
+        pomdp=environment,
+        n_particles=20,  # Small number of particles for testing
+        resampling=True
+    ) 
 
 def test_initialization(planner):
     """Test that the planner initializes correctly with valid parameters."""
@@ -61,10 +55,12 @@ def test_initialization(planner):
     assert planner.alpha_o == 0.5
     assert planner.exploration_constant == 1.0
 
-def test_action_sampler(action_sampler, environment):
+def test_action_sampler(action_sampler):
     """Test that the action sampler returns valid actions."""
     action = action_sampler.sample()
-    assert action in environment.get_actions()
+    assert isinstance(action, np.ndarray)
+    assert action.shape == (2,)
+    assert np.linalg.norm(action) <= 1.0  # Action should be within unit circle
 
 def test_action_progressive_widening(planner, initial_belief):
     """Test that action progressive widening creates new action nodes when needed."""
@@ -78,7 +74,7 @@ def test_action_progressive_widening(planner, initial_belief):
     action_node2 = planner.action_progressive_widening(belief_node=belief_node)
     assert len(belief_node.children) == 2
 
-def test_simulate_path(planner, initial_belief):
+def test_simulate_path(planner, initial_belief, environment):
     """Test that path simulation updates node statistics correctly."""
     belief_node = BeliefNode(belief=initial_belief)
     
@@ -87,8 +83,9 @@ def test_simulate_path(planner, initial_belief):
     
     # Verify node statistics were updated
     assert belief_node.visit_count > 0
-    assert len(belief_node.children) > 0
+    assert not belief_node.is_leaf
     
     # Verify return value is within expected range
-    assert return_value >= -100  * 5  # Minimum possible reward
-    assert return_value <= 10 * 5  # Maximum possible reward
+    # For LightDarkPOMDP, rewards are typically between -10 (obstacle hit) and 10 (goal reached)
+    assert return_value >= (-10 - environment.grid_size * np.sqrt(2)) * 5  # Minimum possible reward
+    assert return_value <= 10  # Maximum possible reward
