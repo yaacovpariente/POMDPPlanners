@@ -111,7 +111,7 @@ def test_compute_return(planner, tiger_pomdp):
     ]
 
     for action_sequence in action_sequences:
-        return_value = planner.compute_return(action_sequence, belief)
+        return_value = planner.estimate_return(action_sequence, belief)
         assert isinstance(return_value, float)
         # Return should be finite
         assert np.isfinite(return_value)
