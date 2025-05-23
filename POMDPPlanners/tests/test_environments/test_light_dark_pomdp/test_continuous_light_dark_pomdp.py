@@ -208,16 +208,17 @@ def test_state_transition_model():
     """Test state transition model"""
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2) * 0.1  # Small noise
+        state_transition_cov_matrix=np.eye(2) * 0.01  # Smaller noise
     )
     state = np.array([5, 5])
 
     # Test state transition
     dist = env.state_transition_model(state, "up")
-    assert isinstance(dist, DiscreteDistribution)
+    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import StateTransitionModel
+    assert isinstance(dist, StateTransitionModel)
     
     # Check that the mean of the distribution is correct
-    next_state = dist.values[0]
+    next_state = dist.sample()
     expected_next_state = state + np.array([0, 1])  # up action
     assert np.allclose(next_state, expected_next_state, atol=0.5)  # Allow for some noise
 
@@ -226,16 +227,17 @@ def test_observation_model():
     """Test observation model"""
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 0.1  # Small noise
+        observation_cov_matrix=np.eye(2) * 0.01  # Smaller noise
     )
     state = np.array([5, 5])
 
     # Test observation model
     dist = env.observation_model(state, "up")
-    assert isinstance(dist, DiscreteDistribution)
+    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import ContinuousLightDarkNormalNoiseObservationModel
+    assert isinstance(dist, ContinuousLightDarkNormalNoiseObservationModel)
     
     # Check that the observation is close to the true state
-    observation = dist.values[0]
+    observation = dist.sample()
     assert np.allclose(observation, state, atol=0.5)  # Allow for some noise
 
 
@@ -394,7 +396,8 @@ def test_continuous_light_dark_pomdp_state_transition_model(base_continuous_ligh
     state = np.array([5, 5])
     action = np.array([0, 1])
     dist = env.state_transition_model(state, action)
-    assert isinstance(dist, DiscreteDistribution)
+    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import StateTransitionModel
+    assert isinstance(dist, StateTransitionModel)
     next_state = dist.sample()
     expected_next_state = state + action
     # Allow for noise in state transition (3 standard deviations)
@@ -406,7 +409,8 @@ def test_continuous_light_dark_pomdp_observation_model(base_continuous_light_dar
     next_state = np.array([5, 5])
     action = np.array([0, 1])
     dist = env.observation_model(next_state, action)
-    assert isinstance(dist, DiscreteDistribution)
+    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import ContinuousLightDarkNormalNoiseObservationModel
+    assert isinstance(dist, ContinuousLightDarkNormalNoiseObservationModel)
     observation = dist.sample()
     # Allow for noise in observation (3 standard deviations)
     assert np.allclose(observation, next_state, atol=3.0)
@@ -502,3 +506,26 @@ def test_continuous_light_dark_pomdp_compute_metrics(base_continuous_light_dark_
     obstacle_rate = metrics_dict["obstacle_hit_rate"]
     assert obstacle_rate.value == 0.5
     assert obstacle_rate.lower_confidence_bound <= obstacle_rate.value <= obstacle_rate.upper_confidence_bound
+
+
+def test_decaying_hit_probability_reward_model():
+    """Test that the environment uses the decaying hit probability reward model when specified."""
+    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import RewardModelType
+    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import ContinuousLightDarkDecayingHitProbabilityRewardModel
+
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2),
+        observation_cov_matrix=np.eye(2),
+        obstacle_hit_probability=0.2,
+        obstacle_reward=-10.0,
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        goal_state_radius=1.5,
+        beacon_radius=1.0,
+        obstacle_radius=1.5,
+        reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
+        penalty_decay=0.5
+    )
+    assert isinstance(env.reward_model, ContinuousLightDarkDecayingHitProbabilityRewardModel)
