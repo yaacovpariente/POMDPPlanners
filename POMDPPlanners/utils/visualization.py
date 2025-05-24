@@ -434,7 +434,7 @@ class AgentPath:
 def plot_policy_returns(
     env: Environment,
     agent_paths: List[AgentPath],
-    output_path: Path,
+    dir_path: Path,
     n_samples: int = 1000,
     n_jobs: int = -1
 ) -> None:
@@ -444,15 +444,52 @@ def plot_policy_returns(
     Args:
         env: POMDP environment
         agent_paths: List of AgentPath objects containing path information
-        output_path: Path to save the plot
+        dir_path: Directory path to save the plot
         n_samples: Number of simulations to run for each path
         n_jobs: Number of parallel jobs to run (-1 for all cores)
+        
+    Raises:
+        ValueError: If any of the input parameters are invalid
+        TypeError: If any of the input parameters are of incorrect type
     """
     # Input validation
+    if not isinstance(env, Environment):
+        raise TypeError("env must be an instance of Environment")
+    if not isinstance(agent_paths, list):
+        raise TypeError("agent_paths must be a list")
+    if not isinstance(dir_path, Path):
+        raise TypeError("dir_path must be a Path object")
+    if not isinstance(n_samples, int):
+        raise TypeError("n_samples must be an integer")
+    if not isinstance(n_jobs, int):
+        raise TypeError("n_jobs must be an integer")
+        
     if not agent_paths:
         raise ValueError("agent_paths cannot be empty")
     if n_samples <= 0:
         raise ValueError("n_samples must be greater than 0")
+    if n_jobs < -1:
+        raise ValueError("n_jobs must be -1 or greater")
+        
+    # Validate each agent path
+    for i, path in enumerate(agent_paths):
+        if not isinstance(path, AgentPath):
+            raise TypeError(f"agent_paths[{i}] must be an instance of AgentPath")
+        if not isinstance(path.name, str):
+            raise TypeError(f"agent_paths[{i}].name must be a string")
+        if not isinstance(path.state_sequence, list):
+            raise TypeError(f"agent_paths[{i}].state_sequence must be a list")
+        if not isinstance(path.action_sequence, list):
+            raise TypeError(f"agent_paths[{i}].action_sequence must be a list")
+        if not isinstance(path.n_particles, int):
+            raise TypeError(f"agent_paths[{i}].n_particles must be an integer")
+        if path.n_particles <= 0:
+            raise ValueError(f"agent_paths[{i}].n_particles must be greater than 0")
+        if len(path.state_sequence) != len(path.action_sequence):
+            raise ValueError(f"agent_paths[{i}] has mismatched state and action sequence lengths")
+    
+    # Create directory if it doesn't exist
+    dir_path.mkdir(parents=True, exist_ok=True)
         
     def simulate_sequence(agent_path: AgentPath):
         total_reward = 0
@@ -489,7 +526,8 @@ def plot_policy_returns(
     plt.ylabel('Count')
     plt.title('Comparison of Returns for Different Agent Paths')
     plt.legend()
-
+    
     # Save the plot
+    output_path = dir_path / "policy_returns_comparison.png"
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
     plt.close()  # Close the figure to free memory
