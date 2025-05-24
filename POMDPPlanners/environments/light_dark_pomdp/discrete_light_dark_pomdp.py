@@ -40,27 +40,21 @@ class DiscreteLDObservationModel(ObservationModel):
             "left": np.array([-1, 0]),
         }
         
-        is_obstacle_hit = np.any(
-            np.all(next_state.reshape(-1, 1) == self.obstacles, axis=0)
-        )
-        if is_obstacle_hit:
-            distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
-            min_distance = np.min(distances)
-            if min_distance < self.beacon_radius:
-                beacon_error_factor = 0.2
-            else:
-                beacon_error_factor = 1.0
-
-            values = [next_state + self.action_to_vector[action] for action in self.actions]
-            values.append(next_state)
-            
-            observation_error_prob = self.observation_error_prob * beacon_error_factor
-            probs = np.ones(len(values)) * (observation_error_prob / (len(values) - 1))
-            probs[-1] = 1 - observation_error_prob
+        
+        distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
+        min_distance = np.min(distances)
+        if min_distance < self.beacon_radius:
+            beacon_error_factor = 0.2
         else:
-            values = [next_state]
-            probs = np.array([1.0])
+            beacon_error_factor = 1.0
 
+        values = [next_state + self.action_to_vector[action] for action in self.actions]
+        values.append(next_state)
+        
+        observation_error_prob = self.observation_error_prob * beacon_error_factor
+        probs = np.ones(len(values)) * (observation_error_prob / (len(values) - 1))
+        probs[-1] = 1 - observation_error_prob
+    
         self.distribution = DiscreteDistribution(values=values, probs=probs)
 
     def sample(self):
