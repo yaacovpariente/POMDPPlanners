@@ -1,9 +1,10 @@
-from typing import List, Dict
+from typing import List, Dict, Any
 from pathlib import Path
 import matplotlib.pyplot as plt
 import numpy as np
 import matplotlib
 import seaborn as sns
+from joblib import Parallel, delayed
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -14,6 +15,9 @@ from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import MetricValue, History, history_to_discounted_return_value
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
+from POMDPPlanners.core.belief import WeightedParticleBelief, Belief
+from POMDPPlanners.core.cost import belief_expectation_cost
+
 
 def plot_metrics_comparison(
     statistics: List[List[MetricValue]],
@@ -415,3 +419,77 @@ def plot_tree_graphs(root_node: BeliefNode):
     print(f"Number of leaf nodes: {len([node for node in all_nodes if not node.children])}")
     print(f"Value range: [{min(node_values):.3f}, {max(node_values):.3f}]")
     print(f"Visit count range: [{min(node_visits)}, {max(node_visits)}]")
+
+from dataclasses import dataclass
+
+@dataclass
+class AgentPath:
+    """Data class to store agent path."""
+    name: str
+    state_sequence: List[Any]
+    action_sequence: List[Any]
+    n_particles: int
+
+
+def plot_policy_returns(
+    env: Environment,
+    agent_paths: List[AgentPath],
+    output_path: Path,
+    n_samples: int = 1000,
+    n_jobs: int = -1
+) -> None:
+    """
+    Simulate and plot returns for multiple agent paths.
+    
+    Args:
+        env: POMDP environment
+        agent_paths: List of AgentPath objects containing path information
+        output_path: Path to save the plot
+        n_samples: Number of simulations to run for each path
+        n_jobs: Number of parallel jobs to run (-1 for all cores)
+    """
+    # Input validation
+    if not agent_paths:
+        raise ValueError("agent_paths cannot be empty")
+    if n_samples <= 0:
+        raise ValueError("n_samples must be greater than 0")
+        
+    def simulate_sequence(agent_path: AgentPath):
+        total_reward = 0
+        
+        for i in range(len(agent_path.action_sequence)):
+            # Create a weighted particle belief centered on the current state
+            particles = [agent_path.state_sequence[i]] * agent_path.n_particles  # Two identical particles
+            log_weights = np.log(np.array(np.ones(agent_path.n_particles) / agent_path.n_particles))  # One with log(1), one with log(exp(-1))
+            belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+            
+            # Use belief_expectation_cost to compute the reward
+            total_reward += -belief_expectation_cost(belief=belief, action=agent_path.action_sequence[i], env=env)
+        
+        return total_reward
+
+    def run_simulation(path_idx):
+        return simulate_sequence(agent_paths[path_idx])
+
+    # Run simulations in parallel
+    all_returns = []
+    for i in range(len(agent_paths)):
+        returns = Parallel(n_jobs=n_jobs)(
+            delayed(run_simulation)(i) for _ in range(n_samples)
+        )
+        all_returns.append(returns)
+
+    # Create the plot
+    plt.figure(figsize=(10, 6))
+    colors = ['blue', 'red', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
+    for i, (returns, agent_path) in enumerate(zip(all_returns, agent_paths)):
+        sns.histplot(data=returns, label=agent_path.name, alpha=0.5, color=colors[i % len(colors)])
+    
+    plt.xlabel('Total Reward')
+    plt.ylabel('Count')
+    plt.title('Comparison of Returns for Different Agent Paths')
+    plt.legend()
+
+    # Save the plot
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()  # Close the figure to free memory

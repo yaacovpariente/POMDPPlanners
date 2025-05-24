@@ -6,8 +6,10 @@ import shutil
 import mlflow
 import os
 
-from POMDPPlanners.utils.visualization import plot_metrics_comparison
+from POMDPPlanners.utils.visualization import plot_metrics_comparison, plot_policy_returns, AgentPath
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import DiscreteLightDarkPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDPDiscreteActions
 from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
 )
@@ -179,4 +181,194 @@ def test_plot_statistics_comparison_empty_statistics(temp_cache_dir):
             environments=[environment],
             policies=[policy],
             cache_dir_path=temp_cache_dir,
+        )
+
+
+def test_plot_policy_returns_tiger_pomdp(temp_cache_dir):
+    # Setup
+    env = TigerPOMDP(discount_factor=0.95)
+    
+    # Create agent paths for Tiger POMDP
+    agent_paths = [
+        AgentPath(
+            name="Listen First",
+            state_sequence=["tiger_left"] * 3,
+            action_sequence=["listen", "listen", "open_right"],
+            n_particles=10
+        ),
+        AgentPath(
+            name="Direct Open",
+            state_sequence=["tiger_left"] * 2,
+            action_sequence=["listen", "open_right"],
+            n_particles=10
+        )
+    ]
+    
+    # Execute
+    output_path = temp_cache_dir / "tiger_policy_returns.png"
+    plot_policy_returns(
+        env=env,
+        agent_paths=agent_paths,
+        output_path=output_path,
+        n_samples=100
+    )
+    
+    # Verify plot was created
+    assert output_path.exists()
+
+
+def test_plot_policy_returns_discrete_light_dark_pomdp(temp_cache_dir):
+    # Setup
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.20,
+        beacons=np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]),
+        goal_state=np.array([10, 5]),
+        start_state=np.array([0, 5]),
+        obstacles=np.array([[5, 5], [4, 5]]),
+        obstacle_reward=-16.0,
+        goal_reward=10.0,
+        obstacle_hit_probability=0.5,
+        beacon_radius=1.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        is_stochastic_reward=True
+    )
+    
+    # Create agent paths for Discrete Light Dark POMDP
+    agent_paths = [
+        AgentPath(
+            name="Direct Path",
+            state_sequence=[
+                np.array([0, 5]), 
+                np.array([1, 5]), 
+                np.array([2, 5]), 
+                np.array([3, 5]), 
+                np.array([4, 5])
+            ],
+            action_sequence=["right"] * 4,
+            n_particles=10
+        ),
+        AgentPath(
+            name="Upper Path",
+            state_sequence=[
+                np.array([0, 5]), 
+                np.array([0, 6]), 
+                np.array([0, 7]), 
+                np.array([0, 8]), 
+                np.array([0, 9])
+            ],
+            action_sequence=["up"] * 4,
+            n_particles=10
+        )
+    ]
+    
+    # Execute
+    output_path = temp_cache_dir / "discrete_ld_policy_returns.png"
+    plot_policy_returns(
+        env=env,
+        agent_paths=agent_paths,
+        output_path=output_path,
+        n_samples=100
+    )
+    
+    # Verify plot was created
+    assert output_path.exists()
+
+
+def test_plot_policy_returns_continuous_light_dark_pomdp(temp_cache_dir):
+    # Setup
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2) * 0.1,
+        observation_cov_matrix=np.eye(2) * 0.1,
+        obstacle_hit_probability=0.2,
+        obstacle_reward=-10.0,
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        goal_state_radius=1.5,
+        beacon_radius=1.0,
+        obstacle_radius=1.5,
+        beacons=np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]),
+        goal_state=np.array([10, 5]),
+        start_state=np.array([0, 5]),
+        obstacles=np.array([[3, 7], [5, 5]])
+    )
+    
+    # Create agent paths for Continuous Light Dark POMDP
+    agent_paths = [
+        AgentPath(
+            name="Direct Path",
+            state_sequence=[
+                np.array([0, 5]), 
+                np.array([1, 5]), 
+                np.array([2, 5]), 
+                np.array([3, 5]), 
+                np.array([4, 5])
+            ],
+            action_sequence=["right"] * 4,
+            n_particles=10
+        ),
+        AgentPath(
+            name="Upper Path",
+            state_sequence=[
+                np.array([0, 5]), 
+                np.array([0, 6]), 
+                np.array([0, 7]), 
+                np.array([0, 8]), 
+                np.array([0, 9])
+            ],
+            action_sequence=["up"] * 4,
+            n_particles=10
+        )
+    ]
+    
+    # Execute
+    output_path = temp_cache_dir / "continuous_ld_policy_returns.png"
+    plot_policy_returns(
+        env=env,
+        agent_paths=agent_paths,
+        output_path=output_path,
+        n_samples=100
+    )
+    
+    # Verify plot was created
+    assert output_path.exists()
+
+
+def test_plot_policy_returns_empty_paths(temp_cache_dir):
+    # Setup
+    env = TigerPOMDP(discount_factor=0.95)
+    
+    # Test with empty agent paths
+    with pytest.raises(ValueError, match="agent_paths cannot be empty"):
+        plot_policy_returns(
+            env=env,
+            agent_paths=[],
+            output_path=temp_cache_dir / "empty_paths.png",
+            n_samples=100
+        )
+
+
+def test_plot_policy_returns_invalid_n_samples(temp_cache_dir):
+    # Setup
+    env = TigerPOMDP(discount_factor=0.95)
+    agent_paths = [
+        AgentPath(
+            name="Test Path",
+            state_sequence=["tiger_left"],
+            action_sequence=["listen"],
+            n_particles=10
+        )
+    ]
+    
+    # Test with invalid n_samples
+    with pytest.raises(ValueError, match="n_samples must be greater than 0"):
+        plot_policy_returns(
+            env=env,
+            agent_paths=agent_paths,
+            output_path=temp_cache_dir / "invalid_samples.png",
+            n_samples=0
         )
