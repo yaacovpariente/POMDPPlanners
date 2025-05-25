@@ -26,7 +26,6 @@ wheels/
 env/
 venv/
 ENV/
-legacy/
 
 # IDE
 .idea/
@@ -86,3 +85,7 @@ db.sqlite3-journal
 *.bz2
 *.whl
 .VSCodeCounter
+
+# Other
+legacy/
+experiments/results
