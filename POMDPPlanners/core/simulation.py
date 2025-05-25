@@ -5,8 +5,9 @@ import numpy as np
 
 if TYPE_CHECKING:
     from POMDPPlanners.core.belief import Belief
+    from POMDPPlanners.core.policy import PolicyRunData
 
-
+    
 class StepData(NamedTuple):
     state: Any
     action: Any
@@ -27,6 +28,7 @@ class History:
     average_reward_time: float
     actual_num_steps: int
     reach_terminal_state: bool
+    policy_run_data: 'PolicyRunData'
 
     def to_dict(self) -> dict:
         """Convert History object to dictionary."""
@@ -76,7 +78,17 @@ class History:
                         resampling=step_data['belief'].get('resampling', False)
                     )
             history.append(StepData(**step_data))
-        
+
+        # Handle policy_run_data deserialization
+        policy_run_data = data.get('policy_run_data', None)
+        if isinstance(policy_run_data, dict):
+            from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
+            info_variables = [
+                PolicyInfoVariable(name=iv['name'], value=iv['value'])
+                for iv in policy_run_data.get('info_variables', [])
+            ]
+            policy_run_data = PolicyRunData(info_variables=info_variables)
+
         # Create and return History instance
         return History(
             history=history,
@@ -87,7 +99,8 @@ class History:
             average_belief_update_time=data['average_belief_update_time'],
             average_reward_time=data['average_reward_time'],
             actual_num_steps=data['actual_num_steps'],
-            reach_terminal_state=data['reach_terminal_state']
+            reach_terminal_state=data['reach_terminal_state'],
+            policy_run_data=policy_run_data
         )
 
 
