@@ -79,7 +79,7 @@ def run_episode(
             break
 
         actions_start_time = time()
-        actions = policy.action(belief)
+        actions, policy_run_data = policy.action(belief)
         actions_time = time() - actions_start_time
         
         # TODO: adapt to multiple actions
@@ -146,6 +146,7 @@ def run_episode(
         average_reward_time=average_reward_time,
         actual_num_steps=actual_num_steps,
         reach_terminal_state=reach_terminal_state,
+        policy_run_data=policy_run_data,
     )
 
 
@@ -683,7 +684,28 @@ def compare_multiple_environments_policies(
         - Dictionary mapping environment names to dictionaries of policy histories
         - DataFrame with statistics and policy configurations
     """
+    # Type checks for all parameters
+    assert isinstance(environment_run_params, list), "environment_run_params must be a list"
+    assert all(isinstance(param, EnvironmentRunParams) for param in environment_run_params), "All elements in environment_run_params must be EnvironmentRunParams"
+    
+    assert isinstance(alpha, float), "alpha must be a float"
+    assert 0 <= alpha <= 1, "alpha must be between 0 and 1"
+    
+    assert isinstance(confidence_interval_level, float), "confidence_interval_level must be a float"
+    assert 0 < confidence_interval_level < 1, "confidence_interval_level must be between 0 and 1"
+    
+    assert isinstance(n_jobs, int), "n_jobs must be an integer"
+    assert n_jobs > 0 or n_jobs == -1, "n_jobs must be positive or -1 (for all available cores)"
+    
+    assert cache_dir_path is None or isinstance(cache_dir_path, Path), "cache_dir_path must be None or a Path object"
     assert cache_dir_path is not None, "cache_dir_path must be specified (use --output flag or set in code)"
+    
+    assert isinstance(experiment_name, str), "experiment_name must be a string"
+    assert len(experiment_name) > 0, "experiment_name cannot be empty"
+    
+    assert isinstance(cache_visualizations, bool), "cache_visualizations must be a boolean"
+    assert isinstance(deployment_type, DeploymentType), "deployment_type must be a DeploymentType enum"
+    assert isinstance(debug, bool), "debug must be a boolean"
     
     # Set logger level based on debug parameter
     logger.setLevel(logging.DEBUG if debug else logging.INFO)
