@@ -205,15 +205,15 @@ def test_plot_policy_returns_tiger_pomdp(temp_cache_dir):
     ]
     
     # Execute
-    output_path = temp_cache_dir / "tiger_policy_returns.png"
     plot_policy_returns(
         env=env,
         agent_paths=agent_paths,
-        output_path=output_path,
+        dir_path=temp_cache_dir,
         n_samples=100
     )
     
     # Verify plot was created
+    output_path = temp_cache_dir / "policy_returns_comparison.png"
     assert output_path.exists()
 
 
@@ -247,7 +247,7 @@ def test_plot_policy_returns_discrete_light_dark_pomdp(temp_cache_dir):
                 np.array([3, 5]), 
                 np.array([4, 5])
             ],
-            action_sequence=["right"] * 4,
+            action_sequence=["right"] * 5,
             n_particles=10
         ),
         AgentPath(
@@ -259,21 +259,21 @@ def test_plot_policy_returns_discrete_light_dark_pomdp(temp_cache_dir):
                 np.array([0, 8]), 
                 np.array([0, 9])
             ],
-            action_sequence=["up"] * 4,
+            action_sequence=["up"] * 5,
             n_particles=10
         )
     ]
     
     # Execute
-    output_path = temp_cache_dir / "discrete_ld_policy_returns.png"
     plot_policy_returns(
         env=env,
         agent_paths=agent_paths,
-        output_path=output_path,
+        dir_path=temp_cache_dir,
         n_samples=100
     )
     
     # Verify plot was created
+    output_path = temp_cache_dir / "policy_returns_comparison.png"
     assert output_path.exists()
 
 
@@ -308,7 +308,7 @@ def test_plot_policy_returns_continuous_light_dark_pomdp(temp_cache_dir):
                 np.array([3, 5]), 
                 np.array([4, 5])
             ],
-            action_sequence=["right"] * 4,
+            action_sequence=["right"] * 5,
             n_particles=10
         ),
         AgentPath(
@@ -320,21 +320,21 @@ def test_plot_policy_returns_continuous_light_dark_pomdp(temp_cache_dir):
                 np.array([0, 8]), 
                 np.array([0, 9])
             ],
-            action_sequence=["up"] * 4,
+            action_sequence=["up"] * 5,
             n_particles=10
         )
     ]
     
     # Execute
-    output_path = temp_cache_dir / "continuous_ld_policy_returns.png"
     plot_policy_returns(
         env=env,
         agent_paths=agent_paths,
-        output_path=output_path,
-        n_samples=100
+        dir_path=temp_cache_dir,
+        n_samples=5
     )
     
     # Verify plot was created
+    output_path = temp_cache_dir / "policy_returns_comparison.png"
     assert output_path.exists()
 
 
@@ -347,7 +347,7 @@ def test_plot_policy_returns_empty_paths(temp_cache_dir):
         plot_policy_returns(
             env=env,
             agent_paths=[],
-            output_path=temp_cache_dir / "empty_paths.png",
+            dir_path=temp_cache_dir,
             n_samples=100
         )
 
@@ -369,6 +369,6 @@ def test_plot_policy_returns_invalid_n_samples(temp_cache_dir):
         plot_policy_returns(
             env=env,
             agent_paths=agent_paths,
-            output_path=temp_cache_dir / "invalid_samples.png",
+            dir_path=temp_cache_dir,
             n_samples=0
         )

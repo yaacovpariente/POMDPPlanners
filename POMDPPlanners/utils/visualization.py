@@ -86,11 +86,15 @@ def plot_metrics_comparison(
             continue
 
         # Plot bars
+        yerr = (np.array(upper_bounds) - np.array(lower_bounds)) / 2
+        if sum(yerr) == 0:
+            yerr = 1e-10
+            
         plt.bar(
             x[: len(means)],
             means,
             width,
-            yerr=(np.array(upper_bounds) - np.array(lower_bounds)) / 2,
+            yerr=yerr,
             capsize=5,
         )
 
@@ -436,7 +440,7 @@ def plot_policy_returns(
     agent_paths: List[AgentPath],
     dir_path: Path,
     n_samples: int = 1000,
-    n_jobs: int = -1
+    n_jobs: int = -1,
 ) -> None:
     """
     Simulate and plot returns for multiple agent paths.
