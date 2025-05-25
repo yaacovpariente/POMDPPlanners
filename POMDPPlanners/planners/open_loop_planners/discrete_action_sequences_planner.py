@@ -1,12 +1,11 @@
-from typing import Any, List
+from typing import Any, List, Tuple
 from itertools import product
 
 import numpy as np
 
-from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, PolicyRunData
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceType
 from POMDPPlanners.core.belief import Belief
-
 
 class DiscreteActionSequencesPlanner(Policy):
     def __init__(self, environment: DiscreteActionsEnvironment, discount_factor: float, name: str, depth: int, n_return_samples: int):
@@ -27,8 +26,8 @@ class DiscreteActionSequencesPlanner(Policy):
             observation_space=SpaceType.MIXED
         )
 
-    def action(self, belief: Belief) -> List[Any]:
-        return self.search(belief)
+    def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
+        return self.search(belief), PolicyRunData(info_variables=[])
 
     def search(self, belief: Belief) -> Any:
         actions = self.environment.get_actions()

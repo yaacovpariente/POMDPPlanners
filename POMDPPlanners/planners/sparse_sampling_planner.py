@@ -1,17 +1,16 @@
-from typing import Any, List
+from typing import Any, List, Tuple
 from abc import ABC, abstractmethod
 
 import numpy as np
 from anytree import PostOrderIter
 
-from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, PolicyRunData
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceType
 
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action_cost_setting
 from POMDPPlanners.core.cost import belief_expectation_cost
-
 
 class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
     def __init__(
@@ -40,12 +39,12 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         self.branching_factor = branching_factor
         self.depth = depth
 
-    def action(self, belief: Belief) -> List[Any]:
+    def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
         assert isinstance(belief, Belief)
 
         tree = self._learn_belief_tree(belief)
         action = get_optimal_action_cost_setting(tree)
-        return [action]
+        return [action], PolicyRunData(info_variables=[])
 
     def _learn_belief_tree(self, belief: Belief) -> BeliefNode:
         tree = BeliefNode(belief=belief)

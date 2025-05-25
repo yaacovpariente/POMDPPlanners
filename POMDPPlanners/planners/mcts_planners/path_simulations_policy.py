@@ -1,11 +1,12 @@
 from abc import abstractmethod
 import time
-from typing import Any, List
+from typing import Any, List, Tuple
 
-from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.policy import Policy, PolicyRunData
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.tree import BeliefNode, get_optimal_action_reward_setting
+from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
 
 class PathSimulationPolicy(Policy):
     def __init__(
@@ -27,10 +28,11 @@ class PathSimulationPolicy(Policy):
         
         assert not (n_simulations is not None and time_out_in_seconds is not None), "Cannot specify both n_simulations and time_out_in_seconds"
 
-    def action(self, belief: Belief) -> List[Any]:
+    def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
         tree = self._learn_tree(belief=belief)
+        tree_metrics = compute_tree_metrics(tree=tree)
         action = get_optimal_action_reward_setting(belief_node=tree)
-        return [action]
+        return [action], PolicyRunData(info_variables=tree_metrics)
     
     def _learn_tree(self, belief: Belief) -> BeliefNode:
         tree = BeliefNode(belief=belief)

@@ -109,16 +109,21 @@ def test_invalid_initialization(environment, discount_factor, depth, exploration
 
 
 def test_action_selection(planner, belief, environment):
-    action = planner.action(belief)
+    action, policy_run_data = planner.action(belief)
     assert isinstance(action, list)
     assert len(action) == 1
     assert action[0] in environment.actions
 
 
 def test_search_behavior_with_initial_belief(planner, belief, environment):
-    action = planner.search(belief)
-    assert action in environment.actions
-    
+    belief_node = planner.search(belief)
+    assert isinstance(belief_node, BeliefNode)
+    assert belief_node.belief == belief
+    assert belief_node.observation is None
+    assert belief_node.parent is None
+    assert len(belief_node.children) > 0
+    assert all(isinstance(child, ActionNode) for child in belief_node.children)
+
 
 def test_random_rollout(planner):
     state = "tiger_left"
@@ -129,7 +134,7 @@ def test_random_rollout(planner):
 def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles):
     current_belief = belief
     for _ in range(5):
-        action = planner.action(current_belief)
+        action, policy_run_data = planner.action(current_belief)
         assert isinstance(action, list)
         assert len(action) == 1
         assert action[0] in environment.actions
@@ -270,7 +275,7 @@ def test_sanity_pomdp_action_selection():
     action_0_count = 0
     
     for _ in range(n_trials):
-        action = planner.action(belief)
+        action, policy_run_data = planner.action(belief)
         assert isinstance(action, list)
         assert len(action) == 1
         if action[0] == 0:  # Count how many times action 0 is selected

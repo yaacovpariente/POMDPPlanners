@@ -3,11 +3,11 @@ import random
 import time
 import numpy as np
 
-from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, PolicyRunData
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.tree import ActionNode, get_optimal_action_reward_setting, BeliefNode
-
+from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
 
 class POMCP(Policy):
     def __init__(
@@ -34,7 +34,10 @@ class POMCP(Policy):
         self.min_samples_per_node = min_samples_per_node
 
     def action(self, belief: Belief) -> List[Any]:
-        return [self.search(belief)]
+        tree = self.search(belief=belief)
+        tree_metrics = compute_tree_metrics(tree=tree)
+        action = get_optimal_action_reward_setting(belief_node=tree)
+        return [action], PolicyRunData(info_variables=tree_metrics)
     
     def search(self, belief: Belief) -> Any:
         belief_node = BeliefNode(belief=belief, observation=None)
@@ -44,7 +47,7 @@ class POMCP(Policy):
         else:
             self._construct_tree_using_n_simulations(belief=belief, belief_node=belief_node)
 
-        return get_optimal_action_reward_setting(belief_node)
+        return belief_node
     
     def _construct_tree_using_timeout(self, belief: Belief, belief_node: BeliefNode) -> BeliefNode:
         assert self.timeout_in_seconds is not None
