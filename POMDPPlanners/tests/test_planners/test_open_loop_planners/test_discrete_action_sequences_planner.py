@@ -5,6 +5,7 @@ from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
+from POMDPPlanners.core.policy import PolicyRunData
 
 
 @pytest.fixture
@@ -78,10 +79,13 @@ def test_action_selection(planner, tiger_pomdp):
     )
 
     # Get action from planner
-    action = planner.action(belief)[0]  # action() returns a list, we take first element
+    actions, run_data = planner.action(belief)
+    action = actions[0]  # action() returns a list, we take first element
 
     # Verify action is one of the valid actions
     assert action in tiger_pomdp.get_actions()
+    assert isinstance(run_data, PolicyRunData)
+    assert len(run_data.info_variables) == 0  # Currently no metrics are returned
 
     # Test with different belief
     particles_right = ["tiger_right"] * 9 + ["tiger_left"]  # 9 right, 1 left
@@ -90,8 +94,11 @@ def test_action_selection(planner, tiger_pomdp):
         particles=particles_right,
         log_weights=log_weights_right
     )
-    action_right = planner.action(belief_right)[0]
+    actions_right, run_data_right = planner.action(belief_right)
+    action_right = actions_right[0]
     assert action_right in tiger_pomdp.get_actions()
+    assert isinstance(run_data_right, PolicyRunData)
+    assert len(run_data_right.info_variables) == 0  # Currently no metrics are returned
 
 
 def test_compute_return(planner, tiger_pomdp):
@@ -151,8 +158,11 @@ def test_integration_with_tiger_pomdp(planner, tiger_pomdp):
     ]
 
     for belief in beliefs:
-        action = planner.action(belief)[0]
+        actions, run_data = planner.action(belief)
+        action = actions[0]
         assert action in tiger_pomdp.get_actions()
+        assert isinstance(run_data, PolicyRunData)
+        assert len(run_data.info_variables) == 0  # Currently no metrics are returned
         
         # Verify the action leads to valid next state
         state = belief.sample()

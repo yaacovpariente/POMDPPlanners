@@ -7,6 +7,8 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
     SafeAntVelocityStateTransition,
     SafeAntVelocityObservation,
 )
+from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
 
 def test_safe_velocity_pomdp_initialization():
     # Test basic initialization
@@ -208,8 +210,6 @@ def test_sample_next_step():
     assert np.isclose(reward, expected_reward, rtol=1e-10)
 
 def test_compute_metrics():
-    from POMDPPlanners.core.simulation import History, StepData
-
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
         safe_velocity_threshold=2.0,
@@ -246,7 +246,8 @@ def test_compute_metrics():
         average_belief_update_time=0.0,
         average_reward_time=0.0,
         actual_num_steps=len(safe_steps),
-        reach_terminal_state=False
+        reach_terminal_state=False,
+        policy_run_data=PolicyRunData(info_variables=[])
     ))
 
     # History 2: Some safety violations
@@ -277,7 +278,8 @@ def test_compute_metrics():
         average_belief_update_time=0.0,
         average_reward_time=0.0,
         actual_num_steps=len(mixed_steps),
-        reach_terminal_state=False
+        reach_terminal_state=False,
+        policy_run_data=PolicyRunData(info_variables=[])
     ))
 
     # History 3: Critical violation
@@ -300,7 +302,8 @@ def test_compute_metrics():
         average_belief_update_time=0.0,
         average_reward_time=0.0,
         actual_num_steps=len(critical_steps),
-        reach_terminal_state=True
+        reach_terminal_state=True,
+        policy_run_data=PolicyRunData(info_variables=[])
     ))
 
     # Compute metrics

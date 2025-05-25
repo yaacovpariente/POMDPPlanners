@@ -5,6 +5,9 @@ from pathlib import Path
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import DiscreteLightDarkPOMDP
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import ObservationModel
+from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
 
 
 @pytest.fixture
@@ -580,6 +583,7 @@ def test_compute_metrics():
     # Create test histories
     from POMDPPlanners.core.simulation import History, StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
     
     # Create a simple belief for testing
     def create_test_belief(state):
@@ -623,7 +627,7 @@ def test_compute_metrics():
             reward=8.0,  # Goal state
             belief=create_test_belief(np.array([10, 5]))
         ),
-    ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=4, reach_terminal_state=True)
+    ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=4, reach_terminal_state=True, policy_run_data=PolicyRunData(info_variables=[]))
     
     # History 2: Hits obstacle
     history2 = History([
@@ -651,7 +655,7 @@ def test_compute_metrics():
             reward=-12.0,  # Obstacle state
             belief=create_test_belief(np.array([3, 5]))
         ),
-    ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=3, reach_terminal_state=True)
+    ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=3, reach_terminal_state=True, policy_run_data=PolicyRunData(info_variables=[]))
     
     # History 3: Reaches goal in 5 steps, avoiding obstacle by going up
     history3 = History([
@@ -703,7 +707,7 @@ def test_compute_metrics():
             reward=8.0,  # Goal state
             belief=create_test_belief(np.array([10, 5]))
         ),
-    ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=6, reach_terminal_state=True)
+    ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=6, reach_terminal_state=True, policy_run_data=PolicyRunData(info_variables=[]))
     
     # Compute metrics
     metrics = env.compute_metrics([history1, history2, history3])

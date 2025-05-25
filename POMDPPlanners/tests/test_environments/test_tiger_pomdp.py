@@ -1,6 +1,8 @@
 import pytest
 import numpy as np
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
 
 
 @pytest.fixture
@@ -183,7 +185,8 @@ class TestTigerPOMDPMetrics:
                 average_belief_update_time=0.0,
                 average_reward_time=0.0,
                 actual_num_steps=4,
-                reach_terminal_state=True
+                reach_terminal_state=True,
+                policy_run_data=PolicyRunData(info_variables=[])
             ))
         
         metrics = tiger_pomdp.compute_metrics(histories)
@@ -233,7 +236,8 @@ class TestTigerPOMDPMetrics:
                 average_belief_update_time=0.0,
                 average_reward_time=0.0,
                 actual_num_steps=3,
-                reach_terminal_state=True
+                reach_terminal_state=True,
+                policy_run_data=PolicyRunData(info_variables=[])
             ))
         
         metrics = tiger_pomdp.compute_metrics(histories)
@@ -283,7 +287,8 @@ class TestTigerPOMDPMetrics:
                 average_belief_update_time=0.0,
                 average_reward_time=0.0,
                 actual_num_steps=len(steps),
-                reach_terminal_state=True
+                reach_terminal_state=True,
+                policy_run_data=PolicyRunData(info_variables=[])
             ))
         
         metrics = tiger_pomdp.compute_metrics(histories)
