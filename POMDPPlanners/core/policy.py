@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from time import time
-from typing import Any, List, TYPE_CHECKING
+from typing import Any, List, Tuple, TYPE_CHECKING, Union
+from typing import NamedTuple
 
 import numpy as np
 from POMDPPlanners.utils.config_to_id import config_to_id
@@ -16,6 +16,13 @@ if TYPE_CHECKING:
 class PolicySpaceInfo:
     action_space: 'SpaceType'
     observation_space: 'SpaceType'
+
+class PolicyInfoVariable(NamedTuple):
+    name: str
+    value: Union[float, int]
+    
+class PolicyRunData(NamedTuple):
+    info_variables: List[PolicyInfoVariable]
 
 class Policy(ABC):
     def __init__(self, environment: "Environment", discount_factor: float, name: str):
@@ -52,7 +59,7 @@ class Policy(ABC):
         return config_to_id(config_dict)
 
     @abstractmethod
-    def action(self, belief: "Belief") -> List[Any]:
+    def action(self, belief: "Belief") -> Tuple[List[Any], PolicyRunData]:
         pass
     
     @classmethod
