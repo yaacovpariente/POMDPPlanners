@@ -23,6 +23,9 @@ def compute_statistics_environment_policy_pair(
     average_actual_num_steps = []
     average_reach_terminal_state = []
 
+    # Dictionary to store policy info variables by name
+    policy_info_variables: Dict[str, List[float]] = {}
+
     for i, h in enumerate(histories):
         return_ = sum(h.history[j].reward * h.discount_factor**j for j in range(len(h.history)) if h.history[j].reward is not None)
         return_samples.append(return_)
@@ -33,7 +36,13 @@ def compute_statistics_environment_policy_pair(
         average_belief_update_time.append(h.average_belief_update_time)
         average_reward_time.append(h.average_reward_time)
         average_actual_num_steps.append(h.actual_num_steps)
-        average_reach_terminal_state.append(h.reach_terminal_state)
+        average_reach_terminal_state.append(1 if h.reach_terminal_state else 0)
+
+        # Collect policy info variables
+        for info_var in h.policy_run_data.info_variables:
+            if info_var.name not in policy_info_variables:
+                policy_info_variables[info_var.name] = []
+            policy_info_variables[info_var.name].append(float(info_var.value))
 
     average_return = sum(return_samples) / len(return_samples)
 
@@ -68,8 +77,22 @@ def compute_statistics_environment_policy_pair(
         data=average_reach_terminal_state, confidence=confidence_interval_level
     )
 
+    # Create metrics for policy info variables
+    policy_info_metrics = []
+    for name, values in policy_info_variables.items():
+        mean_value = np.mean(values)
+        ci = confidence_interval(data=values, confidence=confidence_interval_level)
+        policy_info_metrics.append(
+            MetricValue(
+                name=f"policy_info_{name}",
+                value=mean_value,
+                lower_confidence_bound=ci[0],
+                upper_confidence_bound=ci[1],
+            )
+        )
+
     custom_environment_metrics = env.compute_metrics(histories=histories)
-    return custom_environment_metrics + [
+    return custom_environment_metrics + policy_info_metrics + [
         MetricValue(
             name="average_return",
             value=average_return,

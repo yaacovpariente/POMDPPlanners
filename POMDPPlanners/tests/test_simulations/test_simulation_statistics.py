@@ -2,6 +2,7 @@ import pytest
 import numpy as np
 from typing import List
 from POMDPPlanners.core.simulation import History, StepData, MetricValue
+from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
 from POMDPPlanners.simulations.simulation_statistics import (
     compute_statistics_environment_policy_pair,
     compute_statistics_environments_policies_comparison
@@ -38,7 +39,11 @@ def create_test_history(rewards: List[float], discount_factor: float = 0.95) -> 
         average_belief_update_time=0.4,
         average_reward_time=0.5,
         actual_num_steps=len(steps),
-        reach_terminal_state=True
+        reach_terminal_state=True,
+        policy_run_data=PolicyRunData(info_variables=[
+            PolicyInfoVariable(name="test_var", value=1.0),
+            PolicyInfoVariable(name="test_var2", value=2.0)
+        ])
     )
     return history
 
@@ -78,6 +83,19 @@ def test_compute_statistics_basic():
         assert hasattr(metric, 'lower_confidence_bound')
         assert hasattr(metric, 'upper_confidence_bound')
 
+    # Verify policy info metrics
+    test_var_metric = get_metric_value(stats, "policy_info_test_var")
+    test_var2_metric = get_metric_value(stats, "policy_info_test_var2")
+    
+    assert test_var_metric.value == 1.0  # All histories have value 1.0
+    assert test_var2_metric.value == 2.0  # All histories have value 2.0
+    
+    # For policy info variables with constant values, confidence bounds should be equal to the value
+    assert test_var_metric.lower_confidence_bound == test_var_metric.value
+    assert test_var_metric.upper_confidence_bound == test_var_metric.value
+    assert test_var2_metric.lower_confidence_bound == test_var2_metric.value
+    assert test_var2_metric.upper_confidence_bound == test_var2_metric.value
+
 
 def test_compute_statistics_single_history():
     # Test with a single history
@@ -104,6 +122,10 @@ def test_compute_statistics_single_history():
         assert hasattr(metric, 'value')
         assert hasattr(metric, 'lower_confidence_bound')
         assert hasattr(metric, 'upper_confidence_bound')
+
+    # Verify policy info metrics
+    test_var_metric = get_metric_value(stats, "policy_info_test_var")
+    assert test_var_metric.value == 1.0
 
 
 def test_compute_statistics_negative_rewards():
@@ -133,6 +155,10 @@ def test_compute_statistics_negative_rewards():
         assert hasattr(metric, 'lower_confidence_bound')
         assert hasattr(metric, 'upper_confidence_bound')
 
+    # Verify policy info metrics
+    test_var_metric = get_metric_value(stats, "policy_info_test_var")
+    assert test_var_metric.value == 1.0
+
 
 def test_compute_statistics_zero_rewards():
     # Test with zero rewards
@@ -160,6 +186,10 @@ def test_compute_statistics_zero_rewards():
         assert hasattr(metric, 'value')
         assert hasattr(metric, 'lower_confidence_bound')
         assert hasattr(metric, 'upper_confidence_bound')
+
+    # Verify policy info metrics
+    test_var_metric = get_metric_value(stats, "policy_info_test_var")
+    assert test_var_metric.value == 1.0
 
 
 def test_compute_statistics_environment_policy_pair():
@@ -202,7 +232,11 @@ def test_compute_statistics_environment_policy_pair():
             average_belief_update_time=0.004,
             average_reward_time=0.005,
             actual_num_steps=2,
-            reach_terminal_state=True
+            reach_terminal_state=True,
+            policy_run_data=PolicyRunData(info_variables=[
+                PolicyInfoVariable(name="test_var", value=1.0),
+                PolicyInfoVariable(name="test_var2", value=2.0)
+            ])
         ),
         History(
             history=[
@@ -230,7 +264,11 @@ def test_compute_statistics_environment_policy_pair():
             average_belief_update_time=0.004,
             average_reward_time=0.005,
             actual_num_steps=2,
-            reach_terminal_state=True
+            reach_terminal_state=True,
+            policy_run_data=PolicyRunData(info_variables=[
+                PolicyInfoVariable(name="test_var", value=1.0),
+                PolicyInfoVariable(name="test_var2", value=2.0)
+            ])
         )
     ]
     
@@ -249,6 +287,13 @@ def test_compute_statistics_environment_policy_pair():
         assert hasattr(metric, 'value')
         assert hasattr(metric, 'lower_confidence_bound')
         assert hasattr(metric, 'upper_confidence_bound')
+
+    # Verify policy info metrics
+    test_var_metric = get_metric_value(statistics, "policy_info_test_var")
+    test_var2_metric = get_metric_value(statistics, "policy_info_test_var2")
+    
+    assert test_var_metric.value == 1.0
+    assert test_var2_metric.value == 2.0
 
 
 def test_compute_statistics_environments_policies_comparison():
@@ -284,7 +329,11 @@ def test_compute_statistics_environments_policies_comparison():
             average_belief_update_time=0.004,
             average_reward_time=0.005,
             actual_num_steps=1,
-            reach_terminal_state=False
+            reach_terminal_state=False,
+            policy_run_data=PolicyRunData(info_variables=[
+                PolicyInfoVariable(name="test_var", value=1.0),
+                PolicyInfoVariable(name="test_var2", value=2.0)
+            ])
         ),
         History(
             history=[
@@ -304,7 +353,11 @@ def test_compute_statistics_environments_policies_comparison():
             average_belief_update_time=0.004,
             average_reward_time=0.005,
             actual_num_steps=1,
-            reach_terminal_state=False
+            reach_terminal_state=False,
+            policy_run_data=PolicyRunData(info_variables=[
+                PolicyInfoVariable(name="test_var", value=1.0),
+                PolicyInfoVariable(name="test_var2", value=2.0)
+            ])
         )
     ]
     
@@ -327,7 +380,11 @@ def test_compute_statistics_environments_policies_comparison():
             average_belief_update_time=0.004,
             average_reward_time=0.005,
             actual_num_steps=1,
-            reach_terminal_state=False
+            reach_terminal_state=False,
+            policy_run_data=PolicyRunData(info_variables=[
+                PolicyInfoVariable(name="test_var", value=1.0),
+                PolicyInfoVariable(name="test_var2", value=2.0)
+            ])
         ),
         History(
             history=[
@@ -347,7 +404,11 @@ def test_compute_statistics_environments_policies_comparison():
             average_belief_update_time=0.004,
             average_reward_time=0.005,
             actual_num_steps=1,
-            reach_terminal_state=False
+            reach_terminal_state=False,
+            policy_run_data=PolicyRunData(info_variables=[
+                PolicyInfoVariable(name="test_var", value=1.0),
+                PolicyInfoVariable(name="test_var2", value=2.0)
+            ])
         )
     ]
     
@@ -376,3 +437,9 @@ def test_compute_statistics_environments_policies_comparison():
     assert 'average_return' in statistics_df.columns
     assert 'return_cvar' in statistics_df.columns
     assert 'return_value_at_risk' in statistics_df.columns
+    assert 'policy_info_test_var' in statistics_df.columns
+    assert 'policy_info_test_var2' in statistics_df.columns
+    assert 'policy_info_test_var_ci_lower' in statistics_df.columns
+    assert 'policy_info_test_var_ci_upper' in statistics_df.columns
+    assert 'policy_info_test_var2_ci_lower' in statistics_df.columns
+    assert 'policy_info_test_var2_ci_upper' in statistics_df.columns
