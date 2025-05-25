@@ -12,6 +12,7 @@ from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
 
 
 @pytest.fixture
@@ -65,7 +66,11 @@ def sample_history():
         average_belief_update_time=0.4,
         average_reward_time=0.5,
         actual_num_steps=1,
-        reach_terminal_state=True
+        reach_terminal_state=True,
+        policy_run_data=PolicyRunData(info_variables=[
+            PolicyInfoVariable(name="test_var", value=1.0),
+            PolicyInfoVariable(name="test_var2", value=2.0)
+        ])
     )
 
 
@@ -157,7 +162,13 @@ def test_save_and_load_episode_results(deployment, sample_history, mock_redis_cl
         'average_belief_update_time': 0.4,
         'average_reward_time': 0.5,
         'actual_num_steps': 1,
-        'reach_terminal_state': True
+        'reach_terminal_state': True,
+        'policy_run_data': {
+            'info_variables': [
+                {'name': 'test_var', 'value': 1.0},
+                {'name': 'test_var2', 'value': 2.0}
+            ]
+        }
     }])
 
     # Load results

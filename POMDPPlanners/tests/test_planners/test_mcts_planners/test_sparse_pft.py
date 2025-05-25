@@ -86,7 +86,7 @@ def test_initialization(planner, environment):
 
 def test_action_selection(planner, initial_belief):
     """Test that action selection returns a valid action"""
-    action = planner.action(belief=initial_belief)
+    action, policy_run_data = planner.action(belief=initial_belief)
     assert isinstance(action, list)
     assert len(action) == 1
     assert action[0] in planner.environment.get_actions()
@@ -269,7 +269,7 @@ def test_integration_with_tiger_pomdp(planner, initial_belief, environment, n_pa
             action_node.q_value = -1.0
             action_node.visit_count = 1
         
-        action = planner.action(current_belief)
+        action, policy_run_data = planner.action(current_belief)
         assert isinstance(action, list)
         assert len(action) == 1
         assert action[0] in environment.get_actions()
@@ -366,7 +366,7 @@ def test_sanity_pomdp_action_selection():
     action_0_count = 0
     
     for _ in range(n_trials):
-        action = planner.action(belief)
+        action, policy_run_data = planner.action(belief)
         assert isinstance(action, list)
         assert len(action) == 1
         if action[0] == 0:  # Count how many times action 0 is selected

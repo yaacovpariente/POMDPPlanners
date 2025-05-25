@@ -70,6 +70,10 @@ def confidence_interval(data, confidence=0.95):
     if np.any(np.isnan(data)):
         raise ValueError("Data contains NaN values")
 
+    # If all values are the same, return the value as both bounds
+    if np.all(data == data[0]):
+        return (data[0], data[0])
+
     mean = np.mean(data)
     sem = stats.sem(data)  # Standard error of the mean
     df = len(data) - 1  # Degrees of freedom
