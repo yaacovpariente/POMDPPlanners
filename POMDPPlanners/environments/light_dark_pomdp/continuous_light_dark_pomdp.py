@@ -17,12 +17,14 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_lig
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import ContinuousLightDarkNormalNoiseObservationModel
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
     ContinuousLightDarkRewardModel,
-    ContinuousLightDarkDecayingHitProbabilityRewardModel
+    ContinuousLightDarkDecayingHitProbabilityRewardModel,
+    ContinuousLDDangerousStatesRewardModel
 )
 
 class RewardModelType(Enum):
     STANDARD = "standard"
     DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
+    DANGEROUS_STATES = "dangerous_states"
 
 class StateTransitionModel(Distribution):
     def __init__(self, state: np.ndarray, action: np.ndarray, state_transition_cov_matrix: np.ndarray):
@@ -128,6 +130,18 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 goal_reward=goal_reward,
                 fuel_cost=fuel_cost,
                 penalty_decay=penalty_decay,
+            )
+        elif reward_model_type == RewardModelType.DANGEROUS_STATES:
+            self.reward_model = ContinuousLDDangerousStatesRewardModel(
+                goal_state=goal_state,
+                obstacles=obstacles,
+                goal_state_radius=goal_state_radius,
+                obstacle_radius=obstacle_radius,
+                grid_size=grid_size,
+                obstacle_hit_probability=obstacle_hit_probability,
+                obstacle_reward=obstacle_reward,
+                goal_reward=goal_reward,
+                fuel_cost=fuel_cost,
             )
         else:
             raise ValueError(f"Unknown reward model type: {reward_model_type}")

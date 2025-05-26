@@ -533,3 +533,41 @@ def test_decaying_hit_probability_reward_model():
         penalty_decay=0.5
     )
     assert isinstance(env.reward_model, ContinuousLightDarkDecayingHitProbabilityRewardModel)
+
+
+def test_dangerous_states_reward_model():
+    """Test that the environment uses the dangerous states reward model when specified."""
+    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import RewardModelType
+    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import ContinuousLDDangerousStatesRewardModel
+
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2),
+        observation_cov_matrix=np.eye(2),
+        obstacle_hit_probability=0.2,
+        obstacle_reward=-10.0,
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        goal_state_radius=1.5,
+        beacon_radius=1.0,
+        obstacle_radius=1.5,
+        reward_model_type=RewardModelType.DANGEROUS_STATES
+    )
+    
+    # Test that the correct reward model is initialized
+    assert isinstance(env.reward_model, ContinuousLDDangerousStatesRewardModel)
+    
+    # Test that the reward model produces both positive and negative rewards near obstacles
+    state = np.array([2, 5])  # Near an obstacle
+    action = "right"  # Use string action instead of numpy array
+    
+    # Run multiple times to ensure we get both positive and negative rewards
+    rewards = [env.reward(state, action) for _ in range(100)]
+    positive_rewards = [r for r in rewards if r > 0]
+    negative_rewards = [r for r in rewards if r < 0]
+    
+    # Check that we get both positive and negative rewards
+    assert len(positive_rewards) > 0, "Should get some positive rewards"
+    assert len(negative_rewards) > 0, "Should get some negative rewards"
+    # Note: We do not check the mean reward, as the environment's reward structure includes other penalties.

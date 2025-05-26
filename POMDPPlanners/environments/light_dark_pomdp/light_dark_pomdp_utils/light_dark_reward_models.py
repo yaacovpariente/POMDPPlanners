@@ -61,6 +61,26 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
     def _obstacle_reward(self, state: np.ndarray) -> float:
         return self.obstacle_reward if np.random.rand() < self.obstacle_hit_probability else 0.0
     
+    
+class ContinuousLDDangerousStatesRewardModel(ContinuousLightDarkRewardModel):
+    def __init__(
+        self,
+        goal_state: np.ndarray,
+        obstacles: np.ndarray,
+        goal_state_radius: float,
+        obstacle_radius: float,
+        grid_size: int,
+        obstacle_hit_probability: float,
+        obstacle_reward: float,
+        goal_reward: float,
+        fuel_cost: float,
+    ):
+        super().__init__(goal_state, obstacles, goal_state_radius, obstacle_radius, grid_size, obstacle_hit_probability, obstacle_reward, goal_reward, fuel_cost)
+        
+    def _obstacle_reward(self, state: np.ndarray) -> float:
+        """The expected reward is 0.0, but the variance is high."""
+        return self.obstacle_reward if np.random.rand() < 0.5 else -self.obstacle_reward
+
 
 class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardModel):
     def __init__(
