@@ -310,7 +310,7 @@ def validate_parallel_simulation_inputs(
     assert isinstance(alpha, float), "alpha must be a float"
     assert isinstance(confidence_interval_level, float), "confidence_interval_level must be a float"
     assert 0 <= confidence_interval_level <= 1, "confidence_interval_level must be between 0 and 1"
-    assert isinstance(n_jobs, int) and n_jobs > 0, "n_jobs must be a positive integer"
+    assert isinstance(n_jobs, int) and (n_jobs > 0 or n_jobs == -1), "n_jobs must be a positive integer or -1"
 
 def create_simulation_tasks(
     environment_run_params: List[EnvironmentRunParams],
