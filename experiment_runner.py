@@ -4,7 +4,7 @@ import importlib.util
 import sys
 from typing import List, Dict, Any
 
-from POMDPPlanners.simulations.simulations import compare_multiple_environments_policies
+from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.core.config_types import ExperimentConfig
 from POMDPPlanners.simulations.simulations import EnvironmentRunParams
 from POMDPPlanners.simulations.simulations_deployment import DeploymentType
@@ -130,16 +130,18 @@ def main():
     
     # Run comparison
     logger.info("Starting experiment comparison...")
-    histories, statistics_df = compare_multiple_environments_policies(
+    simulator = POMDPSimulator(
+        cache_dir_path=output_dir,
+        experiment_name=args.experiment_name,
+        debug=args.debug
+    )
+    histories, statistics_df = simulator.compare_multiple_environments_policies(
         environment_run_params=environment_run_params,
         alpha=args.alpha,
         confidence_interval_level=args.confidence,
         n_jobs=args.n_jobs,
-        cache_dir_path=output_dir,
-        experiment_name=args.experiment_name,
         cache_visualizations=args.cache_visualizations,
         deployment_type=deployment_type,
-        debug=args.debug
     )
     
     logger.info("Experiment completed successfully!")
