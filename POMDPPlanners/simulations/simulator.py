@@ -1,14 +1,8 @@
-from typing import List, Type, Tuple, Dict
-from typing import NamedTuple
-import copy
-from time import time
+from typing import List, Tuple, Dict
 from pathlib import Path
 import mlflow
 import hashlib
 import logging
-
-from joblib import Parallel, delayed
-from tqdm import tqdm
 
 import numpy as np
 import pandas as pd
@@ -272,7 +266,7 @@ class POMDPSimulator:
 
         # Initialize deployment based on type
         if deployment_type == DeploymentType.LOCAL:
-            simulation_deployment = LocalSimulationDeployment(n_jobs=n_jobs)
+            simulation_deployment = LocalSimulationDeployment(n_jobs=n_jobs, cache_dir=self.cache_dir_path)
         elif deployment_type == DeploymentType.REMOTE_RAY:
             simulation_deployment = RemoteRaySimulationDeployment(num_cpus=n_jobs)
         elif deployment_type == DeploymentType.DASK_DISTRIBUTED:

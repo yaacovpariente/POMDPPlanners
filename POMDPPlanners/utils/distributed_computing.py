@@ -1,5 +1,5 @@
 from typing import List, Any, Callable, Dict
-from joblib import Parallel, delayed
+from joblib import Parallel, delayed, Memory
 from tqdm import tqdm
 
 import ray
@@ -14,7 +14,8 @@ def run_parallel_locally(
     kwargs_list: List[Dict[str, Any]],
     n_jobs: int = 1,
     description: str = "Running parallel tasks",
-    unit: str = "task"
+    unit: str = "task",
+    cache_dir: str = None
 ) -> List[Any]:
     """Run a function in parallel with different keyword argument sets using joblib.
     
@@ -24,11 +25,18 @@ def run_parallel_locally(
         n_jobs: Number of parallel jobs to use
         description: Description for the progress bar
         unit: Unit label for the progress bar
+        cache_dir: Directory to store cached results. If None, caching is disabled.
         
     Returns:
         List of results from each function call
     """
     logger.info(f"Starting parallel execution with {len(kwargs_list)} tasks using {n_jobs} jobs")
+    
+    # Set up caching if cache_dir is provided
+    if cache_dir is not None:
+        logger.info(f"Using cache directory: {cache_dir}")
+        memory = Memory(cache_dir, verbose=0)
+        func = memory.cache(func)
     
     # Run tasks in parallel using joblib with progress bar
     results = Parallel(n_jobs=n_jobs)(
