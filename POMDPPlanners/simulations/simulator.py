@@ -25,7 +25,8 @@ from POMDPPlanners.simulations.simulations_deployment import (
     LocalSimulationDeployment, 
     RemoteRaySimulationDeployment, 
     DeploymentType, 
-    SimulationDeployment
+    SimulationDeployment,
+    DaskSimulationDeployment
 )
 from POMDPPlanners.utils.visualization import (
     plot_discounted_returns_histogram,
@@ -230,33 +231,6 @@ class POMDPSimulator:
         
         return simulation_tasks
     
-    def _execute_parallel_simulations(
-        self,
-        simulation_tasks: List[Dict],
-        n_jobs: int,
-        simulation_deployment: SimulationDeployment
-    ) -> List[History]:
-        """Execute simulation tasks in parallel."""
-        self.logger.info(f"Starting parallel execution using {n_jobs} jobs")
-        start_time = time()
-        
-        histories_list = Parallel(n_jobs=n_jobs)(
-            delayed(self.run_and_cache_episode)(
-                simulation_deployment=simulation_deployment,
-                **task
-            ) for task in tqdm(
-                simulation_tasks,
-                total=len(simulation_tasks),
-                desc="Running parallel simulations",
-                unit="episode"
-            )
-        )
-        
-        end_time = time()
-        self.logger.info(f"Parallel execution completed in {end_time - start_time:.2f} seconds")
-        
-        return histories_list
-    
     def _organize_simulation_results(
         self,
         histories_list: List[History],
@@ -285,7 +259,8 @@ class POMDPSimulator:
         alpha: float,
         confidence_interval_level: float = 0.95,
         n_jobs: int = 1,
-        deployment_type: DeploymentType = DeploymentType.LOCAL
+        deployment_type: DeploymentType = DeploymentType.LOCAL,
+        scheduler_address: str = None  # For Dask distributed deployment
     ) -> Dict[str, Dict[str, List[History]]]:
         """Simulate multiple policies on multiple environments in parallel."""
         self._validate_parallel_simulation_inputs(
@@ -300,6 +275,13 @@ class POMDPSimulator:
             simulation_deployment = LocalSimulationDeployment(n_jobs=n_jobs)
         elif deployment_type == DeploymentType.REMOTE_RAY:
             simulation_deployment = RemoteRaySimulationDeployment(num_cpus=n_jobs)
+        elif deployment_type == DeploymentType.DASK_DISTRIBUTED:
+            if not scheduler_address:
+                raise ValueError("scheduler_address is required for Dask distributed deployment")
+            simulation_deployment = DaskSimulationDeployment(
+                n_jobs=n_jobs,
+                scheduler_address=scheduler_address
+            )
         else:
             raise ValueError(f"Unsupported deployment type: {deployment_type}")
 
@@ -319,8 +301,8 @@ class POMDPSimulator:
             self.logger.error(f"Error running simulations: {str(e)}")
             raise e
         finally:
-            # Close Redis connection if using remote Ray deployment
-            if deployment_type == DeploymentType.REMOTE_RAY:
+            # Cleanup deployment resources
+            if deployment_type in [DeploymentType.REMOTE_RAY, DeploymentType.DASK_DISTRIBUTED]:
                 del simulation_deployment
             
         # Organize and return results

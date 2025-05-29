@@ -1,11 +1,21 @@
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Callable, List
+from typing import Callable, List, Dict, Any, Optional
 from pathlib import Path
 import redis
 import json
 import os
 import subprocess
+import dask
+from dask.distributed import Client, LocalCluster
+import logging
+from concurrent.futures import ThreadPoolExecutor
+import numpy as np
+import pandas as pd
+from joblib import Parallel, delayed
+import ray
+from distributed import Client as DaskClient
+from POMDPPlanners.utils.logger import get_logger
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
@@ -14,10 +24,12 @@ from POMDPPlanners.utils.distributed_computing import run_parallel_locally, run_
 from POMDPPlanners.core.simulation import History
 from POMDPPlanners.utils.simulations_caching import cache_episode_simulation_results, load_episode_simulation_results
 
+logger = get_logger(__name__)
+
 class DeploymentType(Enum):
     LOCAL = "local"
     REMOTE_RAY = "remote_ray"
-    REMOTE_RAY_MULTI_GPU = "remote_ray_multi_gpu"
+    DASK_DISTRIBUTED = "dask_distributed"
     
 class SimulationDeployment(ABC):
     @abstractmethod
@@ -236,3 +248,108 @@ class RemoteRaySimulationDeployment(SimulationDeployment):
             self.redis_client.set(cache_key, serialized_data)
         except Exception as e:
             print(f"Error saving results to Redis: {e}")
+
+class DaskSimulationDeployment(SimulationDeployment):
+    """Dask-based deployment for distributed computing."""
+    
+    def __init__(self, n_jobs: int = 1, scheduler_address: str = None):
+        """Initialize Dask deployment.
+        
+        Args:
+            n_jobs: Number of worker processes
+            scheduler_address: Address of the Dask scheduler (required for distributed deployment)
+        """
+        self.n_jobs = n_jobs
+        self.scheduler_address = scheduler_address
+        self.client = None
+        
+        if scheduler_address:
+            # Connect to existing Dask cluster
+            self.client = DaskClient(scheduler_address)
+            logger.info(f"Connected to Dask cluster at {scheduler_address}")
+        else:
+            raise ValueError("scheduler_address is required for Dask deployment")
+    
+    def run_multiple_episodes(
+        self,
+        func: Callable,
+        episode_configs: List[Dict[str, Any]]
+    ) -> List[Any]:
+        """Run multiple episodes using Dask.
+        
+        Args:
+            func: Function to run for each episode
+            episode_configs: List of episode configurations
+            
+        Returns:
+            List of episode results
+        """
+        if not self.client:
+            raise RuntimeError("Dask client not initialized")
+            
+        try:
+            # Submit all tasks to Dask
+            futures = []
+            for config in episode_configs:
+                # Create a copy of the config to avoid shared state issues
+                config_copy = {k: v for k, v in config.items()}
+                future = self.client.submit(func, **config_copy)
+                futures.append(future)
+            
+            # Gather results
+            results = self.client.gather(futures)
+            return results
+            
+        except Exception as e:
+            logger.error(f"Error in Dask deployment: {str(e)}")
+            raise
+
+    def run_multiple_policies(self, func: Callable, policy_configs: List[dict]):
+        """Run multiple policies using Dask."""
+        if self.scheduler_address is None:
+            delayed_tasks = [dask.delayed(func)(**config) for config in policy_configs]
+            results = dask.compute(*delayed_tasks, scheduler=self.client)
+            return list(results)
+        else:
+            futures = [self.client.submit(func, **config) for config in policy_configs]
+            results = self.client.gather(futures)
+            return results
+
+    def load_episode_simulation_results(
+        self, 
+        environment: Environment,
+        policy: Policy,
+        initial_belief: Belief,
+        cache_dir_path: Path,
+        general_config: dict
+    ) -> List[History]:
+        return load_episode_simulation_results(
+            environment=environment,
+            policy=policy,
+            initial_belief=initial_belief,
+            cache_dir_path=cache_dir_path,
+            general_config=general_config,
+        )
+
+    def save_episode_simulation_results(
+        self, 
+        environment: Environment,
+        policy: Policy,
+        initial_belief: Belief,
+        results: List[History],
+        cache_dir_path: Path,
+        general_config: dict
+    ) -> None:
+        cache_episode_simulation_results(
+            environment=environment,
+            policy=policy,
+            initial_belief=initial_belief,
+            results=results,
+            cache_dir_path=cache_dir_path,
+            general_config=general_config,
+        )
+
+    def __del__(self):
+        """Cleanup Dask client and cluster."""
+        if hasattr(self, 'client'):
+            self.client.close()
