@@ -99,8 +99,11 @@ def main():
                       help="Name of the MLFlow experiment")
     parser.add_argument("--cache-visualizations", action="store_true",
                       help="Whether to cache visualizations")
-    parser.add_argument("--deployment-type", type=str, choices=["local", "remote_ray"],
+    parser.add_argument("--deployment-type", type=str, 
+                      choices=["local", "remote_ray", "dask_local", "dask_distributed"],
                       default="local", help="Type of deployment to use for simulations")
+    parser.add_argument("--scheduler-address", type=str,
+                      help="Address of Dask scheduler (required for dask_distributed deployment)")
     parser.add_argument("--debug", action="store_true",
                       help="Run in debug mode with only 2 episodes per configuration")
     
@@ -111,7 +114,9 @@ def main():
     output_dir = Path(args.output)
     
     # Convert deployment type string to enum
-    deployment_type = DeploymentType.LOCAL if args.deployment_type == "local" else DeploymentType.REMOTE_RAY
+    deployment_type = DeploymentType(args.deployment_type)
+    if deployment_type == DeploymentType.DASK_DISTRIBUTED and not args.scheduler_address:
+        raise ValueError("scheduler_address is required for dask_distributed deployment")
     
     # Load configurations
     logger.info(f"Loading configurations from {config_dir}")
@@ -142,6 +147,7 @@ def main():
         n_jobs=args.n_jobs,
         cache_visualizations=args.cache_visualizations,
         deployment_type=deployment_type,
+        scheduler_address=args.scheduler_address if deployment_type == DeploymentType.DASK_DISTRIBUTED else None
     )
     
     logger.info("Experiment completed successfully!")
