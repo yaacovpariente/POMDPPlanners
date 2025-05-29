@@ -64,14 +64,15 @@ class SimulationDeployment(ABC):
         pass
     
 class LocalSimulationDeployment(SimulationDeployment):
-    def __init__(self, n_jobs: int = 1):
+    def __init__(self, n_jobs: int = 1, cache_dir: Path = None):
         self.n_jobs = n_jobs
+        self.cache_dir = cache_dir
 
     def run_multiple_episodes(self, func: Callable, episode_configs: List[dict]):
-        return run_parallel_locally(func=func, kwargs_list=episode_configs, n_jobs=self.n_jobs)
+        return run_parallel_locally(func=func, kwargs_list=episode_configs, n_jobs=self.n_jobs, cache_dir=self.cache_dir)
     
     def run_multiple_policies(self, func: Callable, policy_configs: List[dict]):
-        return run_parallel_locally(func=func, kwargs_list=policy_configs, n_jobs=self.n_jobs)
+        return run_parallel_locally(func=func, kwargs_list=policy_configs, n_jobs=self.n_jobs, cache_dir=self.cache_dir)
 
     def load_episode_simulation_results(
         self, 

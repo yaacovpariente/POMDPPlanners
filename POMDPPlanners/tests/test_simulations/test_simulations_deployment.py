@@ -6,6 +6,8 @@ import shutil
 from pathlib import Path
 from unittest.mock import Mock, patch
 import numpy as np
+import time
+from concurrent.futures import ThreadPoolExecutor
 
 from POMDPPlanners.simulations.simulations_deployment import RemoteRaySimulationDeployment, LocalSimulationDeployment
 from POMDPPlanners.core.simulation import History, StepData
@@ -271,9 +273,9 @@ def test_cleanup_on_del(deployment, mock_redis_client):
 
 # Tests for LocalSimulationDeployment
 @pytest.fixture
-def local_deployment():
+def local_deployment(temp_cache_dir):
     """Create a LocalSimulationDeployment instance."""
-    return LocalSimulationDeployment(n_jobs=1)
+    return LocalSimulationDeployment(n_jobs=1, cache_dir=temp_cache_dir)
 
 def test_local_deployment_save_and_load_episode_results(local_deployment, temp_cache_dir, sample_history):
     """Test saving and loading episode results with LocalSimulationDeployment."""
@@ -441,6 +443,172 @@ def test_local_deployment_cache_persistence(local_deployment, temp_cache_dir, sa
     assert isinstance(loaded_results[0], History)
     assert loaded_results[0].discount_factor == sample_history.discount_factor
     assert loaded_results[0].actual_num_steps == sample_history.actual_num_steps
+
+def test_local_deployment_caching_performance(local_deployment, temp_cache_dir):
+    """Test that cached parallel tasks run significantly faster on subsequent executions."""
+    # Create a computationally expensive function that we can cache
+    def expensive_computation(x, sleep_time=0.1):
+        # Simulate expensive computation with sleep
+        time.sleep(sleep_time)
+        # Use deterministic computation instead of random
+        result = np.sum(np.arange(1000) * x)
+        return result
+
+    # Create a wrapper function that will be called by the deployment
+    def task_wrapper(x, sleep_time=0.1, **kwargs):
+        return expensive_computation(x, sleep_time)
+
+    # Create multiple task configurations
+    task_configs = [
+        {
+            'x': i,
+            'sleep_time': 0.1,  # 100ms per task
+            'cache_dir_path': temp_cache_dir,
+            'simulation_deployment': local_deployment
+        }
+        for i in range(5)  # Run 5 tasks
+    ]
+
+    # First run - should be slow
+    start_time = time.time()
+    first_results = local_deployment.run_multiple_episodes(
+        func=task_wrapper,
+        episode_configs=task_configs
+    )
+    first_run_time = time.time() - start_time
+
+    # Second run - should be much faster due to caching
+    start_time = time.time()
+    second_results = local_deployment.run_multiple_episodes(
+        func=task_wrapper,
+        episode_configs=task_configs
+    )
+    second_run_time = time.time() - start_time
+
+    # Verify results are identical
+    assert len(first_results) == len(second_results)
+    for first, second in zip(first_results, second_results):
+        assert np.isclose(first, second), "Cached results should be identical"
+
+    # Verify second run is significantly faster
+    # Since each task takes 100ms, first run should take at least 500ms
+    # Second run should be much faster (ideally < 50ms)
+    assert first_run_time >= 0.5, "First run should take at least 500ms"
+    assert second_run_time < 0.1, "Second run should be much faster (< 100ms)"
+    assert second_run_time < first_run_time / 5, "Second run should be at least 5x faster"
+
+def test_local_deployment_caching_with_different_configs(local_deployment, temp_cache_dir):
+    """Test that different task configurations result in different cache entries."""
+    def task_wrapper(x, y, **kwargs):
+        # Add a small sleep to ensure measurable time
+        time.sleep(0.05)  # Increased sleep time
+        return x + y
+
+    # First set of configurations
+    configs1 = [
+        {
+            'x': i,
+            'y': 1,
+            'cache_dir_path': temp_cache_dir,
+            'simulation_deployment': local_deployment
+        }
+        for i in range(3)
+    ]
+
+    # Second set of configurations (different y value)
+    configs2 = [
+        {
+            'x': i,
+            'y': 2,  # Different y value
+            'cache_dir_path': temp_cache_dir,
+            'simulation_deployment': local_deployment
+        }
+        for i in range(3)
+    ]
+
+    # Run first set
+    start_time = time.time()
+    results1 = local_deployment.run_multiple_episodes(
+        func=task_wrapper,
+        episode_configs=configs1
+    )
+    first_run_time = time.time() - start_time
+
+    # Run second set (should be slow as it's different configs)
+    start_time = time.time()
+    results2 = local_deployment.run_multiple_episodes(
+        func=task_wrapper,
+        episode_configs=configs2
+    )
+    second_run_time = time.time() - start_time
+
+    # Run first set again (should be fast due to caching)
+    start_time = time.time()
+    results1_cached = local_deployment.run_multiple_episodes(
+        func=task_wrapper,
+        episode_configs=configs1
+    )
+    cached_run_time = time.time() - start_time
+
+    # Verify results
+    assert len(results1) == len(results2) == len(results1_cached)
+    for r1, r2, r1c in zip(results1, results2, results1_cached):
+        assert r1 == r1c, "Cached results should be identical"
+        assert r1 != r2, "Different configs should give different results"
+
+    # Verify timing - account for parallel execution
+    # With 3 tasks running in parallel, each taking 50ms, we expect at least 50ms total
+    assert first_run_time >= 0.05, "First run should take at least 50ms"
+    assert second_run_time >= 0.05, "Second run should take at least 50ms"
+    # For cached run, we just verify it's not significantly slower
+    assert cached_run_time <= first_run_time * 0.5, "Cached run should not be significantly slower"
+
+def test_local_deployment_caching_with_large_data(local_deployment, temp_cache_dir):
+    """Test caching behavior with large data structures."""
+    def task_wrapper(data, **kwargs):
+        # Simulate processing large data
+        time.sleep(0.2)  # Increased sleep time
+        # Use deterministic computation
+        return np.sum(data)
+
+    # Create large arrays with deterministic values
+    large_data = [np.arange(1000).reshape(100, 10) for _ in range(3)]
+    
+    configs = [
+        {
+            'data': data,
+            'cache_dir_path': temp_cache_dir,
+            'simulation_deployment': local_deployment
+        }
+        for data in large_data
+    ]
+
+    # First run
+    start_time = time.time()
+    first_results = local_deployment.run_multiple_episodes(
+        func=task_wrapper,
+        episode_configs=configs
+    )
+    first_run_time = time.time() - start_time
+
+    # Second run
+    start_time = time.time()
+    second_results = local_deployment.run_multiple_episodes(
+        func=task_wrapper,
+        episode_configs=configs
+    )
+    second_run_time = time.time() - start_time
+
+    # Verify results
+    assert len(first_results) == len(second_results)
+    for first, second in zip(first_results, second_results):
+        assert np.isclose(first, second), "Cached results should be identical"
+
+    # Verify timing - account for parallel execution
+    # With 3 tasks running in parallel, each taking 200ms, we expect at least 200ms total
+    assert first_run_time >= 0.2, "First run should take at least 200ms"
+    # For second run, we just verify it's not significantly slower
+    assert second_run_time <= first_run_time * 0.5, "Second run should not be significantly slower"
 
 
 @pytest.fixture
