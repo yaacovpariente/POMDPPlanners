@@ -58,6 +58,9 @@ class Policy(ABC):
         
         return config_to_id(config_dict)
 
+    def __hash__(self) -> int:
+        return hash(self.config_id)
+
     @abstractmethod
     def action(self, belief: "Belief") -> Tuple[List[Any], PolicyRunData]:
         pass

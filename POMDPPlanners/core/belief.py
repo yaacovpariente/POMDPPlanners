@@ -54,7 +54,7 @@ class Belief(ABC):
 
     def __hash__(self) -> int:
         """Make the belief hashable by using its config_id."""
-        return int(self.config_id, 16)  # Convert hex string to integer
+        return hash(self.config_id)
 
     def __eq__(self, other: object) -> bool:
         """Define equality based on config_id."""

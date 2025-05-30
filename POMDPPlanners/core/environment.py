@@ -128,6 +128,9 @@ class Environment(ABC):
         config_dict = dict(sorted(config_dict.items()))
         return config_to_id(config_dict)
 
+    def __hash__(self) -> int:
+        return hash(self.config_id)
+
     @abstractmethod
     def state_transition_model(self, state: Any, action: Any) -> StateTransitionModel:
         pass
