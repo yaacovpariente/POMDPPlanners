@@ -1,11 +1,16 @@
 """Safety Ant Velocity POMDP environment instance."""
 
+import numpy as np
+import random
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
 from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
 from POMDPPlanners.core.config_types import ExperimentConfig
 
+# Set random seeds for reproducibility
+np.random.seed(42)
+random.seed(42)
 
 # Environment instance
 safety_ant_velocity_env = SafeAntVelocityPOMDP(

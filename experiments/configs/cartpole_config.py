@@ -1,11 +1,15 @@
 """CartPole POMDP environment instance."""
-
+import random
 import numpy as np
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
 from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
 from POMDPPlanners.core.config_types import ExperimentConfig
+
+# Set random seed for reproducibility
+np.random.seed(42)
+random.seed(42)
 
 # Environment instance
 cartpole_env = CartPolePOMDP(
@@ -53,6 +57,3 @@ cartpole_experiment_config = ExperimentConfig(
     num_episodes=100,
     num_steps=200
 )
-
-
-

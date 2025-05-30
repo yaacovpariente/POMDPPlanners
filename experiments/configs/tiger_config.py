@@ -4,7 +4,12 @@ from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.core.config_types import ExperimentConfig
+import numpy as np
+import random
 
+# Set random seeds for reproducibility
+np.random.seed(42)
+random.seed(42)
 
 # Environment instance
 tiger_env = TigerPOMDP(

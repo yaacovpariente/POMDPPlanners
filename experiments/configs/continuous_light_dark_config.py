@@ -1,11 +1,16 @@
 """Continuous Light-Dark POMDP environment instance."""
 
 import numpy as np
+import random
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDP
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 from POMDPPlanners.core.config_types import ExperimentConfig
+
+# Set random seeds for reproducibility
+np.random.seed(42)
+random.seed(42)
 
 # Environment instance
 continuous_light_dark_env = ContinuousLightDarkPOMDP(

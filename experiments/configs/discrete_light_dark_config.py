@@ -1,10 +1,15 @@
 """Discrete Light-Dark POMDP environment instance."""
 
 import numpy as np
+import random
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import DiscreteLightDarkPOMDP
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.core.config_types import ExperimentConfig
+
+# Set random seeds for reproducibility
+np.random.seed(42)
+random.seed(42)
 
 # Environment instance
 discrete_light_dark_env = DiscreteLightDarkPOMDP(
