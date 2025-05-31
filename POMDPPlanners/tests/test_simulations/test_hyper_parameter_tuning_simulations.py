@@ -3,22 +3,13 @@ import numpy as np
 from pathlib import Path
 import tempfile
 import shutil
-import mlflow
-import json
-import os
-import optuna
 import pandas as pd
 import time
 
-from POMDPPlanners.core.simulation import MetricValue, NumericalHyperParameter
+from POMDPPlanners.core.simulation import NumericalHyperParameter
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
-from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
-    create_policy_optimization_objective,
-    optimize_policy_parameters_with_optuna,
-    optimize_policy_parameters_for_multiple_environments,
-)
+from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import HyperParameterOptimizer
 
 
 @pytest.fixture
@@ -47,49 +38,36 @@ def temp_cache_dir():
                 break
 
 
-def test_create_policy_optimization_objective():
-    # Setup
-    environment = TigerPOMDP(discount_factor=0.95)
-
-    # Define parameter ranges for testing
-    param_ranges = {
-        "branching_factor": {"type": "int", "low": 2, "high": 5},
-        "depth": {"type": "int", "low": 2, "high": 4},
-    }
-
-    # Create a simple evaluation function
-    def evaluation_function(policy):
-        assert isinstance(policy, StandardSparseSamplingDiscreteActionsPlanner)
-        assert hasattr(policy, "environment")
-        return (1.0, (0.5, 1.5))  # Return a tuple to simulate statistics
-
-    # Create a mock trial that implements all suggest methods
-    class MockTrial:
-        def suggest_int(self, name, low, high):
-            return (low + high) // 2
-
-        def suggest_float(self, name, low, high, log=False):
-            return (low + high) / 2
-
-        def suggest_categorical(self, name, choices):
-            return choices[0]
-
-    # Execute
-    objective = create_policy_optimization_objective(
-        policy_class=StandardSparseSamplingDiscreteActionsPlanner,
-        param_ranges=param_ranges,
-        evaluation_function=evaluation_function,
-        environment=environment,
+@pytest.fixture
+def optimizer(temp_cache_dir):
+    """Create a HyperParameterOptimizer instance for testing."""
+    return HyperParameterOptimizer(
+        cache_dir_path=temp_cache_dir,
+        experiment_name="test_optimization",
+        n_jobs=1,
+        confidence_interval_level=0.95,
     )
 
-    # Test the objective function
-    result = objective(MockTrial())
 
-    # Assert
-    assert result == 1.0  # Should return the mean value from the tuple
+def test_optimizer_initialization(temp_cache_dir):
+    """Test that the optimizer initializes correctly."""
+    optimizer = HyperParameterOptimizer(
+        cache_dir_path=temp_cache_dir,
+        experiment_name="test_init",
+        n_jobs=2,
+        confidence_interval_level=0.99,
+    )
+    
+    assert optimizer.cache_dir_path == temp_cache_dir
+    assert optimizer.experiment_name == "test_init"
+    assert optimizer.n_jobs == 2
+    assert optimizer.confidence_interval_level == 0.99
+    assert optimizer.mlruns_path == temp_cache_dir / "mlruns"
+    assert optimizer.mlruns_path.exists()
 
 
-def test_optimize_policy_parameters_with_optuna(temp_cache_dir):
+def test_optimize_policy_parameters(optimizer):
+    """Test optimizing parameters for a single environment-policy pair."""
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     param_ranges = [
@@ -98,14 +76,13 @@ def test_optimize_policy_parameters_with_optuna(temp_cache_dir):
     ]
 
     # Execute
-    best_params, best_value, histories = optimize_policy_parameters_with_optuna(
+    best_params, best_value, histories = optimizer.optimize_policy_parameters(
         environment=environment,
         policy_class=StandardSparseSamplingDiscreteActionsPlanner,
         param_ranges=param_ranges,
         num_episodes=2,
         num_steps=2,
         n_particles=10,
-        cache_dir_path=temp_cache_dir,
         n_trials=2,
     )
 
@@ -118,7 +95,8 @@ def test_optimize_policy_parameters_with_optuna(temp_cache_dir):
     assert len(histories) > 0
 
 
-def test_optimize_policy_parameters_with_optuna_invalid_params(temp_cache_dir):
+def test_optimize_policy_parameters_invalid_params(optimizer):
+    """Test that invalid parameters raise appropriate errors."""
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     param_ranges = [
@@ -128,19 +106,19 @@ def test_optimize_policy_parameters_with_optuna_invalid_params(temp_cache_dir):
 
     # Test invalid parameters
     with pytest.raises(AssertionError):
-        optimize_policy_parameters_with_optuna(
+        optimizer.optimize_policy_parameters(
             environment=environment,
             policy_class=StandardSparseSamplingDiscreteActionsPlanner,
             param_ranges=param_ranges,
             num_episodes=0,  # Invalid num_episodes
             num_steps=2,
             n_particles=10,
-            cache_dir_path=temp_cache_dir,
             n_trials=2,
         )
 
 
-def test_optimize_policy_parameters_for_multiple_environments(temp_cache_dir):
+def test_optimize_multiple_environments(optimizer):
+    """Test optimizing parameters for multiple environment-policy pairs."""
     # Setup
     environment1 = TigerPOMDP(discount_factor=0.95)
     environment2 = TigerPOMDP(discount_factor=0.99)
@@ -155,12 +133,11 @@ def test_optimize_policy_parameters_for_multiple_environments(temp_cache_dir):
     ]
 
     # Execute
-    results, df = optimize_policy_parameters_for_multiple_environments(
+    results, df = optimizer.optimize_multiple_environments(
         environment_policy_pairs=environment_policy_pairs,
         num_episodes=2,
         num_steps=2,
         n_particles=10,
-        cache_dir_path=temp_cache_dir,
         n_trials=2,
     )
 
@@ -179,3 +156,59 @@ def test_optimize_policy_parameters_for_multiple_environments(temp_cache_dir):
     assert len(df) > 0
     assert "param_range_branching_factor" in df.columns
     assert "param_range_depth" in df.columns
+
+
+def test_simulation_method(optimizer):
+    """Test the simulation method directly."""
+    # Setup
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=environment,
+        branching_factor=2,
+        depth=2,
+    )
+    initial_belief = environment.get_initial_belief(n_particles=10)
+
+    # Execute
+    histories, statistics = optimizer.simulation(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_episodes=2,
+        num_steps=2,
+        alpha=0.05,
+    )
+
+    # Assert
+    assert isinstance(histories, list)
+    assert len(histories) == 2
+    assert isinstance(statistics, list)
+    assert len(statistics) > 0
+
+
+def test_run_multiple_episodes(optimizer):
+    """Test running multiple episodes in parallel."""
+    # Setup
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=environment,
+        branching_factor=2,
+        depth=2,
+    )
+    initial_belief = environment.get_initial_belief(n_particles=10)
+
+    # Execute
+    histories = optimizer.run_multiple_episodes(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_episodes=2,
+        num_steps=2,
+    )
+
+    # Assert
+    assert isinstance(histories, list)
+    assert len(histories) == 2
+    for history in histories:
+        assert isinstance(history, list)
+        assert len(history) == 2  # num_steps
