@@ -1,5 +1,6 @@
 import copy
 from time import time
+from typing import Optional
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
@@ -8,7 +9,6 @@ from POMDPPlanners.core.simulation import (
     History,
     StepData,
 )
-from POMDPPlanners.simulations.simulations import validate_episode_inputs
 from POMDPPlanners.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -30,11 +30,43 @@ def run_episode(
         
     Returns:
         History object containing episode data
+        
+    Raises:
+        ValueError: If any input parameters are invalid
+        TypeError: If any input parameters are of incorrect type
     """
+    # Input validation
+    if environment is None:
+        raise ValueError("environment cannot be None")
+    if policy is None:
+        raise ValueError("policy cannot be None")
+    if initial_belief is None:
+        raise ValueError("initial_belief cannot be None")
+    if num_steps is None:
+        raise ValueError("num_steps cannot be None")
+        
+    if not isinstance(environment, Environment):
+        raise TypeError(f"environment must be an instance of Environment, got {type(environment)}")
+    if not isinstance(policy, Policy):
+        raise TypeError(f"policy must be an instance of Policy, got {type(policy)}")
+    if not isinstance(initial_belief, Belief):
+        raise TypeError(f"initial_belief must be an instance of Belief, got {type(initial_belief)}")
+    if not isinstance(num_steps, int):
+        raise TypeError(f"num_steps must be an integer, got {type(num_steps)}")
+    if num_steps <= 0:
+        raise ValueError(f"num_steps must be positive, got {num_steps}")
+        
+    # Validate that environment and policy are compatible
+    if not hasattr(environment, 'state_transition_model') or not hasattr(environment, 'observation_model'):
+        raise ValueError("environment must implement state_transition_model and observation_model")
+    if not hasattr(policy, 'action'):
+        raise ValueError("policy must implement action method")
+    if not hasattr(initial_belief, 'sample') or not hasattr(initial_belief, 'update'):
+        raise ValueError("initial_belief must implement sample and update methods")
+
     logger.debug(f"Starting episode with {num_steps} steps")
 
-    validate_episode_inputs(environment, policy, initial_belief, num_steps)
-
+    # Initialize timing metrics with deterministic values
     average_state_sampling_time = 0.0
     average_action_time = 0.0
     average_observation_time = 0.0
