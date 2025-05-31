@@ -1,4 +1,4 @@
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 from pathlib import Path
 import mlflow
 import hashlib
@@ -12,22 +12,23 @@ from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation import (
     History,
-    EnvironmentRunParams
+    EnvironmentRunParams,
+    DataBaseInterface,
+    TaskManager,
 )
 from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environments_policies_comparison
-from POMDPPlanners.simulations.simulations_deployment import (
-    LocalSimulationDeployment, 
-    RemoteRaySimulationDeployment, 
-    DeploymentType, 
-    SimulationDeployment,
-    DaskSimulationDeployment
-)
 from POMDPPlanners.utils.visualization import (
     plot_discounted_returns_histogram,
     plot_discounted_returns_histogram_multiple_policies
 )
 from POMDPPlanners.utils.logger import get_logger
-from POMDPPlanners.simulations.simulations import run_episode as base_run_episode
+from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+from POMDPPlanners.simulations.simulations_deployment.task_managers import (
+    DaskTaskManager,
+    JoblibTaskManager,
+    TaskManagerType,
+)
+from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
 
 logger = get_logger(__name__)
 
@@ -38,7 +39,12 @@ class POMDPSimulator:
         self,
         cache_dir_path: Path = None,
         experiment_name: str = "POMDP_Planning_Comparison",
-        debug: bool = False
+        debug: bool = False,
+        task_manager_type: TaskManagerType = TaskManagerType.DASK,
+        n_jobs: int = 1,
+        scheduler_address: Optional[str] = None,
+        cache_dir: Optional[str] = None,
+        clear_cache_on_start: bool = False
     ):
         """Initialize the simulator.
         
@@ -46,14 +52,32 @@ class POMDPSimulator:
             cache_dir_path: Path to store results
             experiment_name: Name of the MLFlow experiment
             debug: Whether to enable debug logging
+            task_manager_type: Type of task manager to use for simulations
+            n_jobs: Number of parallel jobs (-1 for all cores)
+            scheduler_address: Address of Dask scheduler (None for local)
+            cache_dir: Directory for joblib cache (None for default)
+            clear_cache_on_start: If True, clears the cache at startup
         """
         self.cache_dir_path = cache_dir_path
         self.experiment_name = experiment_name
         self.logger = logger
         self.logger.setLevel(logging.DEBUG if debug else logging.INFO)
         
+        # Initialize cache database if needed
         if cache_dir_path is not None:
             self._setup_mlflow_tracking()
+            self.cache_db = DiskCacheDB(cache_dir_path / "cache")
+        else:
+            self.cache_db = None
+            
+        # Create task manager
+        self.task_manager = self._create_task_manager(
+            task_manager_type=task_manager_type,
+            n_jobs=n_jobs,
+            scheduler_address=scheduler_address,
+            cache_dir=cache_dir,
+            clear_cache_on_start=clear_cache_on_start
+        )
     
     def _setup_mlflow_tracking(self) -> None:
         """Configure MLFlow tracking."""
@@ -64,18 +88,6 @@ class POMDPSimulator:
         tracking_uri = mlruns_path
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment(self.experiment_name)
-    
-    def run_episode(
-        self,
-        environment: Environment,
-        policy: Policy,
-        initial_belief: Belief,
-        num_steps: int,
-    ) -> History:
-        """Run a single episode without caching (delegates to simulations.py)."""
-        self.logger.debug(f"Starting episode with {num_steps} steps")
-        self._validate_episode_inputs(environment, policy, initial_belief, num_steps)
-        return base_run_episode(environment=environment, policy=policy, initial_belief=initial_belief, num_steps=num_steps)
     
     def _validate_episode_inputs(
         self,
@@ -89,75 +101,6 @@ class POMDPSimulator:
         assert isinstance(policy, Policy), "policy must be a Policy instance"
         assert isinstance(initial_belief, Belief), "initial_belief must be a Belief instance"
         assert isinstance(num_steps, int) and num_steps > 0, "num_steps must be a positive integer"
-    
-    def run_and_cache_episode(
-        self,
-        environment: Environment,
-        policy: Policy,
-        initial_belief: Belief,
-        num_steps: int,
-        episode_id: int,
-        seed: int,
-        simulation_deployment: SimulationDeployment,
-    ) -> History:
-        """Run an episode with optional caching support and deterministic seed."""
-        self._validate_episode_inputs(
-            environment=environment,
-            policy=policy,
-            initial_belief=initial_belief,
-            num_steps=num_steps,
-        )
-
-        if self.cache_dir_path is not None:
-            general_config = {'episode_id': episode_id, 'num_steps': num_steps, 'seed': seed}
-
-            # Try to load from cache
-            try:
-                cached_history = simulation_deployment.load_episode_simulation_results(
-                    environment=environment,
-                    policy=policy,
-                    initial_belief=initial_belief,
-                    cache_dir_path=self.cache_dir_path,
-                    general_config=general_config
-                )
-                if len(cached_history) > 0:
-                    self.logger.info(f"Loaded episode {episode_id} from cache for environment {environment.name} and policy {policy.name}")
-                    return cached_history[0]
-            except Exception as e:
-                self.logger.warning(f"Failed to load episode {episode_id} from cache for environment {environment.name} and policy {policy.name}: {str(e)}")
-
-        # Set random seed
-        state = np.random.get_state()
-        np.random.seed(seed)
-
-        try:
-            # Run the episode
-            result = self.run_episode(
-                environment=environment,
-                policy=policy,
-                initial_belief=initial_belief,
-                num_steps=num_steps,
-            )
-
-            # Cache the result if caching is enabled
-            if self.cache_dir_path is not None:
-                try:
-                    simulation_deployment.save_episode_simulation_results(
-                        environment=environment,
-                        policy=policy,
-                        initial_belief=initial_belief,
-                        results=[result],
-                        cache_dir_path=self.cache_dir_path,
-                        general_config=general_config
-                    )
-                    self.logger.debug(f"Cached episode {episode_id}")
-                except Exception as e:
-                    self.logger.warning(f"Failed to cache episode {episode_id}: {str(e)}")
-
-            return result
-        finally:
-            # Restore random state
-            np.random.set_state(state)
     
     def _validate_parallel_simulation_inputs(
         self,
@@ -198,8 +141,7 @@ class POMDPSimulator:
     def _create_simulation_tasks(
         self,
         environment_run_params: List[EnvironmentRunParams],
-        simulation_deployment: SimulationDeployment
-    ) -> List[Dict]:
+    ) -> List[EpisodeSimulationTask]:
         """Create list of simulation tasks with deterministic ordering."""
         simulation_tasks = []
         total_tasks = 0
@@ -208,18 +150,19 @@ class POMDPSimulator:
             for policy in params.policies:
                 for episode_id in range(params.num_episodes):
                     seed = int(hashlib.md5(f"{params.environment.name}_{policy.name}_{episode_id}".encode()).hexdigest(), 16) % (2**32)
-                    simulation_tasks.append({
-                        'environment': params.environment,
-                        'policy': policy,
-                        'initial_belief': params.belief,
-                        'num_steps': params.num_steps,
-                        'episode_id': episode_id,
-                        'seed': seed,
-                        'simulation_deployment': simulation_deployment
-                    })
+                    task = EpisodeSimulationTask(
+                        environment=params.environment,
+                        policy=policy,
+                        initial_belief=params.belief,
+                        num_steps=params.num_steps,
+                        episode_id=episode_id,
+                        seed=seed,
+                        episode_number=episode_id
+                    )
+                    simulation_tasks.append(task)
                     total_tasks += 1
 
-        simulation_tasks.sort(key=lambda x: x['seed'])
+        simulation_tasks.sort(key=lambda x: x.seed)
         self.logger.info(f"Created {total_tasks} simulation tasks across {len(set(params.environment.name for params in environment_run_params))} "
                     f"environments and {len(set(p.name for params in environment_run_params for p in params.policies))} policies")
         
@@ -247,14 +190,68 @@ class POMDPSimulator:
         
         return results
     
+    def _create_task_manager(
+        self,
+        task_manager_type: TaskManagerType,
+        n_jobs: int = 1,
+        scheduler_address: Optional[str] = None,
+        cache_dir: Optional[str] = None,
+        clear_cache_on_start: bool = False
+    ) -> TaskManager:
+        """Create a task manager of the specified type.
+        
+        Args:
+            task_manager_type: Type of task manager to create
+            n_jobs: Number of parallel jobs (-1 for all cores)
+            scheduler_address: Address of Dask scheduler (None for local)
+            cache_dir: Directory for joblib cache (None for default)
+            clear_cache_on_start: If True, clears the cache at startup
+            
+        Returns:
+            TaskManager: The created task manager instance
+            
+        Raises:
+            ValueError: If task_manager_type is invalid or required dependencies are missing
+        """
+        if task_manager_type == TaskManagerType.DASK:
+            return DaskTaskManager(
+                n_workers=n_jobs,
+                scheduler_address=scheduler_address,
+                clear_cache_on_start=clear_cache_on_start
+            )
+        elif task_manager_type == TaskManagerType.JOBLIB:
+            if self.cache_db is None:
+                self.logger.warning("JoblibTaskManager requires a cache database. Falling back to DaskTaskManager.")
+                return DaskTaskManager(
+                    n_workers=n_jobs,
+                    scheduler_address=scheduler_address,
+                    clear_cache_on_start=clear_cache_on_start
+                )
+            return JoblibTaskManager(
+                cache_db=self.cache_db,
+                n_jobs=n_jobs,
+                cache_dir=cache_dir,
+                clear_cache_on_start=clear_cache_on_start
+            )
+        else:
+            raise ValueError(f"Unknown task manager type: {task_manager_type}")
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        if hasattr(self, 'task_manager'):
+            self.task_manager.__exit__(exc_type, exc_val, exc_tb)
+
     def simulate_multiple_environments_and_policies_parallel(
         self,
         environment_run_params: List[EnvironmentRunParams],
         alpha: float,
         confidence_interval_level: float = 0.95,
         n_jobs: int = 1,
-        deployment_type: DeploymentType = DeploymentType.LOCAL,
-        scheduler_address: str = None  # For Dask distributed deployment
+        scheduler_address: Optional[str] = None,  # For Dask distributed deployment
     ) -> Dict[str, Dict[str, List[History]]]:
         """Simulate multiple policies on multiple environments in parallel."""
         self._validate_parallel_simulation_inputs(
@@ -264,40 +261,17 @@ class POMDPSimulator:
             n_jobs=n_jobs
         )
 
-        # Initialize deployment based on type
-        if deployment_type == DeploymentType.LOCAL:
-            simulation_deployment = LocalSimulationDeployment(n_jobs=n_jobs, cache_dir=self.cache_dir_path)
-        elif deployment_type == DeploymentType.REMOTE_RAY:
-            simulation_deployment = RemoteRaySimulationDeployment(num_cpus=n_jobs)
-        elif deployment_type == DeploymentType.DASK_DISTRIBUTED:
-            if not scheduler_address:
-                raise ValueError("scheduler_address is required for Dask distributed deployment")
-            simulation_deployment = DaskSimulationDeployment(
-                n_jobs=n_jobs,
-                scheduler_address=scheduler_address
-            )
-        else:
-            raise ValueError(f"Unsupported deployment type: {deployment_type}")
-
         # Create simulation tasks
         simulation_tasks = self._create_simulation_tasks(
             environment_run_params=environment_run_params,
-            simulation_deployment=simulation_deployment
         )
 
-        # Execute simulations
+        # Execute simulations using TaskManager
         try:
-            histories_list = simulation_deployment.run_multiple_episodes(
-                func=self.run_and_cache_episode,
-                episode_configs=simulation_tasks
-            )
+            histories_list = self.task_manager.run_tasks(simulation_tasks)
         except Exception as e:
             self.logger.error(f"Error running simulations: {str(e)}")
             raise e
-        finally:
-            # Cleanup deployment resources
-            if deployment_type in [DeploymentType.REMOTE_RAY, DeploymentType.DASK_DISTRIBUTED]:
-                del simulation_deployment
             
         # Organize and return results
         return self._organize_simulation_results(
@@ -313,7 +287,7 @@ class POMDPSimulator:
         confidence_interval_level: float = 0.95,
         n_jobs: int = 1,
         cache_visualizations: bool = True,
-        deployment_type: DeploymentType = DeploymentType.LOCAL,
+        scheduler_address: Optional[str] = None,
     ) -> Tuple[Dict[str, Dict[str, List[History]]], pd.DataFrame]:
         """Compare multiple policies on multiple environments and cache results in MLFlow."""
         # Type checks for all parameters
@@ -330,7 +304,7 @@ class POMDPSimulator:
         assert n_jobs > 0 or n_jobs == -1, "n_jobs must be positive or -1 (for all available cores)"
         
         assert isinstance(cache_visualizations, bool), "cache_visualizations must be a boolean"
-        assert isinstance(deployment_type, DeploymentType), "deployment_type must be a DeploymentType enum"
+        assert scheduler_address is None or isinstance(scheduler_address, str), "scheduler_address must be None or a string"
 
         # Run main comparison
         with mlflow.start_run(run_name="environment_policy_comparison"):
@@ -340,7 +314,7 @@ class POMDPSimulator:
                 alpha=alpha,
                 confidence_interval_level=confidence_interval_level,
                 n_jobs=n_jobs,
-                deployment_type=deployment_type
+                scheduler_address=scheduler_address
             )
             
             # Compute statistics
