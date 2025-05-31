@@ -1,11 +1,12 @@
 """Configuration types for POMDP components."""
 
-from typing import Any, List, Dict
+from typing import Any, List, Dict, TYPE_CHECKING
 from dataclasses import dataclass
 
-from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.core.belief import Belief
+if TYPE_CHECKING:
+    from POMDPPlanners.core.environment import Environment
+    from POMDPPlanners.core.policy import Policy
+    from POMDPPlanners.core.belief import Belief
 
 @dataclass
 class EnvironmentConfig:
@@ -24,8 +25,8 @@ class BeliefConfig:
 
 @dataclass
 class ExperimentConfig:
-    environment: Environment
-    policies: List[Policy]
-    belief: Belief
+    environment: 'Environment'
+    policies: List['Policy']
+    belief: 'Belief'
     num_episodes: int
     num_steps: int 

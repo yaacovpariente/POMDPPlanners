@@ -1,8 +1,6 @@
 from abc import ABC, abstractmethod
-from typing import List, Tuple, Any
+from typing import Tuple, Any
 import random
-import hashlib
-import json
 
 import numpy as np
 
@@ -144,14 +142,16 @@ class WeightedParticleBelief(Belief):
         self.eps = 1e-10
 
     def to_dict(self) -> dict:
-        """Convert the belief to a dictionary with particles and their normalized weights.
+        """Convert the belief to a dictionary for serialization.
         
         Returns:
-            dict: A dictionary with 'particles' and 'normalized_weights' keys.
+            dict: A dictionary containing all necessary fields for deserialization.
         """
         return {
             'particles': self.particles,
-            'normalized_weights': self.normalized_weights.tolist()
+            'log_weights': self.log_weights.tolist(),
+            'resampling': self.resampling,
+            'ess_threshold': self.ess_threshold
         }
 
     def to_unique_support_distribution(self) -> "DiscreteDistribution":

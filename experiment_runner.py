@@ -85,38 +85,30 @@ def create_environment_run_params(configs: List[ExperimentConfig], debug_mode: b
 
 def main():
     parser = argparse.ArgumentParser(description="Run POMDP planning experiments")
-    parser.add_argument("--config-dir", type=str, required=True,
-                      help="Directory containing experiment configuration files")
-    parser.add_argument("--output", type=str, required=True,
-                      help="Directory to store experiment results")
-    parser.add_argument("--alpha", type=float, default=0.1,
-                      help="Alpha value for statistics computation")
-    parser.add_argument("--confidence", type=float, default=0.95,
-                      help="Confidence level for statistics")
-    parser.add_argument("--n-jobs", type=int, default=1,
-                      help="Number of parallel jobs for simulation")
-    parser.add_argument("--experiment-name", type=str, default="POMDP_Planning_Comparison",
-                      help="Name of the MLFlow experiment")
-    parser.add_argument("--cache-visualizations", action="store_true",
-                      help="Whether to cache visualizations")
-    parser.add_argument("--deployment-type", type=str, 
-                      choices=["local", "remote_ray", "dask_local", "dask_distributed"],
-                      default="local", help="Type of deployment to use for simulations")
-    parser.add_argument("--scheduler-address", type=str,
-                      help="Address of Dask scheduler (required for dask_distributed deployment)")
-    parser.add_argument("--debug", action="store_true",
-                      help="Run in debug mode with only 2 episodes per configuration")
-    
+    parser.add_argument("--config_dir", type=str, required=True, help="Directory containing experiment configurations")
+    parser.add_argument("--output_dir", type=str, required=True, help="Directory to save experiment results")
+    parser.add_argument("--experiment_name", type=str, required=True, help="Name of the experiment")
+    parser.add_argument("--alpha", type=float, default=0.1, help="Alpha value for statistical tests")
+    parser.add_argument("--confidence", type=float, default=0.95, help="Confidence interval level")
+    parser.add_argument("--n_jobs", type=int, default=1, help="Number of parallel jobs to run")
+    parser.add_argument("--scheduler_address", type=str, help="Dask scheduler address for distributed computing")
+    parser.add_argument("--cache_visualizations", action="store_true", help="Cache visualizations")
+    parser.add_argument("--debug", action="store_true", help="Run in debug mode with reduced episodes")
     args = parser.parse_args()
+
+    # Setup logging
+    logger = get_logger(__name__)
+    logger.info("Starting experiment runner")
+    logger.info(f"Arguments: {args}")
+
+    # Create output directory
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
     
-    # Convert paths to Path objects
+    # Create config directory
     config_dir = Path(args.config_dir)
-    output_dir = Path(args.output)
-    
-    # Convert deployment type string to enum
-    deployment_type = DeploymentType(args.deployment_type)
-    if deployment_type == DeploymentType.DASK_DISTRIBUTED and not args.scheduler_address:
-        raise ValueError("scheduler_address is required for dask_distributed deployment")
+    if not config_dir.exists():
+        raise ValueError(f"Config directory {config_dir} does not exist")
     
     # Load configurations
     logger.info(f"Loading configurations from {config_dir}")
@@ -146,8 +138,7 @@ def main():
         confidence_interval_level=args.confidence,
         n_jobs=args.n_jobs,
         cache_visualizations=args.cache_visualizations,
-        deployment_type=deployment_type,
-        scheduler_address=args.scheduler_address if deployment_type == DeploymentType.DASK_DISTRIBUTED else None
+        scheduler_address=args.scheduler_address
     )
     
     logger.info("Experiment completed successfully!")
