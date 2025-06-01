@@ -17,25 +17,27 @@ jobs:
       uses: docker/setup-buildx-action@v2
     
     - name: Login to GitHub Container Registry
-      if: github.event_name == 'push'  # Only login on pushes to master
       uses: docker/login-action@v2
       with:
         registry: ghcr.io
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
     
-    - name: Build test image
+    - name: Build and push test image
       uses: docker/build-push-action@v4
       with:
         context: .
         target: test
-        tags: test-image:latest
+        push: true
+        tags: |
+          ghcr.io/${{ github.repository }}/test:latest
+          ghcr.io/${{ github.repository }}/test:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
     - name: Run tests with coverage
       run: |
-        docker run --rm test-image:latest pytest POMDPPlanners/tests -v --cov=POMDPPlanners --cov-report=xml
+        docker run --rm ghcr.io/${{ github.repository }}/test:latest pytest POMDPPlanners/tests -v --cov=POMDPPlanners --cov-report=xml
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
