@@ -24,11 +24,9 @@ from POMDPPlanners.utils.visualization import (
 from POMDPPlanners.utils.logger import get_logger
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 from POMDPPlanners.simulations.simulations_deployment.task_managers import (
-    DaskTaskManager,
-    JoblibTaskManager,
     TaskManagerType,
 )
-from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
+from POMDPPlanners.simulations.simulations_deployment import TaskManagerFactory
 
 logger = get_logger(__name__)
 
@@ -63,12 +61,9 @@ class POMDPSimulator:
         self.logger = logger
         self.logger.setLevel(logging.DEBUG if debug else logging.INFO)
         
-        # Initialize cache database if needed
+        # Setup MLFlow tracking if cache directory is provided
         if cache_dir_path is not None:
             self._setup_mlflow_tracking()
-            self.cache_db = DiskCacheDB(cache_dir_path / "cache")
-        else:
-            self.cache_db = None
             
         # Create task manager
         self.task_manager = self._create_task_manager(
@@ -211,26 +206,24 @@ class POMDPSimulator:
             TaskManager: The created task manager instance
             
         Raises:
-            ValueError: If task_manager_type is invalid or required dependencies are missing
+            ValueError: If task_manager_type is invalid
         """
+        # Determine cache directory
+        if cache_dir is None and self.cache_dir_path is not None:
+            cache_dir = str(self.cache_dir_path / "cache")
+        elif cache_dir is None:
+            cache_dir = "./cache"
+
         if task_manager_type == TaskManagerType.DASK:
-            return DaskTaskManager(
+            return TaskManagerFactory.create_dask(
                 n_workers=n_jobs,
                 scheduler_address=scheduler_address,
                 clear_cache_on_start=clear_cache_on_start
             )
         elif task_manager_type == TaskManagerType.JOBLIB:
-            if self.cache_db is None:
-                self.logger.warning("JoblibTaskManager requires a cache database. Falling back to DaskTaskManager.")
-                return DaskTaskManager(
-                    n_workers=n_jobs,
-                    scheduler_address=scheduler_address,
-                    clear_cache_on_start=clear_cache_on_start
-                )
-            return JoblibTaskManager(
-                cache_db=self.cache_db,
-                n_jobs=n_jobs,
+            return TaskManagerFactory.create_joblib(
                 cache_dir=cache_dir,
+                n_jobs=n_jobs,
                 clear_cache_on_start=clear_cache_on_start
             )
         else:
@@ -251,7 +244,6 @@ class POMDPSimulator:
         alpha: float,
         confidence_interval_level: float = 0.95,
         n_jobs: int = 1,
-        scheduler_address: Optional[str] = None,  # For Dask distributed deployment
     ) -> Dict[str, Dict[str, List[History]]]:
         """Simulate multiple policies on multiple environments in parallel."""
         self._validate_parallel_simulation_inputs(
@@ -267,11 +259,7 @@ class POMDPSimulator:
         )
 
         # Execute simulations using TaskManager
-        try:
-            histories_list = self.task_manager.run_tasks(simulation_tasks)
-        except Exception as e:
-            self.logger.error(f"Error running simulations: {str(e)}")
-            raise e
+        histories_list = self.task_manager.run_tasks(simulation_tasks)
             
         # Organize and return results
         return self._organize_simulation_results(
@@ -314,7 +302,6 @@ class POMDPSimulator:
                 alpha=alpha,
                 confidence_interval_level=confidence_interval_level,
                 n_jobs=n_jobs,
-                scheduler_address=scheduler_address
             )
             
             # Compute statistics

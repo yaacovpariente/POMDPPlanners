@@ -222,6 +222,39 @@ def test_parallel_execution_maintains_statistical_properties(simulator):
                 assert h1.reach_terminal_state == h2.reach_terminal_state
 
 
+def test_invalid_jobs_parameter(simulator):
+    """Test that invalid number of jobs raises appropriate error."""
+    # Setup
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
+    )
+    initial_belief = get_initial_belief(environment, n_particles=3)
+    num_episodes = 4
+    num_steps = 3
+
+    # Test with invalid number of jobs
+    with pytest.raises(AssertionError):
+        simulator.simulate_multiple_environments_and_policies_parallel(
+            environment_run_params=[
+                EnvironmentRunParams(
+                    environment=environment,
+                    belief=initial_belief,
+                    policies=[policy],
+                    num_episodes=num_episodes,
+                    num_steps=num_steps
+                )
+            ],
+            alpha=0.1,
+            n_jobs=0  # Invalid number of jobs
+        )
+
+
 def test_visualization_creation(simulator):
     """Test that visualizations are created correctly."""
     # Setup
@@ -273,112 +306,4 @@ def test_visualization_creation(simulator):
     
     # Check for visualization directory
     viz_dir = policy_dir / "visualizations"
-    assert viz_dir.exists()
-
-
-def test_dask_distributed_deployment(simulator):
-    """Test that Dask distributed deployment works correctly."""
-    # Setup
-    environment = TigerPOMDP(discount_factor=0.95)
-    policy = POMCP(
-        environment=environment,
-        discount_factor=0.95,
-        depth=3,
-        exploration_constant=1.0,
-        name="TestPolicy",
-        n_simulations=2
-    )
-    initial_belief = get_initial_belief(environment, n_particles=3)
-    num_episodes = 4
-    num_steps = 3
-
-    # Mock scheduler address for testing
-    scheduler_address = "tcp://localhost:8786"
-
-    # Skip test if no Dask scheduler is running
-    try:
-        # Try to connect to Dask scheduler
-        client = DaskClient(scheduler_address, timeout=1)
-        client.close()
-    except Exception:
-        pytest.skip("No Dask scheduler running at localhost:8786")
-
-    # Execute with Dask distributed deployment
-    results = simulator.simulate_multiple_environments_and_policies_parallel(
-        environment_run_params=[
-            EnvironmentRunParams(
-                environment=environment,
-                belief=initial_belief,
-                policies=[policy],
-                num_episodes=num_episodes,
-                num_steps=num_steps
-            )
-        ],
-        alpha=0.1,
-        n_jobs=2,
-        scheduler_address=scheduler_address
-    )
-
-    # Assert
-    assert isinstance(results, dict)
-    assert environment.name in results
-    assert policy.name in results[environment.name]
-    assert len(results[environment.name][policy.name]) == num_episodes
-
-    # Check each history
-    for history in results[environment.name][policy.name]:
-        assert isinstance(history, History)
-        assert len(history.history) == num_steps
-        assert history.actual_num_steps == num_steps
-        assert isinstance(history.reach_terminal_state, bool)
-
-
-def test_dask_deployment_error_handling(simulator):
-    """Test error handling in Dask deployment."""
-    # Setup
-    environment = TigerPOMDP(discount_factor=0.95)
-    policy = POMCP(
-        environment=environment,
-        discount_factor=0.95,
-        depth=3,
-        exploration_constant=1.0,
-        name="TestPolicy",
-        n_simulations=2
-    )
-    initial_belief = get_initial_belief(environment, n_particles=3)
-    num_episodes = 4
-    num_steps = 3
-
-    # Test with invalid scheduler address
-    with pytest.raises(RuntimeError):
-        simulator.simulate_multiple_environments_and_policies_parallel(
-            environment_run_params=[
-                EnvironmentRunParams(
-                    environment=environment,
-                    belief=initial_belief,
-                    policies=[policy],
-                    num_episodes=num_episodes,
-                    num_steps=num_steps
-                )
-            ],
-            alpha=0.1,
-            n_jobs=2,
-            scheduler_address="invalid_address"
-        )
-
-    # Test with invalid number of jobs
-    with pytest.raises(AssertionError):
-        simulator.simulate_multiple_environments_and_policies_parallel(
-            environment_run_params=[
-                EnvironmentRunParams(
-                    environment=environment,
-                    belief=initial_belief,
-                    policies=[policy],
-                    num_episodes=num_episodes,
-                    num_steps=num_steps
-                )
-            ],
-            alpha=0.1,
-            n_jobs=0,  # Invalid number of jobs
-            scheduler_address="tcp://localhost:8786"
-        ) 
+    assert viz_dir.exists() 
