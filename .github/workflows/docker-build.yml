@@ -40,16 +40,9 @@ jobs:
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
-    - name: Run tests with coverage
+    - name: Run tests
       run: |
-        mkdir -p coverage
-        docker run --rm -v "$(pwd)/coverage:/coverage" ghcr.io/${{ github.repository_owner }}/pomdpplanners/test:latest pytest POMDPPlanners/tests -v --cov=POMDPPlanners --cov-report=xml:/coverage/coverage.xml
-    
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage/coverage.xml
-        fail_ci_if_error: true
+        docker run --rm ghcr.io/${{ github.repository_owner }}/pomdpplanners/test:latest pytest POMDPPlanners/tests -v
     
     - name: Build and push production image
       if: github.event_name == 'push'
