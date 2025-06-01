@@ -42,12 +42,13 @@ jobs:
     
     - name: Run tests with coverage
       run: |
-        docker run --rm ghcr.io/${{ github.repository_owner }}/pomdpplanners/test:latest pytest POMDPPlanners/tests -v --cov=POMDPPlanners --cov-report=xml
+        mkdir -p coverage
+        docker run --rm -v "$(pwd)/coverage:/app/coverage" ghcr.io/${{ github.repository_owner }}/pomdpplanners/test:latest pytest POMDPPlanners/tests -v --cov=POMDPPlanners --cov-report=xml:coverage/coverage.xml
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
-        file: ./coverage.xml
+        file: ./coverage/coverage.xml
         fail_ci_if_error: true
     
     - name: Build and push production image
