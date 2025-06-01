@@ -1,4 +1,11 @@
-from POMDPPlanners.simulations.simulations_deployment.types import DeploymentType
+from enum import Enum
+
+class DeploymentType(Enum):
+    """Enum representing different types of deployment for simulations."""
+    LOCAL = "local"
+    REMOTE_RAY = "remote_ray"
+    DASK_DISTRIBUTED = "dask_distributed"
+
 from POMDPPlanners.simulations.simulations_deployment.task_managers import (
     TaskManagerType,
     DaskTaskManager,

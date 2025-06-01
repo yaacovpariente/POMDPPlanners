@@ -6,7 +6,7 @@ from typing import List, Dict, Any
 
 from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.core.config_types import ExperimentConfig
-from POMDPPlanners.simulations.simulations import EnvironmentRunParams
+from POMDPPlanners.core.simulation import EnvironmentRunParams
 from POMDPPlanners.simulations.simulations_deployment import DeploymentType
 from POMDPPlanners.utils.logger import get_logger
 
