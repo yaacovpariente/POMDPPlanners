@@ -4,7 +4,6 @@ import mlflow
 import hashlib
 import logging
 
-import numpy as np
 import pandas as pd
 
 from POMDPPlanners.core.environment import Environment
@@ -30,8 +29,8 @@ from POMDPPlanners.simulations.simulations_deployment import TaskManagerFactory
 
 logger = get_logger(__name__)
 
-class POMDPSimulator:
-    """A class to handle POMDP simulations and comparisons."""
+class BaseSimulator:
+    """A base class for POMDP simulators."""
     
     def __init__(
         self,
@@ -84,6 +83,97 @@ class POMDPSimulator:
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment(self.experiment_name)
     
+    def _create_task_manager(
+        self,
+        task_manager_type: TaskManagerType,
+        n_jobs: int = 1,
+        scheduler_address: Optional[str] = None,
+        cache_dir: Optional[str] = None,
+        clear_cache_on_start: bool = False
+    ) -> TaskManager:
+        """Create a task manager of the specified type.
+        
+        Args:
+            task_manager_type: Type of task manager to create
+            n_jobs: Number of parallel jobs (-1 for all cores)
+            scheduler_address: Address of Dask scheduler (None for local)
+            cache_dir: Directory for joblib cache (None for default)
+            clear_cache_on_start: If True, clears the cache at startup
+            
+        Returns:
+            TaskManager: The created task manager instance
+            
+        Raises:
+            ValueError: If task_manager_type is invalid
+        """
+        # Determine cache directory
+        if cache_dir is None and self.cache_dir_path is not None:
+            cache_dir = str(self.cache_dir_path / "cache")
+        elif cache_dir is None:
+            cache_dir = "./cache"
+
+        if task_manager_type == TaskManagerType.DASK:
+            return TaskManagerFactory.create_dask(
+                n_workers=n_jobs,
+                scheduler_address=scheduler_address,
+                clear_cache_on_start=clear_cache_on_start
+            )
+        elif task_manager_type == TaskManagerType.JOBLIB:
+            return TaskManagerFactory.create_joblib(
+                cache_dir=cache_dir,
+                n_jobs=n_jobs,
+                clear_cache_on_start=clear_cache_on_start
+            )
+        else:
+            raise ValueError(f"Unknown task manager type: {task_manager_type}")
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        if hasattr(self, 'task_manager'):
+            self.task_manager.__exit__(exc_type, exc_val, exc_tb)
+    
+    
+class POMDPSimulator(BaseSimulator):
+    """A class to handle POMDP simulations and comparisons."""
+    
+    def __init__(
+        self,
+        cache_dir_path: Path = None,
+        experiment_name: str = "POMDP_Planning_Comparison",
+        debug: bool = False,
+        task_manager_type: TaskManagerType = TaskManagerType.DASK,
+        n_jobs: int = 1,
+        scheduler_address: Optional[str] = None,
+        cache_dir: Optional[str] = None,
+        clear_cache_on_start: bool = False
+    ):
+        """Initialize the simulator.
+        
+        Args:
+            cache_dir_path: Path to store results
+            experiment_name: Name of the MLFlow experiment
+            debug: Whether to enable debug logging
+            task_manager_type: Type of task manager to use for simulations
+            n_jobs: Number of parallel jobs (-1 for all cores)
+            scheduler_address: Address of Dask scheduler (None for local)
+            cache_dir: Directory for joblib cache (None for default)
+            clear_cache_on_start: If True, clears the cache at startup
+        """
+        super().__init__(
+            cache_dir_path=cache_dir_path,
+            experiment_name=experiment_name,
+            debug=debug,
+            task_manager_type=task_manager_type,
+            n_jobs=n_jobs,
+            scheduler_address=scheduler_address,
+            cache_dir=cache_dir,
+            clear_cache_on_start=clear_cache_on_start
+        )
+        
     def _validate_episode_inputs(
         self,
         environment: Environment,
@@ -216,59 +306,6 @@ class POMDPSimulator:
                     )
         
         return results
-
-    def _create_task_manager(
-        self,
-        task_manager_type: TaskManagerType,
-        n_jobs: int = 1,
-        scheduler_address: Optional[str] = None,
-        cache_dir: Optional[str] = None,
-        clear_cache_on_start: bool = False
-    ) -> TaskManager:
-        """Create a task manager of the specified type.
-        
-        Args:
-            task_manager_type: Type of task manager to create
-            n_jobs: Number of parallel jobs (-1 for all cores)
-            scheduler_address: Address of Dask scheduler (None for local)
-            cache_dir: Directory for joblib cache (None for default)
-            clear_cache_on_start: If True, clears the cache at startup
-            
-        Returns:
-            TaskManager: The created task manager instance
-            
-        Raises:
-            ValueError: If task_manager_type is invalid
-        """
-        # Determine cache directory
-        if cache_dir is None and self.cache_dir_path is not None:
-            cache_dir = str(self.cache_dir_path / "cache")
-        elif cache_dir is None:
-            cache_dir = "./cache"
-
-        if task_manager_type == TaskManagerType.DASK:
-            return TaskManagerFactory.create_dask(
-                n_workers=n_jobs,
-                scheduler_address=scheduler_address,
-                clear_cache_on_start=clear_cache_on_start
-            )
-        elif task_manager_type == TaskManagerType.JOBLIB:
-            return TaskManagerFactory.create_joblib(
-                cache_dir=cache_dir,
-                n_jobs=n_jobs,
-                clear_cache_on_start=clear_cache_on_start
-            )
-        else:
-            raise ValueError(f"Unknown task manager type: {task_manager_type}")
-
-    def __enter__(self):
-        """Context manager entry."""
-        return self
-    
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        if hasattr(self, 'task_manager'):
-            self.task_manager.__exit__(exc_type, exc_val, exc_tb)
 
     def simulate_multiple_environments_and_policies_parallel(
         self,
