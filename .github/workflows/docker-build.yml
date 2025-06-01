@@ -35,12 +35,12 @@ jobs:
     
     - name: Run unit tests
       run: |
-        docker run test-image:latest pytest tests/unit
+        docker run test-image:latest pytest POMDPPlanners/tests
     
     - name: Run integration tests
       if: github.event_name == 'push'
       run: |
-        docker run test-image:latest pytest tests/integration
+        docker run test-image:latest pytest POMDPPlanners/tests
     
     - name: Build and push production image
       if: github.event_name == 'push'

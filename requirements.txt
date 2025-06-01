@@ -16,4 +16,5 @@ tqdm>=4.62.0
 optuna>=2.0.0
 pyyaml>=6.0.0
 dask>=2023.3.0
-distributed>=2023.3.0 
+distributed>=2023.3.0
+cachey>=0.2.1 
