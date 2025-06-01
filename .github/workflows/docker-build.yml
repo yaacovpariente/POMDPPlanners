@@ -28,19 +28,20 @@ jobs:
       uses: docker/build-push-action@v4
       with:
         context: .
-        target: test  # We'll need to add a test stage to your Dockerfile
+        target: test
         tags: test-image:latest
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
-    - name: Run unit tests
+    - name: Run tests with coverage
       run: |
-        docker run test-image:latest pytest POMDPPlanners/tests
+        docker run --rm test-image:latest pytest POMDPPlanners/tests -v --cov=POMDPPlanners --cov-report=xml
     
-    - name: Run integration tests
-      if: github.event_name == 'push'
-      run: |
-        docker run test-image:latest pytest POMDPPlanners/tests
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        fail_ci_if_error: true
     
     - name: Build and push production image
       if: github.event_name == 'push'
