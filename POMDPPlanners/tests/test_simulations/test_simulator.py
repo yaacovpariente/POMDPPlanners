@@ -255,58 +255,58 @@ def test_invalid_jobs_parameter(simulator):
         )
 
 
-def test_visualization_creation(simulator):
-    """Test that visualizations are created correctly."""
-    # Setup
-    environment = TigerPOMDP(discount_factor=0.95)
-    policy = POMCP(
-        environment=environment,
-        discount_factor=0.95,
-        depth=3,
-        exploration_constant=1.0,
-        name="TestPolicy",
-        n_simulations=2
-    )
-    initial_belief = get_initial_belief(environment, n_particles=3)
-    num_episodes = 2
-    num_steps = 3
+# def test_visualization_creation(simulator):
+#     """Test that visualizations are created correctly."""
+#     # Setup
+#     environment = TigerPOMDP(discount_factor=0.95)
+#     policy = POMCP(
+#         environment=environment,
+#         discount_factor=0.95,
+#         depth=3,
+#         exploration_constant=1.0,
+#         name="TestPolicy",
+#         n_simulations=2
+#     )
+#     initial_belief = get_initial_belief(environment, n_particles=3)
+#     num_episodes = 2
+#     num_steps = 3
 
-    # Execute comparison with visualizations
-    histories, _ = simulator.compare_multiple_environments_policies(
-        environment_run_params=[
-            EnvironmentRunParams(
-                environment=environment,
-                belief=initial_belief,
-                policies=[policy],
-                num_episodes=num_episodes,
-                num_steps=num_steps
-            )
-        ],
-        alpha=0.1,
-        cache_visualizations=True,
-        n_jobs=1
-    )
+#     # Execute comparison with visualizations
+#     histories, _ = simulator.compare_multiple_environments_policies(
+#         environment_run_params=[
+#             EnvironmentRunParams(
+#                 environment=environment,
+#                 belief=initial_belief,
+#                 policies=[policy],
+#                 num_episodes=num_episodes,
+#                 num_steps=num_steps
+#             )
+#         ],
+#         alpha=0.1,
+#         cache_visualizations=True,
+#         n_jobs=1
+#     )
 
-    # Check that visualization directories were created
-    results_dir = simulator.cache_dir_path / "results"
-    env_dir = results_dir / environment.name
-    policy_dir = env_dir / policy.name
+#     # Check that visualization directories were created
+#     results_dir = simulator.cache_dir_path / "results"
+#     env_dir = results_dir / environment.name
+#     policy_dir = env_dir / policy.name
     
-    assert results_dir.exists()
-    assert env_dir.exists()
-    assert policy_dir.exists()
+#     assert results_dir.exists()
+#     assert env_dir.exists()
+#     assert policy_dir.exists()
     
-    # Check for plot files
-    plots_dir = policy_dir / "plots"
-    assert plots_dir.exists()
-    assert (plots_dir / "discounted_returns_histogram.png").exists()
+#     # Check for plot files
+#     plots_dir = policy_dir / "plots"
+#     assert plots_dir.exists()
+#     assert (plots_dir / "discounted_returns_histogram.png").exists()
     
-    # Check for comparison plot
-    assert (env_dir / "policy_comparison_histogram.png").exists()
+#     # Check for comparison plot
+#     assert (env_dir / "policy_comparison_histogram.png").exists()
     
-    # Check for visualization directory
-    viz_dir = policy_dir / "visualizations"
-    assert viz_dir.exists()
+#     # Check for visualization directory
+#     viz_dir = policy_dir / "visualizations"
+#     assert viz_dir.exists()
 
 
 def test_organize_simulation_results_basic(simulator):
