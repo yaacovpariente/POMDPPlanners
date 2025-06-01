@@ -306,4 +306,293 @@ def test_visualization_creation(simulator):
     
     # Check for visualization directory
     viz_dir = policy_dir / "visualizations"
-    assert viz_dir.exists() 
+    assert viz_dir.exists()
+
+
+def test_organize_simulation_results_basic(simulator):
+    """Test basic organization of simulation results with a single environment and policy."""
+    # Setup
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
+    )
+    initial_belief = get_initial_belief(environment, n_particles=3)
+    num_episodes = 2
+    num_steps = 3
+
+    # Create some test histories and their identifiers
+    histories = []
+    task_identifiers = []
+    for i in range(num_episodes):
+        history = History(
+            history=[(0, 0, 0.0, False) for _ in range(num_steps)],
+            actual_num_steps=num_steps,
+            reach_terminal_state=False,
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            policy_run_data={}
+        )
+        histories.append(history)
+        task_identifiers.append((environment.name, policy.name))
+
+    # Execute
+    results = simulator._organize_simulation_results(
+        histories_list=histories,
+        environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
+        num_episodes=num_episodes,
+        task_identifiers=task_identifiers
+    )
+
+    # Assert
+    assert isinstance(results, dict)
+    assert environment.name in results
+    assert policy.name in results[environment.name]
+    assert len(results[environment.name][policy.name]) == num_episodes
+    assert all(isinstance(h, History) for h in results[environment.name][policy.name])
+
+
+def test_organize_simulation_results_multiple(simulator):
+    """Test organization of simulation results with multiple environments and policies."""
+    # Setup
+    env1 = TigerPOMDP(discount_factor=0.95, name="Tiger1")
+    env2 = TigerPOMDP(discount_factor=0.95, name="Tiger2")
+    
+    policy1 = POMCP(
+        environment=env1,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy1",
+        n_simulations=2
+    )
+    policy2 = POMCP(
+        environment=env2,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy2",
+        n_simulations=2
+    )
+    
+    initial_belief = get_initial_belief(env1, n_particles=3)
+    num_episodes = 2
+    num_steps = 3
+
+    # Create test histories and their identifiers for both environments and policies
+    histories = []
+    task_identifiers = []
+    # First two histories for policy1
+    for _ in range(num_episodes):
+        history = History(
+            history=[(0, 0, 0.0, False) for _ in range(num_steps)],
+            actual_num_steps=num_steps,
+            reach_terminal_state=False,
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            policy_run_data={}
+        )
+        histories.append(history)
+        task_identifiers.append((env1.name, policy1.name))
+    
+    # Next two histories for policy2
+    for _ in range(num_episodes):
+        history = History(
+            history=[(0, 0, 0.0, False) for _ in range(num_steps)],
+            actual_num_steps=num_steps,
+            reach_terminal_state=False,
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            policy_run_data={}
+        )
+        histories.append(history)
+        task_identifiers.append((env2.name, policy2.name))
+
+    # Execute
+    results = simulator._organize_simulation_results(
+        histories_list=histories,
+        environment_belief_policy_tuples=[
+            (env1, initial_belief, [policy1]),
+            (env2, initial_belief, [policy2])
+        ],
+        num_episodes=num_episodes,
+        task_identifiers=task_identifiers
+    )
+
+    # Assert
+    assert isinstance(results, dict)
+    assert len(results) == 2
+    assert env1.name in results
+    assert env2.name in results
+    assert policy1.name in results[env1.name]
+    assert policy2.name in results[env2.name]
+    assert len(results[env1.name][policy1.name]) == num_episodes
+    assert len(results[env2.name][policy2.name]) == num_episodes
+
+
+def test_organize_simulation_results_edge_cases(simulator):
+    """Test edge cases for organizing simulation results."""
+    # Setup
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
+    )
+    initial_belief = get_initial_belief(environment, n_particles=3)
+
+    # Test case 1: Empty histories
+    results_empty = simulator._organize_simulation_results(
+        histories_list=[],
+        environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
+        num_episodes=0,
+        task_identifiers=[]  # Empty list of identifiers
+    )
+    assert isinstance(results_empty, dict)
+    assert environment.name in results_empty
+    assert policy.name in results_empty[environment.name]
+    assert len(results_empty[environment.name][policy.name]) == 0
+
+    # Test case 2: Single episode
+    single_history = [History(
+        history=[(0, 0, 0.0, False)],
+        actual_num_steps=1,
+        reach_terminal_state=False,
+        discount_factor=0.95,
+        average_state_sampling_time=0.0,
+        average_action_time=0.0,
+        average_observation_time=0.0,
+        average_belief_update_time=0.0,
+        average_reward_time=0.0,
+        policy_run_data={}
+    )]
+    single_identifier = [(environment.name, policy.name)]
+    results_single = simulator._organize_simulation_results(
+        histories_list=single_history,
+        environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
+        num_episodes=1,
+        task_identifiers=single_identifier
+    )
+    assert isinstance(results_single, dict)
+    assert environment.name in results_single
+    assert policy.name in results_single[environment.name]
+    assert len(results_single[environment.name][policy.name]) == 1
+    assert isinstance(results_single[environment.name][policy.name][0], History)
+
+
+def test_organize_simulation_results_matches_configurations(simulator):
+    """Test that histories are correctly matched to their environment-policy configurations."""
+    # Setup two environments with different names
+    env1 = TigerPOMDP(discount_factor=0.95, name="Tiger1")
+    env2 = TigerPOMDP(discount_factor=0.95, name="Tiger2")
+    
+    # Setup two policies with different configurations
+    policy1 = POMCP(
+        environment=env1,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy1",
+        n_simulations=2
+    )
+    policy2 = POMCP(
+        environment=env2,
+        discount_factor=0.95,
+        depth=5,  # Different depth
+        exploration_constant=2.0,  # Different exploration constant
+        name="Policy2",
+        n_simulations=4  # Different number of simulations
+    )
+    
+    initial_belief = get_initial_belief(env1, n_particles=3)
+    num_episodes = 2
+    num_steps = 3
+
+    # Create test histories with distinct characteristics for each policy
+    histories = []
+    task_identifiers = []
+    # First two histories for policy1 (depth=3)
+    for _ in range(num_episodes):
+        history = History(
+            history=[(0, 0, 0.0, False) for _ in range(num_steps)],
+            actual_num_steps=num_steps,
+            reach_terminal_state=False,
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            policy_run_data={"depth": 3, "exploration_constant": 1.0}  # Match policy1's config
+        )
+        histories.append(history)
+        task_identifiers.append((env1.name, policy1.name))
+    
+    # Next two histories for policy2 (depth=5)
+    for _ in range(num_episodes):
+        history = History(
+            history=[(0, 0, 0.0, False) for _ in range(num_steps)],
+            actual_num_steps=num_steps,
+            reach_terminal_state=False,
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            policy_run_data={"depth": 5, "exploration_constant": 2.0}  # Match policy2's config
+        )
+        histories.append(history)
+        task_identifiers.append((env2.name, policy2.name))
+
+    # Execute
+    results = simulator._organize_simulation_results(
+        histories_list=histories,
+        environment_belief_policy_tuples=[
+            (env1, initial_belief, [policy1]),
+            (env2, initial_belief, [policy2])
+        ],
+        num_episodes=num_episodes,
+        task_identifiers=task_identifiers
+    )
+
+    # Assert
+    assert isinstance(results, dict)
+    assert len(results) == 2
+    
+    # Verify env1/policy1 histories
+    assert env1.name in results
+    assert policy1.name in results[env1.name]
+    policy1_histories = results[env1.name][policy1.name]
+    assert len(policy1_histories) == num_episodes
+    for history in policy1_histories:
+        assert history.policy_run_data["depth"] == policy1.depth
+        assert history.policy_run_data["exploration_constant"] == policy1.exploration_constant
+    
+    # Verify env2/policy2 histories
+    assert env2.name in results
+    assert policy2.name in results[env2.name]
+    policy2_histories = results[env2.name][policy2.name]
+    assert len(policy2_histories) == num_episodes
+    for history in policy2_histories:
+        assert history.policy_run_data["depth"] == policy2.depth
+        assert history.policy_run_data["exploration_constant"] == policy2.exploration_constant

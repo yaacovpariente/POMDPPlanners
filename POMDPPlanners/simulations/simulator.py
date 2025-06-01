@@ -136,15 +136,24 @@ class POMDPSimulator:
     def _create_simulation_tasks(
         self,
         environment_run_params: List[EnvironmentRunParams],
-    ) -> List[EpisodeSimulationTask]:
-        """Create list of simulation tasks with deterministic ordering."""
+    ) -> Tuple[List[EpisodeSimulationTask], List[Tuple[str, str]]]:
+        """Create list of simulation tasks with deterministic ordering.
+        
+        Returns:
+            Tuple containing:
+            - List of simulation tasks
+            - List of (env_name, policy_name) identifiers matching the tasks
+        """
         simulation_tasks = []
+        task_identifiers = []  # Store (env_name, policy_name) for each task
         total_tasks = 0
         
         for params in environment_run_params:
+            env_name = params.environment.name
             for policy in params.policies:
+                policy_name = policy.name
                 for episode_id in range(params.num_episodes):
-                    seed = int(hashlib.md5(f"{params.environment.name}_{policy.name}_{episode_id}".encode()).hexdigest(), 16) % (2**32)
+                    seed = int(hashlib.md5(f"{env_name}_{policy_name}_{episode_id}".encode()).hexdigest(), 16) % (2**32)
                     task = EpisodeSimulationTask(
                         environment=params.environment,
                         policy=policy,
@@ -155,36 +164,59 @@ class POMDPSimulator:
                         episode_number=episode_id
                     )
                     simulation_tasks.append(task)
+                    task_identifiers.append((env_name, policy_name))
                     total_tasks += 1
 
-        simulation_tasks.sort(key=lambda x: x.seed)
         self.logger.info(f"Created {total_tasks} simulation tasks across {len(set(params.environment.name for params in environment_run_params))} "
                     f"environments and {len(set(p.name for params in environment_run_params for p in params.policies))} policies")
         
-        return simulation_tasks
+        return simulation_tasks, task_identifiers
     
     def _organize_simulation_results(
         self,
         histories_list: List[History],
         environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
-        num_episodes: int
+        num_episodes: int,
+        task_identifiers: List[Tuple[str, str]]
     ) -> Dict[str, Dict[str, List[History]]]:
-        """Organize simulation results by environment and policy."""
-        self.logger.info("Organizing results by environment and policy")
-        results = {}
-        current_idx = 0
+        """Organize simulation results by environment and policy using task identifiers.
         
-        for environment, _, policies in environment_belief_policy_tuples:
-            env_results = {}
+        Args:
+            histories_list: List of histories from simulation tasks
+            environment_belief_policy_tuples: List of (environment, belief, policies) tuples
+            num_episodes: Number of episodes per policy
+            task_identifiers: List of (env_name, policy_name) tuples matching the histories
+            
+        Returns:
+            Dict mapping environment names to dicts mapping policy names to lists of histories
+        """
+        self.logger.info("Organizing results by environment and policy")
+        
+        # Initialize results structure
+        results = {}
+        for env, _, policies in environment_belief_policy_tuples:
+            results[env.name] = {policy.name: [] for policy in policies}
+        
+        # Group histories by their (env, policy) identifier
+        for history, (env_name, policy_name) in zip(histories_list, task_identifiers):
+            if env_name in results and policy_name in results[env_name]:
+                results[env_name][policy_name].append(history)
+                self.logger.debug(f"Added history for {env_name} with {policy_name}")
+            else:
+                self.logger.warning(f"Received history for unknown env-policy pair: {env_name}, {policy_name}")
+        
+        # Verify each policy has the expected number of histories
+        for env, _, policies in environment_belief_policy_tuples:
             for policy in policies:
-                policy_histories = histories_list[current_idx:current_idx + num_episodes]
-                env_results[policy.name] = policy_histories
-                current_idx += num_episodes
-                self.logger.debug(f"Processed {len(policy_histories)} histories for {environment.name} with {policy.name}")
-            results[environment.name] = env_results
+                histories = results[env.name][policy.name]
+                if len(histories) != num_episodes:
+                    self.logger.warning(
+                        f"Policy {policy.name} in environment {env.name} has {len(histories)} histories, "
+                        f"expected {num_episodes}"
+                    )
         
         return results
-    
+
     def _create_task_manager(
         self,
         task_manager_type: TaskManagerType,
@@ -253,8 +285,8 @@ class POMDPSimulator:
             n_jobs=n_jobs
         )
 
-        # Create simulation tasks
-        simulation_tasks = self._create_simulation_tasks(
+        # Create simulation tasks and their identifiers
+        simulation_tasks, task_identifiers = self._create_simulation_tasks(
             environment_run_params=environment_run_params,
         )
 
@@ -265,7 +297,8 @@ class POMDPSimulator:
         return self._organize_simulation_results(
             histories_list=histories_list,
             environment_belief_policy_tuples=[(params.environment, params.belief, params.policies) for params in environment_run_params],
-            num_episodes=environment_run_params[0].num_episodes
+            num_episodes=environment_run_params[0].num_episodes,
+            task_identifiers=task_identifiers
         )
     
     def compare_multiple_environments_policies(
