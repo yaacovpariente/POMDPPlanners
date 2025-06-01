@@ -30,14 +30,14 @@ jobs:
         target: test
         push: true
         tags: |
-          ghcr.io/${{ github.repository }}/test:latest
-          ghcr.io/${{ github.repository }}/test:${{ github.sha }}
+          ghcr.io/${{ github.repository_owner }}/pomdpplanners/test:latest
+          ghcr.io/${{ github.repository_owner }}/pomdpplanners/test:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
     
     - name: Run tests with coverage
       run: |
-        docker run --rm ghcr.io/${{ github.repository }}/test:latest pytest POMDPPlanners/tests -v --cov=POMDPPlanners --cov-report=xml
+        docker run --rm ghcr.io/${{ github.repository_owner }}/pomdpplanners/test:latest pytest POMDPPlanners/tests -v --cov=POMDPPlanners --cov-report=xml
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
@@ -52,7 +52,7 @@ jobs:
         context: .
         push: true
         tags: |
-          ghcr.io/${{ github.repository }}:latest
-          ghcr.io/${{ github.repository }}:${{ github.sha }}
+          ghcr.io/${{ github.repository_owner }}/pomdpplanners:latest
+          ghcr.io/${{ github.repository_owner }}/pomdpplanners:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max 
