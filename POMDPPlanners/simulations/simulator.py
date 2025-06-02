@@ -12,12 +12,13 @@ from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation import (
     History,
+    MetricValue,
     SimulationTask,
     EnvironmentRunParams,
     DataBaseInterface,
     TaskManager,
 )
-from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environments_policies_comparison
+from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environments_policies_comparison, metrics_dict_to_dataframe, compute_statistics_environment_policy_pair
 from POMDPPlanners.utils.visualization import (
     plot_discounted_returns_histogram,
     plot_discounted_returns_histogram_multiple_policies
@@ -172,13 +173,15 @@ class BaseSimulator(ABC):
                 n_jobs=n_jobs,
             )
             
-            # Compute statistics
-            statistics_df = self._compute_statistics_df(
+            metrics = self._compute_metrics(
                 results=results,
                 environment_run_params=environment_run_params,
                 alpha=alpha,
                 confidence_interval_level=confidence_interval_level,
             )
+            
+            # Compute statistics
+            statistics_df = metrics_dict_to_dataframe(metrics_dict=metrics)
 
             # Create and merge policy configurations
             policy_configs_df = self._create_policy_configurations_df([(params.environment, params.belief, params.policies) for params in environment_run_params])
@@ -242,7 +245,7 @@ class BaseSimulator(ABC):
     
     def _organize_simulation_results(
         self,
-        histories_list: List[History],
+        results_list: list,
         environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
         num_episodes: int,
         task_identifiers: List[Tuple[str, str]]
@@ -250,10 +253,10 @@ class BaseSimulator(ABC):
         """Organize simulation results by environment and policy using task identifiers.
         
         Args:
-            histories_list: List of histories from simulation tasks
+            results_list: List of results from simulation tasks
             environment_belief_policy_tuples: List of (environment, belief, policies) tuples
             num_episodes: Number of episodes per policy
-            task_identifiers: List of (env_name, policy_name) tuples matching the histories
+            task_identifiers: List of (env_name, policy_name) tuples matching the results
             
         Returns:
             Dict mapping environment names to dicts mapping policy names to lists of task results
@@ -265,21 +268,21 @@ class BaseSimulator(ABC):
         for env, _, policies in environment_belief_policy_tuples:
             results[env.name] = {policy.name: [] for policy in policies}
         
-        # Group histories by their (env, policy) identifier
-        for history, (env_name, policy_name) in zip(histories_list, task_identifiers):
+        # Group results by their (env, policy) identifier
+        for result, (env_name, policy_name) in zip(results_list, task_identifiers):
             if env_name in results and policy_name in results[env_name]:
-                results[env_name][policy_name].append(history)
-                self.logger.debug(f"Added history for {env_name} with {policy_name}")
+                results[env_name][policy_name].append(result)
+                self.logger.debug(f"Added result for {env_name} with {policy_name}")
             else:
-                self.logger.warning(f"Received history for unknown env-policy pair: {env_name}, {policy_name}")
+                self.logger.warning(f"Received result for unknown env-policy pair: {env_name}, {policy_name}")
         
-        # Verify each policy has the expected number of histories
+        # Verify each policy has the expected number of results
         for env, _, policies in environment_belief_policy_tuples:
             for policy in policies:
-                histories = results[env.name][policy.name]
-                if len(histories) != num_episodes:
+                result = results[env.name][policy.name]
+                if len(result) != num_episodes:
                     self.logger.warning(
-                        f"Policy {policy.name} in environment {env.name} has {len(histories)} histories, "
+                        f"Policy {policy.name} in environment {env.name} has {len(results)} results, "
                         f"expected {num_episodes}"
                     )
         
@@ -306,11 +309,11 @@ class BaseSimulator(ABC):
         )
 
         # Execute simulations using TaskManager
-        histories_list = self.task_manager.run_tasks(simulation_tasks)
+        results_list = self.task_manager.run_tasks(simulation_tasks)
             
         # Organize and return results
         return self._organize_simulation_results(
-            histories_list=histories_list,
+            results_list=results_list,
             environment_belief_policy_tuples=[(params.environment, params.belief, params.policies) for params in environment_run_params],
             num_episodes=environment_run_params[0].num_episodes,
             task_identifiers=task_identifiers
@@ -367,33 +370,16 @@ class BaseSimulator(ABC):
         pass
     
     @abstractmethod
-    def _compute_statistics_df(
+    def _compute_metrics(
         self,
-        results: Dict[str, Dict[str, List[History]]],
+        results: Dict[str, Dict[str, list]],
         environment_run_params: List[EnvironmentRunParams],
         alpha: float,
         confidence_interval_level: float
-    ) -> pd.DataFrame:
-        """Compute statistics for the simulation results.
-        
-        Args:
-            results: Dictionary mapping environment names to dictionaries mapping policy names to lists of histories
-            environment_run_params: List of environment run parameters containing environment, belief, and policy info
-            alpha: Alpha value for statistics computation (e.g. for CVaR)
-            confidence_interval_level: Confidence level for statistics (e.g. 0.95 for 95% CI)
-            
-        Returns:
-            DataFrame with the following structure:
-            - Required columns: 'environment' (str), 'policy' (str) - used for merging
-            - Metric columns: Each metric from compute_statistics_environment_policy_pair
-            - For each metric X, includes:
-              - X: The metric value
-              - X_ci_lower: Lower confidence bound
-              - X_ci_upper: Upper confidence bound
-            - One row per environment-policy pair
-        """
+    ) -> Dict[str, Dict[str, List[MetricValue]]]:
+        """Compute metrics for the simulation results."""
         pass
-    
+
     def _create_environment_visualizations(
         self,
         env_name: str,
@@ -480,78 +466,43 @@ class POMDPSimulator(BaseSimulator):
                     f"environments and {len(set(p.name for params in environment_run_params for p in params.policies))} policies")
         
         return simulation_tasks, task_identifiers
-    
-    def _organize_simulation_results(
-        self,
-        histories_list: List[History],
-        environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
-        num_episodes: int,
-        task_identifiers: List[Tuple[str, str]]
-    ) -> Dict[str, Dict[str, List[History]]]:
-        """Organize simulation results by environment and policy using task identifiers.
         
-        Args:
-            histories_list: List of histories from simulation tasks
-            environment_belief_policy_tuples: List of (environment, belief, policies) tuples
-            num_episodes: Number of episodes per policy
-            task_identifiers: List of (env_name, policy_name) tuples matching the histories
-            
-        Returns:
-            Dict mapping environment names to dicts mapping policy names to lists of histories
-        """
-        return super()._organize_simulation_results(
-            histories_list=histories_list,
-            environment_belief_policy_tuples=environment_belief_policy_tuples,
-            num_episodes=num_episodes,
-            task_identifiers=task_identifiers
-        )
-    
-    def simulate_multiple_environments_and_policies_parallel(
-        self,
-        environment_run_params: List[EnvironmentRunParams],
-        alpha: float,
-        confidence_interval_level: float = 0.95,
-        n_jobs: int = 1,
-    ) -> Dict[str, Dict[str, List[History]]]:
-        """Simulate multiple policies on multiple environments in parallel."""
-        return super().simulate_multiple_environments_and_policies_parallel(
-            environment_run_params=environment_run_params,
-            alpha=alpha,
-            confidence_interval_level=confidence_interval_level,
-            n_jobs=n_jobs
-        )
-    
-    def _compute_statistics_df(
+    def _compute_metrics(
         self,
         results: Dict[str, Dict[str, List[History]]],
         environment_run_params: List[EnvironmentRunParams],
         alpha: float,
         confidence_interval_level: float
-    ) -> pd.DataFrame:
-        """Compute statistics for the simulation results.
+    ) -> Dict[str, Dict[str, List[MetricValue]]]:
+        """Compute metrics for all environment-policy pairs.
         
         Args:
             results: Dictionary mapping environment names to dictionaries mapping policy names to lists of histories
-            environment_run_params: List of environment run parameters containing environment, belief, and policy info
-            alpha: Alpha value for statistics computation (e.g. for CVaR)
-            confidence_interval_level: Confidence level for statistics (e.g. 0.95 for 95% CI)
+            environment_run_params: List of environment run parameters containing environments and policies
+            alpha: Alpha value for statistics computation
+            confidence_interval_level: Confidence level for statistics
             
         Returns:
-            DataFrame with the following structure:
-            - Required columns: 'environment' (str), 'policy' (str) - used for merging
-            - Metric columns: Each metric from compute_statistics_environment_policy_pair
-            - For each metric X, includes:
-              - X: The metric value
-              - X_ci_lower: Lower confidence bound
-              - X_ci_upper: Upper confidence bound
-            - One row per environment-policy pair
+            Dictionary mapping environment names to dictionaries mapping policy names to lists of MetricValue objects
         """
-        return compute_statistics_environments_policies_comparison(
-            histories=results,
-            environments=[params.environment for params in environment_run_params],
-            alpha=alpha,
-            confidence_interval_level=confidence_interval_level
-        )
+        metrics_dict = {}
+        envs_dict = {params.environment.name: params.environment for params in environment_run_params}
+        
+        for env_name, policy_histories_dict in results.items():
+            metrics_dict[env_name] = {}
+            environment = envs_dict[env_name]
+            
+            for policy_name, histories in policy_histories_dict.items():
+                # Compute statistics for this environment-policy pair
+                metrics = compute_statistics_environment_policy_pair(
+                    env=environment,
+                    histories=histories,
+                    alpha=alpha,
+                    confidence_interval_level=confidence_interval_level
+                )
+                metrics_dict[env_name][policy_name] = metrics
+                
+        return metrics_dict
     
     def _create_environment_visualizations(
         self,

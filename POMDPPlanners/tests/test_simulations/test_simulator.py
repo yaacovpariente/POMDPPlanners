@@ -346,7 +346,7 @@ def test_organize_simulation_results_basic(simulator):
 
     # Execute
     results = simulator._organize_simulation_results(
-        histories_list=histories,
+        results_list=histories,
         environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
         num_episodes=num_episodes,
         task_identifiers=task_identifiers
@@ -426,7 +426,7 @@ def test_organize_simulation_results_multiple(simulator):
 
     # Execute
     results = simulator._organize_simulation_results(
-        histories_list=histories,
+        results_list=histories,
         environment_belief_policy_tuples=[
             (env1, initial_belief, [policy1]),
             (env2, initial_belief, [policy2])
@@ -462,7 +462,7 @@ def test_organize_simulation_results_edge_cases(simulator):
 
     # Test case 1: Empty histories
     results_empty = simulator._organize_simulation_results(
-        histories_list=[],
+        results_list=[],
         environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
         num_episodes=0,
         task_identifiers=[]  # Empty list of identifiers
@@ -487,7 +487,7 @@ def test_organize_simulation_results_edge_cases(simulator):
     )]
     single_identifier = [(environment.name, policy.name)]
     results_single = simulator._organize_simulation_results(
-        histories_list=single_history,
+        results_list=single_history,
         environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
         num_episodes=1,
         task_identifiers=single_identifier
@@ -566,7 +566,7 @@ def test_organize_simulation_results_matches_configurations(simulator):
 
     # Execute
     results = simulator._organize_simulation_results(
-        histories_list=histories,
+        results_list=histories,
         environment_belief_policy_tuples=[
             (env1, initial_belief, [policy1]),
             (env2, initial_belief, [policy2])
