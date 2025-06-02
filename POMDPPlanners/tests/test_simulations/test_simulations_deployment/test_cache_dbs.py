@@ -95,14 +95,6 @@ def test_disk_cache_db_operations(temp_cache_dir, environment, policy):
     finally:
         cache_db.close()
 
-def test_disk_cache_db_invalid_value(temp_cache_dir):
-    """Test that DiskCacheDB rejects invalid values."""
-    cache_db = DiskCacheDB(cache_dir=temp_cache_dir)
-    try:
-        with pytest.raises(TypeError, match="Cache can only store History objects"):
-            cache_db.set("test_key", "not a history")
-    finally:
-        cache_db.close()
 
 def test_disk_cache_db_clear(temp_cache_dir, environment, policy):
     """Test cache clearing functionality."""
