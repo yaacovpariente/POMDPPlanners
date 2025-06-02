@@ -5,7 +5,7 @@ from diskcache import Cache
 from pathlib import Path
 from POMDPPlanners.utils.logger import get_logger
 
-from POMDPPlanners.core.simulation import DataBaseInterface, History
+from POMDPPlanners.core.simulation import DataBaseInterface
 
 logger = get_logger(__name__)
 
@@ -69,13 +69,9 @@ class DiskCacheDB(DataBaseInterface):
         
         Args:
             key: Cache key to store
-            value: Value to store (must be a History object)
+            value: Value to store
         """
-        if not isinstance(value, History):
-            raise TypeError("Cache can only store History objects")
-            
         try:
-            # Convert History to JSON-serializable dict
             self.cache.set(key, value)
         except Exception as e:
             logger.error(f"Error storing in cache: {e}")

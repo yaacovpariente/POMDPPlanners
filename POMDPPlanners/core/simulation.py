@@ -9,7 +9,8 @@ from POMDPPlanners.utils.logger import get_logger
 if TYPE_CHECKING:
     from POMDPPlanners.core.belief import Belief
     from POMDPPlanners.core.policy import PolicyRunData
-
+    from POMDPPlanners.core.environment import Environment
+    from POMDPPlanners.core.policy import Policy
     
 class StepData(NamedTuple):
     state: Any
@@ -145,11 +146,11 @@ class MetricValue(NamedTuple):
     lower_confidence_bound: float
     upper_confidence_bound: float
 
-
-class EnvironmentRunParams(NamedTuple):
-    environment: Any  # Use Any to avoid circular import
-    belief: Any
-    policies: list[Any]
+@dataclass(frozen=True)
+class EnvironmentRunParams:
+    environment: 'Environment'
+    belief: 'Belief'
+    policies: list['Policy']
     num_episodes: int
     num_steps: int
 
