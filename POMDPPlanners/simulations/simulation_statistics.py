@@ -214,3 +214,49 @@ def compute_statistics_environments_policies_comparison(
     
     return df
 
+def metrics_dict_to_dataframe(
+    metrics_dict: Dict[str, Dict[str, List[MetricValue]]]
+) -> pd.DataFrame:
+    """
+    Convert a dictionary of metrics into a DataFrame with environment and policy columns.
+    
+    Args:
+        metrics_dict: Dictionary mapping environment names to dictionaries mapping policy names to lists of MetricValue objects
+        
+    Returns:
+        DataFrame where each row represents an environment-policy pair and columns are metrics with confidence intervals
+    """
+    assert isinstance(metrics_dict, dict)
+    assert len(metrics_dict) > 0
+    assert all(isinstance(policy_metrics, dict) for policy_metrics in metrics_dict.values())
+    assert all(
+        isinstance(metrics, list) and all(isinstance(m, MetricValue) for m in metrics)
+        for policy_metrics in metrics_dict.values()
+        for metrics in policy_metrics.values()
+    )
+
+    # List to store all statistics
+    all_statistics = []
+
+    # Process each environment-policy pair
+    for env_name, policy_metrics_dict in metrics_dict.items():
+        for policy_name, metrics in policy_metrics_dict.items():
+            # Create row data with environment and policy names
+            row_data = {
+                'environment': env_name,
+                'policy': policy_name
+            }
+            
+            # Add all metrics to row data
+            for metric in metrics:
+                row_data[metric.name] = metric.value
+                row_data[f'{metric.name}_ci_lower'] = metric.lower_confidence_bound
+                row_data[f'{metric.name}_ci_upper'] = metric.upper_confidence_bound
+            
+            all_statistics.append(row_data)
+    
+    # Create DataFrame from all statistics
+    df = pd.DataFrame(all_statistics)
+    
+    return df
+
