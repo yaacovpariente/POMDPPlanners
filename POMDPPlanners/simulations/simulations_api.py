@@ -2,121 +2,45 @@ import os
 import importlib
 import inspect
 from pathlib import Path
+from typing import List, Tuple, Dict
+
+import pandas as pd
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.belief import Belief, get_initial_belief
-from POMDPPlanners.simulations.simulations import simulation
+from POMDPPlanners.core.simulation import EnvironmentRunParams
+from POMDPPlanners.simulations.simulator import POMDPSimulator
+from POMDPPlanners.simulations.simulations_deployment.task_managers import TaskManagerType
 
 class SimulationsAPI:
     def __init__(self):
         pass
-    
-    def run_simulation(
-        self, 
-        environment: Environment, 
-        policy: Policy, 
-        initial_belief: Belief, 
-        discount_factor: float, 
-        num_episodes: int, 
-        num_steps: int,
+
+    def run_multiple_environments_and_policies_local_run(
+        self,
+        environment_run_params: List[EnvironmentRunParams],
         alpha: float,
         confidence_interval_level: float,
-        cache_dir_path: Path = None
-    ):
-        assert isinstance(environment, Environment)
-        assert isinstance(policy, Policy)
-        assert isinstance(initial_belief, Belief)
-        assert isinstance(discount_factor, float)
-        assert isinstance(num_episodes, int)
-        assert isinstance(num_steps, int)
-        assert isinstance(alpha, float)
-        assert isinstance(confidence_interval_level, float)
-        assert isinstance(cache_dir_path, Path)
-        
-        assert num_episodes > 0
-        assert num_steps > 0
-        assert 1 >= alpha >= 0
-        assert 1 >= confidence_interval_level >= 0
-        
-        return simulation(
-            environment=environment,
-            policy=policy,
-            initial_belief=initial_belief,
-            discount_factor=discount_factor,
-            num_episodes=num_episodes,
-            num_steps=num_steps,
+        experiment_name: str = "POMDP_Planning_Comparison",
+        debug: bool = False,
+        n_jobs: int = -1,
+        cache_dir_path: Path = None,
+        clear_cache_on_start: bool = False,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        simulator = POMDPSimulator(
+            cache_dir_path=cache_dir_path,
+            experiment_name=experiment_name,
+            debug=debug,
+            task_manager_type=TaskManagerType.JOBLIB,
+            n_jobs=n_jobs,
+            clear_cache_on_start=clear_cache_on_start,
+        )
+        return simulator.compare_multiple_environments_policies(
+            environment_run_params=environment_run_params,
             alpha=alpha,
             confidence_interval_level=confidence_interval_level,
-            cache_dir_path=cache_dir_path
+            n_jobs=n_jobs,
+            cache_visualizations=True,
         )
         
-    def evaluate_policy_over_all_environments(
-        self, 
-        policy: Policy, 
-        discount_factor: float, 
-        n_particles: int,
-        num_episodes: int, 
-        num_steps: int,
-        alpha: float,
-        confidence_interval_level: float,
-        cache_dir_path: Path = None
-    ):
-        assert isinstance(policy, Policy)
-        assert isinstance(discount_factor, float)
-        assert isinstance(n_particles, int)
-        assert isinstance(num_episodes, int)
-        assert isinstance(num_steps, int)
-        assert isinstance(alpha, float)
-        assert isinstance(confidence_interval_level, float)
-        assert isinstance(cache_dir_path, Path)
-        
-        assert num_episodes > 0
-        assert num_steps > 0
-        assert n_particles > 0
-        assert 1 >= alpha >= 0
-        assert 1 >= confidence_interval_level >= 0
-
-        environment_classes = get_all_environment_classes()
-        
-        for environment_class in environment_classes:
-            environment = environment_class()
-            initial_belief = get_initial_belief(pomdp=environment, n_particles=n_particles)
-            
-            self.run_simulation(
-                environment=environment, 
-                policy=policy, 
-                initial_belief=initial_belief, 
-                discount_factor=discount_factor, 
-                num_episodes=num_episodes, 
-                num_steps=num_steps,
-                alpha=alpha,
-                confidence_interval_level=confidence_interval_level,
-                cache_dir_path=cache_dir_path
-            )
-
-
-def get_all_environment_classes():
-    # Get the directory containing the environment files
-    env_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # Get all Python files in the directory (excluding __init__.py)
-    env_files = [f[:-3] for f in os.listdir(env_dir) 
-                if f.endswith('.py') and f != '__init__.py']
-    
-    env_classes = []
-    
-    # Import each module and find Environment subclasses
-    for module_name in env_files:
-        # Import the module
-        module = importlib.import_module(f'POMDPPlanners.environments.{module_name}')
-        
-        # Get all classes defined in the module
-        for name, obj in inspect.getmembers(module):
-            # Check if it's a class and a subclass of Environment (but not Environment itself)
-            if (inspect.isclass(obj) and 
-                issubclass(obj, Environment) and 
-                obj != Environment):
-                env_classes.append(obj)
-    
-    return env_classes
