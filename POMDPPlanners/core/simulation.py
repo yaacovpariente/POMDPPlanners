@@ -3,6 +3,7 @@ from typing import Any, NamedTuple, TYPE_CHECKING, List, Union
 from dataclasses import dataclass
 
 import numpy as np
+from POMDPPlanners.utils.logger import get_logger
 
 
 if TYPE_CHECKING:
@@ -84,6 +85,8 @@ class History:
         Returns:
             History: New History instance
         """
+        assert isinstance(data, dict)
+        
         # Convert history list of dictionaries back to StepData objects
         history = []
         for step_data in data['history']:
@@ -187,35 +190,47 @@ class TaskManager(ABC):
 class TaskManagerExternalDB(TaskManager):
     def __init__(self, cache_db: DataBaseInterface):
         self.cache_db = cache_db
+        self.logger = get_logger(__name__)
     
     @abstractmethod
     def _run_tasks(self, tasks: List[SimulationTask]) -> List[Any]:
         pass
     
     def run_tasks(self, tasks: List[SimulationTask]) -> List[Any]:
+        self.logger.info(f"Starting to process {len(tasks)} tasks")
         # Lists to store results and track which tasks need to be run
         results = [None] * len(tasks)
         tasks_to_run = []
         task_indices = []  # Keep track of original indices for uncached tasks
         
         # First pass: check cache and collect tasks that need to be run
+        cached_tasks = 0
         for i, task in enumerate(tasks):
-            if self.cache_db.is_key_in_cache(task.get_config_id()):
-                results[i] = self.cache_db.get(task.get_config_id())
+            task_id = task.get_config_id()
+            if self.cache_db.is_key_in_cache(task_id):
+                results[i] = self.cache_db.get(task_id)
+                cached_tasks += 1
             else:
                 tasks_to_run.append(task)
                 task_indices.append(i)
         
+        self.logger.info(f"Cache status: {cached_tasks} tasks cached, {len(tasks_to_run)} tasks uncached out of {len(tasks)} total tasks")
+        
         # Run only the tasks that weren't in cache
         if tasks_to_run:
+            self.logger.info(f"Running {len(tasks_to_run)} uncached tasks")
             new_results = self._run_tasks(tasks_to_run)
+            self.logger.info(f"Successfully completed {len(new_results)} tasks")
             
             # Store new results in their original positions
             for idx, result in zip(task_indices, new_results):
                 results[idx] = result
                 # Cache the new result
-                self.cache_db.set(tasks[idx].get_config_id(), result)
+                task_id = tasks[idx].get_config_id()
+                self.logger.debug(f"Storing task {idx} in cache with config_id: {task_id}")
+                self.cache_db.set(task_id, result)
         
+        self.logger.info("All tasks completed successfully")
         return results
 
 def history_to_discounted_return_value(history: History) -> float:

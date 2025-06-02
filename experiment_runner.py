@@ -4,11 +4,10 @@ import importlib.util
 import sys
 from typing import List, Dict, Any
 
-from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.core.config_types import ExperimentConfig
 from POMDPPlanners.core.simulation import EnvironmentRunParams
-from POMDPPlanners.simulations.simulations_deployment import DeploymentType
 from POMDPPlanners.utils.logger import get_logger
+from POMDPPlanners.simulations.simulations_api import SimulationsAPI
 
 logger = get_logger(__name__)
 
@@ -94,6 +93,7 @@ def main():
     parser.add_argument("--scheduler_address", type=str, help="Dask scheduler address for distributed computing")
     parser.add_argument("--cache_visualizations", action="store_true", help="Cache visualizations")
     parser.add_argument("--debug", action="store_true", help="Run in debug mode with reduced episodes")
+    parser.add_argument("--clear_cache_on_start", action="store_true", help="Clear cache directory at the start of the experiment")
     args = parser.parse_args()
 
     # Setup logging
@@ -127,18 +127,16 @@ def main():
     
     # Run comparison
     logger.info("Starting experiment comparison...")
-    simulator = POMDPSimulator(
-        cache_dir_path=output_dir,
-        experiment_name=args.experiment_name,
-        debug=args.debug
-    )
-    histories, statistics_df = simulator.compare_multiple_environments_policies(
+    api = SimulationsAPI()
+    histories, statistics_df = api.run_multiple_environments_and_policies_local_run(
         environment_run_params=environment_run_params,
         alpha=args.alpha,
         confidence_interval_level=args.confidence,
+        experiment_name=args.experiment_name,
+        debug=args.debug,
         n_jobs=args.n_jobs,
-        cache_visualizations=args.cache_visualizations,
-        scheduler_address=args.scheduler_address
+        cache_dir_path=output_dir,
+        clear_cache_on_start=args.clear_cache_on_start
     )
     
     logger.info("Experiment completed successfully!")
