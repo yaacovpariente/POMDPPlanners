@@ -3,8 +3,11 @@ import json
 import numpy as np
 from diskcache import Cache
 from pathlib import Path
+from POMDPPlanners.utils.logger import get_logger
 
 from POMDPPlanners.core.simulation import DataBaseInterface, History
+
+logger = get_logger(__name__)
 
 
 class DiskCacheDB(DataBaseInterface):
@@ -45,9 +48,9 @@ class DiskCacheDB(DataBaseInterface):
             data = self.cache.get(key)
             if data is None:
                 return None
-            return History.from_dict(json.loads(data))
+            return data
         except Exception as e:
-            print(f"Error retrieving from cache: {e}")
+            logger.error(f"Error retrieving from cache: {e}")
             return None
     
     def is_key_in_cache(self, key: str) -> bool:
@@ -73,10 +76,9 @@ class DiskCacheDB(DataBaseInterface):
             
         try:
             # Convert History to JSON-serializable dict
-            data = json.dumps(value.to_dict())
-            self.cache.set(key, data)
+            self.cache.set(key, value)
         except Exception as e:
-            print(f"Error storing in cache: {e}")
+            logger.error(f"Error storing in cache: {e}")
     
     def clear(self):
         """Clear all entries from the cache."""

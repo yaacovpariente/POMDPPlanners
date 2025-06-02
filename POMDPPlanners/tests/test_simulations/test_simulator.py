@@ -239,7 +239,7 @@ def test_invalid_jobs_parameter(simulator):
     num_steps = 3
 
     # Test with invalid number of jobs
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         simulator.simulate_multiple_environments_and_policies_parallel(
             environment_run_params=[
                 EnvironmentRunParams(

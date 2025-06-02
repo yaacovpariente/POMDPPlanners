@@ -2,6 +2,7 @@ from typing import Optional, List, Dict
 import os
 from pathlib import Path
 from enum import Enum
+from tqdm import tqdm
 
 from dask.distributed import Future
 from dask.distributed import Client, LocalCluster
@@ -183,6 +184,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
         self.memory = Memory(self.cache_dir, verbose=verbose)
         if clear_cache_on_start:
             self.memory.clear()
+            self.cache_db.clear()
             
         # Create a cached version of the task runner
         self._cached_run = self.memory.cache(self._run_single_task)
@@ -201,7 +203,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
     def _run_tasks(self, tasks: List[SimulationTask]) -> List[History]:
         """Run tasks in parallel using joblib."""
         results = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
-            delayed(self._cached_run)(task) for task in tasks
+            delayed(self._cached_run)(task) for task in tqdm(tasks, desc="Running tasks")
         )
         return results
     

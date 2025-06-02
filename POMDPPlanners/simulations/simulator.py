@@ -4,6 +4,7 @@ import mlflow
 import hashlib
 import logging
 from abc import ABC, abstractmethod
+from joblib import Parallel, delayed
 
 import pandas as pd
 
@@ -148,20 +149,32 @@ class BaseSimulator(ABC):
         cache_visualizations: bool = True,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         """Compare multiple policies on multiple environments and cache results in MLFlow."""
+        # Log environment and algorithm names
+        env_algo_info = "\n".join([
+            f"Environment: {params.environment.name} - Algorithms: {[p.name for p in params.policies]}"
+            for params in environment_run_params
+        ])
+        self.logger.info(f"Running comparison with:\n{env_algo_info}")
+        
         # Type checks for all parameters
-        assert isinstance(environment_run_params, list), "environment_run_params must be a list"
-        assert all(isinstance(param, EnvironmentRunParams) for param in environment_run_params), "All elements in environment_run_params must be EnvironmentRunParams"
-        
-        assert isinstance(alpha, float), "alpha must be a float"
-        assert 0 <= alpha <= 1, "alpha must be between 0 and 1"
-        
-        assert isinstance(confidence_interval_level, float), "confidence_interval_level must be a float"
-        assert 0 < confidence_interval_level < 1, "confidence_interval_level must be between 0 and 1"
-        
-        assert isinstance(n_jobs, int), "n_jobs must be an integer"
-        assert n_jobs > 0 or n_jobs == -1, "n_jobs must be positive or -1 (for all available cores)"
-        
-        assert isinstance(cache_visualizations, bool), "cache_visualizations must be a boolean"
+        if not isinstance(environment_run_params, list):
+            raise ValueError("environment_run_params must be a list")
+        if not all(isinstance(param, EnvironmentRunParams) for param in environment_run_params):
+            raise ValueError("All elements in environment_run_params must be EnvironmentRunParams")
+        if not isinstance(alpha, float):
+            raise ValueError("alpha must be a float")
+        if not (0 <= alpha <= 1):
+            raise ValueError("alpha must be between 0 and 1")
+        if not isinstance(confidence_interval_level, float):
+            raise ValueError("confidence_interval_level must be a float")
+        if not (0 < confidence_interval_level < 1):
+            raise ValueError("confidence_interval_level must be between 0 and 1")
+        if not isinstance(n_jobs, int):
+            raise ValueError("n_jobs must be an integer")
+        if not (n_jobs > 0 or n_jobs == -1):
+            raise ValueError("n_jobs must be a positive integer or -1")
+        if not isinstance(cache_visualizations, bool):
+            raise ValueError("cache_visualizations must be a boolean")
 
         # Run main comparison
         with mlflow.start_run(run_name="environment_policy_comparison"):
@@ -199,7 +212,7 @@ class BaseSimulator(ABC):
             results_dir = self.cache_dir_path / "results"
             results_dir.mkdir(exist_ok=True)
             
-            for env_name, policy_results_dict in results.items():
+            def create_env_viz(env_name: str, policy_results_dict: Dict[str, list]) -> None:
                 environment = next(params.environment for params in environment_run_params if params.environment.name == env_name)
                 policies = [p for params in environment_run_params for p in params.policies if p.name in policy_results_dict]
                 
@@ -211,6 +224,12 @@ class BaseSimulator(ABC):
                     results_dir=results_dir,
                     cache_visualizations=cache_visualizations
                 )
+            
+            # Run visualizations in parallel
+            Parallel(n_jobs=n_jobs)(
+                delayed(create_env_viz)(env_name, policy_results_dict)
+                for env_name, policy_results_dict in results.items()
+            )
             
             # Log all artifacts
             mlflow.log_artifact(str(results_dir), "results")
@@ -327,33 +346,43 @@ class BaseSimulator(ABC):
         n_jobs: int
     ) -> None:
         """Validate all input parameters for parallel simulation."""
-        assert isinstance(environment_run_params, list), "environment_run_params must be a list"
-        assert len(environment_run_params) > 0, "environment_run_params cannot be empty"
-        
+        if not isinstance(environment_run_params, list):
+            raise ValueError("environment_run_params must be a list")
+        if len(environment_run_params) == 0:
+            raise ValueError("environment_run_params cannot be empty")
         for params in environment_run_params:
-            assert isinstance(params, EnvironmentRunParams), f"Expected EnvironmentRunParams, got {type(params)}"
-            assert isinstance(params.environment, Environment), f"Expected Environment, got {type(params.environment)}"
-            assert isinstance(params.belief, Belief), f"Expected Belief, got {type(params.belief)}"
-            assert isinstance(params.policies, list), f"Expected list of policies, got {type(params.policies)}"
-            assert len(params.policies) > 0, "Policy list cannot be empty"
+            if not isinstance(params, EnvironmentRunParams):
+                raise ValueError(f"Expected EnvironmentRunParams, got {type(params)}")
+            if not isinstance(params.environment, Environment):
+                raise ValueError(f"Expected Environment, got {type(params.environment)}")
+            if not isinstance(params.belief, Belief):
+                raise ValueError(f"Expected Belief, got {type(params.belief)}")
+            if not isinstance(params.policies, list):
+                raise ValueError(f"Expected list of policies, got {type(params.policies)}")
+            if len(params.policies) == 0:
+                raise ValueError("Policy list cannot be empty")
             for policy in params.policies:
-                assert isinstance(policy, Policy), f"Expected Policy, got {type(policy)}"
-            assert isinstance(params.num_episodes, int) and params.num_episodes > 0, "num_episodes must be a positive integer"
-            assert isinstance(params.num_steps, int) and params.num_steps > 0, "num_steps must be a positive integer"
-
-        # Verify unique environment names
+                if not isinstance(policy, Policy):
+                    raise ValueError(f"Expected Policy, got {type(policy)}")
+            if not (isinstance(params.num_episodes, int) and params.num_episodes > 0):
+                raise ValueError("num_episodes must be a positive integer")
+            if not (isinstance(params.num_steps, int) and params.num_steps > 0):
+                raise ValueError("num_steps must be a positive integer")
         env_names = [params.environment.name for params in environment_run_params]
-        assert len(env_names) == len(set(env_names)), "All environments must have unique names"
-
-        # Verify unique policy names across all environments
+        if len(env_names) != len(set(env_names)):
+            raise ValueError("All environments must have unique names")
         all_policies = [policy for params in environment_run_params for policy in params.policies]
         policy_names = [policy.name for policy in all_policies]
-        assert len(policy_names) == len(set(policy_names)), "All policies must have unique names"
-
-        assert isinstance(alpha, float), "alpha must be a float"
-        assert isinstance(confidence_interval_level, float), "confidence_interval_level must be a float"
-        assert 0 <= confidence_interval_level <= 1, "confidence_interval_level must be between 0 and 1"
-        assert isinstance(n_jobs, int) and (n_jobs > 0 or n_jobs == -1), "n_jobs must be a positive integer or -1"
+        if len(policy_names) != len(set(policy_names)):
+            raise ValueError("All policies must have unique names")
+        if not isinstance(alpha, float):
+            raise ValueError("alpha must be a float")
+        if not isinstance(confidence_interval_level, float):
+            raise ValueError("confidence_interval_level must be a float")
+        if not (0 <= confidence_interval_level <= 1):
+            raise ValueError("confidence_interval_level must be between 0 and 1")
+        if not (isinstance(n_jobs, int) and (n_jobs > 0 or n_jobs == -1)):
+            raise ValueError("n_jobs must be a positive integer or -1")
     
     @abstractmethod
     def _create_simulation_tasks(
