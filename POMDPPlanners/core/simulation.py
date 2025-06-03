@@ -231,8 +231,22 @@ class TaskManagerExternalDB(TaskManager):
                 self.logger.debug(f"Storing task {idx} in cache with config_id: {task_id}")
                 self.cache_db.set(task_id, result)
         
-        self.logger.info("All tasks completed successfully")
-        return results
+        # Filter out None results and log failures
+        successful_results = []
+        for i, result in enumerate(results):
+            if result is None:
+                task_id = tasks[i].get_config_id()
+                self.logger.warning(f"Task {i} (config_id: {task_id}) failed - returned None result")
+            else:
+                successful_results.append(result)
+        
+        self.logger.info(f"{len(successful_results)} tasks completed successfully")
+        
+        n_failed_tasks = len(tasks) - len(successful_results)
+        if n_failed_tasks > 0:
+            self.logger.warning(f"{n_failed_tasks} tasks failed.")
+            
+        return successful_results
 
 def history_to_discounted_return_value(history: History) -> float:
     return sum(step.reward * history.discount_factor ** i for i, step in enumerate(history.history) if step.reward is not None)
