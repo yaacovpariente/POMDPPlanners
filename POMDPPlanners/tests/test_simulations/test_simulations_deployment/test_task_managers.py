@@ -3,6 +3,7 @@ import numpy as np
 import tempfile
 import shutil
 from pathlib import Path
+import time
 
 from POMDPPlanners.simulations.simulations_deployment.task_managers import DaskTaskManager, JoblibTaskManager
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
@@ -28,7 +29,14 @@ def temp_cache_dir():
     """Fixture to create a temporary cache directory."""
     temp_dir = tempfile.mkdtemp()
     yield temp_dir
-    shutil.rmtree(temp_dir)
+    # Add a small delay to ensure all file handles are released
+    time.sleep(0.1)
+    try:
+        shutil.rmtree(temp_dir)
+    except PermissionError:
+        # If we still can't delete, log a warning but don't fail the test
+        import warnings
+        warnings.warn(f"Could not delete temporary directory {temp_dir}")
 
 @pytest.fixture
 def environment():
@@ -54,7 +62,10 @@ def cache_db(temp_cache_dir):
     """Fixture to create a DiskCacheDB instance."""
     db = DiskCacheDB(cache_dir=temp_cache_dir)
     yield db
+    # Ensure the cache is properly closed
     db.close()
+    # Add a small delay to ensure all file handles are released
+    time.sleep(0.1)
 
 # Tests for DaskTaskManager
 def test_dask_task_manager_initialization():
@@ -76,6 +87,7 @@ def test_dask_task_manager_run_tasks(environment, policy):
     with DaskTaskManager() as task_manager:
         # Create multiple tasks
         tasks = []
+        task_identifiers = []
         for i in range(2):
             belief = create_test_belief()
             task = EpisodeSimulationTask(
@@ -87,10 +99,13 @@ def test_dask_task_manager_run_tasks(environment, policy):
                 seed=42 + i
             )
             tasks.append(task)
+            task_identifiers.append(f"episode_{i}")
         # Run tasks
-        results = task_manager.run_tasks(tasks)
+        results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
         # Verify results
         assert len(results) == 2
+        assert len(successful_ids) == 2
+        assert all(id in successful_ids for id in task_identifiers)
         for result in results:
             assert isinstance(result, History)
             assert len(result.history) <= 2
@@ -135,6 +150,7 @@ def test_joblib_task_manager_run_tasks(cache_db, environment, policy):
     with JoblibTaskManager(cache_db=cache_db) as task_manager:
         # Create multiple tasks
         tasks = []
+        task_identifiers = []
         for i in range(2):
             belief = create_test_belief()
             task = EpisodeSimulationTask(
@@ -146,12 +162,15 @@ def test_joblib_task_manager_run_tasks(cache_db, environment, policy):
                 seed=42 + i
             )
             tasks.append(task)
+            task_identifiers.append(f"episode_{i}")
         
         # Run tasks
-        results = task_manager.run_tasks(tasks)
+        results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
         
         # Verify results
         assert len(results) == 2
+        assert len(successful_ids) == 2
+        assert all(id in successful_ids for id in task_identifiers)
         for result in results:
             assert isinstance(result, History)
             assert len(result.history) <= 2
@@ -169,25 +188,28 @@ def test_joblib_task_manager_cache(cache_db, environment, policy):
             episode_id=1,
             seed=42
         )
+        task_identifier = "episode_1"
         
         # Run task twice
-        result1 = task_manager.run_tasks([task])[0]
-        result2 = task_manager.run_tasks([task])[0]
+        result1, ids1 = task_manager.run_tasks([task], [task_identifier])
+        result2, ids2 = task_manager.run_tasks([task], [task_identifier])
         
         # Compare main fields instead of object equality
-        assert result1.discount_factor == result2.discount_factor
-        assert result1.actual_num_steps == result2.actual_num_steps
-        assert result1.reach_terminal_state == result2.reach_terminal_state
-        assert len(result1.history) == len(result2.history)
-        # Optionally compare more fields as needed
+        assert result1[0].discount_factor == result2[0].discount_factor
+        assert result1[0].actual_num_steps == result2[0].actual_num_steps
+        assert result1[0].reach_terminal_state == result2[0].reach_terminal_state
+        assert len(result1[0].history) == len(result2[0].history)
+        assert ids1 == ids2
+        assert task_identifier in ids1
         
         # Clear cache and run again
         task_manager.clear_cache()
-        result3 = task_manager.run_tasks([task])[0]
+        result3, ids3 = task_manager.run_tasks([task], [task_identifier])
         
         # Compare main fields again
-        assert result1.discount_factor == result3.discount_factor
-        assert result1.actual_num_steps == result3.actual_num_steps
-        assert result1.reach_terminal_state == result3.reach_terminal_state
-        assert len(result1.history) == len(result3.history)
-        # Optionally compare more fields as needed 
+        assert result1[0].discount_factor == result3[0].discount_factor
+        assert result1[0].actual_num_steps == result3[0].actual_num_steps
+        assert result1[0].reach_terminal_state == result3[0].reach_terminal_state
+        assert len(result1[0].history) == len(result3[0].history)
+        assert ids1 == ids3
+        assert task_identifier in ids3 

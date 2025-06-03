@@ -1,4 +1,4 @@
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Tuple
 import os
 from pathlib import Path
 from enum import Enum
@@ -99,9 +99,30 @@ class DaskTaskManager(TaskManager):
             
         return self.client.gather(futures)
     
-    def run_tasks(self, tasks: List[SimulationTask]) -> List[History]:
-        """Run tasks using Dask (submit and gather results)."""
-        return self._run_tasks(tasks)
+    def run_tasks(self, tasks: List[SimulationTask], task_identifiers: list) -> Tuple[List[History], list]:
+        """Run tasks using Dask (submit and gather results).
+        
+        Args:
+            tasks: List of simulation tasks to execute
+            task_identifiers: List of identifiers for the tasks
+            
+        Returns:
+            Tuple[List[History], list]: A tuple containing:
+                - List of successful simulation histories
+                - List of identifiers for successful tasks
+        """
+        # Run tasks and get results
+        results = self._run_tasks(tasks)
+        
+        # Filter successful results and their identifiers
+        successful_results = []
+        successful_identifiers = []
+        for result, identifier in zip(results, task_identifiers):
+            if result is not None:
+                successful_results.append(result)
+                successful_identifiers.append(identifier)
+        
+        return successful_results, successful_identifiers
     
     def _run_tasks(self, tasks: List[SimulationTask]) -> List[History]:
         """Run tasks using Dask (submit and gather results)."""
