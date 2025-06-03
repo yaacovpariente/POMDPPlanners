@@ -328,8 +328,11 @@ class BaseSimulator(ABC):
         )
 
         # Execute simulations using TaskManager
-        results_list = self.task_manager.run_tasks(simulation_tasks)
-            
+        results_list, task_identifiers = self.task_manager.run_tasks(simulation_tasks, task_identifiers)
+        
+        assert len(results_list) == len(task_identifiers)
+        assert len(results_list) > 0, "All tasks failed."
+        
         # Organize and return results
         return self._organize_simulation_results(
             results_list=results_list,

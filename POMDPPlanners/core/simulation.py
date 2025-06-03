@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, NamedTuple, TYPE_CHECKING, List, Union
+from typing import Any, NamedTuple, TYPE_CHECKING, List, Union, Tuple
 from dataclasses import dataclass
 
 import numpy as np
@@ -185,7 +185,7 @@ class DataBaseInterface(ABC):
     
 class TaskManager(ABC):
     @abstractmethod
-    def run_tasks(self, tasks: List[SimulationTask]) -> List[Any]:
+    def run_tasks(self, tasks: List[SimulationTask], task_identifiers: list) -> Tuple[List[Any], list]:
         pass
     
 class TaskManagerExternalDB(TaskManager):
@@ -197,7 +197,7 @@ class TaskManagerExternalDB(TaskManager):
     def _run_tasks(self, tasks: List[SimulationTask]) -> List[Any]:
         pass
     
-    def run_tasks(self, tasks: List[SimulationTask]) -> List[Any]:
+    def run_tasks(self, tasks: List[SimulationTask], task_identifiers: list) -> Tuple[List[Any], list]:
         self.logger.info(f"Starting to process {len(tasks)} tasks")
         # Lists to store results and track which tasks need to be run
         results = [None] * len(tasks)
@@ -223,6 +223,8 @@ class TaskManagerExternalDB(TaskManager):
             new_results = self._run_tasks(tasks_to_run)
             self.logger.info(f"Successfully completed {len(new_results)} tasks")
             
+            assert len(new_results) == len(tasks_to_run)
+            
             # Store new results in their original positions
             for idx, result in zip(task_indices, new_results):
                 results[idx] = result
@@ -230,23 +232,25 @@ class TaskManagerExternalDB(TaskManager):
                 task_id = tasks[idx].get_config_id()
                 self.logger.debug(f"Storing task {idx} in cache with config_id: {task_id}")
                 self.cache_db.set(task_id, result)
-        
-        # Filter out None results and log failures
+
+        # Filter out failed tasks and their identifiers
         successful_results = []
-        for i, result in enumerate(results):
-            if result is None:
+        successful_identifiers = []
+        for i, (result, identifier) in enumerate(zip(results, task_identifiers)):
+            if result is not None:
+                successful_results.append(result)
+                successful_identifiers.append(identifier)
+            else:
                 task_id = tasks[i].get_config_id()
                 self.logger.warning(f"Task {i} (config_id: {task_id}) failed - returned None result")
-            else:
-                successful_results.append(result)
-        
+
+        n_failed_tasks = len(tasks) - len(successful_results)
         self.logger.info(f"{len(successful_results)} tasks completed successfully")
         
-        n_failed_tasks = len(tasks) - len(successful_results)
         if n_failed_tasks > 0:
             self.logger.warning(f"{n_failed_tasks} tasks failed.")
             
-        return successful_results
+        return successful_results, successful_identifiers
 
 def history_to_discounted_return_value(history: History) -> float:
     return sum(step.reward * history.discount_factor ** i for i, step in enumerate(history.history) if step.reward is not None)
