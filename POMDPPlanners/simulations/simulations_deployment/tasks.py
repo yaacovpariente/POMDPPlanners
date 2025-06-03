@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Union
 import hashlib
 import json
 import random
@@ -6,6 +6,9 @@ import numpy as np
 
 from POMDPPlanners.core.simulation import SimulationTask, History
 from POMDPPlanners.simulations.episodes import run_episode
+from POMDPPlanners.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class EpisodeSimulationTask(SimulationTask):
@@ -96,7 +99,7 @@ class EpisodeSimulationTask(SimulationTask):
         """Create a SimulationTask instance from a dictionary."""
         return cls(**data)
     
-    def run(self) -> History:
+    def run(self) -> Union[History, None]:
         """Run the simulation task.
         
         Returns:
@@ -109,16 +112,21 @@ class EpisodeSimulationTask(SimulationTask):
         
         try:
             # Run simulation with seed parameter
-            return run_episode(
+            result = run_episode(
                 environment=self.environment,
                 policy=self.policy,
                 initial_belief=self.initial_belief,
                 num_steps=self.num_steps,
             )
+        except Exception as e:
+            logger.error(f"Error running episode {self.episode_id}: {e}")
+            result = None
         finally:
             # Restore random state
             np.random.set_state(state)
             
+        return result
+    
     def __eq__(self, other: 'EpisodeSimulationTask') -> bool:
         """Check if two tasks are equal."""
         if not isinstance(other, EpisodeSimulationTask):
