@@ -1,5 +1,9 @@
 from setuptools import setup, find_packages
 
+def read_requirements(filename):
+    with open(filename) as f:
+        return [line.strip() for line in f if line.strip() and not line.startswith('#')]
+
 setup(
     name="POMDPPlanners",
     version="0.1.0",
@@ -21,14 +25,9 @@ setup(
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     python_requires=">=3.8",
-    install_requires=[
-        "numpy",
-        "matplotlib",
-        "mlflow>=2.8.0",
-    ],
+    install_requires=read_requirements('requirements.txt'),
     extras_require={
         "dev": [
-            "pytest",
             "pylint",
             "black",
             "pre-commit",
