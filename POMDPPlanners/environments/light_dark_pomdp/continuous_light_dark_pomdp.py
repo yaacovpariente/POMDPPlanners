@@ -178,7 +178,9 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             next_state=next_state,
             action=action,
             observation_cov_matrix=self.observation_cov_matrix,
-            grid_size=self.grid_size
+            grid_size=self.grid_size,
+            beacons=self.beacons,
+            beacon_radius=self.beacon_radius
         )
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
