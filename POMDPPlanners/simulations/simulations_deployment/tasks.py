@@ -1,14 +1,15 @@
-from typing import Any, Union
+from typing import Any, Union, Optional
+from pathlib import Path
 import hashlib
 import json
 import random
+import logging
+
 import numpy as np
 
 from POMDPPlanners.core.simulation import SimulationTask, History
 from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.utils.logger import get_logger
-
-logger = get_logger(__name__)
 
 
 class EpisodeSimulationTask(SimulationTask):
@@ -23,7 +24,9 @@ class EpisodeSimulationTask(SimulationTask):
         episode_id: int,
         seed: int,
         discount_factor: float = 1.0,
-        episode_number: int = 0
+        episode_number: int = 0,
+        cache_dir: Optional[Path] = None,
+        debug: bool = False
     ):
         """Initialize a simulation task.
         
@@ -52,6 +55,18 @@ class EpisodeSimulationTask(SimulationTask):
         self.discount_factor = discount_factor
         self.episode_number = episode_number
         self._cache_key = self._generate_cache_key()
+        self.debug = debug
+        
+        self.output_dir = cache_dir / "episodes" / f"{self.environment.name}.{self.policy.name}.{self.episode_id}" if cache_dir is not None else None
+    
+    @property
+    def logger(self) -> logging.Logger:
+        """All tasks should remain pickable and therefore the logger should be a property"""
+        return get_logger(
+            name=f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}",
+            debug=self.debug,
+            output_dir=self.output_dir
+        )
     
     def _generate_cache_key(self) -> str:
         """Generate a unique cache key for this task."""
@@ -117,9 +132,10 @@ class EpisodeSimulationTask(SimulationTask):
                 policy=self.policy,
                 initial_belief=self.initial_belief,
                 num_steps=self.num_steps,
+                logger=self.logger
             )
         except Exception as e:
-            logger.error(f"Error running episode {self.episode_id}: {e}")
+            self.logger.error(f"Error running episode {self.episode_id}: {e}")
             result = None
         finally:
             # Restore random state

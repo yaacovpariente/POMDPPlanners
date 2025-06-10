@@ -39,16 +39,21 @@ class Policy(ABC):
         self.environment = environment
         self.discount_factor = discount_factor
         self.name = name
+        self.log_path = log_path
         self.debug = debug
         
         # Initialize logger with the policy's name and user-specified settings
-        self.logger = get_logger(
-            name=f"policy.{name}",
+        self.logger.info(f"Initialized policy: {self.name} (debug={self.debug})")
+        
+    @property
+    def logger(self) -> logging.Logger:
+        """All policies should remain pickable and therefore the logger should be a property"""
+        return get_logger(
+            name=f"policy.{self.name}",
             level=logging.INFO,
-            output_dir=log_path,
-            debug=debug
+            output_dir=self.log_path,
+            debug=self.debug
         )
-        self.logger.info(f"Initialized policy: {name} (debug={debug})")
 
     @property
     def config_id(self) -> str:

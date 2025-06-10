@@ -56,9 +56,20 @@ class Environment(ABC):
         self.discount_factor = discount_factor
         self.name = name
         self.space_info = space_info
-        self.logger = get_logger(f"environment.{name}", output_dir=output_dir, debug=debug)
-        self.logger.info(f"Initializing {name} environment with discount factor {discount_factor}")
-        self.logger.debug(f"Space info: action_space={space_info.action_space}, observation_space={space_info.observation_space}")
+        self.output_dir = output_dir
+        self.debug = debug
+        
+        self.logger.info(f"Initializing {self.name} environment with discount factor {self.discount_factor}")
+        self.logger.debug(f"Space info: action_space={self.space_info.action_space}, observation_space={self.space_info.observation_space}")
+
+    @property
+    def logger(self) -> logging.Logger:
+        """All environments should remain pickable and therefore the logger should be a property"""
+        return get_logger(
+            name=f"environment.{self.name}",
+            output_dir=self.output_dir,
+            debug=self.debug
+        )
 
     def __eq__(self, other):
         if not isinstance(other, Environment):
