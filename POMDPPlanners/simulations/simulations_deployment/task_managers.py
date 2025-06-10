@@ -180,7 +180,8 @@ class JoblibTaskManager(TaskManagerExternalDB):
         n_jobs: int = -1,  # -1 means use all available cores
         cache_dir: Optional[str] = None,
         clear_cache_on_start: bool = False,
-        verbose: int = 0
+        verbose: int = 0,
+        logger_debug: bool = False
     ):
         """Initialize the joblib task manager.
         
@@ -191,7 +192,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
             clear_cache_on_start: If True, clears the cache at startup
             verbose: Verbosity level for joblib
         """
-        super().__init__(cache_db=cache_db)
+        super().__init__(cache_db=cache_db, cache_dir=cache_dir, logger_debug=logger_debug)
         self.n_jobs = n_jobs
         self.verbose = verbose
         
