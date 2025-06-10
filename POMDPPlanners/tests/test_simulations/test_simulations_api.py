@@ -4,6 +4,7 @@ from unittest.mock import patch, MagicMock
 from pathlib import Path
 from typing import List, Dict
 import tempfile
+import time
 
 import pandas as pd
 import numpy as np
@@ -24,6 +25,8 @@ def temp_cache_dir():
     try:
         yield Path(temp_dir)
     finally:
+        # Add a small delay to ensure all file handles are released
+        time.sleep(0.1)
         # Ensure cleanup happens even if test fails
         try:
             import shutil
@@ -83,8 +86,7 @@ class TestSimulationsAPI:
             experiment_name="test_experiment",
             debug=True,
             n_jobs=1,  # Use single job for testing
-            cache_dir_path=temp_cache_dir,
-            clear_cache_on_start=True
+            cache_dir_path=temp_cache_dir
         )
         assert isinstance(results, dict)
         assert "test_tiger" in results
