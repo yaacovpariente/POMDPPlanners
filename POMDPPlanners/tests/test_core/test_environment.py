@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from typing import Optional, Any
+from pathlib import Path
 from POMDPPlanners.core.environment import (
     Environment,
     StateTransitionModel,
@@ -34,12 +35,14 @@ class MockObservationModel(ObservationModel):
         return 1.0
 
 class MockEnvironment(Environment):
-    def __init__(self, discount_factor: float, test_array: Optional[np.ndarray] = None):
+    def __init__(self, discount_factor: float, test_array: Optional[np.ndarray] = None, 
+                 output_dir: Optional[Path] = None, debug: bool = False):
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,
             observation_space=SpaceType.DISCRETE
         )
-        super().__init__(discount_factor=discount_factor, name="MockEnvironment", space_info=space_info)
+        super().__init__(discount_factor=discount_factor, name="MockEnvironment", 
+                        space_info=space_info, output_dir=output_dir, debug=debug)
         self.test_array = test_array if test_array is not None else np.array([1, 2, 3])
     
     def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
@@ -64,12 +67,13 @@ class MockEnvironment(Environment):
         return np.array_equal(observation1, observation2)
 
 class DifferentEnvironment(Environment):
-    def __init__(self, discount_factor: float):
+    def __init__(self, discount_factor: float, output_dir: Optional[Path] = None, debug: bool = False):
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,
             observation_space=SpaceType.DISCRETE
         )
-        super().__init__(discount_factor=discount_factor, name="DifferentEnvironment", space_info=space_info)
+        super().__init__(discount_factor=discount_factor, name="DifferentEnvironment", 
+                        space_info=space_info, output_dir=output_dir, debug=debug)
     
     def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
         return MockStateTransitionModel(state, action)
@@ -96,6 +100,11 @@ class DifferentEnvironment(Environment):
 def base_environment() -> MockEnvironment:
     """Fixture providing a base environment for comparison."""
     return MockEnvironment(discount_factor=0.9)
+
+@pytest.fixture
+def base_environment_with_logging(tmp_path) -> MockEnvironment:
+    """Fixture providing a base environment with logging enabled."""
+    return MockEnvironment(discount_factor=0.9, output_dir=tmp_path, debug=True)
 
 @pytest.mark.parametrize("discount_factor,expected_equal", [
     (0.9, True),   # Same discount factor
@@ -199,3 +208,32 @@ class TestEnvironmentConfigId:
         config_id = base_environment.config_id
         assert len(config_id) == 64  # SHA-256 produces 64 hex characters
         assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters
+
+class TestEnvironmentLogger:
+    """Test suite for Environment logger functionality."""
+    
+    def test_logger_initialization(self, base_environment_with_logging: MockEnvironment):
+        """Test that logger is properly initialized."""
+        assert hasattr(base_environment_with_logging, 'logger')
+        assert base_environment_with_logging.logger.name == "environment.MockEnvironment"
+    
+    def test_logger_without_output_dir(self, base_environment: MockEnvironment):
+        """Test that logger works without output directory."""
+        assert hasattr(base_environment, 'logger')
+        assert base_environment.logger.name == "environment.MockEnvironment"
+    
+    def test_logger_debug_mode(self, base_environment_with_logging: MockEnvironment):
+        """Test that debug mode affects logger level."""
+        assert base_environment_with_logging.logger.level <= 10  # DEBUG level is 10
+    
+    def test_logger_normal_mode(self, base_environment: MockEnvironment):
+        """Test that normal mode sets correct logger level."""
+        assert base_environment.logger.level == 20  # INFO level is 20
+    
+    def test_logger_output_dir(self, tmp_path):
+        """Test that logger creates log files in output directory."""
+        env = MockEnvironment(discount_factor=0.9, output_dir=tmp_path)
+        logs_dir = tmp_path / "logs"
+        assert logs_dir.exists()
+        log_files = list(logs_dir.glob("*.log"))
+        assert len(log_files) > 0

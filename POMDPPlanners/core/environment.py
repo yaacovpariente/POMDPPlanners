@@ -1,8 +1,9 @@
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Optional
 from pathlib import Path
 from abc import ABC, abstractmethod
 from enum import Enum
 from dataclasses import dataclass
+import logging
 
 import numpy as np
 
@@ -10,6 +11,7 @@ from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.utils.config_to_id import config_to_id
+from POMDPPlanners.utils.logger import get_logger
 
 class SpaceType(Enum):
     """Enum representing different types of spaces in the environment."""
@@ -50,10 +52,13 @@ class StateTransitionModel(Distribution, ABC):
         pass
 
 class Environment(ABC):
-    def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo):
+    def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo, output_dir: Path = None, debug: bool = False):
         self.discount_factor = discount_factor
         self.name = name
         self.space_info = space_info
+        self.logger = get_logger(f"environment.{name}", output_dir=output_dir, debug=debug)
+        self.logger.info(f"Initializing {name} environment with discount factor {discount_factor}")
+        self.logger.debug(f"Space info: action_space={space_info.action_space}, observation_space={space_info.observation_space}")
 
     def __eq__(self, other):
         if not isinstance(other, Environment):
@@ -117,14 +122,20 @@ class Environment(ABC):
             elif isinstance(value, Enum):
                 return value.value
             elif hasattr(value, '__dict__'):
+                # Skip logger objects
+                if isinstance(value, logging.Logger):
+                    return None
                 return serialize_value(value.__dict__)
             else:
                 return str(value)
         config_dict = {}
         for key, value in self.__dict__.items():
-            if key.startswith('_') or callable(value):
+            # Skip logger and private attributes
+            if key.startswith('_') or callable(value) or isinstance(value, logging.Logger):
                 continue
-            config_dict[key] = serialize_value(value)
+            serialized_value = serialize_value(value)
+            if serialized_value is not None:  # Skip None values (like logger)
+                config_dict[key] = serialized_value
         config_dict = dict(sorted(config_dict.items()))
         return config_to_id(config_dict)
 
@@ -176,8 +187,9 @@ class Environment(ABC):
 
 
 class DiscreteActionsEnvironment(Environment):
-    def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo):
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
+    def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo, output_dir: Path = None, debug: bool = False):
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, output_dir=output_dir, debug=debug)
+        self.logger.debug("Initialized DiscreteActionsEnvironment")
 
     @abstractmethod
     def state_transition_model(self, state: Any, action: Any) -> StateTransitionModel:
