@@ -32,6 +32,8 @@ def get_logger(name: str, level: int = logging.INFO, output_dir: Optional[Path] 
     
     # Add file handler if output_dir is provided
     if output_dir is not None:
+        # Convert string to Path if needed
+        output_dir = Path(output_dir) if isinstance(output_dir, str) else output_dir
         # Create logs directory
         logs_dir = output_dir / "logs"
         logs_dir.mkdir(parents=True, exist_ok=True)
