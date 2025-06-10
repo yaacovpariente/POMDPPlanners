@@ -30,7 +30,7 @@ class TaskManagerFactory:
         n_workers: Optional[int] = None,
         scheduler_address: Optional[str] = None,
         cache_size: int = 2e9,  # 2GB default
-        clear_cache_on_start: bool = False
+        clear_cache_on_start: bool = False,
     ) -> DaskTaskManager:
         """Create a DaskTaskManager for distributed computing.
         
