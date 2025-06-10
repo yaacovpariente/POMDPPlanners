@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
-from typing import Any, NamedTuple, TYPE_CHECKING, List, Union, Tuple
+from typing import Any, NamedTuple, TYPE_CHECKING, List, Union, Tuple, Optional
+from pathlib import Path
 from dataclasses import dataclass
+import logging
 
 import numpy as np
 from POMDPPlanners.utils.logger import get_logger
@@ -189,9 +191,18 @@ class TaskManager(ABC):
         pass
     
 class TaskManagerExternalDB(TaskManager):
-    def __init__(self, cache_db: DataBaseInterface):
+    def __init__(self, cache_db: DataBaseInterface, cache_dir: Optional[Path] = None, logger_debug: bool = False):
         self.cache_db = cache_db
-        self.logger = get_logger(__name__)
+        self.cache_dir = cache_dir
+        self.logger_debug = logger_debug
+    
+    @property
+    def logger(self) -> logging.Logger:
+        return get_logger(
+            name=f"task_manager",
+            debug=self.logger_debug,
+            output_dir=self.cache_dir
+        )
     
     @abstractmethod
     def _run_tasks(self, tasks: List[SimulationTask]) -> List[Any]:

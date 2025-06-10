@@ -31,7 +31,6 @@ from POMDPPlanners.simulations.simulations_deployment.task_managers import (
 )
 from POMDPPlanners.simulations.simulations_deployment import TaskManagerFactory
 
-logger = get_logger(__name__)
 
 class BaseSimulator(ABC):
     """A base class for POMDP simulators."""
@@ -61,8 +60,13 @@ class BaseSimulator(ABC):
         """
         self.cache_dir_path = cache_dir_path
         self.experiment_name = experiment_name
-        self.logger = logger
-        self.logger.setLevel(logging.DEBUG if debug else logging.INFO)
+        self.debug = debug
+        
+        self.logger = get_logger(
+            name=f"simulator.{experiment_name}",
+            debug=debug,
+            output_dir=cache_dir_path
+        )
         
         # Setup MLFlow tracking if cache directory is provided
         if cache_dir_path is not None:
@@ -488,7 +492,9 @@ class POMDPSimulator(BaseSimulator):
                         num_steps=params.num_steps,
                         episode_id=episode_id,
                         seed=seed,
-                        episode_number=episode_id
+                        episode_number=episode_id,
+                        cache_dir=self.cache_dir_path,
+                        debug=self.debug
                     )
                     simulation_tasks.append(task)
                     task_identifiers.append((env_name, policy_name))
