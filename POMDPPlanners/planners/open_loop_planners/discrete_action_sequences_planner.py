@@ -1,5 +1,6 @@
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Optional
 from itertools import product
+from pathlib import Path
 
 import numpy as np
 
@@ -8,8 +9,8 @@ from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceType
 from POMDPPlanners.core.belief import Belief
 
 class DiscreteActionSequencesPlanner(Policy):
-    def __init__(self, environment: DiscreteActionsEnvironment, discount_factor: float, name: str, depth: int, n_return_samples: int):
-        super().__init__(environment=environment, discount_factor=discount_factor, name=name)
+    def __init__(self, environment: DiscreteActionsEnvironment, discount_factor: float, name: str, depth: int, n_return_samples: int, log_path: Optional[Path] = None, debug: bool = False):
+        super().__init__(environment=environment, discount_factor=discount_factor, name=name, log_path=log_path, debug=debug)
 
         assert depth > 0
         assert n_return_samples > 0

@@ -1,8 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import Any, Tuple
+from typing import Any, Tuple, Optional
 import time
 from math import floor
 import random
+from pathlib import Path
 
 import numpy as np
 
@@ -34,14 +35,18 @@ class PFT_DPW(PathSimulationPolicy):
         time_out_in_seconds: int = None, 
         n_simulations: int = None, 
         min_samples_per_node: int = 10, 
-        min_visit_count_per_action: int = 1
+        min_visit_count_per_action: int = 1,
+        log_path: Optional[Path] = None,
+        debug: bool = False
     ):
         super().__init__(
             environment=environment, 
             discount_factor=discount_factor, 
             name=name,
             n_simulations=n_simulations,
-            time_out_in_seconds=time_out_in_seconds
+            time_out_in_seconds=time_out_in_seconds,
+            log_path=log_path,
+            debug=debug
         )
         
         self.__type_check_inputs(

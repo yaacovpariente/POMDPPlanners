@@ -1,5 +1,6 @@
 import random
-from typing import Any, Tuple
+from typing import Any, Tuple, Optional
+from pathlib import Path
 
 import numpy as np
 
@@ -13,13 +14,28 @@ from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSim
 
 
 class SparsePFT(PathSimulationPolicy):
-    def __init__(self, environment: DiscreteActionsEnvironment, discount_factor: float, gamma: float, depth: int, c_ucb: float, beta_ucb: float, belief_child_num: int, n_simulations: int, name: str = "SparsePFT"):
+    def __init__(
+        self, 
+        environment: DiscreteActionsEnvironment, 
+        discount_factor: float, 
+        gamma: float, 
+        depth: int, 
+        c_ucb: float, 
+        beta_ucb: float, 
+        belief_child_num: int, 
+        n_simulations: int, 
+        name: str = "SparsePFT", 
+        log_path: Optional[Path] = None, 
+        debug: bool = False
+    ):
         super().__init__(
             environment=environment,
             discount_factor=discount_factor,
             name=name,
             n_simulations=n_simulations,
-            time_out_in_seconds=None
+            time_out_in_seconds=None,
+            log_path=log_path,
+            debug=debug
         )
         
         assert isinstance(environment, DiscreteActionsEnvironment)

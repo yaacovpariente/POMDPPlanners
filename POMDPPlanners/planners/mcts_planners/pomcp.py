@@ -1,7 +1,8 @@
-from typing import Any, List
+from typing import Any, List, Optional
 import random
 import time
 import numpy as np
+from pathlib import Path
 
 from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, PolicyRunData
 from POMDPPlanners.core.environment import Environment, SpaceType
@@ -19,13 +20,21 @@ class POMCP(Policy):
         name: str,
         time_out_in_seconds: int = None, 
         n_simulations: int = None, 
-        min_samples_per_node: int = 10
+        min_samples_per_node: int = 10,
+        log_path: Optional[Path] = None,
+        debug: bool = False
     ):
         combination1 = time_out_in_seconds is not None and n_simulations is None
         combination2 = time_out_in_seconds is None and n_simulations is not None
         assert combination1 or combination2, "Only one of time_out_in_seconds and n_simulations must be provided."
         
-        super().__init__(environment=environment, discount_factor=discount_factor, name=name)
+        super().__init__(
+            environment=environment, 
+            discount_factor=discount_factor, 
+            name=name,
+            log_path=log_path,
+            debug=debug
+        )
         
         self.depth = depth
         self.exploration_constant = exploration_constant

@@ -1,6 +1,7 @@
 from abc import abstractmethod
 import time
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Optional
+from pathlib import Path
 
 from POMDPPlanners.core.policy import Policy, PolicyRunData
 from POMDPPlanners.core.environment import Environment
@@ -15,12 +16,16 @@ class PathSimulationPolicy(Policy):
         discount_factor: float, 
         name: str, 
         n_simulations: int, 
-        time_out_in_seconds: int
+        time_out_in_seconds: int,
+        log_path: Optional[Path] = None,
+        debug: bool = False
     ):
         super().__init__(
             environment=environment, 
             discount_factor=discount_factor, 
-            name=name
+            name=name,
+            log_path=log_path,
+            debug=debug
         )
 
         self.n_simulations = n_simulations

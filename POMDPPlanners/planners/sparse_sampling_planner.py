@@ -1,5 +1,6 @@
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Optional
 from abc import ABC, abstractmethod
+from pathlib import Path
 
 import numpy as np
 from anytree import PostOrderIter
@@ -19,7 +20,9 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         branching_factor: int,
         depth: int,
         resampling: bool = False,
-        name: str = "SparseSamplingDiscreteActionsPlanner"
+        name: str = "SparseSamplingDiscreteActionsPlanner",
+        log_path: Optional[Path] = None,
+        debug: bool = False
     ):
         assert isinstance(environment, DiscreteActionsEnvironment)
         assert isinstance(branching_factor, int)
@@ -33,7 +36,9 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         super().__init__(
             environment=environment, 
             discount_factor=environment.discount_factor,
-            name=name
+            name=name,
+            log_path=log_path,
+            debug=debug
         )
 
         self.branching_factor = branching_factor
