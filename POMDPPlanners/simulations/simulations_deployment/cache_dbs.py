@@ -7,8 +7,6 @@ from POMDPPlanners.utils.logger import get_logger
 
 from POMDPPlanners.core.simulation import DataBaseInterface
 
-logger = get_logger(__name__)
-
 
 class DiskCacheDB(DataBaseInterface):
     """A disk-based cache database implementation using diskcache."""
@@ -17,7 +15,8 @@ class DiskCacheDB(DataBaseInterface):
         self,
         cache_dir: str = "./cache",
         size_limit: int = 2e9,  # 2GB default size limit
-        eviction_policy: str = "least-recently-used"
+        eviction_policy: str = "least-recently-used",
+        debug: bool = False
     ):
         """Initialize the disk cache database.
         
@@ -33,6 +32,12 @@ class DiskCacheDB(DataBaseInterface):
             directory=str(self.cache_dir),
             size_limit=size_limit,
             eviction_policy=eviction_policy
+        )
+        
+        self.logger = get_logger(
+            name=f"disk_cache_db",
+            debug=debug,
+            output_dir=cache_dir
         )
     
     def get(self, key: str) -> Any:
@@ -50,7 +55,7 @@ class DiskCacheDB(DataBaseInterface):
                 return None
             return data
         except Exception as e:
-            logger.error(f"Error retrieving from cache: {e}")
+            self.logger.error(f"Error retrieving from cache: {e}")
             return None
     
     def is_key_in_cache(self, key: str) -> bool:
@@ -74,7 +79,7 @@ class DiskCacheDB(DataBaseInterface):
         try:
             self.cache.set(key, value)
         except Exception as e:
-            logger.error(f"Error storing in cache: {e}")
+            self.logger.error(f"Error storing in cache: {e}")
     
     def clear(self):
         """Clear all entries from the cache."""

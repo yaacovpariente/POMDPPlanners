@@ -1,6 +1,7 @@
 import copy
 from time import time
 from typing import Optional
+from logging import Logger
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
@@ -11,14 +12,13 @@ from POMDPPlanners.core.simulation import (
 )
 from POMDPPlanners.utils.logger import get_logger
 
-logger = get_logger(__name__)
-
 
 def run_episode(
     environment: Environment,
     policy: Policy,
     initial_belief: Belief,
     num_steps: int,
+    logger: Logger,
 ) -> History:
     """Run a single episode without caching.
     
@@ -64,8 +64,15 @@ def run_episode(
     if not hasattr(initial_belief, 'sample') or not hasattr(initial_belief, 'update'):
         raise ValueError("initial_belief must implement sample and update methods")
 
-    logger.debug(f"Starting episode with {num_steps} steps")
+    if logger is None:
+        logger = get_logger(
+            name=f"episode.{environment.name}.{policy.name}",
+            debug=logger.debug,
+            output_dir=logger.output_dir
+        )
 
+    logger.debug(f"Starting episode with {num_steps} steps")
+    
     # Initialize timing metrics with deterministic values
     average_state_sampling_time = 0.0
     average_action_time = 0.0
