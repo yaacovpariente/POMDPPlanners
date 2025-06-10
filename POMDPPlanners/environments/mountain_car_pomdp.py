@@ -1,4 +1,4 @@
-from typing import List, Any, Tuple
+from typing import List, Any, Tuple, Optional
 from pathlib import Path
 import numpy as np
 import matplotlib
@@ -84,7 +84,7 @@ class MountainCarObservation(ObservationModel):
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
-    def __init__(self, discount_factor: float, name: str = "MountainCarPOMDP"):
+    def __init__(self, discount_factor: float, name: str = "MountainCarPOMDP", output_dir: Optional[Path] = None, debug: bool = False):
         self.min_position = -1.2
         self.max_position = 0.6
         self.max_speed = 0.07
@@ -108,7 +108,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             action_space=SpaceType.DISCRETE,  # Action space is [-1, 0, 1]
             observation_space=SpaceType.CONTINUOUS  # Observation space is position and velocity
         )
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, output_dir=output_dir, debug=debug)
 
     def state_transition_model(
         self, state: Tuple[float, float], action: int

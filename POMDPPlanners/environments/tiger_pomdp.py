@@ -1,4 +1,4 @@
-from typing import List, Any
+from typing import List, Any, Optional
 from pathlib import Path
 
 import numpy as np
@@ -67,7 +67,7 @@ class TigerObservation(ObservationModel):
 
 
 class TigerPOMDP(DiscreteActionsEnvironment):
-    def __init__(self, discount_factor: float, name: str = "TigerPOMDP"):
+    def __init__(self, discount_factor: float, name: str = "TigerPOMDP", output_dir: Optional[Path] = None, debug: bool = False):
         if not (0.0 <= discount_factor <= 1.0):
             raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
         
@@ -75,7 +75,7 @@ class TigerPOMDP(DiscreteActionsEnvironment):
             action_space=SpaceType.DISCRETE,  # Actions are discrete: listen, open_left, open_right
             observation_space=SpaceType.DISCRETE  # Observations are discrete: hear_left, hear_right, hear_nothing
         )
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, output_dir=output_dir, debug=debug)
         self.states = STATES
         self.actions = ACTIONS
         self.observations = OBSERVATIONS

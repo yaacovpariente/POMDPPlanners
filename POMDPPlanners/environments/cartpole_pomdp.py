@@ -1,4 +1,6 @@
-from typing import List, Any
+from typing import List, Any, Optional
+from pathlib import Path
+
 import math
 
 import numpy as np
@@ -92,7 +94,7 @@ class CartPoleInitialStateDistribution(Distribution):
 
 
 class CartPolePOMDP(DiscreteActionsEnvironment):
-    def __init__(self, discount_factor: float, noise_cov: np.ndarray, name: str = "CartPolePOMDP"):
+    def __init__(self, discount_factor: float, noise_cov: np.ndarray, name: str = "CartPolePOMDP", output_dir: Optional[Path] = None, debug: bool = False):
         # Set all configuration parameters first
         self.noise_cov = noise_cov
         self.gravity = 9.8
@@ -119,7 +121,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         )
         
         # Call parent's __init__ last, which will generate the config_id
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, output_dir=output_dir, debug=debug)
 
     def state_transition_model(
         self, state: np.ndarray, action: int

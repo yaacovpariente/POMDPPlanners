@@ -1,4 +1,4 @@
-from typing import List, Any, Tuple
+from typing import List, Any, Tuple, Optional
 import numpy as np
 from pathlib import Path
 
@@ -109,6 +109,8 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         safety_violation_penalty: float = -100.0,
         movement_reward_scale: float = 1.0,
         name: str = "SafeVelocityPOMDP",
+        output_dir: Optional[Path] = None,
+        debug: bool = False,
     ):
         self.safe_velocity_threshold = safe_velocity_threshold
         self.max_force = max_force
@@ -128,7 +130,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             action_space=SpaceType.DISCRETE,  # Action space is discrete force magnitudes
             observation_space=SpaceType.CONTINUOUS  # Observation space is positions and velocities with noise
         )
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, output_dir=output_dir, debug=debug)
 
     def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
         return SafeAntVelocityStateTransition(

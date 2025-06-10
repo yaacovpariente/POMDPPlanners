@@ -1,4 +1,4 @@
-from typing import List, Any, Tuple
+from typing import List, Any, Tuple, Optional
 import numpy as np
 from pathlib import Path
 
@@ -108,6 +108,8 @@ class PushPOMDP(DiscreteActionsEnvironment):
         friction_coefficient: float = 0.3,
         observation_noise: float = 0.1,
         name: str = "PushPOMDP",
+        output_dir: Optional[Path] = None,
+        debug: bool = False,
     ):
         self.grid_size = grid_size
         self.push_threshold = push_threshold
@@ -124,7 +126,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
             action_space=SpaceType.DISCRETE,  # Action space is discrete positions
             observation_space=SpaceType.CONTINUOUS  # Observation space is positions with noise
         )
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, output_dir=output_dir, debug=debug)
 
     def state_transition_model(self, state: np.ndarray, action: str) -> StateTransitionModel:
         return PushStateTransition(
