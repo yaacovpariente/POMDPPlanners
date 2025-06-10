@@ -1,10 +1,13 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, List, Tuple, TYPE_CHECKING, Union
+from typing import Any, List, Tuple, TYPE_CHECKING, Union, Optional
 from typing import NamedTuple
+from pathlib import Path
+import logging
 
 import numpy as np
 from POMDPPlanners.utils.config_to_id import config_to_id
+from POMDPPlanners.utils.logger import get_logger
 
 if TYPE_CHECKING:
     from POMDPPlanners.core.environment import Environment
@@ -25,10 +28,27 @@ class PolicyRunData(NamedTuple):
     info_variables: List[PolicyInfoVariable]
 
 class Policy(ABC):
-    def __init__(self, environment: "Environment", discount_factor: float, name: str):
+    def __init__(
+        self, 
+        environment: "Environment", 
+        discount_factor: float, 
+        name: str,
+        log_path: Optional[Path] = None,
+        debug: bool = False
+    ):
         self.environment = environment
         self.discount_factor = discount_factor
         self.name = name
+        self.debug = debug
+        
+        # Initialize logger with the policy's name and user-specified settings
+        self.logger = get_logger(
+            name=f"policy.{name}",
+            level=logging.INFO,
+            output_dir=log_path,
+            debug=debug
+        )
+        self.logger.info(f"Initialized policy: {name} (debug={debug})")
 
     @property
     def config_id(self) -> str:
@@ -43,7 +63,13 @@ class Policy(ABC):
                 return [serialize_value(v) for v in value]
             elif isinstance(value, dict):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
+            elif isinstance(value, logging.Logger):
+                # Exclude logger from config serialization
+                return None
             elif hasattr(value, '__dict__'):
+                # Skip logger objects in __dict__ to avoid recursion
+                if isinstance(value, logging.Logger):
+                    return serialize_value(value.name)
                 return serialize_value(value.__dict__)
             else:
                 return str(value)
