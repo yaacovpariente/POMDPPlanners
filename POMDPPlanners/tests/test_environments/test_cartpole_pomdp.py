@@ -7,6 +7,7 @@ from POMDPPlanners.environments.cartpole_pomdp import (
     CartPoleInitialStateDistribution,
 )
 
+np.random.seed(42)
 
 @pytest.fixture
 def base_cartpole_environment() -> CartPolePOMDP:
