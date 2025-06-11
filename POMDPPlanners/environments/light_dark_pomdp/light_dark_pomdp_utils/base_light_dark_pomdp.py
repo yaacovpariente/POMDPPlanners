@@ -197,7 +197,10 @@ class BaseLightDarkPOMDP(Environment, ABC):
             # Update action arrow based on the action vector
             if frame < len(actions):
                 action = actions[frame]
-                dx, dy = self.action_to_vector[action]
+                if isinstance(action, str):
+                    dx, dy = self.action_to_vector[action]
+                else:
+                    dx, dy = action
                 arrow.set_data(x=x, y=y, dx=dx, dy=dy)
             else:
                 arrow.set_data(x=x, y=y, dx=0, dy=0)
@@ -230,9 +233,37 @@ class BaseLightDarkPOMDP(Environment, ABC):
         plt.close()
 
     def cache_visualization(self, history: History, cache_path: Path) -> None:
-        agent_path = [step.state for step in history.history]
-        agent_belief_path = [step.belief.to_unique_support_distribution() for step in history.history]
-        actions = [step.action for step in history.history]
+        """Cache visualization of agent's path and belief.
+        
+        Args:
+            history: The history of states, actions, and observations
+            cache_path: Path where to save the visualization
+            
+        Raises:
+            ValueError: If history is empty or contains invalid data
+        """
+        if not history.history:
+            raise ValueError("Cannot visualize empty history")
+            
+        # Extract data with validation
+        agent_path = []
+        agent_belief_path = []
+        actions = []
+        
+        for step in history.history:
+            if not hasattr(step, 'state') or not hasattr(step, 'belief') or not hasattr(step, 'action'):
+                raise ValueError(f"History step missing required attributes: {step}")
+                
+            agent_path.append(step.state)
+            agent_belief_path.append(step.belief.to_unique_support_distribution())
+            actions.append(step.action)
+            
+        # Validate all lists have same length
+        if not (len(agent_path) == len(agent_belief_path) == len(actions)):
+            raise ValueError(f"Mismatched lengths: path={len(agent_path)}, belief={len(agent_belief_path)}, actions={len(actions)}")
+            
+        # Create directory if it doesn't exist
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
         
         self.visualize_path(path=agent_path, agent_belief_path=agent_belief_path, actions=actions, cache_path=cache_path)
 
