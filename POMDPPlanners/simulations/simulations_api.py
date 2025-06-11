@@ -12,10 +12,16 @@ from POMDPPlanners.core.belief import Belief, get_initial_belief
 from POMDPPlanners.core.simulation import EnvironmentRunParams
 from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.simulations.simulations_deployment.task_managers import TaskManagerType
+from POMDPPlanners.utils.logger import get_logger
 
 class SimulationsAPI:
-    def __init__(self):
-        pass
+    def __init__(self, cache_dir_path: Path = None, debug: bool = False):
+        self.logger = get_logger(
+            name="simulations_api",
+            output_dir=cache_dir_path,
+            debug=debug
+        )
+        self.logger.info("Initialized SimulationsAPI")
 
     def run_multiple_environments_and_policies_local_run(
         self,
@@ -28,6 +34,9 @@ class SimulationsAPI:
         cache_dir_path: Path = None,
         clear_cache_on_start: bool = False,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        self.logger.info(f"Starting simulation run with {len(environment_run_params)} environment configurations")
+        self.logger.debug(f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}")
+        
         simulator = POMDPSimulator(
             cache_dir_path=cache_dir_path,
             experiment_name=experiment_name,
@@ -36,13 +45,17 @@ class SimulationsAPI:
             n_jobs=n_jobs,
             clear_cache_on_start=clear_cache_on_start,
         )
-        return simulator.compare_multiple_environments_policies(
+        
+        self.logger.info("Running simulation comparison")
+        results = simulator.compare_multiple_environments_policies(
             environment_run_params=environment_run_params,
             alpha=alpha,
             confidence_interval_level=confidence_interval_level,
             n_jobs=n_jobs,
             cache_visualizations=True,
         )
+        self.logger.info("Simulation run completed successfully")
+        return results
         
     def run_multiple_environments_and_policies_local_run_with_initial_debug_run(
         self,
@@ -54,6 +67,10 @@ class SimulationsAPI:
         cache_dir_path: Path = None,
         clear_cache_on_start: bool = False,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        self.logger.info("Starting simulation run with initial debug run")
+        self.logger.debug(f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}")
+        
+        # Create debug configurations
         environment_run_params_debug = [
             EnvironmentRunParams(
                 environment=config.environment,
@@ -64,6 +81,10 @@ class SimulationsAPI:
             )
             for config in environment_run_params
         ]
+        self.logger.info(f"Created debug configurations with {len(environment_run_params_debug)} environments")
+        
+        # Run debug simulation
+        self.logger.info("Starting debug simulation run")
         simulator_debug = POMDPSimulator(
             cache_dir_path=cache_dir_path,
             experiment_name=experiment_name,
@@ -80,7 +101,10 @@ class SimulationsAPI:
             n_jobs=n_jobs,
             cache_visualizations=True,
         )
+        self.logger.info("Debug simulation run completed")
         
+        # Run main simulation
+        self.logger.info("Starting main simulation run")
         simulator = POMDPSimulator(
             cache_dir_path=cache_dir_path,
             experiment_name=experiment_name,
@@ -90,10 +114,12 @@ class SimulationsAPI:
             clear_cache_on_start=clear_cache_on_start,
         )
         
-        return simulator.compare_multiple_environments_policies(
+        results = simulator.compare_multiple_environments_policies(
             environment_run_params=environment_run_params,
             alpha=alpha,
             confidence_interval_level=confidence_interval_level,
             n_jobs=n_jobs,
             cache_visualizations=True,
         )
+        self.logger.info("Main simulation run completed successfully")
+        return results
