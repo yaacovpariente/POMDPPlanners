@@ -3,11 +3,11 @@ from typing import Any, Dict
 import numpy as np
 
 from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.belief import WeightedParticleBeliefReinvigoration, Belief
+from POMDPPlanners.core.belief import WeightedParticleBeliefReinvigoration, Belief, WeightedParticleBelief
 from POMDPPlanners.core.config_types import BeliefConfig
 
 def create_belief(environment: Environment, belief_config: BeliefConfig) -> WeightedParticleBeliefReinvigoration:
-    """Create a belief instance from configuration.
+    """Create a belief instance from a belief config.
     
     Args:
         environment: The POMDP environment
@@ -18,7 +18,7 @@ def create_belief(environment: Environment, belief_config: BeliefConfig) -> Weig
     """
     belief_params = belief_config.params.copy()
     n_particles = belief_params.pop('n_particles')
-    particles = [environment.initial_state_dist().sample() for _ in range(n_particles)]
+    particles = environment.initial_state_dist().sample(n_samples=n_particles)
     log_weights = np.log(np.ones(n_particles) / n_particles)
     # Inject particles and log_weights into params
     belief_params['particles'] = particles
@@ -26,6 +26,17 @@ def create_belief(environment: Environment, belief_config: BeliefConfig) -> Weig
     # Create a new config with updated params
     updated_config = BeliefConfig(class_name=belief_config.class_name, params=belief_params)
     return Belief.from_config(updated_config)
+
+def get_initial_belief(
+    environment: Environment, n_particles: int, resampling: bool = True
+) -> Belief:
+    """Create initial belief from environment's initial state distribution."""
+    particles = environment.initial_state_dist().sample(n_samples=n_particles)
+    log_weights = np.log(np.ones(n_particles) / n_particles)
+
+    return WeightedParticleBelief(
+        particles=particles, log_weights=log_weights, resampling=resampling
+    )
 
 class WeightedParticleBeliefDiscreteLightDark(WeightedParticleBeliefReinvigoration):
     def __init__(
@@ -179,15 +190,21 @@ class WeightedParticleBeliefSanityPOMDP(WeightedParticleBeliefReinvigoration):
         
         self.reinvigoration_fraction = reinvigoration_fraction
 
-    def reinvigorate(self, action: Any, observation: Any, pomdp: Environment, belief: WeightedParticleBeliefReinvigoration) -> WeightedParticleBeliefReinvigoration:
-        effective_sample_size = 1 / np.sum(np.square(self.normalized_weights))
+    def reinvigorate(self, action: Any, observation: Any, pomdp: Environment) -> Belief:
+        """Reinvigorate particles by sampling from initial state distribution."""
+        n_reinvigorate = int(self.reinvigoration_fraction * len(self.particles))
+        reinvigorated_states = pomdp.initial_state_dist().sample(n_samples=n_reinvigorate)
         
-        if effective_sample_size > self.ess_threshold:
-            # For SanityPOMDP, we can reinvigorate by sampling from the initial state distribution
-            n_reinvigorate = int(self.reinvigoration_fraction * len(belief.particles))
-            reinvigorated_states = [pomdp.initial_state_dist().sample() for _ in range(n_reinvigorate)]
-            
-            replace_indices = np.random.choice(len(belief.particles), size=n_reinvigorate, replace=True)
-            belief.particles[:len(replace_indices)] = reinvigorated_states
-                
-        return belief
+        # Create new belief with reinvigorated particles
+        new_particles = self.particles + reinvigorated_states
+        new_log_weights = np.concatenate([
+            self.log_weights,
+            np.log(np.ones(n_reinvigorate) / n_reinvigorate)
+        ])
+        
+        return WeightedParticleBelief(
+            particles=new_particles,
+            log_weights=new_log_weights,
+            resampling=self.resampling,
+            ess_threshold=self.ess_threshold
+        )

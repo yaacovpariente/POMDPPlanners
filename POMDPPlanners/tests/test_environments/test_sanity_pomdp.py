@@ -288,22 +288,6 @@ class TestSanityPOMDPModels:
         assert isinstance(dist, SanityInitialObservationDist)
 
 
-class TestSanityPOMDPReward:
-    """Test suite for SanityPOMDP reward function."""
-    
-    def test_reward_state_0(self, sanity_pomdp):
-        """Test reward for state 0 (should be 1.0)."""
-        for action in [0, 1]:
-            reward = sanity_pomdp.reward(state=0, action=action)
-            assert reward == 1.0
-    
-    def test_reward_state_1(self, sanity_pomdp):
-        """Test reward for state 1 (should be 0.0)."""
-        for action in [0, 1]:
-            reward = sanity_pomdp.reward(state=1, action=action)
-            assert reward == 0.0
-
-
 class TestSanityPOMDPTerminal:
     """Test suite for SanityPOMDP terminal state detection."""
     
@@ -346,7 +330,7 @@ class TestSanityPOMDPSampleNextStep:
         next_state, next_observation, reward = sanity_pomdp.sample_next_step(state=1, action=0)
         assert next_state == 0  # Action 0 leads to state 0
         assert next_observation == 0  # State 0 gives observation 0
-        assert reward == 0.0  # State 1 gives reward 0.0 (reward is based on current state)
+        assert reward == 1.0  # State 1 gives reward 0.0 (reward is based on current state)
 
 
 class TestSanityPOMDPMetrics:

@@ -34,12 +34,13 @@ class ContinuousLightDarkNormalNoiseObservationModel(ObservationModel):
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
         # Convert list to numpy array for vectorized computation
         values_array = np.array(values)
-        
-        # Use scipy's built-in multivariate normal PDF
-        return multivariate_normal.pdf(values_array, mean=self.next_state, cov=self.observation_cov_matrix)
+        res = multivariate_normal.pdf(values_array, mean=self.next_state, cov=self.observation_cov_matrix)
+        if not isinstance(res, np.ndarray):
+            res = np.array([res])
+            
+        return res
 
     def _near_beacon(self, next_state: np.ndarray) -> bool:
         next_state = next_state.reshape(2, 1)
         distances = np.linalg.norm(next_state - self.beacons, axis=0)
         return np.any(distances <= self.beacon_radius)
-
