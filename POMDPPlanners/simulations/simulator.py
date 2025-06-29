@@ -61,6 +61,7 @@ class BaseSimulator(ABC):
         self.cache_dir_path = cache_dir_path
         self.experiment_name = experiment_name
         self.debug = debug
+        self.n_jobs = n_jobs
         
         self.logger = get_logger(
             name=f"simulator.{experiment_name}",
@@ -439,7 +440,8 @@ class POMDPSimulator(BaseSimulator):
         n_jobs: int = 1,
         scheduler_address: Optional[str] = None,
         cache_dir: Optional[str] = None,
-        clear_cache_on_start: bool = False
+        clear_cache_on_start: bool = False,
+        task_console_output: bool = False
     ):
         """Initialize the simulator.
         
@@ -452,6 +454,9 @@ class POMDPSimulator(BaseSimulator):
             scheduler_address: Address of Dask scheduler (None for local)
             cache_dir: Directory for joblib cache (None for default)
             clear_cache_on_start: If True, clears the cache at startup
+            task_console_output: Whether to enable console output for individual tasks (default: False).
+                               Set to True to see console output from each task, but this can create
+                               log mess when running in parallel.
         """
         super().__init__(
             cache_dir_path=cache_dir_path,
@@ -463,6 +468,7 @@ class POMDPSimulator(BaseSimulator):
             cache_dir=cache_dir,
             clear_cache_on_start=clear_cache_on_start
         )
+        self.task_console_output = task_console_output
             
     def _create_simulation_tasks(
         self,
@@ -494,7 +500,8 @@ class POMDPSimulator(BaseSimulator):
                         seed=seed,
                         episode_number=episode_id,
                         cache_dir=self.cache_dir_path,
-                        debug=self.debug
+                        debug=self.debug,
+                        console_output=self.task_console_output
                     )
                     simulation_tasks.append(task)
                     task_identifiers.append((env_name, policy_name))
