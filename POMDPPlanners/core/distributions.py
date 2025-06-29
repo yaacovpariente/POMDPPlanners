@@ -1,13 +1,30 @@
 from abc import ABC, abstractmethod
+from typing import List, Any
 import numpy as np
 
 
 class Distribution(ABC):
     @abstractmethod
-    def sample(self):
+    def sample(self, n_samples: int = 1) -> List[Any]:
+        """Sample n_samples from the distribution.
+        
+        Args:
+            n_samples: Number of samples to return (default: 1)
+            
+        Returns:
+            List of n_samples independent samples
+        """
         pass
 
-    def probability(self, value):
+    def probability(self, values: List[Any]) -> np.ndarray:
+        """Calculate probabilities for a list of values.
+        
+        Args:
+            values: List of values to calculate probabilities for
+            
+        Returns:
+            numpy array of probabilities corresponding to input values
+        """
         raise NotImplementedError(
             "The method is not implemented for this distribution."
         )
@@ -24,18 +41,19 @@ class DiscreteDistribution(Distribution):
         self.values = values
         self.probs = probs
 
-    def sample(self):
-        idx = np.random.choice(len(self.values), p=self.probs)
-        return self.values[idx]
+    def sample(self, n_samples: int = 1) -> List[Any]:
+        indices = np.random.choice(len(self.values), size=n_samples, p=self.probs)
+        return [self.values[idx] for idx in indices]
 
-    def probability(self, value):
-        idx = np.array(
-            [i if np.array_equal(v, value) else 0 for i, v in enumerate(self.values)]
-        )
-        if len(idx) == 0:
-            return 0.0
-
-        return sum(self.probs * idx)
+    def probability(self, values: List[Any]) -> np.ndarray:
+        # Vectorized probability calculation
+        result = np.zeros(len(values))
+        for i, value in enumerate(values):
+            for j, dist_value in enumerate(self.values):
+                if np.array_equal(value, dist_value):
+                    result[i] = self.probs[j]
+                    break
+        return result
 
 
 class Numpy2DDistribution(Distribution):
@@ -46,6 +64,16 @@ class Numpy2DDistribution(Distribution):
         self.values = values
         self.probs = probs
 
-    def sample(self):
-        idx = np.random.choice(len(self.probs), p=self.probs)
-        return self.values[:, idx]
+    def sample(self, n_samples: int = 1) -> List[Any]:
+        indices = np.random.choice(len(self.probs), size=n_samples, p=self.probs)
+        return [self.values[:, idx] for idx in indices]
+
+    def probability(self, values: List[Any]) -> np.ndarray:
+        # Vectorized probability calculation for 2D numpy arrays
+        result = np.zeros(len(values))
+        for i, value in enumerate(values):
+            for j in range(self.values.shape[1]):
+                if np.array_equal(value, self.values[:, j]):
+                    result[i] = self.probs[j]
+                    break
+        return result
