@@ -191,6 +191,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
             cache_dir: Directory for joblib cache (None for default)
             clear_cache_on_start: If True, clears the cache at startup
             verbose: Verbosity level for joblib
+            logger_debug: Whether to enable debug logging
         """
         super().__init__(cache_db=cache_db, cache_dir=cache_dir, logger_debug=logger_debug)
         self.n_jobs = n_jobs
