@@ -11,16 +11,19 @@ class SanityStateTransitionModel(Distribution):
         self.state = state
         self.action = action
         
-    def sample(self) -> int:
+    def sample(self, n_samples: int = 1) -> List[int]:
         # Action 0 always leads to state 0 (good state)
         # Action 1 always leads to state 1 (bad state)
-        return 0 if self.action == 0 else 1
+        next_state = 0 if self.action == 0 else 1
+        return [next_state] * n_samples
 
-    def probability(self, next_state: int) -> float:
-        if self.action == 0:
-            return 1.0 if next_state == 0 else 0.0
-        else:  # action == 1
-            return 1.0 if next_state == 1 else 0.0
+    def probability(self, values: List[int]) -> np.ndarray:
+        result = np.zeros(len(values))
+        expected_next_state = 0 if self.action == 0 else 1
+        for i, value in enumerate(values):
+            if value == expected_next_state:
+                result[i] = 1.0
+        return result
 
 class SanityObservationModel(Distribution):
     def __init__(self, next_state: int, action: int):
@@ -28,36 +31,48 @@ class SanityObservationModel(Distribution):
         self.next_state = next_state
         self.action = action
         
-    def sample(self) -> int:
+    def sample(self, n_samples: int = 1) -> List[int]:
         # Observation always matches the state
-        return self.next_state
+        return [self.next_state] * n_samples
 
-    def probability(self, observation: int) -> float:
-        return 1.0 if observation == self.next_state else 0.0
+    def probability(self, values: List[int]) -> np.ndarray:
+        result = np.zeros(len(values))
+        for i, value in enumerate(values):
+            if value == self.next_state:
+                result[i] = 1.0
+        return result
 
 class SanityInitialStateDist(Distribution):
-    def sample(self) -> int:
+    def sample(self, n_samples: int = 1) -> List[int]:
         # Always start in good state (0)
-        return 0
+        return [0] * n_samples
 
-    def probability(self, state: int) -> float:
-        return 1.0 if state == 0 else 0.0
+    def probability(self, values: List[int]) -> np.ndarray:
+        result = np.zeros(len(values))
+        for i, value in enumerate(values):
+            if value == 0:
+                result[i] = 1.0
+        return result
 
 class SanityInitialObservationDist(Distribution):
-    def sample(self) -> int:
+    def sample(self, n_samples: int = 1) -> List[int]:
         # Initial observation always matches initial state (0)
-        return 0
+        return [0] * n_samples
 
-    def probability(self, observation: int) -> float:
-        return 1.0 if observation == 0 else 0.0
+    def probability(self, values: List[int]) -> np.ndarray:
+        result = np.zeros(len(values))
+        for i, value in enumerate(values):
+            if value == 0:
+                result[i] = 1.0
+        return result
 
 class SanityPOMDP(DiscreteActionsEnvironment):
-    def __init__(self, output_dir: Optional[Path] = None, debug: bool = False):
+    def __init__(self, discount_factor: float = 0.95, output_dir: Optional[Path] = None, debug: bool = False):
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,  # Binary action space
             observation_space=SpaceType.DISCRETE  # Binary observation space
         )
-        super().__init__(discount_factor=0.95, name="SanityPOMDP", space_info=space_info, output_dir=output_dir, debug=debug)
+        super().__init__(discount_factor=discount_factor, name="SanityPOMDP", space_info=space_info, output_dir=output_dir, debug=debug)
         
     def state_transition_model(self, state: int, action: int) -> SanityStateTransitionModel:
         return SanityStateTransitionModel(state, action)
@@ -67,7 +82,8 @@ class SanityPOMDP(DiscreteActionsEnvironment):
     
     def reward(self, state: int, action: int) -> float:
         # Higher reward for being in good state (0)
-        return 1.0 if state == 0 else 0.0
+        next_state = self.state_transition_model(state, action).sample()[0]
+        return 1.0 if next_state == 0 else 0.0
     
     def is_terminal(self, state: int) -> bool:
         return False  # No terminal states
