@@ -31,12 +31,13 @@ class ObservationModel(Distribution, ABC):
         self.action = action
 
     @abstractmethod
-    def sample(self) -> Any:
+    def sample(self, n_samples: int = 1) -> List[Any]:
         pass
 
-    @abstractmethod
-    def probability(self, next_observation: Any) -> float:
-        pass
+    def probability(self, values: List[Any]) -> np.ndarray:
+        raise NotImplementedError(
+            "The method is not implemented for this observation model."
+        )
 
 
 class StateTransitionModel(Distribution, ABC):
@@ -45,11 +46,13 @@ class StateTransitionModel(Distribution, ABC):
         self.action = action
 
     @abstractmethod
-    def sample(self) -> Any:
+    def sample(self, n_samples: int = 1) -> List[Any]:
         pass
 
-    def probability(self, next_state: Any) -> float:
-        pass
+    def probability(self, values: List[Any]) -> np.ndarray:
+        raise NotImplementedError(
+            "The method is not implemented for this state transition model."
+        )
 
 class Environment(ABC):
     def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo, output_dir: Path = None, debug: bool = False):
@@ -182,10 +185,10 @@ class Environment(ABC):
         pass
 
     def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
-        next_state = self.state_transition_model(state=state, action=action).sample()
+        next_state = self.state_transition_model(state=state, action=action).sample()[0]
         next_observation = self.observation_model(
             next_state=next_state, action=action
-        ).sample()
+        ).sample()[0]
         reward = self.reward(state=state, action=action)
 
         return next_state, next_observation, reward

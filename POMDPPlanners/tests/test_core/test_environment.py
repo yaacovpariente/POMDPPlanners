@@ -1,6 +1,6 @@
 import numpy as np
 import pytest
-from typing import Optional, Any
+from typing import Optional, Any, List
 from pathlib import Path
 from POMDPPlanners.core.environment import (
     Environment,
@@ -14,25 +14,25 @@ from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
 class MockDistribution(Distribution):
-    def sample(self) -> np.ndarray:
-        return np.array([1, 2])
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        return [np.array([1, 2])] * n_samples
     
-    def probability(self, value: np.ndarray) -> float:
-        return 1.0
+    def probability(self, values: List[np.ndarray]) -> np.ndarray:
+        return np.array([1.0] * len(values))
 
 class MockStateTransitionModel(StateTransitionModel):
-    def sample(self) -> np.ndarray:
-        return np.array([1, 2])
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        return [np.array([1, 2])] * n_samples
     
-    def probability(self, next_state: np.ndarray) -> float:
-        return 1.0
+    def probability(self, values: List[np.ndarray]) -> np.ndarray:
+        return np.array([1.0] * len(values))
 
 class MockObservationModel(ObservationModel):
-    def sample(self) -> np.ndarray:
-        return np.array([3, 4])
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        return [np.array([1, 2])] * n_samples
     
-    def probability(self, next_observation: np.ndarray) -> float:
-        return 1.0
+    def probability(self, values: List[np.ndarray]) -> np.ndarray:
+        return np.array([1.0] * len(values))
 
 class MockEnvironment(Environment):
     def __init__(self, discount_factor: float, test_array: Optional[np.ndarray] = None, 
