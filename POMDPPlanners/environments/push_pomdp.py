@@ -9,7 +9,7 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType
 )
-from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
+from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.simulation import History, StepData
 
 
@@ -40,7 +40,7 @@ class PushStateTransition(StateTransitionModel):
             "left": np.array([-1, 0]),
         }
 
-    def sample(self) -> np.ndarray:
+    def sample(self, n_samples: int = 1) -> List[Any]:
         # Get movement vector for the action
         movement = self.action_to_vector[self.action]
         
@@ -63,7 +63,7 @@ class PushStateTransition(StateTransitionModel):
         
         # Combine all state components
         next_state = np.concatenate([new_robot_pos, new_object_pos, self.target_pos])
-        return next_state
+        return [next_state] * n_samples
 
 
 class PushObservation(ObservationModel):
@@ -83,14 +83,17 @@ class PushObservation(ObservationModel):
         self.object_pos = next_state[2:4]
         self.target_pos = next_state[4:6]
 
-    def sample(self) -> np.ndarray:
-        # Add noise to object position observation
-        noisy_object_pos = self.object_pos + np.random.normal(0, self.observation_noise, size=2)
-        noisy_object_pos = np.clip(noisy_object_pos, 0, self.grid_size - 1)
-        
-        # Combine observations (robot position is known exactly, target position is known)
-        observation = np.concatenate([self.robot_pos, noisy_object_pos, self.target_pos])
-        return observation
+    def sample(self, n_samples: int = 1) -> List[Any]:
+        observations = []
+        for _ in range(n_samples):
+            # Add noise to object position observation
+            noisy_object_pos = self.object_pos + np.random.normal(0, self.observation_noise, size=2)
+            noisy_object_pos = np.clip(noisy_object_pos, 0, self.grid_size - 1)
+            
+            # Combine observations (robot position is known exactly, target position is known)
+            observation = np.concatenate([self.robot_pos, noisy_object_pos, self.target_pos])
+            observations.append(observation)
+        return observations
 
     def probability(self, observation: np.ndarray) -> float:
         # Calculate probability based on Gaussian noise model
@@ -175,16 +178,20 @@ class PushPOMDP(DiscreteActionsEnvironment):
                 self.grid_size = grid_size
                 self.target_pos = target_pos
                 
-            def sample(self) -> np.ndarray:
-                # Random initial positions for robot and object
-                robot_pos = np.random.uniform(0, self.grid_size - 1, size=2)
-                object_pos = np.random.uniform(0, self.grid_size - 1, size=2)
-                
-                # Ensure object is not too close to target initially
-                while np.linalg.norm(object_pos - self.target_pos) < 2.0:
+            def sample(self, n_samples: int = 1) -> List[Any]:
+                initial_states = []
+                for _ in range(n_samples):
+                    # Random initial positions for robot and object
+                    robot_pos = np.random.uniform(0, self.grid_size - 1, size=2)
                     object_pos = np.random.uniform(0, self.grid_size - 1, size=2)
-                
-                return np.concatenate([robot_pos, object_pos, self.target_pos])
+                    
+                    # Ensure object is not too close to target initially
+                    while np.linalg.norm(object_pos - self.target_pos) < 2.0:
+                        object_pos = np.random.uniform(0, self.grid_size - 1, size=2)
+                    
+                    initial_state = np.concatenate([robot_pos, object_pos, self.target_pos])
+                    initial_states.append(initial_state)
+                return initial_states
         
         return InitialState(self.grid_size, self.target_pos)
 

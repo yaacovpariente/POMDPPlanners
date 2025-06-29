@@ -42,7 +42,7 @@ def test_state_transition():
         friction_coefficient=friction_coefficient,
     )
 
-    next_state = transition.sample()
+    next_state = transition.sample()[0]  # Get first element from list
 
     # Verify state dimensions
     assert next_state.shape == (6,)
@@ -76,7 +76,7 @@ def test_state_transition_no_push():
         friction_coefficient=friction_coefficient,
     )
 
-    next_state = transition.sample()
+    next_state = transition.sample()[0]  # Get first element from list
 
     # Verify robot moved
     assert next_state[0] > state[0]
@@ -98,7 +98,7 @@ def test_observation_model():
         grid_size=grid_size,
     )
 
-    observation = observation_model.sample()
+    observation = observation_model.sample()[0]  # Get first element from list
 
     # Verify observation dimensions
     assert observation.shape == (6,)
@@ -147,7 +147,7 @@ def test_initial_state_distribution():
     
     # Test multiple samples
     for _ in range(10):
-        state = initial_dist.sample()
+        state = initial_dist.sample()[0]  # Get first element from list
         
         # Verify state dimensions
         assert state.shape == (6,)
