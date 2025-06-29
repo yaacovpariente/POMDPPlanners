@@ -80,8 +80,8 @@ class UnweightedParticleBelief(Belief):
         for _ in range(self.num_particles):
             # Sample a particle and simulate its transition
             s = random.choice(self.particles)
-            next_s = pomdp.state_transition_model(state=s, action=action).sample()
-            obs = pomdp.observation_model(next_state=next_s, action=action).sample()
+            next_s = pomdp.state_transition_model(state=s, action=action).sample()[0]
+            obs = pomdp.observation_model(next_state=next_s, action=action).sample()[0]
             if pomdp.is_equal_observation(obs, observation):
                 new_particles.append(next_s)
 
@@ -103,8 +103,8 @@ class UnweightedParticleBelief(Belief):
         # Try sampling from initial state and simulate until match
         while True:
             s = self._reinvigoration_pertubation(action=action, observation=observation, pomdp=pomdp)
-            next_s = pomdp.state_transition_model(state=s, action=action).sample()
-            obs = pomdp.observation_model(next_state=next_s, action=action).sample()
+            next_s = pomdp.state_transition_model(state=s, action=action).sample()[0]
+            obs = pomdp.observation_model(next_state=next_s, action=action).sample()[0]
             if pomdp.is_equal_observation(obs, observation):
                 return next_s
 
@@ -259,22 +259,19 @@ class WeightedParticleBelief(Belief):
             return resampled_particles, new_log_weights
         return particles, log_weights
     
-    def _update_weights(self, action: Any, observation: Any, pomdp: Environment) -> Tuple[list, np.ndarray]:
+    def _update_weights(self, action: Any, observation: Any, pomdp: Environment) -> Tuple[np.ndarray, np.ndarray]:
         next_particles = [
-            pomdp.state_transition_model(state=particle, action=action).sample()
+            pomdp.state_transition_model(state=particle, action=action).sample()[0]
             for particle in self.particles
         ]
-        next_log_weights = self.log_weights + np.log(
-            self.eps
-            + np.array(
-                [
-                    pomdp.observation_model(
-                        next_state=next_particle, action=action
-                    ).probability(observation)
-                    for next_particle in next_particles
-                ]
-            )
-        )
+        probs = np.array([
+            pomdp.observation_model(
+                next_state=next_particle, action=action
+            ).probability([observation])[0]
+            for next_particle in next_particles
+        ])
+        
+        next_log_weights = self.log_weights + np.log(self.eps + probs)
 
         return next_particles, next_log_weights
 
@@ -331,8 +328,8 @@ def sample_next_belief(
     belief: Belief, action: Any, pomdp: "Environment"
 ) -> Tuple[Belief, Any]:
     state = belief.sample()
-    next_state = pomdp.state_transition_model(state=state, action=action).sample()
-    observation = pomdp.observation_model(next_state=next_state, action=action).sample()
+    next_state = pomdp.state_transition_model(state=state, action=action).sample()[0]
+    observation = pomdp.observation_model(next_state=next_state, action=action).sample()[0]
 
     next_belief = belief.update(action=action, observation=observation, pomdp=pomdp)
 
@@ -345,7 +342,7 @@ def get_initial_belief(
     assert isinstance(n_particles, int)
     assert n_particles > 0
 
-    particles = [pomdp.initial_state_dist().sample() for _ in range(n_particles)]
+    particles = pomdp.initial_state_dist().sample(n_samples=n_particles)
     log_weights = np.log(np.ones(n_particles) / n_particles)
 
     return WeightedParticleBelief(

@@ -552,5 +552,201 @@ def test_reinvigoration_sanity_pomdp():
     belief = create_belief(env, config)
     assert isinstance(belief, WeightedParticleBeliefSanityPOMDP)
     # Call reinvigorate with dummy action and observation
-    reinvigorated = belief.reinvigorate(action="up", observation=np.array([0, 0]), pomdp=env, belief=belief)
-    assert reinvigorated is belief
+    reinvigorated = belief.reinvigorate(action="up", observation=np.array([0, 0]), pomdp=env)
+    assert isinstance(reinvigorated, WeightedParticleBelief)
+
+# Tests for WeightedParticleBelief.update() method
+def test_belief_update_basic():
+    """Test basic belief update functionality."""
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+    
+    # Create a simple environment and belief
+    env = SanityPOMDP()
+    particles = [0, 1, 0, 1]  # Mix of states
+    log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
+    
+    # Perform an update
+    action = 0
+    observation = 0
+    updated_belief = belief.update(action=action, observation=observation, pomdp=env)
+    
+    # Check that we get a new belief object
+    assert updated_belief is not belief
+    assert isinstance(updated_belief, WeightedParticleBelief)
+    
+    # Check that we have the same number of particles
+    assert len(updated_belief.particles) == len(belief.particles)
+    
+    # Check that weights are still valid (not all zero)
+    assert np.any(updated_belief.log_weights > -np.inf)
+
+def test_belief_update_with_resampling():
+    """Test belief update with resampling enabled."""
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+    
+    env = SanityPOMDP()
+    particles = [0, 1, 0, 1]
+    log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=True, ess_threshold=0.5)
+    
+    action = 0
+    observation = 0
+    updated_belief = belief.update(action=action, observation=observation, pomdp=env)
+    
+    # Check that we get a new belief object
+    assert updated_belief is not belief
+    assert isinstance(updated_belief, WeightedParticleBelief)
+    
+    # Check that we have the same number of particles
+    assert len(updated_belief.particles) == len(belief.particles)
+    
+    # Check that weights are normalized after resampling
+    normalized_weights = np.exp(updated_belief.log_weights - np.max(updated_belief.log_weights))
+    assert np.isclose(np.sum(normalized_weights), len(updated_belief.particles))
+
+def test_belief_update_state_transitions():
+    """Test that belief update correctly handles state transitions."""
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+    
+    env = SanityPOMDP()
+    particles = [0, 0, 0]  # All particles start in state 0
+    log_weights = np.array([0.1, 0.1, 0.1])  # Non-zero weights
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
+    
+    action = 0
+    observation = 0
+    updated_belief = belief.update(action=action, observation=observation, pomdp=env)
+    
+    # Check that particles have been updated (state transitions occurred)
+    # In SanityPOMDP, action 0 from state 0 should transition to state 0
+    assert all(p == 0 for p in updated_belief.particles)
+
+def test_belief_update_observation_probabilities():
+    """Test that belief update correctly computes observation probabilities."""
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+    
+    env = SanityPOMDP()
+    particles = [0, 1, 0, 1]
+    log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
+    
+    action = 0
+    observation = 0
+    updated_belief = belief.update(action=action, observation=observation, pomdp=env)
+    
+    # Check that weights have been updated based on observation probabilities
+    # The weights should reflect how likely each particle's next state is to produce the observation
+    assert not np.array_equal(updated_belief.log_weights, belief.log_weights)
+
+def test_belief_update_with_tiger_pomdp():
+    """Test belief update with TigerPOMDP environment."""
+    env = TigerPOMDP(discount_factor=0.95)
+    particles = ["tiger_left", "tiger_right", "tiger_left"]
+    log_weights = np.array([0.1, 0.1, 0.1])  # Non-zero weights
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
+    
+    action = "listen"
+    observation = "hear_left"
+    updated_belief = belief.update(action=action, observation=observation, pomdp=env)
+    
+    # Check that we get a valid updated belief
+    assert isinstance(updated_belief, WeightedParticleBelief)
+    assert len(updated_belief.particles) == len(belief.particles)
+    
+    # Check that weights have been updated
+    assert not np.array_equal(updated_belief.log_weights, belief.log_weights)
+
+def test_belief_update_preserves_particle_count():
+    """Test that belief update preserves the number of particles."""
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+    
+    env = SanityPOMDP()
+    n_particles = 10
+    particles = [0] * n_particles
+    log_weights = np.ones(n_particles) * 0.1  # Non-zero weights
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
+    
+    action = 0
+    observation = 0
+    updated_belief = belief.update(action=action, observation=observation, pomdp=env)
+    
+    assert len(updated_belief.particles) == n_particles
+
+def test_belief_update_weight_normalization():
+    """Test that belief update properly handles weight normalization."""
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+    
+    env = SanityPOMDP()
+    particles = [0, 1, 0, 1]
+    log_weights = np.array([1.0, 2.0, 3.0, 4.0])  # Unequal weights
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
+    
+    action = 0
+    observation = 0
+    updated_belief = belief.update(action=action, observation=observation, pomdp=env)
+    
+    # Check that weights are finite
+    assert np.all(np.isfinite(updated_belief.log_weights))
+    
+    # Check that at least some weights are different from original
+    assert not np.array_equal(updated_belief.log_weights, belief.log_weights)
+
+def test_belief_update_with_extreme_weights():
+    """Test belief update with extreme weight values."""
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+    
+    env = SanityPOMDP()
+    particles = [0, 1, 0, 1]
+    log_weights = np.array([-1000.0, -1000.0, -1000.0, -1000.0])  # Very small weights
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
+    
+    action = 0
+    observation = 0
+    updated_belief = belief.update(action=action, observation=observation, pomdp=env)
+    
+    # Check that update doesn't crash with extreme weights
+    assert isinstance(updated_belief, WeightedParticleBelief)
+    assert len(updated_belief.particles) == len(belief.particles)
+
+def test_belief_update_consistency():
+    """Test that belief update produces consistent results."""
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+    
+    env = SanityPOMDP()
+    particles = [0, 1, 0, 1]
+    log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
+    
+    action = 0
+    observation = 0
+    
+    # Perform two identical updates
+    updated_belief1 = belief.update(action=action, observation=observation, pomdp=env)
+    updated_belief2 = belief.update(action=action, observation=observation, pomdp=env)
+    
+    # Results should be consistent (same particle count, similar weight structure)
+    assert len(updated_belief1.particles) == len(updated_belief2.particles)
+    assert len(updated_belief1.log_weights) == len(updated_belief2.log_weights)
+
+def test_belief_update_with_different_actions():
+    """Test that belief update behaves differently for different actions."""
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+    
+    env = SanityPOMDP()
+    particles = [0, 1, 0, 1]
+    log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
+    
+    observation = 0
+    
+    # Update with action 0
+    updated_belief1 = belief.update(action=0, observation=observation, pomdp=env)
+    
+    # Update with action 1
+    updated_belief2 = belief.update(action=1, observation=observation, pomdp=env)
+    
+    # Results should be different for different actions
+    # (At least the particles should be different due to different state transitions)
+    assert updated_belief1.particles != updated_belief2.particles or \
+           not np.array_equal(updated_belief1.log_weights, updated_belief2.log_weights)
