@@ -3,7 +3,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-def get_logger(name: str, level: int = logging.INFO, output_dir: Optional[Path] = None, debug: bool = False) -> logging.Logger:
+def get_logger(name: str, level: int = logging.INFO, output_dir: Optional[Path] = None, debug: bool = False, console_output: bool = True) -> logging.Logger:
     """
     Get a configured logger instance with optional file and console output.
     
@@ -12,6 +12,8 @@ def get_logger(name: str, level: int = logging.INFO, output_dir: Optional[Path] 
         level (int): The logging level (default: logging.INFO)
         output_dir (Optional[Path]): Directory to store log files. If None, only console logging is enabled.
         debug (bool): Whether to enable debug logging (default: False)
+        console_output (bool): Whether to enable console output (default: True). 
+                              Set to False to disable console output while keeping file logging.
         
     Returns:
         logging.Logger: Configured logger instance
@@ -23,12 +25,13 @@ def get_logger(name: str, level: int = logging.INFO, output_dir: Optional[Path] 
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
     
-    # Create console handler
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(logging.DEBUG if debug else level)
-    console_formatter = logging.Formatter('%(levelname)s: %(message)s')
-    console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
+    # Create console handler only if console_output is True
+    if console_output:
+        console_handler = logging.StreamHandler()
+        console_handler.setLevel(logging.DEBUG if debug else level)
+        console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+        console_handler.setFormatter(console_formatter)
+        logger.addHandler(console_handler)
     
     # Add file handler if output_dir is provided
     if output_dir is not None:
@@ -51,6 +54,8 @@ def get_logger(name: str, level: int = logging.INFO, output_dir: Optional[Path] 
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
         
-        logger.info(f"Logging to file: {log_file}")
+        # Only log to console if console_output is enabled
+        if console_output:
+            logger.info(f"Logging to file: {log_file}")
     
     return logger
