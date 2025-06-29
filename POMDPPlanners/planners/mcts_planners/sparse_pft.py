@@ -120,8 +120,8 @@ class SparsePFT(PathSimulationPolicy):
     def _generate_belief(self, action_node: ActionNode) -> Tuple[BeliefNode, float]:
         belief = action_node.parent.belief
         state = belief.sample()
-        next_state = self.environment.state_transition_model(state=state, action=action_node.action).sample()
-        next_observation = self.environment.observation_model(next_state=next_state, action=action_node.action).sample()
+        next_state = self.environment.state_transition_model(state=state, action=action_node.action).sample()[0]
+        next_observation = self.environment.observation_model(next_state=next_state, action=action_node.action).sample()[0]
         
         next_belief = belief.update(
             action=action_node.action,
