@@ -10,7 +10,7 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType
 )
-from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
+from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.simulation import History, MetricValue
 
 STATES = ["tiger_left", "tiger_right"]
@@ -23,17 +23,25 @@ class TigerStateTransition(StateTransitionModel):
         self.state = state
         self.action = action
 
-    def sample(self) -> str:
-        # State only changes when opening a door
-        if self.action == "open_left" or self.action == "open_right":
-            # After opening a door, tiger is randomly placed behind either door
-            return np.random.choice(STATES)
-        return self.state
+    def sample(self, n_samples: int = 1) -> List[str]:
+        samples = []
+        for _ in range(n_samples):
+            # State only changes when opening a door
+            if self.action == "open_left" or self.action == "open_right":
+                # After opening a door, tiger is randomly placed behind either door
+                samples.append(np.random.choice(STATES))
+            else:
+                samples.append(self.state)
+        return samples
 
-    def probability(self, next_state: Any) -> float:
-        if self.action == "open_left" or self.action == "open_right":
-            return 0.5
-        return 1.0
+    def probability(self, values: List[Any]) -> np.ndarray:
+        result = np.zeros(len(values))
+        for i, next_state in enumerate(values):
+            if self.action == "open_left" or self.action == "open_right":
+                result[i] = 0.5
+            else:
+                result[i] = 1.0 if next_state == self.state else 0.0
+        return result
 
 
 class TigerObservation(ObservationModel):
@@ -41,29 +49,35 @@ class TigerObservation(ObservationModel):
         self.next_state = next_state
         self.action = action
 
-    def sample(self) -> str:
-        if self.action == "listen":
-            # Listen action is 85% accurate
-            if self.next_state == "tiger_left":
-                return "hear_left" if np.random.random() < 0.85 else "hear_right"
+    def sample(self, n_samples: int = 1) -> List[str]:
+        samples = []
+        for _ in range(n_samples):
+            if self.action == "listen":
+                # Listen action is 85% accurate
+                if self.next_state == "tiger_left":
+                    samples.append("hear_left" if np.random.random() < 0.85 else "hear_right")
+                else:
+                    samples.append("hear_right" if np.random.random() < 0.85 else "hear_left")
             else:
-                return "hear_right" if np.random.random() < 0.85 else "hear_left"
-        else:
-            # When opening a door, observation is random (hearing nothing)
-            return "hear_nothing"
+                # When opening a door, observation is random (hearing nothing)
+                samples.append("hear_nothing")
+        return samples
 
-    def probability(self, next_observation: Any) -> float:
-        if next_observation not in OBSERVATIONS:
-            raise ValueError(f"Invalid observation: {next_observation}")
-            
-        if self.action == "listen":
-            if self.next_state == "tiger_left":
-                return 0.85 if next_observation == "hear_left" else 0.15
+    def probability(self, values: List[Any]) -> np.ndarray:
+        result = np.zeros(len(values))
+        for i, next_observation in enumerate(values):
+            if next_observation not in OBSERVATIONS:
+                raise ValueError(f"Invalid observation: {next_observation}")
+                
+            if self.action == "listen":
+                if self.next_state == "tiger_left":
+                    result[i] = 0.85 if next_observation == "hear_left" else 0.15
+                else:
+                    result[i] = 0.85 if next_observation == "hear_right" else 0.15
             else:
-                return 0.85 if next_observation == "hear_right" else 0.15
-
-        # For non-listen actions, only hear_nothing has probability 1.0, others have probability 0.0
-        return 1.0 if next_observation == "hear_nothing" else 0.0
+                # For non-listen actions, only hear_nothing has probability 1.0, others have probability 0.0
+                result[i] = 1.0 if next_observation == "hear_nothing" else 0.0
+        return result
 
 
 class TigerPOMDP(DiscreteActionsEnvironment):

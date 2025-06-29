@@ -26,14 +26,14 @@ def test_get_actions(tiger_pomdp):
 def test_initial_state_distribution(tiger_pomdp):
     dist = tiger_pomdp.initial_state_dist()
     # Sample multiple times to ensure we get both states
-    samples = [dist.sample() for _ in range(100)]
+    samples = dist.sample(n_samples=100)
     assert all(s in tiger_pomdp.states for s in samples)
     assert len(set(samples)) == 2  # Should get both states
 
 
 def test_initial_observation_distribution(tiger_pomdp):
     dist = tiger_pomdp.initial_observation_dist()
-    samples = [dist.sample() for _ in range(10)]
+    samples = dist.sample(n_samples=10)
     assert all(s == "hear_nothing" for s in samples)
 
 
@@ -41,7 +41,7 @@ def test_state_transition_listen(tiger_pomdp):
     # Listening shouldn't change the state
     for state in tiger_pomdp.states:
         dist = tiger_pomdp.state_transition_model(state, "listen")
-        samples = [dist.sample() for _ in range(10)]
+        samples = dist.sample(n_samples=10)
         assert all(s == state for s in samples)
 
 
@@ -49,7 +49,7 @@ def test_state_transition_open_door(tiger_pomdp):
     # Opening a door should randomly place tiger behind either door
     for action in ["open_left", "open_right"]:
         dist = tiger_pomdp.state_transition_model("tiger_left", action)
-        samples = [dist.sample() for _ in range(100)]
+        samples = dist.sample(n_samples=100)
         assert all(s in tiger_pomdp.states for s in samples)
         assert len(set(samples)) == 2  # Should get both states
 
@@ -58,7 +58,7 @@ def test_observation_model_listen(tiger_pomdp):
     # Test listen action with both states
     for state in tiger_pomdp.states:
         dist = tiger_pomdp.observation_model(state, "listen")
-        samples = [dist.sample() for _ in range(100)]
+        samples = dist.sample(n_samples=100)
         assert all(s in tiger_pomdp.observations for s in samples)
 
         # Should mostly get correct observation
@@ -72,7 +72,7 @@ def test_observation_model_open_door(tiger_pomdp):
     for state in tiger_pomdp.states:
         for action in ["open_left", "open_right"]:
             dist = tiger_pomdp.observation_model(state, action)
-            samples = [dist.sample() for _ in range(10)]
+            samples = dist.sample(n_samples=10)
             assert all(s == "hear_nothing" for s in samples)
 
 
