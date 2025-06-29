@@ -115,18 +115,18 @@ def run_episode(
             average_reward_time = (average_reward_time * (i - 1) + reward_time) / i
 
             state_sampling_start_time = time()
-            next_state = environment.state_transition_model(state, action).sample()
+            next_state = environment.state_transition_model(state, action).sample()[0]
             state_sampling_time = time() - state_sampling_start_time
             average_state_sampling_time = (
-                average_state_sampling_time * (i - 1) + state_sampling_time
-            ) / i
+                (average_state_sampling_time * (i - 1) + state_sampling_time) / i
+            )
 
             observation_start_time = time()
-            observation = environment.observation_model(next_state, action).sample()
+            observation = environment.observation_model(next_state, action).sample()[0]
             observation_time = time() - observation_start_time
             average_observation_time = (
-                average_observation_time * (i - 1) + observation_time
-            ) / i
+                (average_observation_time * (i - 1) + observation_time) / i
+            )
 
             history.append(
                 StepData(
