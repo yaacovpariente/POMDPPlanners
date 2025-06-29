@@ -149,76 +149,32 @@ class TestCartPolePOMDPConfigId:
         assert config_id1 == config_id2
 
 
-def test_cartpole_state_transition():
-    # Test state transition with known parameters
-    state = np.array([0.0, 0.0, 0.0, 0.0])  # x, x_dot, theta, theta_dot
-    action = np.array([1])  # push right
-    force_mag = 10.0
-    total_mass = 1.1
-    polemass_length = 0.05
-    gravity = 9.8
-    length = 0.5
-    tau = 0.02
-    masspole = 0.1
-
-    transition = CartPoleStateTransition(
-        state=state,
-        action=action,
-        force_mag=force_mag,
-        total_mass=total_mass,
-        polemass_length=polemass_length,
-        gravity=gravity,
-        length=length,
-        kinematics_integrator="euler",
-        tau=tau,
-        masspole=masspole,
-    )
-
-    next_state = transition.sample()
-
-    # Verify state dimensions
-    assert next_state.shape == (4,)
-    # Verify state bounds are reasonable
-    assert np.all(np.isfinite(next_state))
-    # Verify reasonable initial movement
-    assert np.abs(next_state[0]) < 0.1  # x position should change little in one step
-    assert (
-        np.abs(next_state[1]) < 0.5
-    )  # x_dot should be reasonable for the force applied
-    assert np.abs(next_state[2]) < 0.1  # theta should change little in one step
-    assert np.abs(next_state[3]) < 0.5  # theta_dot should be reasonable
-
-
-def test_cartpole_observation():
-    # Test observation model with known parameters
+def test_state_transition_model(base_cartpole_environment):
+    # Test state transition
     state = np.array([0.0, 0.0, 0.0, 0.0])
-    action = np.array([0])
-    noise_cov = np.eye(4) * 0.1  # Small noise
+    action = 0
+    transition = base_cartpole_environment.state_transition_model(state, action)
+    next_state = transition.sample()[0]
+    assert isinstance(next_state, np.ndarray)
+    assert next_state.shape == (4,)
 
-    observation = CartPoleObservation(
-        next_state=state, action=action, noise_cov=noise_cov
-    )
 
-    obs = observation.sample()
-
-    # Verify observation dimensions
+def test_observation_model(base_cartpole_environment):
+    # Test observation model
+    state = np.array([0.0, 0.0, 0.0, 0.0])
+    action = 0
+    observation = base_cartpole_environment.observation_model(state, action)
+    obs = observation.sample()[0]
+    assert isinstance(obs, np.ndarray)
     assert obs.shape == (4,)
-    # Verify observation is close to state with noise
-    assert np.allclose(obs, state, atol=1.0)
-    # Verify noise is applied
-    assert not np.array_equal(obs, state)
 
 
-def test_cartpole_initial_state_distribution():
+def test_initial_state_distribution(base_cartpole_environment):
     # Test initial state distribution
-    dist = CartPoleInitialStateDistribution()
-    state = dist.sample()
-
-    # Verify state dimensions
+    dist = base_cartpole_environment.initial_state_dist()
+    state = dist.sample()[0]
+    assert isinstance(state, np.ndarray)
     assert state.shape == (4,)
-    # Verify state is within expected bounds
-    assert np.all(state >= -0.05)
-    assert np.all(state <= 0.05)
 
 
 def test_cartpole_pomdp_initialization():

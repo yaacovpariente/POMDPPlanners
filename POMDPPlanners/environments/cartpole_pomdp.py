@@ -40,7 +40,7 @@ class CartPoleStateTransition(StateTransitionModel):
         self.tau = tau
         self.masspole = masspole
 
-    def sample(self) -> np.ndarray:
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
         x, x_dot, theta, theta_dot = self.state
         force = self.force_mag if self.action == 1 else -self.force_mag
         costheta = math.cos(theta)
@@ -68,7 +68,16 @@ class CartPoleStateTransition(StateTransitionModel):
             theta = theta + self.tau * theta_dot
 
         next_state = np.array([x, x_dot, theta, theta_dot])
-        return next_state
+        return [next_state] * n_samples
+
+    def probability(self, values: List[np.ndarray]) -> np.ndarray:
+        # Deterministic transition - probability is 1.0 for the exact next state, 0.0 otherwise
+        result = np.zeros(len(values))
+        expected_next_state = self.sample()[0]  # Get the deterministic next state
+        for i, value in enumerate(values):
+            if np.array_equal(value, expected_next_state):
+                result[i] = 1.0
+        return result
 
 
 class CartPoleObservation(ObservationModel):
@@ -76,21 +85,27 @@ class CartPoleObservation(ObservationModel):
         super().__init__(next_state=next_state, action=action)
         self.noise_cov = noise_cov
 
-    def sample(self) -> np.ndarray:
-        return np.random.multivariate_normal(self.next_state, self.noise_cov)
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        samples = []
+        for _ in range(n_samples):
+            sample = np.random.multivariate_normal(self.next_state, self.noise_cov)
+            samples.append(sample)
+        return samples
 
-    def probability(self, observation: np.ndarray) -> float:
-        return stats.multivariate_normal(self.next_state, self.noise_cov).pdf(
-            observation
-        )
+    def probability(self, values: List[np.ndarray]) -> np.ndarray:
+        # Convert list of arrays to 2D numpy array for vectorized computation
+        values_array = np.array(values)
+        return stats.multivariate_normal(self.next_state, self.noise_cov).pdf(values_array)
 
 
 class CartPoleInitialStateDistribution(Distribution):
     def __init__(self):
         super().__init__()
 
-    def sample(self) -> np.ndarray:
-        return np.random.uniform(low=-0.05, high=0.05, size=(4,))
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        # Generate all samples at once using vectorized uniform distribution
+        samples_array = np.random.uniform(low=-0.05, high=0.05, size=(n_samples, 4))
+        return [sample for sample in samples_array]
 
 
 class CartPolePOMDP(DiscreteActionsEnvironment):
