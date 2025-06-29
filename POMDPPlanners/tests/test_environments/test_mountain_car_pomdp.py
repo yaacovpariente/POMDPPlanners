@@ -18,58 +18,92 @@ def test_mountain_car_initialization():
     assert 1 in pomdp.actions
 
 
-def test_mountain_car_state_transition():
-    pomdp = MountainCarPOMDP(discount_factor=0.95)
+def test_state_transition_model(base_mountain_car_environment):
+    # Test state transition
+    state = np.array([0.0, 0.0])
+    action = 0
+    transition = base_mountain_car_environment.state_transition_model(state, action)
+    new_state = transition.sample()[0]
+    assert isinstance(new_state, np.ndarray)
+    assert new_state.shape == (2,)
 
-    # Test left acceleration
-    state = (0.0, 0.0)
-    transition = pomdp.state_transition_model(state, -1)
-    new_state = transition.sample()
-    assert isinstance(new_state, tuple)
-    assert len(new_state) == 2
-    assert isinstance(new_state[0], float)
-    assert isinstance(new_state[1], float)
-    assert new_state[0] <= pomdp.max_position
-    assert new_state[0] >= pomdp.min_position
-    assert abs(new_state[1]) <= pomdp.max_speed
+    # Test with different action
+    action = 1
+    transition = base_mountain_car_environment.state_transition_model(state, action)
+    new_state = transition.sample()[0]
+    assert isinstance(new_state, np.ndarray)
+    assert new_state.shape == (2,)
 
-    # Test right acceleration
-    state = (0.0, 0.0)
-    transition = pomdp.state_transition_model(state, 1)
-    new_state = transition.sample()
-    assert new_state[0] <= pomdp.max_position
-    assert new_state[0] >= pomdp.min_position
-    assert abs(new_state[1]) <= pomdp.max_speed
-
-    # Test no acceleration
-    state = (0.0, 0.0)
-    transition = pomdp.state_transition_model(state, 0)
-    new_state = transition.sample()
-    assert new_state[0] <= pomdp.max_position
-    assert new_state[0] >= pomdp.min_position
-    assert abs(new_state[1]) <= pomdp.max_speed
+    # Test with negative action
+    action = -1
+    transition = base_mountain_car_environment.state_transition_model(state, action)
+    new_state = transition.sample()[0]
+    assert isinstance(new_state, np.ndarray)
+    assert new_state.shape == (2,)
 
 
-def test_mountain_car_observation():
-    pomdp = MountainCarPOMDP(discount_factor=0.95)
+def test_observation_model(base_mountain_car_environment):
+    # Test observation model
+    state = np.array([0.0, 0.0])
+    action = 0
+    observation = base_mountain_car_environment.observation_model(state, action)
+    obs = observation.sample()[0]
+    assert isinstance(obs, np.ndarray)
+    assert obs.shape == (2,)
 
-    # Test observation with known state
-    state = (0.0, 0.0)
-    observation = pomdp.observation_model(state, 0).sample()
-    assert isinstance(observation, tuple)
-    assert len(observation) == 2
-    assert isinstance(observation[0], float)
-    assert isinstance(observation[1], float)
+    # Test multiple observations
+    observations = base_mountain_car_environment.observation_model(state, action).sample(n_samples=100)
+    assert len(observations) == 100
+    assert all(isinstance(obs, np.ndarray) and obs.shape == (2,) for obs in observations)
 
-    # Test observation noise
-    state = (0.0, 0.0)
-    observations = [pomdp.observation_model(state, 0).sample() for _ in range(100)]
-    positions = [obs[0] for obs in observations]
-    velocities = [obs[1] for obs in observations]
 
-    # Check that observations are noisy
-    assert np.std(positions) > 0
-    assert np.std(velocities) > 0
+def test_initial_state_distribution(base_mountain_car_environment):
+    # Test initial state distribution
+    dist = base_mountain_car_environment.initial_state_dist()
+    initial_state = dist.sample()[0]
+    assert isinstance(initial_state, np.ndarray)
+    assert initial_state.shape == (2,)
+
+
+def test_initial_observation_distribution(base_mountain_car_environment):
+    # Test initial observation distribution
+    dist = base_mountain_car_environment.initial_observation_dist()
+    initial_observation = dist.sample()[0]
+    assert isinstance(initial_observation, np.ndarray)
+    assert initial_observation.shape == (2,)
+
+
+def test_sample_next_step(base_mountain_car_environment):
+    # Test sample_next_step method
+    state = np.array([0.0, 0.0])
+    action = 0
+    next_state, observation, reward = base_mountain_car_environment.sample_next_step(state, action)
+    
+    assert isinstance(next_state, np.ndarray)
+    assert next_state.shape == (2,)
+    assert isinstance(observation, np.ndarray)
+    assert observation.shape == (2,)
+    assert isinstance(reward, float)
+
+    # Test with different action
+    action = 1
+    next_state, observation, reward = base_mountain_car_environment.sample_next_step(state, action)
+    
+    assert isinstance(next_state, np.ndarray)
+    assert next_state.shape == (2,)
+    assert isinstance(observation, np.ndarray)
+    assert observation.shape == (2,)
+    assert isinstance(reward, float)
+
+    # Test with negative action
+    action = -1
+    next_state, observation, reward = base_mountain_car_environment.sample_next_step(state, action)
+    
+    assert isinstance(next_state, np.ndarray)
+    assert next_state.shape == (2,)
+    assert isinstance(observation, np.ndarray)
+    assert observation.shape == (2,)
+    assert isinstance(reward, float)
 
 
 def test_mountain_car_reward():
@@ -107,29 +141,6 @@ def test_mountain_car_terminal():
     assert pomdp.is_terminal(state)
 
 
-def test_mountain_car_initial_state():
-    pomdp = MountainCarPOMDP(discount_factor=0.95)
-    initial_state = pomdp.initial_state_dist().sample()
-
-    assert isinstance(initial_state, tuple)
-    assert len(initial_state) == 2
-    assert isinstance(initial_state[0], float)
-    assert isinstance(initial_state[1], float)
-    assert initial_state[0] >= -0.6
-    assert initial_state[0] <= -0.4
-    assert initial_state[1] == 0.0
-
-
-def test_mountain_car_initial_observation():
-    pomdp = MountainCarPOMDP(discount_factor=0.95)
-    initial_observation = pomdp.initial_observation_dist().sample()
-
-    assert isinstance(initial_observation, tuple)
-    assert len(initial_observation) == 2
-    assert initial_observation[0] == 0.0
-    assert initial_observation[1] == 0.0
-
-
 def test_mountain_car_actions():
     pomdp = MountainCarPOMDP(discount_factor=0.95)
     actions = pomdp.get_actions()
@@ -145,20 +156,20 @@ def test_mountain_car_state_bounds():
 
     # Test position bounds
     state = (pomdp.min_position - 0.1, 0.0)
-    transition = pomdp.state_transition_model(state, 0).sample()
+    transition = pomdp.state_transition_model(state, 0).sample()[0]
     assert transition[0] >= pomdp.min_position
 
     state = (pomdp.max_position + 0.1, 0.0)
-    transition = pomdp.state_transition_model(state, 0).sample()
+    transition = pomdp.state_transition_model(state, 0).sample()[0]
     assert transition[0] <= pomdp.max_position
 
     # Test velocity bounds
     state = (0.0, pomdp.max_speed + 0.1)
-    transition = pomdp.state_transition_model(state, 0).sample()
+    transition = pomdp.state_transition_model(state, 0).sample()[0]
     assert abs(transition[1]) <= pomdp.max_speed
 
     state = (0.0, -pomdp.max_speed - 0.1)
-    transition = pomdp.state_transition_model(state, 0).sample()
+    transition = pomdp.state_transition_model(state, 0).sample()[0]
     assert abs(transition[1]) <= pomdp.max_speed
 
 

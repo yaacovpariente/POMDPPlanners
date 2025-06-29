@@ -37,28 +37,24 @@ class MountainCarTransition(StateTransitionModel):
         self.min_position = min_position
         self.max_position = max_position
 
-    def sample(self) -> Tuple[float, float]:
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
         position, velocity = self.state
+        v = velocity + self.action * self.power + np.cos(3 * position) * (-self.gravity)
+        v = np.clip(v, -self.max_speed, self.max_speed)
+        p = position + v
+        p = np.clip(p, self.min_position, self.max_position)
+        if p == self.min_position and v < 0:
+            v = 0
+        next_state = np.array([p, v])
+        return [next_state] * n_samples
 
-        # Update velocity
-        velocity += self.action * self.power + np.cos(3 * position) * (-self.gravity)
-        velocity = np.clip(velocity, -self.max_speed, self.max_speed)
-
-        # Update position
-        position += velocity
-        position = np.clip(position, self.min_position, self.max_position)
-
-        # Reset velocity if hit the left wall
-        if position == self.min_position and velocity < 0:
-            velocity = 0
-
-        return (position, velocity)
-
-    def probability(self, next_state: Tuple[float, float]):
-        # Simplified probability calculation
-        # In reality, this would need to account for all possible transitions
-        expected_next_state = self.sample()
-        return 1.0 if expected_next_state == next_state else 0.0
+    def probability(self, values: List[np.ndarray]) -> np.ndarray:
+        result = np.zeros(len(values))
+        expected_next_state = self.sample()[0]
+        for i, value in enumerate(values):
+            if np.array_equal(value, expected_next_state):
+                result[i] = 1.0
+        return result
 
 
 class MountainCarObservation(ObservationModel):
@@ -69,18 +65,17 @@ class MountainCarObservation(ObservationModel):
         self.cov_matrix = cov_matrix
         self.mean = np.array(next_state)
 
-    def sample(self) -> Tuple[float, float]:
-        # Sample from multivariate normal distribution
-        obs = np.random.multivariate_normal(self.mean, self.cov_matrix)
-        # Convert back to tuple
-        return tuple(obs)
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        samples = []
+        for _ in range(n_samples):
+            obs = np.random.multivariate_normal(self.mean, self.cov_matrix)
+            samples.append(np.array(obs))
+        return samples
 
-    def probability(self, next_observation: Tuple[float, float]):
-        # Use numpy's multivariate normal PDF
-        obs_array = np.array(next_observation)
-        return scipy.stats.multivariate_normal.pdf(
-            obs_array, mean=self.mean, cov=self.cov_matrix
-        )
+    def probability(self, values: List[np.ndarray]) -> np.ndarray:
+        # Vectorized probability for a batch of observations
+        values_array = np.array(values)
+        return scipy.stats.multivariate_normal(self.mean, self.cov_matrix).pdf(values_array)
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
@@ -146,20 +141,19 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
 
     def initial_state_dist(self) -> Distribution:
         class InitialState(Distribution):
-            def sample(self) -> Tuple[float, float]:
-                # Start at random position in the valley with zero velocity
-                position = np.random.uniform(-0.6, -0.4)
-                velocity = 0.0
-                return (position, velocity)
-
+            def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+                samples = []
+                for _ in range(n_samples):
+                    position = np.random.uniform(-0.6, -0.4)
+                    velocity = 0.0
+                    samples.append(np.array([position, velocity]))
+                return samples
         return InitialState()
 
     def initial_observation_dist(self) -> Distribution:
         class InitialObservation(Distribution):
-            def sample(self) -> Tuple[float, float]:
-                # Start with zero position and velocity
-                return (0.0, 0.0)
-
+            def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+                return [np.array([0.0, 0.0])] * n_samples
         return InitialObservation()
 
     def get_actions(self) -> List[Any]:
