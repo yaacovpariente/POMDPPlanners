@@ -26,7 +26,8 @@ class EpisodeSimulationTask(SimulationTask):
         discount_factor: float = 1.0,
         episode_number: int = 0,
         cache_dir: Optional[Path] = None,
-        debug: bool = False
+        debug: bool = False,
+        console_output: bool = True
     ):
         """Initialize a simulation task.
         
@@ -39,6 +40,10 @@ class EpisodeSimulationTask(SimulationTask):
             seed: Random seed for reproducibility
             discount_factor: Discount factor for reward calculation
             episode_number: The episode number for this simulation
+            cache_dir: Directory for caching results
+            debug: Whether to enable debug logging
+            console_output: Whether to enable console output (default: True).
+                          Set to False to disable console output while keeping file logging.
             
         Raises:
             ValueError: If num_steps is not positive
@@ -56,6 +61,7 @@ class EpisodeSimulationTask(SimulationTask):
         self.episode_number = episode_number
         self._cache_key = self._generate_cache_key()
         self.debug = debug
+        self.console_output = console_output
         
         self.output_dir = cache_dir / "episodes" / f"{self.environment.name}.{self.policy.name}.{self.episode_id}" if cache_dir is not None else None
     
@@ -65,7 +71,8 @@ class EpisodeSimulationTask(SimulationTask):
         return get_logger(
             name=f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}",
             debug=self.debug,
-            output_dir=self.output_dir
+            output_dir=self.output_dir,
+            console_output=self.console_output
         )
     
     def _generate_cache_key(self) -> str:

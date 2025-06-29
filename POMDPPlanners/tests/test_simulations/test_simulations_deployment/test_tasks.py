@@ -49,7 +49,8 @@ def test_episode_simulation_task_creation(environment, policy):
         episode_id=1,
         seed=42,
         discount_factor=0.95,
-        episode_number=1
+        episode_number=1,
+        console_output=False
     )
     
     assert task.environment == environment
@@ -74,7 +75,8 @@ def test_episode_simulation_task_invalid_steps(environment, policy):
             initial_belief=belief,
             num_steps=-1,
             episode_id=1,
-            seed=42
+            seed=42,
+            console_output=False
         )
 
 def test_episode_simulation_task_equality(environment, policy):
@@ -88,7 +90,8 @@ def test_episode_simulation_task_equality(environment, policy):
         initial_belief=belief,
         num_steps=2,
         episode_id=1,
-        seed=42
+        seed=42,
+        console_output=False
     )
     
     task2 = EpisodeSimulationTask(
@@ -97,7 +100,8 @@ def test_episode_simulation_task_equality(environment, policy):
         initial_belief=belief,
         num_steps=2,
         episode_id=1,
-        seed=42
+        seed=42,
+        console_output=False
     )
     
     # Create different task
@@ -107,7 +111,8 @@ def test_episode_simulation_task_equality(environment, policy):
         initial_belief=belief,
         num_steps=2,
         episode_id=2,  # Different episode_id
-        seed=42
+        seed=42,
+        console_output=False
     )
     
     assert task1 == task2
@@ -127,7 +132,8 @@ def test_episode_simulation_task_serialization(environment, policy):
         episode_id=1,
         seed=42,
         discount_factor=0.95,
-        episode_number=1
+        episode_number=1,
+        console_output=False
     )
     
     # Test serialization
@@ -153,7 +159,8 @@ def test_episode_simulation_task_execution(environment, policy):
         initial_belief=belief,
         num_steps=2,
         episode_id=1,
-        seed=42
+        seed=42,
+        console_output=False
     )
     
     history = task.run()
