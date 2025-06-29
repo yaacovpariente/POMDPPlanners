@@ -5,9 +5,10 @@ from enum import Enum
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+from scipy.stats import multivariate_normal
 
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment, ObservationModel, SpaceInfo, SpaceType
-from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
+from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.utils.statistics import confidence_interval
@@ -33,19 +34,23 @@ class StateTransitionModel(Distribution):
         self.state_transition_cov_matrix = state_transition_cov_matrix
         self.mean = state + action
         
-    def sample(self) -> np.ndarray:
-        return np.random.multivariate_normal(
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        # Vectorized sampling: generate all samples at once
+        samples = np.random.multivariate_normal(
             mean=self.mean,
-            cov=self.state_transition_cov_matrix
+            cov=self.state_transition_cov_matrix,
+            size=n_samples
         )
+        
+        # Convert to list of arrays
+        return [sample for sample in samples]
     
-    def probability(self, value: np.ndarray) -> float:
-        # Calculate the probability density of the multivariate normal distribution
-        n = len(self.mean)
-        diff = value - self.mean
-        exponent = -0.5 * np.dot(np.dot(diff, np.linalg.inv(self.state_transition_cov_matrix)), diff)
-        normalization = 1.0 / (np.sqrt((2 * np.pi) ** n * np.linalg.det(self.state_transition_cov_matrix)))
-        return normalization * np.exp(exponent)
+    def probability(self, values: List[np.ndarray]) -> np.ndarray:
+        # Convert list to numpy array for vectorized computation
+        values_array = np.array(values)
+        
+        # Use scipy's built-in multivariate normal PDF
+        return multivariate_normal.pdf(values_array, mean=self.mean, cov=self.state_transition_cov_matrix)
         
 
 class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):

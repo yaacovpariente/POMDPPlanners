@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment, ObservationModel, SpaceInfo, SpaceType
-from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
+from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.utils.statistics import confidence_interval
@@ -57,11 +57,11 @@ class DiscreteLDObservationModel(ObservationModel):
     
         self.distribution = DiscreteDistribution(values=values, probs=probs)
 
-    def sample(self):
-        return self.distribution.sample()
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        return self.distribution.sample(n_samples)
 
-    def probability(self, next_observation: Any) -> float:
-        return self.distribution.probability(next_observation)
+    def probability(self, values: List[Any]) -> np.ndarray:
+        return self.distribution.probability(values)
 
 
 class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsEnvironment):

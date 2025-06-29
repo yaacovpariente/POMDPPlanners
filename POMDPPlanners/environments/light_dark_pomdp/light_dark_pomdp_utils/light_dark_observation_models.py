@@ -1,4 +1,6 @@
 import numpy as np
+from typing import List, Any
+from scipy.stats import multivariate_normal
 from POMDPPlanners.core.environment import ObservationModel
 
 
@@ -14,23 +16,27 @@ class ContinuousLightDarkNormalNoiseObservationModel(ObservationModel):
         if self.near_beacon:
             self.observation_cov_matrix *= 0.5
 
-    def sample(self) -> np.ndarray:
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
+        # Vectorized sampling: generate all noise samples at once
         noise = np.random.multivariate_normal(
             mean=np.zeros(2),
-            cov=self.observation_cov_matrix
+            cov=self.observation_cov_matrix,
+            size=n_samples
         )
         
-        observation = self.next_state + noise
-        observation = np.clip(observation, 0, self.grid_size)
+        # Vectorized observation calculation
+        observations = self.next_state + noise
+        observations = np.clip(observations, 0, self.grid_size)
         
-        return observation
+        # Convert to list of arrays
+        return [obs for obs in observations]
 
-    def probability(self, next_observation: np.ndarray) -> float:
-        # For continuous observations, we return the probability density
-        # of the multivariate normal distribution
-        noise = next_observation - self.next_state
-        return np.exp(-0.5 * noise.T @ np.linalg.inv(self.observation_cov_matrix) @ noise) / \
-               (2 * np.pi * np.sqrt(np.linalg.det(self.observation_cov_matrix)))
+    def probability(self, values: List[np.ndarray]) -> np.ndarray:
+        # Convert list to numpy array for vectorized computation
+        values_array = np.array(values)
+        
+        # Use scipy's built-in multivariate normal PDF
+        return multivariate_normal.pdf(values_array, mean=self.next_state, cov=self.observation_cov_matrix)
 
     def _near_beacon(self, next_state: np.ndarray) -> bool:
         next_state = next_state.reshape(2, 1)

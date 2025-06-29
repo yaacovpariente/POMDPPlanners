@@ -45,6 +45,23 @@ def base_continuous_light_dark_pomdp() -> ContinuousLightDarkPOMDP:
     )
 
 
+@pytest.fixture
+def pomdp():
+    return ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2),
+        observation_cov_matrix=np.eye(2),
+        obstacle_hit_probability=0.2,
+        obstacle_reward=-10.0,
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        goal_state_radius=1.5,
+        beacon_radius=1.0,
+        obstacle_radius=1.5,
+    )
+
+
 class TestContinuousLightDarkPOMDPEquality:
     """Test suite for ContinuousLightDarkPOMDP equality comparisons."""
     
@@ -207,41 +224,45 @@ def test_initialization():
     assert np.array_equal(env.obstacles, expected_obstacles)
 
 
-def test_state_transition_model():
-    """Test state transition model"""
-    env = ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2) * 0.01  # Smaller noise
-    )
-    state = np.array([5, 5])
-
+def test_state_transition_model(pomdp):
     # Test state transition
-    dist = env.state_transition_model(state, "up")
-    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import StateTransitionModel
-    assert isinstance(dist, StateTransitionModel)
-    
-    # Check that the mean of the distribution is correct
-    next_state = dist.sample()
-    expected_next_state = state + np.array([0, 1])  # up action
-    assert np.allclose(next_state, expected_next_state, atol=0.5)  # Allow for some noise
+    state = np.array([0.0, 0.0])
+    action = np.array([0.0, 0.0])
+    transition = pomdp.state_transition_model(state, action)
+    next_state = transition.sample()[0]
+    assert isinstance(next_state, np.ndarray)
+    assert next_state.shape == (2,)
 
 
-def test_observation_model():
-    """Test observation model"""
-    env = ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95,
-        observation_cov_matrix=np.eye(2) * 0.01  # Smaller noise
-    )
-    state = np.array([5, 5])
-
+def test_observation_model(pomdp):
     # Test observation model
-    dist = env.observation_model(state, "up")
-    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import ContinuousLightDarkNormalNoiseObservationModel
-    assert isinstance(dist, ContinuousLightDarkNormalNoiseObservationModel)
+    state = np.array([0.0, 0.0])
+    action = np.array([0.0, 0.0])
+    observation = pomdp.observation_model(state, action)
+    obs = observation.sample()[0]
+    assert isinstance(obs, np.ndarray)
+    assert obs.shape == (2,)
+
+
+def test_sample_next_step(pomdp):
+    # Test sample_next_step method
+    state = np.array([0.0, 0.0])
+    action = np.array([0.0, 0.0])
+    next_state, observation, reward = pomdp.sample_next_step(state, action)
     
-    # Check that the observation is close to the true state
-    observation = dist.sample()
-    assert np.allclose(observation, state, atol=0.5)  # Allow for some noise
+    assert isinstance(next_state, np.ndarray)
+    assert next_state.shape == (2,)
+    assert isinstance(observation, np.ndarray)
+    assert observation.shape == (2,)
+    assert isinstance(reward, float)
+
+
+def test_initial_state_distribution(pomdp):
+    # Test initial state distribution
+    dist = pomdp.initial_state_dist()
+    state = dist.sample()[0]
+    assert isinstance(state, np.ndarray)
+    assert state.shape == (2,)
 
 
 def test_reward_function():

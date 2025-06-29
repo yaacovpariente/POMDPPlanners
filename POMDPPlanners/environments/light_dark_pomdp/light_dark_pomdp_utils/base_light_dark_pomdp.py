@@ -13,7 +13,7 @@ from POMDPPlanners.core.environment import (
     SpaceInfo,
     SpaceType
 )
-from POMDPPlanners.core.distributions import Distribution, DiscreteDistribution
+from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.utils.statistics import confidence_interval
