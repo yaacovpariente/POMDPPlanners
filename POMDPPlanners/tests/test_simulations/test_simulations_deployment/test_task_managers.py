@@ -221,4 +221,137 @@ def test_joblib_task_manager_cache(cache_db, environment, policy):
         assert result1[0].reach_terminal_state == result3[0].reach_terminal_state
         assert len(result1[0].history) == len(result3[0].history)
         assert ids1 == ids3
-        assert task_identifier in ids3 
+        assert task_identifier in ids3
+
+def test_joblib_task_manager_logging(cache_db, environment, policy, temp_cache_dir):
+    """Test that JoblibTaskManager writes logs properly."""
+    import os
+    from pathlib import Path
+    
+    # Create a specific log directory for this test
+    log_dir = Path(temp_cache_dir) / "test_logs"
+    log_dir.mkdir(exist_ok=True)
+    
+    with JoblibTaskManager(cache_db=cache_db, cache_dir=str(log_dir), logger_debug=True) as task_manager:
+        # Create a task
+        belief = create_test_belief()
+        task = EpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=1,
+            seed=42
+        )
+        task_identifier = "episode_1"
+        
+        # Run task to generate logs
+        results, successful_ids = task_manager.run_tasks([task], [task_identifier])
+        
+        # Verify results
+        assert len(results) == 1
+        assert len(successful_ids) == 1
+        assert task_identifier in successful_ids
+        
+        # Check that log files were created
+        logs_dir = log_dir / "logs"
+        assert logs_dir.exists(), f"Logs directory {logs_dir} should exist"
+        
+        # Find the task manager log file
+        log_files = list(logs_dir.glob("task_manager_*.log"))
+        assert len(log_files) > 0, f"Should have at least one task manager log file in {logs_dir}"
+        
+        # Read the log file content (concatenate all task_manager log files)
+        log_content = ""
+        for log_file in log_files:
+            with open(log_file, 'r') as f:
+                log_content += f.read()
+        
+        # Verify that expected log messages are present
+        expected_messages = [
+            "Starting to process",
+            "Cache status:",
+            "System Info - CPU cores:",
+            "Starting parallel processing with",
+            "Processing",
+            "tasks using joblib",
+            "Results:",
+            "successful"
+        ]
+        
+        for expected_msg in expected_messages:
+            assert expected_msg in log_content, f"Log should contain '{expected_msg}'"
+        
+        # Verify specific log patterns
+        assert "Starting to process 1 tasks" in log_content
+        assert "Cache status: 0 tasks cached, 1 tasks uncached out of 1 total tasks" in log_content
+        assert "Running" in log_content and "uncached tasks" in log_content
+        assert "1 tasks completed successfully" in log_content
+
+def test_joblib_task_manager_logging_with_multiple_tasks(cache_db, environment, policy, temp_cache_dir):
+    """Test that JoblibTaskManager logs progress updates for multiple tasks."""
+    import os
+    from pathlib import Path
+    
+    # Create a specific log directory for this test
+    log_dir = Path(temp_cache_dir) / "test_logs_multi"
+    log_dir.mkdir(exist_ok=True)
+    
+    with JoblibTaskManager(cache_db=cache_db, cache_dir=str(log_dir), logger_debug=True) as task_manager:
+        # Create multiple tasks to test progress logging
+        tasks = []
+        task_identifiers = []
+        for i in range(2):  # Create 2 tasks to test progress updates
+            belief = create_test_belief()
+            task = EpisodeSimulationTask(
+                environment=environment,
+                policy=policy,
+                initial_belief=belief,
+                num_steps=2,
+                episode_id=i,
+                seed=42 + i
+            )
+            tasks.append(task)
+            task_identifiers.append(f"episode_{i}")
+        
+        # Run tasks to generate logs
+        results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
+        
+        # Verify results
+        assert len(results) == 2
+        assert len(successful_ids) == 2
+        
+        # Check that log files were created
+        logs_dir = log_dir / "logs"
+        assert logs_dir.exists()
+        
+        # Find the task manager log file
+        log_files = list(logs_dir.glob("task_manager_*.log"))
+        assert len(log_files) > 0
+        
+        # Read the log file content
+        log_content = ""
+        for log_file in log_files:
+            with open(log_file, 'r') as f:
+                log_content += f.read()
+        
+        # Verify progress logging messages
+        progress_messages = [
+            "Starting to process 2 tasks",
+            "Cache status: 0 tasks cached, 2 tasks uncached out of 2 total tasks",
+            "Running 2 uncached tasks",
+            "Starting parallel processing with",
+            "Processing 2 tasks using joblib",
+            "2 tasks completed successfully"
+        ]
+        
+        for expected_msg in progress_messages:
+            assert expected_msg in log_content, f"Log should contain '{expected_msg}'"
+        
+        # Verify that system info was logged
+        assert "System Info - CPU cores:" in log_content
+        assert "Memory:" in log_content
+        assert "Process Info - PID:" in log_content
+        
+        # Check for the warning about get_stats not being present
+        assert "Could not log cache statistics: 'Memory' object has no attribute 'get_stats'" in log_content 

@@ -224,10 +224,60 @@ class JoblibTaskManager(TaskManagerExternalDB):
     
     def _run_tasks(self, tasks: List[SimulationTask]) -> List[History]:
         """Run tasks in parallel using joblib."""
-        results = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
-            delayed(self._cached_run)(task) for task in tqdm(tasks, desc="Running tasks")
-        )
-        return results
+        import time
+        
+        # Log system information
+        self._log_system_info()
+        
+        # Log parallel processing setup
+        self.logger.info(f"Starting parallel processing with {self.n_jobs} jobs")
+        self.logger.info(f"Processing {len(tasks)} tasks using joblib")
+        
+        start_time = time.time()
+        
+        # Create a custom tqdm callback that logs to logger
+        def tqdm_logger_callback(tqdm_obj):
+            """Custom tqdm callback to log progress to logger."""
+            last_logged = 0
+            for i in tqdm_obj:
+                current_progress = i + 1
+                # Log every 10% or at least every 5 tasks
+                if (current_progress % max(1, min(5, len(tasks) // 10)) == 0 and 
+                    current_progress != last_logged):
+                    elapsed = time.time() - start_time
+                    self.logger.info(f"Progress: {current_progress}/{len(tasks)} tasks completed ({current_progress/len(tasks)*100:.1f}%) - Elapsed: {elapsed:.1f}s")
+                    last_logged = current_progress
+                yield i
+        
+        # Run tasks with progress logging
+        try:
+            # Use tqdm with custom callback for logging
+            with tqdm(tasks, desc="Running tasks") as pbar:
+                results = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
+                    delayed(self._cached_run)(task) for task in pbar
+                )
+            
+            end_time = time.time()
+            total_time = end_time - start_time
+            
+            # Log completion statistics
+            successful_results = [r for r in results if r is not None]
+            failed_count = len(results) - len(successful_results)
+            
+            self.logger.info(f"Parallel processing completed in {total_time:.2f}s")
+            self.logger.info(f"Results: {len(successful_results)} successful, {failed_count} failed")
+            
+            if failed_count > 0:
+                self.logger.warning(f"{failed_count} tasks failed during parallel processing")
+            
+            # Log cache statistics
+            self._log_cache_statistics()
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Error during parallel processing: {str(e)}")
+            raise
     
     def clear_cache(self):
         """Clear the joblib cache."""
@@ -241,3 +291,41 @@ class JoblibTaskManager(TaskManagerExternalDB):
         """Context manager exit."""
         # No cleanup needed for joblib
         pass
+
+    def _log_system_info(self):
+        """Log system information for debugging and monitoring."""
+        import psutil
+        import os
+        
+        try:
+            cpu_count = psutil.cpu_count()
+            memory = psutil.virtual_memory()
+            process = psutil.Process(os.getpid())
+            
+            self.logger.info(f"System Info - CPU cores: {cpu_count}, "
+                           f"Memory: {memory.total / (1024**3):.1f}GB total, "
+                           f"{memory.available / (1024**3):.1f}GB available")
+            self.logger.info(f"Process Info - PID: {process.pid}, "
+                           f"Memory usage: {process.memory_info().rss / (1024**2):.1f}MB")
+        except ImportError:
+            self.logger.warning("psutil not available - skipping system info logging")
+        except Exception as e:
+            self.logger.warning(f"Could not log system info: {str(e)}")
+
+    def _log_cache_statistics(self):
+        """Log cache statistics for performance monitoring."""
+        try:
+            # Get joblib cache statistics
+            cache_stats = self.memory.get_stats()
+            self.logger.info(f"Joblib Cache Stats - "
+                           f"Cache hits: {cache_stats.get('hits', 0)}, "
+                           f"Cache misses: {cache_stats.get('misses', 0)}")
+            
+            # Calculate hit rate
+            total_requests = cache_stats.get('hits', 0) + cache_stats.get('misses', 0)
+            if total_requests > 0:
+                hit_rate = cache_stats.get('hits', 0) / total_requests * 100
+                self.logger.info(f"Cache hit rate: {hit_rate:.1f}%")
+            
+        except Exception as e:
+            self.logger.warning(f"Could not log cache statistics: {str(e)}")
