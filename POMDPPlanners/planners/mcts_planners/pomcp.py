@@ -91,6 +91,7 @@ class POMCP(Policy):
         
         action_node = self.get_explored_action_node(belief_node=belief_node)
         
+        state = belief_node.belief.sample()
         next_state, next_observation, reward = self.environment.sample_next_step(state=state, action=action_node.action)
         
         next_belief_node = None
