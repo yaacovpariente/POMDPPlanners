@@ -10,6 +10,10 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
 
+@pytest.fixture
+def pomdp():
+    return SafeAntVelocityPOMDP(discount_factor=0.95)
+
 def test_safe_velocity_pomdp_initialization():
     # Test basic initialization
     env = SafeAntVelocityPOMDP(
@@ -55,7 +59,7 @@ def test_state_transition():
         max_force=max_force,
     )
 
-    next_state = transition.sample()
+    next_state = transition.sample()[0]
 
     # Verify state dimensions
     assert next_state.shape == (4,)
@@ -103,7 +107,7 @@ def test_observation_model():
         velocity_noise=velocity_noise,
     )
 
-    observation = observation_model.sample()
+    observation = observation_model.sample()[0]
 
     # Verify observation dimensions
     assert observation.shape == (4,)
@@ -152,7 +156,7 @@ def test_initial_state_distribution():
     
     # Test multiple samples
     for _ in range(10):
-        state = initial_dist.sample()
+        state = initial_dist.sample()[0]
         
         # Verify state dimensions
         assert state.shape == (4,)
@@ -421,29 +425,29 @@ def test_config_id():
 
 def test_state_transition_model(pomdp):
     # Test state transition
-    state = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-    action = np.array([0.0, 0.0])
+    state = np.array([0.0, 0.0, 0.0, 0.0])
+    action = 0
     transition = pomdp.state_transition_model(state, action)
     next_state = transition.sample()[0]
     assert isinstance(next_state, np.ndarray)
-    assert next_state.shape == (8,)
+    assert next_state.shape == (4,)
 
     # Test with different action
-    action = np.array([1.0, 1.0])
+    action = 1
     transition = pomdp.state_transition_model(state, action)
     next_state = transition.sample()[0]
     assert isinstance(next_state, np.ndarray)
-    assert next_state.shape == (8,)
+    assert next_state.shape == (4,)
 
 
 def test_observation_model(pomdp):
     # Test observation model
-    state = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
-    action = np.array([0.0, 0.0])
+    state = np.array([0.0, 0.0, 0.0, 0.0])
+    action = 0
     observation = pomdp.observation_model(state, action)
     obs = observation.sample()[0]
     assert isinstance(obs, np.ndarray)
-    assert obs.shape == (8,)
+    assert obs.shape == (4,)
 
 
 def test_initial_state_distribution(pomdp):
@@ -451,4 +455,4 @@ def test_initial_state_distribution(pomdp):
     dist = pomdp.initial_state_dist()
     state = dist.sample()[0]
     assert isinstance(state, np.ndarray)
-    assert state.shape == (8,) 
+    assert state.shape == (4,) 
