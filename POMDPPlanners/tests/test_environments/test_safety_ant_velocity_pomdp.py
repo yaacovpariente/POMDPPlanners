@@ -417,4 +417,38 @@ def test_config_id():
         safety_violation_penalty=-100.0,
         movement_reward_scale=1.0,
     )
-    assert env1.config_id != env3.config_id 
+    assert env1.config_id != env3.config_id
+
+def test_state_transition_model(pomdp):
+    # Test state transition
+    state = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    action = np.array([0.0, 0.0])
+    transition = pomdp.state_transition_model(state, action)
+    next_state = transition.sample()[0]
+    assert isinstance(next_state, np.ndarray)
+    assert next_state.shape == (8,)
+
+    # Test with different action
+    action = np.array([1.0, 1.0])
+    transition = pomdp.state_transition_model(state, action)
+    next_state = transition.sample()[0]
+    assert isinstance(next_state, np.ndarray)
+    assert next_state.shape == (8,)
+
+
+def test_observation_model(pomdp):
+    # Test observation model
+    state = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+    action = np.array([0.0, 0.0])
+    observation = pomdp.observation_model(state, action)
+    obs = observation.sample()[0]
+    assert isinstance(obs, np.ndarray)
+    assert obs.shape == (8,)
+
+
+def test_initial_state_distribution(pomdp):
+    # Test initial state distribution
+    dist = pomdp.initial_state_dist()
+    state = dist.sample()[0]
+    assert isinstance(state, np.ndarray)
+    assert state.shape == (8,) 

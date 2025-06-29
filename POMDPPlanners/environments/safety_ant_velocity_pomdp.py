@@ -41,22 +41,26 @@ class SafeAntVelocityStateTransition(StateTransitionModel):
         self.position = state[:2]
         self.velocity = state[2:4]
 
-    def sample(self) -> np.ndarray:
-        # Get force magnitude from action
-        force_magnitude = self.force_scales[self.action] * self.max_force
-        
-        # Random force direction
-        force_direction = np.random.uniform(-np.pi, np.pi)
-        force = force_magnitude * np.array([np.cos(force_direction), np.sin(force_direction)])
-        
-        # Physics simulation (simplified)
-        acceleration = (force - self.damping * self.velocity) / self.mass
-        new_velocity = self.velocity + acceleration * self.dt
-        new_position = self.position + new_velocity * self.dt
-        
-        # Combine into new state
-        next_state = np.concatenate([new_position, new_velocity])
-        return next_state
+    def sample(self, n_samples: int = 1) -> List[Any]:
+        next_states = []
+        for _ in range(n_samples):
+            # Get force magnitude from action
+            force_magnitude = self.force_scales[self.action] * self.max_force
+            
+            # Random force direction
+            force_direction = np.random.uniform(-np.pi, np.pi)
+            force = force_magnitude * np.array([np.cos(force_direction), np.sin(force_direction)])
+            
+            # Physics simulation (simplified)
+            acceleration = (force - self.damping * self.velocity) / self.mass
+            new_velocity = self.velocity + acceleration * self.dt
+            new_position = self.position + new_velocity * self.dt
+            
+            # Combine into new state
+            next_state = np.concatenate([new_position, new_velocity])
+            next_states.append(next_state)
+
+        return next_states
 
 
 class SafeAntVelocityObservation(ObservationModel):
@@ -75,14 +79,17 @@ class SafeAntVelocityObservation(ObservationModel):
         self.position = next_state[:2]
         self.velocity = next_state[2:4]
 
-    def sample(self) -> np.ndarray:
-        # Add noise to position and velocity observations
-        noisy_position = self.position + np.random.normal(0, self.position_noise, size=2)
-        noisy_velocity = self.velocity + np.random.normal(0, self.velocity_noise, size=2)
-        
-        # Combine observations
-        observation = np.concatenate([noisy_position, noisy_velocity])
-        return observation
+    def sample(self, n_samples: int = 1) -> List[Any]:
+        observations = []
+        for _ in range(n_samples):
+            # Add noise to position and velocity observations
+            noisy_position = self.position + np.random.normal(0, self.position_noise, size=2)
+            noisy_velocity = self.velocity + np.random.normal(0, self.velocity_noise, size=2)
+            
+            # Combine observations
+            observation = np.concatenate([noisy_position, noisy_velocity])
+            observations.append(observation)
+        return observations
 
     def probability(self, observation: np.ndarray) -> float:
         # Calculate probability based on Gaussian noise model
@@ -172,11 +179,15 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
 
     def initial_state_dist(self) -> Distribution:
         class InitialState(Distribution):
-            def sample(self) -> np.ndarray:
-                # Start with zero velocity and random position
-                position = np.random.uniform(-1, 1, size=2)
-                velocity = np.zeros(2)
-                return np.concatenate([position, velocity])
+            def sample(self, n_samples: int = 1) -> List[Any]:
+                initial_states = []
+                for _ in range(n_samples):
+                    # Start with zero velocity and random position
+                    position = np.random.uniform(-1, 1, size=2)
+                    velocity = np.zeros(2)
+                    initial_state = np.concatenate([position, velocity])
+                    initial_states.append(initial_state)
+                return initial_states
         
         return InitialState()
 
@@ -249,11 +260,11 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             )
         ]
 
-    def sample_next_step(self, state: Any, action: Any) -> Tuple[Any, Any, float]:
-        next_state = self.state_transition_model(state=state, action=action).sample()
+    def sample_next_step(self, state: np.ndarray, action: np.ndarray) -> Tuple[np.ndarray, np.ndarray, float]:
+        next_state = self.state_transition_model(state=state, action=action).sample()[0]
         next_observation = self.observation_model(
             next_state=next_state, action=action
-        ).sample()
+        ).sample()[0]
         reward = self.reward(state=next_state, action=action)
 
         return next_state, next_observation, reward 
