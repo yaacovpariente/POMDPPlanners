@@ -128,12 +128,11 @@ def main():
     # Run comparison
     logger.info("Starting experiment comparison...")
     api = SimulationsAPI()
-    histories, statistics_df = api.run_multiple_environments_and_policies_local_run(
+    histories, statistics_df = api.run_multiple_environments_and_policies_local_run_with_initial_debug_run(
         environment_run_params=environment_run_params,
         alpha=args.alpha,
         confidence_interval_level=args.confidence,
         experiment_name=args.experiment_name,
-        debug=args.debug,
         n_jobs=args.n_jobs,
         cache_dir_path=output_dir,
         clear_cache_on_start=args.clear_cache_on_start
