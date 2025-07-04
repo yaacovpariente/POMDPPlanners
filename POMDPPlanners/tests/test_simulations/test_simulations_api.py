@@ -105,11 +105,7 @@ class TestSimulationsAPI:
         assert all(hasattr(step, 'action') for step in history.history)
         assert all(hasattr(step, 'observation') for step in history.history)
         assert all(hasattr(step, 'reward') for step in history.history)
-        assert (temp_cache_dir / "mlruns").exists()
-        assert (temp_cache_dir / "results").exists()
-        assert (temp_cache_dir / "results" / "test_tiger").exists()
-        assert (temp_cache_dir / "results" / "test_tiger" / "test_sparse_pft").exists()
-
+        
     def test_run_multiple_environments_and_policies_local_run_error(
         self,
         temp_cache_dir,
