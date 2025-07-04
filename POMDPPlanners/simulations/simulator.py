@@ -3,8 +3,10 @@ from pathlib import Path
 import mlflow
 import hashlib
 import logging
+import shutil
 from abc import ABC, abstractmethod
 from joblib import Parallel, delayed
+import uuid
 
 import pandas as pd
 
@@ -22,7 +24,8 @@ from POMDPPlanners.core.simulation import (
 from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environments_policies_comparison, metrics_dict_to_dataframe, compute_statistics_environment_policy_pair
 from POMDPPlanners.utils.visualization import (
     plot_discounted_returns_histogram,
-    plot_discounted_returns_histogram_multiple_policies
+    plot_discounted_returns_histogram_multiple_policies,
+    plot_policies_comparison_on_environment
 )
 from POMDPPlanners.utils.logger import get_logger
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
@@ -117,7 +120,7 @@ class BaseSimulator(ABC):
         """
         # Determine cache directory
         if cache_dir is None and self.cache_dir_path is not None:
-            cache_dir = str(self.cache_dir_path / "cache")
+            cache_dir = str(self.cache_dir_path)
         elif cache_dir is None:
             cache_dir = "./cache"
 
@@ -213,31 +216,58 @@ class BaseSimulator(ABC):
             mlflow.log_table(merged_df, "statistics/comparison_results.json")
             mlflow.log_table(policy_configs_df, "statistics/policy_configurations.json")
 
-            # Create results directory and visualizations
-            results_dir = self.cache_dir_path / "results"
-            results_dir.mkdir(exist_ok=True)
+            # Create policy comparison plots using the metrics
+            temp_plots_dir = Path(f"/tmp/plots_{uuid.uuid4().hex[:8]}")
+            temp_plots_dir.mkdir(exist_ok=True)
             
-            def create_env_viz(env_name: str, policy_results_dict: Dict[str, list]) -> None:
+            try:
+                plot_policies_comparison_on_environment(
+                    metrics_dict=metrics,
+                    cache_dir_path=temp_plots_dir
+                )
+                
+                # Log the policy comparison plots
+                mlflow.log_artifact(str(temp_plots_dir), "policy_comparison_plots")
+            finally:
+                # Clean up temporary plots directory
+                if temp_plots_dir.exists():
+                    shutil.rmtree(temp_plots_dir)
+
+            # Create visualizations for each environment and log them directly
+            def create_and_log_env_viz(env_name: str, policy_results_dict: Dict[str, list]) -> None:
                 environment = next(params.environment for params in environment_run_params if params.environment.name == env_name)
                 policies = [p for params in environment_run_params for p in params.policies if p.name in policy_results_dict]
                 
-                self._create_environment_visualizations(
-                    env_name=env_name,
-                    environment=environment,
-                    policy_results_dict=policy_results_dict,
-                    policies=policies,
-                    results_dir=results_dir,
-                    cache_visualizations=cache_visualizations
-                )
+                # Create temporary directory for this environment
+                temp_env_dir = Path(f"/tmp/{env_name}_{uuid.uuid4().hex[:8]}")
+                temp_env_dir.mkdir(exist_ok=True)
+                
+                try:
+                    self._create_environment_visualizations(
+                        env_name=env_name,
+                        environment=environment,
+                        policy_results_dict=policy_results_dict,
+                        policies=policies,
+                        results_dir=temp_env_dir,
+                        cache_visualizations=cache_visualizations
+                    )
+                    
+                    # Log the contents of this environment's directory directly under env_name
+                    for item in temp_env_dir.iterdir():
+                        if item.is_dir():
+                            mlflow.log_artifact(str(item), f"{env_name}/{item.name}")
+                        else:
+                            mlflow.log_artifact(str(item), env_name)
+                finally:
+                    # Clean up temporary directory
+                    if temp_env_dir.exists():
+                        shutil.rmtree(temp_env_dir)
             
             # Run visualizations in parallel
             Parallel(n_jobs=n_jobs)(
-                delayed(create_env_viz)(env_name, policy_results_dict)
+                delayed(create_and_log_env_viz)(env_name, policy_results_dict)
                 for env_name, policy_results_dict in results.items()
             )
-            
-            # Log all artifacts
-            mlflow.log_artifact(str(results_dir), "results")
 
         return results, merged_df
     
@@ -578,8 +608,9 @@ class POMDPSimulator(BaseSimulator):
         cache_visualizations: bool
     ) -> None:
         """Create and save visualizations for a specific environment."""
-        env_dir = results_dir / env_name
-        env_dir.mkdir(exist_ok=True)
+        # Don't create env_dir since the entire results_dir is already the environment directory
+        # env_dir = results_dir / env_name
+        # env_dir.mkdir(exist_ok=True)
         
         for policy_name, policy_histories in policy_histories_dict.items():
             policy = next(p for p in policies if p.name == policy_name)
@@ -587,12 +618,12 @@ class POMDPSimulator(BaseSimulator):
                 policy=policy,
                 environment=environment,
                 policy_histories=policy_histories,
-                env_dir=env_dir,
+                env_dir=results_dir,  # Use results_dir directly instead of env_dir
                 cache_visualizations=cache_visualizations
             )
         
         # Create comparison plot
-        comparison_plot_path = env_dir / "policy_comparison_histogram.png"
+        comparison_plot_path = results_dir / "policy_comparison_histogram.png"  # Use results_dir directly
         plot_discounted_returns_histogram_multiple_policies(
             histories=policy_histories_dict,
             policies=policies,

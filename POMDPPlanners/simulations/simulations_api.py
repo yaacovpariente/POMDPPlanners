@@ -54,7 +54,7 @@ class SimulationsAPI:
             n_jobs=n_jobs,
             cache_visualizations=True,
         )
-        self.logger.info("Simulation run completed successfully")
+        self.logger.info("Simulation run completed")
         return results
         
     def run_multiple_environments_and_policies_local_run_with_initial_debug_run(
@@ -121,5 +121,5 @@ class SimulationsAPI:
             n_jobs=n_jobs,
             cache_visualizations=True,
         )
-        self.logger.info("Main simulation run completed successfully")
+        self.logger.info("Main simulation run completed!")
         return results
