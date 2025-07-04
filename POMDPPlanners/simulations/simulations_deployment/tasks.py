@@ -67,10 +67,14 @@ class EpisodeSimulationTask(SimulationTask):
     @property
     def logger(self) -> logging.Logger:
         """All tasks should remain pickable and therefore the logger should be a property"""
+        output_dir = None
+        if self.cache_dir is not None:
+            output_dir = self.cache_dir / "logs" / "episodes"
+        
         return get_logger(
             name=f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}",
             debug=self.debug,
-            output_dir=self.cache_dir / "logs" / "episodes",
+            output_dir=output_dir,
             console_output=self.console_output
         )
     
