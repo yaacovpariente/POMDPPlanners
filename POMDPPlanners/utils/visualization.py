@@ -7,6 +7,7 @@ import seaborn as sns
 from joblib import Parallel, delayed
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import logging
 
 matplotlib.use("Agg")  # Use non-interactive backend
 import mlflow
@@ -18,6 +19,8 @@ from POMDPPlanners.core.tree import BeliefNode, ActionNode
 from POMDPPlanners.core.belief import WeightedParticleBelief, Belief
 from POMDPPlanners.core.cost import belief_expectation_cost
 
+# Set up logger
+logger = logging.getLogger(__name__)
 
 def plot_metrics_comparison(
     statistics: List[List[MetricValue]],
@@ -239,14 +242,106 @@ def plot_environment_policy_pair_comparison(
     cache_path: Path,
 ) -> None:
     plot_discounted_returns_histogram(histories=histories, policy=policy, environment=environment, cache_path=cache_path)
+    
 
 def plot_policies_comparison_on_environment(
-    histories: List[List[History]],
-    environments: List[Environment],
-    policies: List[Policy],
-    cache_path: Path,
+    metrics_dict: Dict[str, Dict[str, List[MetricValue]]],
+    cache_dir_path: Path,
 ) -> None:
-    pass
+    """
+    Plot bar plots comparing policies across environments for each metric type, using academic publication style.
+    """
+    assert isinstance(metrics_dict, dict), "metrics_dict must be a dictionary"
+    assert len(metrics_dict) > 0, "metrics_dict cannot be empty"
+    assert all(isinstance(policy_metrics, dict) for policy_metrics in metrics_dict.values()), \
+        "All values in metrics_dict must be dictionaries"
+    assert all(
+        isinstance(metrics, list) and all(isinstance(m, MetricValue) for m in metrics)
+        for policy_metrics in metrics_dict.values()
+        for metrics in policy_metrics.values()
+    ), "All metric values must be MetricValue objects"
+
+    # Create plots directory if it doesn't exist
+    plots_dir = cache_dir_path
+    plots_dir.mkdir(exist_ok=True)
+
+    # Get all unique metric names across all environments and policies
+    all_metric_names = set()
+    for env_name, policy_metrics_dict in metrics_dict.items():
+        for policy_name, metrics in policy_metrics_dict.items():
+            for metric in metrics:
+                all_metric_names.add(metric.name)
+
+    for env_name, policy_metrics_dict in metrics_dict.items():
+        for metric_name in all_metric_names:
+            policy_names = []
+            metric_values = []
+            lower_bounds = []
+            upper_bounds = []
+            for policy_name, metrics in policy_metrics_dict.items():
+                metric = next((m for m in metrics if m.name == metric_name), None)
+                if metric is None:
+                    continue
+                if (np.isnan(metric.value) or 
+                    np.isnan(metric.lower_confidence_bound) or 
+                    np.isnan(metric.upper_confidence_bound)):
+                    continue
+                policy_names.append(policy_name)
+                metric_values.append(metric.value)
+                lower_bounds.append(metric.lower_confidence_bound)
+                upper_bounds.append(metric.upper_confidence_bound)
+            if not policy_names:
+                continue
+
+            try:
+                # Academic style plot configuration
+                plt.figure(figsize=(16, 12))
+                x = np.arange(len(policy_names))
+                width = 0.6
+                yerr = (np.array(upper_bounds) - np.array(lower_bounds)) / 2
+                if sum(yerr) == 0:
+                    yerr = np.full(len(policy_names), 1e-10)
+
+                bars = plt.bar(
+                    x,
+                    metric_values,
+                    width,
+                    yerr=yerr,
+                    capsize=8,
+                    color='skyblue',
+                    alpha=0.85,
+                    edgecolor='black',
+                    linewidth=3
+                )
+
+                # Axis labels and title with large, bold font
+                plt.xlabel('Policy', fontsize=42, fontweight='bold')
+                plt.ylabel(metric_name.replace('_', ' ').title(), fontsize=42, fontweight='bold')
+                plt.title(f'{metric_name.replace("_", " ").title()} - {env_name}', fontsize=47, fontweight='bold', pad=20)
+                plt.xticks(x, policy_names, rotation=45, ha='right', fontsize=31, fontweight='bold')
+                plt.yticks(fontsize=31, fontweight='bold')
+
+                # Add value labels on top of bars
+                for i, (bar, value) in enumerate(zip(bars, metric_values)):
+                    height = bar.get_height()
+                    plt.text(bar.get_x() + bar.get_width()/2., height + yerr[i] + 0.01,
+                             f'{value:.3f}', ha='center', va='bottom', fontsize=28, fontweight='bold',
+                             bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.8))
+
+                # Grid and layout
+                plt.grid(True, alpha=0.3, axis='y')
+                plt.tight_layout()
+
+                # Save the plot
+                plot_filename = f"{env_name}_{metric_name}_comparison.png"
+                plt.savefig(plots_dir / plot_filename, dpi=300, bbox_inches='tight')
+                plt.close()
+                
+            except Exception as e:
+                logger.warning(f"Error creating plot for {env_name} - {metric_name}: {str(e)}")
+                plt.close()  # Make sure to close the figure even if there's an error
+                continue
+
 
 def plot_tree_graphs(root_node: BeliefNode):
     """
