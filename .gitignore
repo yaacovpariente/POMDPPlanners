@@ -89,3 +89,5 @@ db.sqlite3-journal
 # Other
 legacy/
 experiments/results
+dask-worker-space/
+joblib_cache/

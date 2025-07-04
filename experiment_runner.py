@@ -138,7 +138,7 @@ def main():
         clear_cache_on_start=args.clear_cache_on_start
     )
     
-    logger.info("Experiment completed successfully!")
+    logger.info("Experiment completed!")
     logger.info(f"Results saved to {output_dir}")
     logger.info("\nStatistics Summary:")
     logger.info(f"\n{statistics_df}")
