@@ -283,6 +283,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
     def clear_cache(self):
         """Clear the joblib cache."""
         self.memory.clear()
+        self.cache_db.clear()
     
     def __enter__(self):
         """Context manager entry."""

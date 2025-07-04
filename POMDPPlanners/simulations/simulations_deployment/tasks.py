@@ -62,8 +62,7 @@ class EpisodeSimulationTask(SimulationTask):
         self._cache_key = self._generate_cache_key()
         self.debug = debug
         self.console_output = console_output
-        
-        self.output_dir = cache_dir / "episodes" / f"{self.environment.name}.{self.policy.name}.{self.episode_id}" if cache_dir is not None else None
+        self.cache_dir = cache_dir
     
     @property
     def logger(self) -> logging.Logger:
@@ -71,7 +70,7 @@ class EpisodeSimulationTask(SimulationTask):
         return get_logger(
             name=f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}",
             debug=self.debug,
-            output_dir=self.output_dir,
+            output_dir=self.cache_dir / "logs" / "episodes",
             console_output=self.console_output
         )
     
