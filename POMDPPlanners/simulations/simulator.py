@@ -186,6 +186,26 @@ class BaseSimulator(ABC):
 
         # Run main comparison
         with mlflow.start_run(run_name="environment_policy_comparison"):
+            # Log input parameters
+            mlflow.log_param("alpha", alpha)
+            mlflow.log_param("confidence_interval_level", confidence_interval_level)
+            mlflow.log_param("n_jobs", n_jobs)
+            mlflow.log_param("cache_visualizations", cache_visualizations)
+            mlflow.log_param("num_environments", len(environment_run_params))
+            
+            # Log environment and policy information
+            for i, params in enumerate(environment_run_params):
+                env_prefix = f"env_{i}"
+                mlflow.log_param(f"{env_prefix}_name", params.environment.name)
+                mlflow.log_param(f"{env_prefix}_num_episodes", params.num_episodes)
+                mlflow.log_param(f"{env_prefix}_num_steps", params.num_steps)
+                mlflow.log_param(f"{env_prefix}_num_policies", len(params.policies))
+                
+                for j, policy in enumerate(params.policies):
+                    policy_prefix = f"{env_prefix}_policy_{j}"
+                    mlflow.log_param(f"{policy_prefix}_name", policy.name)
+                    mlflow.log_param(f"{policy_prefix}_type", policy.__class__.__name__)
+            
             # Run simulations
             results = self.simulate_multiple_environments_and_policies_parallel(
                 environment_run_params=environment_run_params,
@@ -200,6 +220,9 @@ class BaseSimulator(ABC):
                 alpha=alpha,
                 confidence_interval_level=confidence_interval_level,
             )
+            
+            # Log metrics to MLflow
+            self._log_metrics_to_mlflow(metrics)
             
             # Compute statistics
             statistics_df = metrics_dict_to_dataframe(metrics_dict=metrics)
@@ -580,6 +603,36 @@ class POMDPSimulator(BaseSimulator):
                 metrics_dict[env_name][policy_name] = metrics
                 
         return metrics_dict
+    
+    def _log_metrics_to_mlflow(
+        self,
+        metrics: Dict[str, Dict[str, List[MetricValue]]]
+    ) -> None:
+        """Log all metrics to MLflow for tracking and comparison.
+        
+        Args:
+            metrics: Dictionary mapping environment names to dictionaries mapping policy names to lists of MetricValue objects
+        """
+        self.logger.info("Logging metrics to MLflow")
+        
+        for env_name, policy_metrics_dict in metrics.items():
+            for policy_name, metric_list in policy_metrics_dict.items():
+                # Create metric prefix for this environment-policy pair
+                metric_prefix = f"{env_name}_{policy_name}"
+                
+                for metric in metric_list:
+                    # Log the main metric value
+                    mlflow.log_metric(f"{metric_prefix}_{metric.name}", metric.value)
+                    
+                    # Log confidence interval bounds
+                    mlflow.log_metric(f"{metric_prefix}_{metric.name}_ci_lower", metric.lower_confidence_bound)
+                    mlflow.log_metric(f"{metric_prefix}_{metric.name}_ci_upper", metric.upper_confidence_bound)
+                    
+                    # Log confidence interval width for easy comparison
+                    ci_width = metric.upper_confidence_bound - metric.lower_confidence_bound
+                    mlflow.log_metric(f"{metric_prefix}_{metric.name}_ci_width", ci_width)
+        
+        self.logger.info(f"Logged metrics for {len(metrics)} environments")
     
     def _create_environment_visualizations(
         self,
