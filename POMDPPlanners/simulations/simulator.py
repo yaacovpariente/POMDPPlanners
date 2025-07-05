@@ -226,8 +226,9 @@ class BaseSimulator(ABC):
                     cache_dir_path=temp_plots_dir
                 )
                 
-                # Log the policy comparison plots
-                mlflow.log_artifact(str(temp_plots_dir), "policy_comparison_plots")
+                # Log the policy comparison plots - log contents, not the directory itself
+                for item in temp_plots_dir.iterdir():
+                    mlflow.log_artifact(str(item), "policy_comparison_plots")
             finally:
                 # Clean up temporary plots directory
                 if temp_plots_dir.exists():
@@ -255,7 +256,8 @@ class BaseSimulator(ABC):
                     # Log the contents of this environment's directory directly under env_name
                     for item in temp_env_dir.iterdir():
                         if item.is_dir():
-                            mlflow.log_artifact(str(item), f"{env_name}/{item.name}")
+                            # Log the directory contents directly under env_name, not under env_name/policy_name
+                            mlflow.log_artifact(str(item), env_name)
                         else:
                             mlflow.log_artifact(str(item), env_name)
                 finally:
