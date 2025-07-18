@@ -29,7 +29,7 @@ def get_logger(name: str, level: int = logging.INFO, output_dir: Optional[Path] 
     if console_output:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG if debug else level)
-        console_formatter = logging.Formatter('%(levelname)s: %(message)s')
+        console_formatter = logging.Formatter('%(levelname)s: %(pathname)s:%(lineno)d - %(message)s')
         console_handler.setFormatter(console_formatter)
         logger.addHandler(console_handler)
     
@@ -50,7 +50,7 @@ def get_logger(name: str, level: int = logging.INFO, output_dir: Optional[Path] 
         # Create file handler
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.DEBUG if debug else level)
-        file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(pathname)s:%(lineno)d - %(message)s')
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
         
