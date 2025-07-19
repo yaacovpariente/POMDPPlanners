@@ -10,6 +10,7 @@ import numpy as np
 from POMDPPlanners.core.simulation import SimulationTask, History
 from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.utils.logger import get_logger
+from POMDPPlanners.utils.config_to_id import config_to_id
 
 
 class EpisodeSimulationTask(SimulationTask):
@@ -81,22 +82,17 @@ class EpisodeSimulationTask(SimulationTask):
     def _generate_cache_key(self) -> str:
         """Generate a unique cache key for this task."""
         
-        # Get configuration IDs or string representations of objects
-        env_id = getattr(self.environment, 'config_id', str(self.environment))
-        policy_id = getattr(self.policy, 'config_id', str(self.policy))
-        belief_id = getattr(self.initial_belief, 'config_id', str(self.initial_belief))
-        
         components = {
-            'env': env_id,
-            'policy': policy_id,
-            'belief': belief_id,
+            'env': self.environment.config_id,
+            'policy': self.policy.config_id,
+            'belief': self.initial_belief.config_id,
             'episode_id': self.episode_id,
             'episode_number': self.episode_number,
             'num_steps': self.num_steps,
             'seed': self.seed,
             'discount_factor': self.discount_factor
         }
-        return f"simulation:{hashlib.md5(json.dumps(components, sort_keys=True).encode()).hexdigest()}"
+        return config_to_id(components)
     
     def get_config_id(self) -> str:
         """Get the configuration ID for this task.
