@@ -4,6 +4,7 @@ import hashlib
 import json
 import random
 import logging
+import time
 
 import numpy as np
 
@@ -140,8 +141,11 @@ class EpisodeSimulationTask(SimulationTask):
         Returns:
             History: The simulation history
         """
-        # Log task configuration
+        # Start timing
+        start_time = time.time()
         self.logger.info(f"Starting episode {self.episode_id} (episode_number: {self.episode_number})")
+        
+        # Log task configuration
         self.logger.info(f"Environment: {self.environment.name} (config_id: {self.environment.config_id})")
         self.logger.info(f"Policy: {self.policy.name} (config_id: {self.policy.config_id})")
         self.logger.info(f"Initial belief: {self.initial_belief.config_id}")
@@ -191,6 +195,11 @@ class EpisodeSimulationTask(SimulationTask):
             self.logger.debug("Restoring random state")
             np.random.set_state(state)
             self.logger.debug("Random state restored")
+            
+            # Log total execution time
+            end_time = time.time()
+            execution_time = end_time - start_time
+            self.logger.info(f"Episode {self.episode_id} execution completed in {execution_time:.4f} seconds")
             
         return result
     
