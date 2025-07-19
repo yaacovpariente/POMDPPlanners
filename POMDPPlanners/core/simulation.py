@@ -232,12 +232,15 @@ class TaskManagerExternalDB(TaskManager):
         if tasks_to_run:
             self.logger.info(f"Running {len(tasks_to_run)} uncached tasks")
             new_results = self._run_tasks(tasks_to_run)
-            self.logger.info(f"Successfully completed {len(new_results)} tasks")
+            self.logger.info(f"Completed {len(new_results)} tasks")
             
             assert len(new_results) == len(tasks_to_run)
             
             # Store new results in their original positions
             for idx, result in zip(task_indices, new_results):
+                if result is None:  # prevents storing failed tasks
+                    continue
+
                 results[idx] = result
                 # Cache the new result
                 task_id = tasks[idx].get_config_id()

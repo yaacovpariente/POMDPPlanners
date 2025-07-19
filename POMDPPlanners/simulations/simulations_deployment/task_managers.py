@@ -221,7 +221,10 @@ class JoblibTaskManager(TaskManagerExternalDB):
         Returns:
             History: The simulation history
         """
-        return task.run()
+        result = task.run()
+        self.cache_db.set(task.get_config_id(), result)
+        
+        return result
     
     def _run_tasks(self, tasks: List[SimulationTask]) -> List[History]:
         """Run tasks in parallel using joblib."""
