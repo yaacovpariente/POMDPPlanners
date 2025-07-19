@@ -29,7 +29,7 @@ def get_logger(name: str, level: int = logging.INFO, output_dir: Optional[Path] 
     if console_output:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG if debug else level)
-        console_formatter = logging.Formatter('%(levelname)s: %(pathname)s:%(lineno)d - %(message)s')
+        console_formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(pathname)s:%(lineno)d - %(message)s')
         console_handler.setFormatter(console_formatter)
         logger.addHandler(console_handler)
     
