@@ -60,10 +60,24 @@ class EpisodeSimulationTask(SimulationTask):
         self.seed = seed
         self.discount_factor = discount_factor
         self.episode_number = episode_number
-        self._cache_key = self._generate_cache_key()
         self.debug = debug
         self.console_output = console_output
         self.cache_dir = cache_dir
+        
+        # Generate cache key after all attributes are set
+        self._cache_key = self._generate_cache_key()
+        
+        # Log task creation
+        temp_logger = get_logger(
+            name=f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}",
+            debug=self.debug,
+            output_dir=self.cache_dir / "logs" / "episodes" if self.cache_dir else None,
+            console_output=self.console_output
+        )
+        temp_logger.debug(f"Creating EpisodeSimulationTask with episode_id={self.episode_id}, episode_number={self.episode_number}")
+        temp_logger.debug(f"Task parameters: num_steps={self.num_steps}, seed={self.seed}, discount_factor={self.discount_factor}")
+        temp_logger.debug(f"Cache directory: {self.cache_dir}")
+        temp_logger.debug(f"Generated cache key: {self._cache_key}")
     
     @property
     def logger(self) -> logging.Logger:
@@ -137,6 +151,8 @@ class EpisodeSimulationTask(SimulationTask):
             self.logger.info(f"Cache directory: {self.cache_dir}")
         self.logger.info(f"Cache key: {self._cache_key}")
         
+        # Log random state setup
+        self.logger.debug(f"Setting random seed to {self.seed}")
         state = np.random.get_state()
         
         random.seed(self.seed)
@@ -144,6 +160,7 @@ class EpisodeSimulationTask(SimulationTask):
         
         try:
             # Run simulation with seed parameter
+            self.logger.info("Starting episode simulation...")
             result = run_episode(
                 environment=self.environment,
                 policy=self.policy,
@@ -151,12 +168,29 @@ class EpisodeSimulationTask(SimulationTask):
                 num_steps=self.num_steps,
                 logger=self.logger
             )
+            
+            if result is not None:
+                self.logger.info(f"Episode {self.episode_id} completed successfully")
+                self.logger.debug(f"Episode result type: {type(result)}")
+                if hasattr(result, 'history') and result.history:
+                    self.logger.debug(f"Episode had {len(result.history)} steps")
+                    # Calculate total reward from history
+                    total_reward = sum(step.reward for step in result.history if step.reward is not None)
+                    self.logger.info(f"Total episode reward: {total_reward}")
+                    self.logger.debug(f"Episode reached terminal state: {result.reach_terminal_state}")
+                    self.logger.debug(f"Actual steps taken: {result.actual_num_steps}")
+            else:
+                self.logger.warning(f"Episode {self.episode_id} returned None result")
+                
         except Exception as e:
             self.logger.error(f"Error running episode {self.episode_id}: {e}")
+            self.logger.exception("Full exception details:")
             result = None
         finally:
             # Restore random state
+            self.logger.debug("Restoring random state")
             np.random.set_state(state)
+            self.logger.debug("Random state restored")
             
         return result
     
