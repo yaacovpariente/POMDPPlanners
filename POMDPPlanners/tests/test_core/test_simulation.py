@@ -216,9 +216,9 @@ def test_task_manager_external_db():
     assert "id4" in successful_ids
     assert "id2" not in successful_ids  # Failed task should not be in successful_ids
     
-    # Verify caching
+    # Verify caching - only successful tasks should be cached
     assert mock_db.is_key_in_cache("task1")
-    assert mock_db.is_key_in_cache("task2")
+    assert not mock_db.is_key_in_cache("task2")  # Failed task should not be cached
     assert mock_db.is_key_in_cache("task3")
     assert mock_db.is_key_in_cache("task4")
     
