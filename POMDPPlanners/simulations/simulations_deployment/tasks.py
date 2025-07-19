@@ -126,6 +126,17 @@ class EpisodeSimulationTask(SimulationTask):
         Returns:
             History: The simulation history
         """
+        # Log task configuration
+        self.logger.info(f"Starting episode {self.episode_id} (episode_number: {self.episode_number})")
+        self.logger.info(f"Environment: {self.environment.name} (config_id: {self.environment.config_id})")
+        self.logger.info(f"Policy: {self.policy.name} (config_id: {self.policy.config_id})")
+        self.logger.info(f"Initial belief: {self.initial_belief.config_id}")
+        self.logger.info(f"Configuration: num_steps={self.num_steps}, seed={self.seed}, discount_factor={self.discount_factor}")
+        self.logger.info(f"Debug mode: {self.debug}, Console output: {self.console_output}")
+        if self.cache_dir:
+            self.logger.info(f"Cache directory: {self.cache_dir}")
+        self.logger.info(f"Cache key: {self._cache_key}")
+        
         state = np.random.get_state()
         
         random.seed(self.seed)
