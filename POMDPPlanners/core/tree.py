@@ -36,7 +36,8 @@ class ActionNode(BaseNode):
 
 class BeliefNode(BaseNode):
     def __init__(self, belief: Belief, observation: Any = None, parent=None, children=tuple(), data: Any = None):
-        assert isinstance(belief, Belief)
+        if not isinstance(belief, Belief):
+            raise TypeError("belief must be a Belief instance")
         super().__init__(parent=parent, children=children, data=data)
 
         self.belief = belief

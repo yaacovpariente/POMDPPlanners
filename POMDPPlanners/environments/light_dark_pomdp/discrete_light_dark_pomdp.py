@@ -130,7 +130,8 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         )
 
     def reward(self, state: np.ndarray, action: Any) -> float:
-        assert state.shape == (2,)
+        if state.shape != (2,):
+            raise ValueError("state must be a 2D vector")
 
         next_state = state + self.action_to_vector[action]
 
@@ -154,7 +155,8 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         return reward
 
     def is_terminal(self, state: np.ndarray) -> bool:
-        assert state.shape == (2,)
+        if state.shape != (2,):
+            raise ValueError("state must be a 2D vector")
 
         is_goal_state = np.all(state == self.goal_state)
         is_obstacle_hit = np.any(np.all(state.reshape(-1, 1) == self.obstacles, axis=0))

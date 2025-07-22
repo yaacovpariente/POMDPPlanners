@@ -37,9 +37,10 @@ def plot_metrics_comparison(
         policies: List of policies
         cache_dir_path: Path to save the plots
     """
-    assert (
+    if not (
         len(statistics) > 0 and len(environments) > 0 and len(policies) > 0
-    ), "Statistics, environments, and policies lists must not be empty"
+    ):
+        raise ValueError("Statistics, environments, and policies lists must not be empty")
 
     # Create plots directory if it doesn't exist
     plots_dir = cache_dir_path / "plots"
@@ -251,15 +252,20 @@ def plot_policies_comparison_on_environment(
     """
     Plot bar plots comparing policies across environments for each metric type, using academic publication style.
     """
-    assert isinstance(metrics_dict, dict), "metrics_dict must be a dictionary"
-    assert len(metrics_dict) > 0, "metrics_dict cannot be empty"
-    assert all(isinstance(policy_metrics, dict) for policy_metrics in metrics_dict.values()), \
-        "All values in metrics_dict must be dictionaries"
-    assert all(
-        isinstance(metrics, list) and all(isinstance(m, MetricValue) for m in metrics)
+    if not (
+        isinstance(metrics_dict, dict)
+    ):
+        raise TypeError("metrics_dict must be a dictionary")
+    if len(metrics_dict) == 0:
+        raise ValueError("metrics_dict cannot be empty")
+    if not all(isinstance(policy_metrics, dict) for policy_metrics in metrics_dict.values()):
+        raise TypeError("All policy_metrics must be dictionaries")
+    if not all(
+        isinstance(metric, MetricValue)
         for policy_metrics in metrics_dict.values()
-        for metrics in policy_metrics.values()
-    ), "All metric values must be MetricValue objects"
+        for metric in policy_metrics.values()
+    ):
+        raise TypeError("All metric values must be MetricValue objects")
 
     # Create plots directory if it doesn't exist
     plots_dir = cache_dir_path

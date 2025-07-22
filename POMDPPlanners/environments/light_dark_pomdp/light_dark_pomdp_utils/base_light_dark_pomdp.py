@@ -84,36 +84,60 @@ class BaseLightDarkPOMDP(Environment, ABC):
         grid_size: int,
     ):
         # Type checks
-        assert isinstance(discount_factor, float), "discount_factor must be a float"
-        assert isinstance(name, str), "name must be a string"
-        assert isinstance(beacons, np.ndarray), "beacons must be a numpy array"
-        assert isinstance(goal_state, np.ndarray), "goal_state must be a numpy array"
-        assert isinstance(start_state, np.ndarray), "start_state must be a numpy array"
-        assert isinstance(obstacles, np.ndarray), "obstacles must be a numpy array"
-        assert isinstance(obstacle_hit_probability, float), "obstacle_hit_probability must be a float"
-        assert isinstance(obstacle_reward, float), "obstacle_reward must be a float"
-        assert isinstance(goal_reward, float), "goal_reward must be a float"
-        assert isinstance(beacon_radius, float), "beacon_radius must be a float"
-        assert isinstance(fuel_cost, float), "fuel_cost must be a float"
-        assert isinstance(grid_size, int), "grid_size must be an integer"
+        if not isinstance(discount_factor, float):
+            raise TypeError("discount_factor must be a float")
+        if not isinstance(name, str):
+            raise TypeError("name must be a string")
+        if not isinstance(beacons, np.ndarray):
+            raise TypeError("beacons must be a numpy array")
+        if not isinstance(goal_state, np.ndarray):
+            raise TypeError("goal_state must be a numpy array")
+        if not isinstance(start_state, np.ndarray):
+            raise TypeError("start_state must be a numpy array")
+        if not isinstance(obstacles, np.ndarray):
+            raise TypeError("obstacles must be a numpy array")
+        if not isinstance(obstacle_hit_probability, float):
+            raise TypeError("obstacle_hit_probability must be a float")
+        if not isinstance(obstacle_reward, float):
+            raise TypeError("obstacle_reward must be a float")
+        if not isinstance(goal_reward, float):
+            raise TypeError("goal_reward must be a float")
+        if not isinstance(beacon_radius, float):
+            raise TypeError("beacon_radius must be a float")
+        if not isinstance(fuel_cost, float):
+            raise TypeError("fuel_cost must be a float")
+        if not isinstance(grid_size, int):
+            raise TypeError("grid_size must be an integer")
 
         # Value range checks
-        assert 0 <= discount_factor <= 1, "discount_factor must be between 0 and 1"
-        assert 0 <= obstacle_hit_probability <= 1, "obstacle_hit_probability must be between 0 and 1"
-        assert grid_size > 0, "grid_size must be positive"
-        assert beacon_radius > 0, "beacon_radius must be positive"
+        if not (0 <= discount_factor <= 1):
+            raise ValueError("discount_factor must be between 0 and 1")
+        if not (0 <= obstacle_hit_probability <= 1):
+            raise ValueError("obstacle_hit_probability must be between 0 and 1")
+        if grid_size <= 0:
+            raise ValueError("grid_size must be positive")
+        if beacon_radius <= 0:
+            raise ValueError("beacon_radius must be positive")
 
         # Shape checks
-        assert beacons.shape[0] == 2, "beacons must be a 2xN array"
-        assert goal_state.shape == (2,), "goal_state must be a 2D vector"
-        assert start_state.shape == (2,), "start_state must be a 2D vector"
-        assert obstacles.shape[0] == 2, "obstacles must be a 2xN array"
+        if beacons.shape[0] != 2:
+            raise ValueError("beacons must be a 2xN array")
+        if goal_state.shape != (2,):
+            raise ValueError("goal_state must be a 2D vector")
+        if start_state.shape != (2,):
+            raise ValueError("start_state must be a 2D vector")
+        if obstacles.shape[0] != 2:
+            raise ValueError("obstacles must be a 2xN array")
 
         # Range checks for states
-        assert np.all(beacons >= 0) and np.all(beacons <= grid_size), "beacons coordinates must be within grid"
-        assert np.all(goal_state >= 0) and np.all(goal_state <= grid_size), "goal_state must be within grid"
-        assert np.all(start_state >= 0) and np.all(start_state <= grid_size), "start_state must be within grid"
-        assert np.all(obstacles >= 0) and np.all(obstacles <= grid_size), "obstacles must be within grid"
+        if not (np.all(beacons >= 0) and np.all(beacons <= grid_size)):
+            raise ValueError("beacons coordinates must be within grid")
+        if not (np.all(goal_state >= 0) and np.all(goal_state <= grid_size)):
+            raise ValueError("goal_state must be within grid")
+        if not (np.all(start_state >= 0) and np.all(start_state <= grid_size)):
+            raise ValueError("start_state must be within grid")
+        if not (np.all(obstacles >= 0) and np.all(obstacles <= grid_size)):
+            raise ValueError("obstacles must be within grid")
         
     @abstractmethod
     def state_transition_model(self, state: np.ndarray, action: Any) -> Distribution:
@@ -142,8 +166,10 @@ class BaseLightDarkPOMDP(Environment, ABC):
         return DiscreteDistribution(values=[1.0], probs=np.array([1.0]))
     
     def visualize_path(self, path: List[np.ndarray], agent_belief_path: List[DiscreteDistribution], actions: List[str], cache_path: Path):
-        assert isinstance(cache_path, Path)
-        assert str(cache_path).endswith(".gif")
+        if not isinstance(cache_path, Path):
+            raise TypeError("cache_path must be a Path object")
+        if not str(cache_path).endswith(".gif"):
+            raise ValueError("cache_path must end with .gif")
 
         fig, ax = plt.subplots()
         ax.set_xlim(-1, self.grid_size + 1)

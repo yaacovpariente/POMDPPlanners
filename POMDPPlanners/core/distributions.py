@@ -32,11 +32,14 @@ class Distribution(ABC):
 
 class DiscreteDistribution(Distribution):
     def __init__(self, values: list, probs: np.array):
-        assert isinstance(values, list)
-        assert isinstance(probs, np.ndarray)
-
-        assert len(values) == len(probs)
-        assert np.isclose(np.sum(probs), 1.0, rtol=1e-10)
+        if not isinstance(values, list):
+            raise TypeError("values must be a list")
+        if not isinstance(probs, np.ndarray):
+            raise TypeError("probs must be a numpy.ndarray")
+        if len(values) != len(probs):
+            raise ValueError("values and probs must have the same length")
+        if not np.isclose(np.sum(probs), 1.0, rtol=1e-10):
+            raise ValueError("probs must sum to 1.0 (within tolerance)")
 
         self.values = values
         self.probs = probs
@@ -58,8 +61,10 @@ class DiscreteDistribution(Distribution):
 
 class Numpy2DDistribution(Distribution):
     def __init__(self, values: np.ndarray, probs: np.array):
-        assert values.shape[0] == 2
-        assert values.shape[1] == len(probs)
+        if values.shape[0] != 2:
+            raise ValueError("values must have shape (2, N)")
+        if values.shape[1] != len(probs):
+            raise ValueError("values second dimension must match length of probs")
 
         self.values = values
         self.probs = probs

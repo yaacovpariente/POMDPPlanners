@@ -12,9 +12,12 @@ class DiscreteActionSequencesPlanner(Policy):
     def __init__(self, environment: DiscreteActionsEnvironment, discount_factor: float, name: str, depth: int, n_return_samples: int, log_path: Optional[Path] = None, debug: bool = False):
         super().__init__(environment=environment, discount_factor=discount_factor, name=name, log_path=log_path, debug=debug)
 
-        assert depth > 0
-        assert n_return_samples > 0
-        assert 1 >= discount_factor >= 0
+        if depth <= 0:
+            raise ValueError("depth must be greater than 0")
+        if n_return_samples <= 0:
+            raise ValueError("n_return_samples must be greater than 0")
+        if not (1 >= discount_factor >= 0):
+            raise ValueError("discount_factor must be between 0 and 1")
         
         self.depth = depth
         self.n_return_samples = n_return_samples

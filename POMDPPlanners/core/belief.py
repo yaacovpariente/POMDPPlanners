@@ -120,14 +120,18 @@ class WeightedParticleBelief(Belief):
     def __init__(
         self, particles: list, log_weights: np.ndarray, resampling: bool = False, ess_threshold: float = 0.5
     ):
-        assert isinstance(particles, list)
-        assert isinstance(log_weights, np.ndarray)
-        assert len(particles) == len(log_weights)
-        assert isinstance(resampling, bool)
-        assert sum(log_weights != 0) > 0
-        assert np.all(
-            np.isfinite(log_weights)
-        ), "log_weights must be finite numbers (not Inf, -Inf, or NaN)"
+        if not isinstance(particles, list):
+            raise TypeError("particles must be a list")
+        if not isinstance(log_weights, np.ndarray):
+            raise TypeError("log_weights must be a numpy.ndarray")
+        if len(particles) != len(log_weights):
+            raise ValueError("particles and log_weights must have the same length")
+        if not isinstance(resampling, bool):
+            raise TypeError("resampling must be a boolean")
+        if not np.any(log_weights != 0):
+            raise ValueError("At least one log_weight must be nonzero")
+        if not np.all(np.isfinite(log_weights)):
+            raise ValueError("log_weights must be finite numbers (not Inf, -Inf, or NaN)")
 
         self.particles = particles
         self.log_weights = log_weights
@@ -339,8 +343,10 @@ def sample_next_belief(
 def get_initial_belief(
     pomdp: Environment, n_particles: int, resampling: bool = True
 ) -> Belief:
-    assert isinstance(n_particles, int)
-    assert n_particles > 0
+    if not isinstance(n_particles, int):
+        raise TypeError("n_particles must be an integer")
+    if n_particles <= 0:
+        raise ValueError("n_particles must be greater than 0")
 
     particles = pomdp.initial_state_dist().sample(n_samples=n_particles)
     log_weights = np.log(np.ones(n_particles) / n_particles)

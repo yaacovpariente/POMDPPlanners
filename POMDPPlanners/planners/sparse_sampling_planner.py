@@ -24,10 +24,14 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         log_path: Optional[Path] = None,
         debug: bool = False
     ):
-        assert isinstance(environment, DiscreteActionsEnvironment)
-        assert isinstance(branching_factor, int)
-        assert isinstance(depth, int)
-        assert isinstance(resampling, bool)
+        if not isinstance(environment, DiscreteActionsEnvironment):
+            raise TypeError("environment must be a DiscreteActionsEnvironment instance")
+        if not isinstance(branching_factor, int):
+            raise TypeError("branching_factor must be an int")
+        if not isinstance(depth, int):
+            raise TypeError("depth must be an int")
+        if not isinstance(resampling, bool):
+            raise TypeError("resampling must be a bool")
         if depth <= 0:
             raise ValueError("Depth must be greater than 0")
         if branching_factor <= 0:
@@ -45,7 +49,8 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         self.depth = depth
 
     def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
-        assert isinstance(belief, Belief)
+        if not isinstance(belief, Belief):
+            raise TypeError("belief must be a Belief instance")
 
         tree = self._learn_belief_tree(belief)
         action = get_optimal_action_cost_setting(tree)
@@ -98,8 +103,10 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
                 raise ValueError(f"Unknown node type: {type(node)}")
 
     def _update_leaf_node_statistics(self, node: ActionNode):
-        assert isinstance(node, ActionNode)
-        assert node.height == 0
+        if not isinstance(node, ActionNode):
+            raise TypeError("node must be an ActionNode instance")
+        if node.height != 0:
+            raise ValueError("node.height must be 0")
         node.visit_count = 1
 
         self._update_leaf_node_q_value(node)

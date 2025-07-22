@@ -70,8 +70,10 @@ class PFT_DPW(PathSimulationPolicy):
         min_samples_per_node: int, 
         min_visit_count_per_action: int
     ):  
-        assert isinstance(min_samples_per_node, int)
-        assert isinstance(min_visit_count_per_action, int)
+        if not isinstance(min_samples_per_node, int):
+            raise TypeError("min_samples_per_node must be an int")
+        if not isinstance(min_visit_count_per_action, int):
+            raise TypeError("min_visit_count_per_action must be an int")
         # TODO: check if min_samples_per_node is greater than min_visit_count_per_action
         # TODO: check k and alpha params
         

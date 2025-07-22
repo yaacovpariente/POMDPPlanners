@@ -4,15 +4,18 @@ import numpy as np
 import pandas as pd
 
 from POMDPPlanners.core.simulation import History, MetricValue
-from POMDPPlanners.utils.statistics import cvar_estimator, confidence_interval
+from POMDPPlanners.utils.statistics import cvar_estimator, confidence_interval, cvar_confidence_interval, quantile_confidence_interval
 from POMDPPlanners.core.environment import Environment
 
 def compute_statistics_environment_policy_pair(
     env: Environment, histories: List[History], alpha: float, confidence_interval_level: float = 0.95
 ) -> List[MetricValue]:
-    assert isinstance(histories, list)
-    assert len(histories) > 0
-    assert all(isinstance(h, History) for h in histories)
+    if not isinstance(histories, list):
+        raise TypeError("histories must be a list")
+    if len(histories) == 0:
+        raise ValueError("histories must not be empty")
+    if not all(isinstance(h, History) for h in histories):
+        raise TypeError("All elements of histories must be History instances")
 
     return_samples = []
     average_state_sampling_time = []
@@ -49,8 +52,11 @@ def compute_statistics_environment_policy_pair(
     return_cvar = cvar_estimator(return_samples, alpha)
     return_value_at_risk = np.percentile(return_samples, (1 - alpha) * 100)
 
-    return_confidence_interval = confidence_interval(
-        data=return_samples, confidence=confidence_interval_level
+    cvar_return_confidence_interval = cvar_confidence_interval(
+        data=return_samples, alpha=alpha, delta=1-confidence_interval_level
+    )
+    return_value_at_risk_confidence_interval = quantile_confidence_interval(
+        data=return_samples, alpha=1-alpha, conf_level=1-confidence_interval_level
     )
     average_return_confidence_interval = confidence_interval(
         data=return_samples, confidence=confidence_interval_level
@@ -102,14 +108,14 @@ def compute_statistics_environment_policy_pair(
         MetricValue(
             name="return_cvar",
             value=return_cvar,
-            lower_confidence_bound=return_confidence_interval[0],
-            upper_confidence_bound=return_confidence_interval[1],
+            lower_confidence_bound=cvar_return_confidence_interval[0],
+            upper_confidence_bound=cvar_return_confidence_interval[1],
         ),
         MetricValue(
             name="return_value_at_risk",
             value=return_value_at_risk,
-            lower_confidence_bound=return_confidence_interval[0],
-            upper_confidence_bound=return_confidence_interval[1],
+            lower_confidence_bound=return_value_at_risk_confidence_interval[0],
+            upper_confidence_bound=return_value_at_risk_confidence_interval[1],
         ),
         MetricValue(
             name="average_state_sampling_time",
@@ -172,14 +178,18 @@ def compute_statistics_environments_policies_comparison(
     Returns:
         DataFrame where each row represents an environment-policy pair and columns are metrics
     """
-    assert isinstance(histories, dict)
-    assert len(histories) > 0
-    assert all(isinstance(env_histories, dict) for env_histories in histories.values())
-    assert all(
+    if not isinstance(histories, dict):
+        raise TypeError("histories must be a dict")
+    if len(histories) == 0:
+        raise ValueError("histories must not be empty")
+    if not all(isinstance(env_histories, dict) for env_histories in histories.values()):
+        raise TypeError("All values in histories must be dicts")
+    if not all(
         isinstance(policy_histories, list) and all(isinstance(h, History) for h in policy_histories)
         for env_histories in histories.values()
         for policy_histories in env_histories.values()
-    )
+    ):
+        raise TypeError("All policy histories must be lists of History instances")
 
     # List to store all statistics
     all_statistics = []
@@ -226,14 +236,18 @@ def metrics_dict_to_dataframe(
     Returns:
         DataFrame where each row represents an environment-policy pair and columns are metrics with confidence intervals
     """
-    assert isinstance(metrics_dict, dict)
-    assert len(metrics_dict) > 0
-    assert all(isinstance(policy_metrics, dict) for policy_metrics in metrics_dict.values())
-    assert all(
-        isinstance(metrics, list) and all(isinstance(m, MetricValue) for m in metrics)
+    if not isinstance(metrics_dict, dict):
+        raise TypeError("metrics_dict must be a dict")
+    if len(metrics_dict) == 0:
+        raise ValueError("metrics_dict must not be empty")
+    if not all(isinstance(policy_metrics, dict) for policy_metrics in metrics_dict.values()):
+        raise TypeError("All values in metrics_dict must be dicts")
+    if not all(
+        isinstance(metric, MetricValue)
         for policy_metrics in metrics_dict.values()
-        for metrics in policy_metrics.values()
-    )
+        for metric in policy_metrics.values()
+    ):
+        raise TypeError("All metrics must be MetricValue instances")
 
     # List to store all statistics
     all_statistics = []

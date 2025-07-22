@@ -19,7 +19,8 @@ def get_v_values_sample(action_node: ActionNode) -> np.ndarray:
 
 
 def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
-    assert isinstance(tree, BeliefNode)
+    if not isinstance(tree, BeliefNode):
+        raise TypeError("tree must be a BeliefNode instance")
     
     if tree.is_leaf:
         return [

@@ -88,7 +88,8 @@ class History:
         Returns:
             History: New History instance
         """
-        assert isinstance(data, dict)
+        if not isinstance(data, dict):
+            raise TypeError("data must be a dictionary")
         
         # Convert history list of dictionaries back to StepData objects
         history = []
@@ -234,7 +235,8 @@ class TaskManagerExternalDB(TaskManager):
             new_results = self._run_tasks(tasks_to_run)
             self.logger.info(f"Completed {len(new_results)} tasks")
             
-            assert len(new_results) == len(tasks_to_run)
+            if len(new_results) != len(tasks_to_run):
+                raise ValueError("new_results and tasks_to_run must have the same length")
             
             # Store new results in their original positions
             for idx, result in zip(task_indices, new_results):

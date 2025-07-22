@@ -31,7 +31,8 @@ class PathSimulationPolicy(Policy):
         self.n_simulations = n_simulations
         self.time_out_in_seconds = time_out_in_seconds
         
-        assert not (n_simulations is not None and time_out_in_seconds is not None), "Cannot specify both n_simulations and time_out_in_seconds"
+        if n_simulations is not None and time_out_in_seconds is not None:
+            raise ValueError("Cannot specify both n_simulations and time_out_in_seconds")
 
     def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
         tree = self._learn_tree(belief=belief)
@@ -42,6 +43,9 @@ class PathSimulationPolicy(Policy):
     def _learn_tree(self, belief: Belief) -> BeliefNode:
         tree = BeliefNode(belief=belief)
         
+        if self.n_simulations is None:
+            raise ValueError("n_simulations must not be None")
+        
         if self.n_simulations is not None:
             self._construct_tree_using_n_simulations(belief_node=tree)
         else:
@@ -50,13 +54,15 @@ class PathSimulationPolicy(Policy):
         return tree
     
     def _construct_tree_using_n_simulations(self, belief_node: BeliefNode) -> BeliefNode:
-        assert self.n_simulations is not None
+        if self.n_simulations is None:
+            raise ValueError("n_simulations must not be None")
         
         for _ in range(self.n_simulations):
             self._simulate_path(belief_node=belief_node, depth=0)
 
     def _construct_tree_using_timeout(self, belief_node: BeliefNode) -> BeliefNode:
-        assert self.time_out_in_seconds is not None
+        if self.time_out_in_seconds is None:
+            raise ValueError("time_out_in_seconds must not be None")
         
         start_time = time.time()
         while time.time() - start_time < self.time_out_in_seconds:

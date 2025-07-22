@@ -159,15 +159,22 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         beacon_radius: float,
         obstacle_radius: float,
     ):
-        assert state_transition_cov_matrix.shape == (2, 2), "state_transition_cov_matrix must be a 2x2 matrix"
-        assert observation_cov_matrix.shape == (2, 2), "observation_cov_matrix must be a 2x2 matrix"
-        assert goal_state_radius > 0, "goal_state_radius must be greater than 0"
-        assert beacon_radius > 0, "beacon_radius must be greater than 0"
-        assert obstacle_radius > 0, "obstacle_radius must be greater than 0"
+        if state_transition_cov_matrix.shape != (2, 2):
+            raise ValueError("state_transition_cov_matrix must be a 2x2 matrix")
+        if observation_cov_matrix.shape != (2, 2):
+            raise ValueError("observation_cov_matrix must be a 2x2 matrix")
+        if goal_state_radius <= 0:
+            raise ValueError("goal_state_radius must be greater than 0")
+        if beacon_radius <= 0:
+            raise ValueError("beacon_radius must be greater than 0")
+        if obstacle_radius <= 0:
+            raise ValueError("obstacle_radius must be greater than 0")
     
     def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> Distribution:
-        assert state.shape == (2,), "state must be a 2D vector"
-        assert action.shape == (2,), "action must be a 2D vector"
+        if state.shape != (2,):
+            raise ValueError("state must be a 2D vector")
+        if action.shape != (2,):
+            raise ValueError("action must be a 2D vector")
         
         return StateTransitionModel(
             state=state,
@@ -176,8 +183,10 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         )
 
     def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> Distribution:
-        assert next_state.shape == (2,), "next_state must be a 2D vector"
-        assert action.shape == (2,), "action must be a 2D vector"
+        if next_state.shape != (2,):
+            raise ValueError("next_state must be a 2D vector")
+        if action.shape != (2,):
+            raise ValueError("action must be a 2D vector")
         
         return ContinuousLightDarkNormalNoiseObservationModel(
             next_state=next_state,
@@ -192,7 +201,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         return self.reward_model.compute_reward(state, action)
 
     def is_terminal(self, state: np.ndarray) -> bool:
-        assert state.shape == (2,), "state must be a 2D vector"
+        if state.shape != (2,):
+            raise ValueError("state must be a 2D vector")
 
         is_goal_state = np.linalg.norm(state - self.goal_state) <= self.goal_state_radius
 

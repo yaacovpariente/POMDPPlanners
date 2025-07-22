@@ -26,7 +26,8 @@ class POMCP(Policy):
     ):
         combination1 = time_out_in_seconds is not None and n_simulations is None
         combination2 = time_out_in_seconds is None and n_simulations is not None
-        assert combination1 or combination2, "Only one of time_out_in_seconds and n_simulations must be provided."
+        if not (combination1 or combination2):
+            raise ValueError("Only one of time_out_in_seconds and n_simulations must be provided.")
         
         super().__init__(
             environment=environment, 
@@ -51,6 +52,8 @@ class POMCP(Policy):
     def search(self, belief: Belief) -> Any:
         belief_node = BeliefNode(belief=belief, observation=None)
         
+        if self.timeout_in_seconds is None:
+            raise ValueError("timeout_in_seconds must not be None")
         if self.timeout_in_seconds is not None:
             self._construct_tree_using_timeout(belief=belief, belief_node=belief_node)
         else:
@@ -59,7 +62,8 @@ class POMCP(Policy):
         return belief_node
     
     def _construct_tree_using_timeout(self, belief: Belief, belief_node: BeliefNode) -> BeliefNode:
-        assert self.timeout_in_seconds is not None
+        if self.timeout_in_seconds is None:
+            raise ValueError("timeout_in_seconds must not be None")
         
         start_time = time.time()
         while time.time() - start_time < self.timeout_in_seconds:
@@ -67,7 +71,8 @@ class POMCP(Policy):
             self.simulate(state=state, belief_node=belief_node, depth=0)
             
     def _construct_tree_using_n_simulations(self, belief: Belief, belief_node: BeliefNode) -> BeliefNode:
-        assert self.n_simulations is not None
+        if self.n_simulations is None:
+            raise ValueError("n_simulations must not be None")
         
         for _ in range(self.n_simulations):
             state = belief.sample()
@@ -115,7 +120,8 @@ class POMCP(Policy):
         return return_sample
         
     def get_explored_action_node(self, belief_node: BeliefNode) -> ActionNode:
-        assert isinstance(belief_node, BeliefNode)
+        if not isinstance(belief_node, BeliefNode):
+            raise TypeError("belief_node must be a BeliefNode instance")
         
         action_nodes_visits = np.array([child.visit_count for child in belief_node.children])
         unvisited_action_indices = np.where(action_nodes_visits == 0)[0]

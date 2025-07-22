@@ -38,16 +38,24 @@ class SparsePFT(PathSimulationPolicy):
             debug=debug
         )
         
-        assert isinstance(environment, DiscreteActionsEnvironment)
-        assert isinstance(discount_factor, float)
-        assert isinstance(gamma, float)
-        assert isinstance(depth, int)
-        assert isinstance(c_ucb, float)
-        assert isinstance(beta_ucb, float)
-        assert isinstance(belief_child_num, int)
-        assert isinstance(n_simulations, int)
-        
-        assert 1 >= discount_factor >= 0
+        if not isinstance(environment, DiscreteActionsEnvironment):
+            raise TypeError("environment must be a DiscreteActionsEnvironment instance")
+        if not isinstance(discount_factor, float):
+            raise TypeError("discount_factor must be a float")
+        if not isinstance(gamma, float):
+            raise TypeError("gamma must be a float")
+        if not isinstance(depth, int):
+            raise TypeError("depth must be an int")
+        if not isinstance(c_ucb, float):
+            raise TypeError("c_ucb must be a float")
+        if not isinstance(beta_ucb, float):
+            raise TypeError("beta_ucb must be a float")
+        if not isinstance(belief_child_num, int):
+            raise TypeError("belief_child_num must be an int")
+        if not isinstance(n_simulations, int):
+            raise TypeError("n_simulations must be an int")
+        if not (1 >= discount_factor >= 0):
+            raise ValueError("discount_factor must be between 0 and 1")
         
         self.gamma = gamma
         self.depth = depth

@@ -7,8 +7,10 @@ class BaseLightDarkRewardModel(ABC):
         pass
     
     def compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
-        assert state.shape == (2,), "state must be a 2D vector"
-        assert action.shape == (2,), "action must be a 2D vector"
+        if state.shape != (2,):
+            raise ValueError("state must be a 2D vector")
+        if action.shape != (2,):
+            raise ValueError("action must be a 2D vector")
         
         return self._compute_reward(state, action)
     
@@ -135,4 +137,5 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
         
         # Return obstacle reward if random value is less than probability
         return self.obstacle_reward if np.random.rand() < p else 0.0
+    
     

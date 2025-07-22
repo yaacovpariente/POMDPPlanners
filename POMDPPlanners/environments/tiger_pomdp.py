@@ -139,8 +139,10 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         import matplotlib.pyplot as plt
         import matplotlib.animation as animation
 
-        assert isinstance(cache_path, Path)
-        assert str(cache_path).endswith(".gif")
+        if not isinstance(cache_path, Path):
+            raise TypeError("cache_path must be a Path object")
+        if not str(cache_path).endswith(".gif"):
+            raise ValueError("cache_path must end with .gif")
 
         # Create figure and axis
         fig, ax = plt.subplots(figsize=(8, 4))
