@@ -1,6 +1,6 @@
 import numpy as np
 from scipy import stats
-
+from scipy.stats import binom
 
 def cvar_estimator(vec: np.ndarray, alpha: float) -> float:
     """
@@ -82,6 +82,30 @@ def confidence_interval(data, confidence=0.95):
     ci = stats.t.interval(confidence, df, loc=mean, scale=sem)
     return ci
 
+
+def cvar_confidence_interval(data, alpha=0.95, delta=0.05):
+    """
+    Calculate the confidence interval for the CVaR of a dataset using the t-distribution.
+    
+    Args:
+        data: Array of values
+        confidence: Confidence level (default 0.95 for 95%)
+
+    Returns:
+        tuple: (lower_bound, upper_bound) of the confidence interval
+        
+    Raises:
+        ValueError: If data contains NaN values or has insufficient samples
+    """
+
+    if not 0 <= alpha <= 1:
+        raise ValueError("confidence must be between 0 and 1")
+    if len(data) == 0:
+        raise ValueError("Input vector must not be empty")
+    
+    lower_bound = cvar_probabilistic_lower_bound_thomas(vec=data, alpha=alpha, delta=delta/2, dist_lower_bound=0)
+    upper_bound = cvar_probabilistic_upper_bound_thomas(vec=data, alpha=alpha, delta=delta/2, dist_upper_bound=0)
+    return lower_bound, upper_bound
 
 def cvar_probabilistic_lower_bound_thomas(vec: np.ndarray, alpha: float, delta: float, dist_lower_bound: float) -> float:
     """
@@ -167,6 +191,33 @@ def cvar_probabilistic_upper_bound_thomas(vec: np.ndarray, alpha: float, delta: 
     
     return s
 
+
+def quantile_confidence_interval(data, alpha=0.95, conf_level=0.95):
+    """
+    data: 1D array-like of samples
+    alpha: target quantile (e.g. 0.95 for 95% VaR)
+    conf_level: overall coverage (e.g. 0.95 for 95% CI)
+    Returns: (lower_value, upper_value, k1, k2)
+    """
+    x = np.sort(np.asarray(data))
+    n = len(x)
+    delta = 1 - conf_level
+
+    # find smallest k1 such that P(Y < k1) >= delta/2
+    k1 = 0
+    while binom.cdf(k1-1, n, alpha) < delta/2 and k1 <= n:
+        k1 += 1
+
+    # find largest k2 such that P(Y <= k2) <= 1 - delta/2
+    k2 = n
+    while binom.cdf(k2, n, alpha) > 1 - delta/2 and k2 >= 0:
+        k2 -= 1
+
+    # clip to valid index range and convert to 0-based indexing
+    k1 = max(1, min(k1, n))      # at least 1
+    k2 = max(1, min(k2, n))      # at least 1
+
+    return x[k1-1], x[k2-1], k1, k2
 
 def get_min_and_max_cost(min_immediate_cost: float, max_immediate_cost: float, depth: int, max_depth: int, gamma: float) -> tuple[float, float]:
     """
