@@ -7,6 +7,7 @@ import shutil
 from abc import ABC, abstractmethod
 from joblib import Parallel, delayed
 import uuid
+import tempfile
 
 import pandas as pd
 
@@ -240,33 +241,22 @@ class BaseSimulator(ABC):
             mlflow.log_table(policy_configs_df, "statistics/policy_configurations.json")
 
             # Create policy comparison plots using the metrics
-            temp_plots_dir = Path(f"/tmp/plots_{uuid.uuid4().hex[:8]}")
-            temp_plots_dir.mkdir(exist_ok=True)
-            
-            try:
+            with tempfile.TemporaryDirectory() as temp_plots_dir_str:
+                temp_plots_dir = Path(temp_plots_dir_str)
                 plot_policies_comparison_on_environment(
                     metrics_dict=metrics,
                     cache_dir_path=temp_plots_dir
                 )
-                
                 # Log the policy comparison plots - log contents, not the directory itself
                 for item in temp_plots_dir.iterdir():
                     mlflow.log_artifact(str(item), "policy_comparison_plots")
-            finally:
-                # Clean up temporary plots directory
-                if temp_plots_dir.exists():
-                    shutil.rmtree(temp_plots_dir)
 
             # Create visualizations for each environment and log them directly
             def create_and_log_env_viz(env_name: str, policy_results_dict: Dict[str, list]) -> None:
                 environment = next(params.environment for params in environment_run_params if params.environment.name == env_name)
                 policies = [p for params in environment_run_params for p in params.policies if p.name in policy_results_dict]
-                
-                # Create temporary directory for this environment
-                temp_env_dir = Path(f"/tmp/{env_name}_{uuid.uuid4().hex[:8]}")
-                temp_env_dir.mkdir(exist_ok=True)
-                
-                try:
+                with tempfile.TemporaryDirectory() as temp_env_dir_str:
+                    temp_env_dir = Path(temp_env_dir_str)
                     self._create_environment_visualizations(
                         env_name=env_name,
                         environment=environment,
@@ -275,18 +265,12 @@ class BaseSimulator(ABC):
                         results_dir=temp_env_dir,
                         cache_visualizations=cache_visualizations
                     )
-                    
                     # Log the contents of this environment's directory directly under env_name
                     for item in temp_env_dir.iterdir():
                         if item.is_dir():
-                            # Log the directory contents directly under env_name, not under env_name/policy_name
                             mlflow.log_artifact(str(item), env_name)
                         else:
                             mlflow.log_artifact(str(item), env_name)
-                finally:
-                    # Clean up temporary directory
-                    if temp_env_dir.exists():
-                        shutil.rmtree(temp_env_dir)
             
             # Run visualizations in parallel
             Parallel(n_jobs=n_jobs)(
