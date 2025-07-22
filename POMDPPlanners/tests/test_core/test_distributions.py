@@ -12,7 +12,7 @@ def test_discrete_distribution_initialization():
     assert np.array_equal(dist.probs, probs)
 
     # Test invalid initialization with mismatched lengths
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         DiscreteDistribution([1, 2], np.array([0.5, 0.5, 0.0]))
 
 
@@ -63,11 +63,11 @@ def test_numpy2d_distribution_initialization():
     assert np.array_equal(dist.probs, probs)
 
     # Test invalid initialization with wrong shape
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         Numpy2DDistribution(np.array([[1, 2], [3, 4], [5, 6]]), np.array([0.5, 0.5]))
 
     # Test invalid initialization with mismatched lengths
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         Numpy2DDistribution(np.array([[1, 2], [3, 4]]), np.array([0.5, 0.5, 0.0]))
 
 

@@ -52,8 +52,6 @@ class POMCP(Policy):
     def search(self, belief: Belief) -> Any:
         belief_node = BeliefNode(belief=belief, observation=None)
         
-        if self.timeout_in_seconds is None:
-            raise ValueError("timeout_in_seconds must not be None")
         if self.timeout_in_seconds is not None:
             self._construct_tree_using_timeout(belief=belief, belief_node=belief_node)
         else:

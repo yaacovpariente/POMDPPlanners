@@ -263,7 +263,8 @@ def plot_policies_comparison_on_environment(
     if not all(
         isinstance(metric, MetricValue)
         for policy_metrics in metrics_dict.values()
-        for metric in policy_metrics.values()
+        for metrics_list in policy_metrics.values()
+        for metric in metrics_list
     ):
         raise TypeError("All metric values must be MetricValue objects")
 

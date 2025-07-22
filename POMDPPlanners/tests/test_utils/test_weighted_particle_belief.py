@@ -65,7 +65,7 @@ def test_reinvigoration():
 def test_invalid_initialization():
     """Test initialization with invalid parameters"""
     # Test with mismatched particles and weights
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         WeightedParticleBeliefDiscreteLightDark(
             particles=[np.array([0, 0]) for _ in range(5)],
             log_weights=np.zeros(10),
@@ -73,7 +73,7 @@ def test_invalid_initialization():
         )
     
     # Test with invalid reinvigoration fraction
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         WeightedParticleBeliefDiscreteLightDark(
             particles=[np.array([0, 0]) for _ in range(10)],
             log_weights=np.zeros(10),
@@ -166,7 +166,7 @@ def test_full_coverage_reinvigoration():
 def test_full_coverage_invalid_initialization():
     """Test initialization with invalid parameters for WeightedParticleBeliefDiscreteLightDarkFullCoverage"""
     # Test with mismatched particles and weights
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         WeightedParticleBeliefDiscreteLightDarkFullCoverage(
             particles=[np.array([0, 0]) for _ in range(5)],
             log_weights=np.zeros(10),
@@ -174,7 +174,7 @@ def test_full_coverage_invalid_initialization():
         )
     
     # Test with invalid reinvigoration_particles_weights_sum
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         WeightedParticleBeliefDiscreteLightDarkFullCoverage(
             particles=[np.array([0, 0]) for _ in range(10)],
             log_weights=np.zeros(10),
@@ -283,7 +283,7 @@ def test_continuous_full_coverage_reinvigoration():
 def test_continuous_full_coverage_invalid_initialization():
     """Test initialization with invalid parameters for WeightedParticleBeliefContinuousLightDarkFullCoverage"""
     # Test with mismatched particles and weights
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         WeightedParticleBeliefContinuousLightDarkFullCoverage(
             particles=[np.array([0, 0]) for _ in range(5)],
             log_weights=np.zeros(10),
@@ -291,7 +291,7 @@ def test_continuous_full_coverage_invalid_initialization():
         )
     
     # Test with invalid reinvigoration_particles_weights_sum
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         WeightedParticleBeliefContinuousLightDarkFullCoverage(
             particles=[np.array([0, 0]) for _ in range(10)],
             log_weights=np.zeros(10),
@@ -299,7 +299,7 @@ def test_continuous_full_coverage_invalid_initialization():
         )
     
     # Test with invalid covariance matrix shape
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         WeightedParticleBeliefContinuousLightDarkFullCoverage(
             particles=[np.array([0, 0]) for _ in range(10)],
             log_weights=np.zeros(10),

@@ -39,7 +39,7 @@ def test_initialization(tiger_pomdp):
     assert planner.name == "test_planner"
 
     # Test invalid depth
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         DiscreteActionSequencesPlanner(
             environment=tiger_pomdp,
             discount_factor=0.95,
@@ -49,7 +49,7 @@ def test_initialization(tiger_pomdp):
         )
 
     # Test invalid n_return_samples
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         DiscreteActionSequencesPlanner(
             environment=tiger_pomdp,
             discount_factor=0.95,
@@ -59,7 +59,7 @@ def test_initialization(tiger_pomdp):
         )
 
     # Test invalid discount_factor
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         DiscreteActionSequencesPlanner(
             environment=tiger_pomdp,
             discount_factor=1.5,

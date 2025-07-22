@@ -96,7 +96,7 @@ def test_initialization_with_timeout(environment, discount_factor, depth, explor
 
 
 def test_invalid_initialization(environment, discount_factor, depth, exploration_constant):
-    with pytest.raises(AssertionError):
+    with pytest.raises(ValueError):
         POMCP(
             environment=environment,
             discount_factor=discount_factor,
