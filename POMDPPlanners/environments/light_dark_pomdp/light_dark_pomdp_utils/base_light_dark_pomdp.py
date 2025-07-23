@@ -179,7 +179,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         # Control belief particles color
         belief_particles_color = '#FFFF00'  # Yellow color
 
-        fig, ax = plt.subplots()
+        fig, ax = plt.subplots(figsize=(10, 8))
         ax.set_xlim(-1, self.grid_size + 1)
         ax.set_ylim(-1, self.grid_size + 1)
         ax.set_xticks(np.arange(-1, self.grid_size + 1, 1))
@@ -308,8 +308,9 @@ class BaseLightDarkPOMDP(Environment, ABC):
         ani = animation.FuncAnimation(
             fig, update, frames=len(path), init_func=init, blit=True, repeat=False
         )
-        plt.legend()
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.title("Agent Path")
+        plt.tight_layout()
 
         # Save the animation
         if cache_path is not None:
