@@ -308,7 +308,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
             fig, update, frames=len(path), init_func=init, blit=True, repeat=False
         )
         plt.legend()
-        plt.title("Agent Path and Belief Visualization")
+        plt.title("Agent Path")
 
         # Save the animation
         if cache_path is not None:
