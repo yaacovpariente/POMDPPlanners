@@ -185,6 +185,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         ax.set_xticks(np.arange(-1, self.grid_size + 1, 1))
         ax.set_yticks(np.arange(-1, self.grid_size + 1, 1))
         ax.set_facecolor('#696969')  # Darker grey
+        ax.grid(False)  # Remove the grid from the background
 
         # Plot circles around beacons with white background and light fade effect
         for i in range(self.beacons.shape[1]):
