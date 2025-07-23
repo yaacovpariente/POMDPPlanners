@@ -35,6 +35,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         obstacles: np.ndarray = np.array([[3, 7], [5, 5]]),
         obstacle_hit_probability: float = 0.2,
         obstacle_reward: float = -10.0,
+        obstacle_radius: float = 1.0,
         goal_reward: float = 10.0,
         beacon_radius: float = 1.0,
         fuel_cost: float = 2.0,
@@ -49,6 +50,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
             obstacles=obstacles,
             obstacle_hit_probability=obstacle_hit_probability,
             obstacle_reward=obstacle_reward,
+            obstacle_radius=obstacle_radius,
             goal_reward=goal_reward,
             beacon_radius=beacon_radius,
             fuel_cost=fuel_cost,
@@ -63,6 +65,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         self.obstacles = obstacles
         self.obstacle_hit_probability = obstacle_hit_probability
         self.obstacle_reward = obstacle_reward
+        self.obstacle_radius = obstacle_radius
         self.goal_reward = goal_reward
         self.beacon_radius = beacon_radius
         self.fuel_cost = fuel_cost
@@ -78,6 +81,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         obstacles: np.ndarray,
         obstacle_hit_probability: float,
         obstacle_reward: float,
+        obstacle_radius: float,
         goal_reward: float,
         beacon_radius: float,
         fuel_cost: float,
@@ -118,7 +122,8 @@ class BaseLightDarkPOMDP(Environment, ABC):
             raise ValueError("grid_size must be positive")
         if beacon_radius <= 0:
             raise ValueError("beacon_radius must be positive")
-
+        if obstacle_radius <= 0:
+            raise ValueError("obstacle_radius must be positive")
         # Shape checks
         if beacons.shape[0] != 2:
             raise ValueError("beacons must be a 2xN array")
@@ -171,23 +176,45 @@ class BaseLightDarkPOMDP(Environment, ABC):
         if not str(cache_path).endswith(".gif"):
             raise ValueError("cache_path must end with .gif")
 
+        # Control belief particles color
+        belief_particles_color = '#FFFF00'  # Yellow color
+
         fig, ax = plt.subplots()
         ax.set_xlim(-1, self.grid_size + 1)
         ax.set_ylim(-1, self.grid_size + 1)
         ax.set_xticks(np.arange(-1, self.grid_size + 1, 1))
         ax.set_yticks(np.arange(-1, self.grid_size + 1, 1))
-        ax.grid()
+        ax.set_facecolor('#696969')  # Darker grey
 
+        # Plot circles around beacons with white background and light fade effect
+        for i in range(self.beacons.shape[1]):
+            beacon_x, beacon_y = self.beacons[0, i], self.beacons[1, i]
+            # Create multiple circles with exponential decay for realistic light fade
+            for j in range(15):  # More circles for smoother gradient
+                radius = self.beacon_radius + j * 0.05  # Smaller radius increments
+                # Exponential decay for more realistic light fade
+                alpha = 0.9 * np.exp(-j * 0.3)  # Exponential decay from 0.9 to near 0
+                circle = plt.Circle((beacon_x, beacon_y), radius, 
+                                  facecolor='white', edgecolor='none', alpha=alpha)
+                ax.add_patch(circle)
+        
         # Plot the beacons
-        ax.scatter(self.beacons[0], self.beacons[1], color="blue", label="Beacons")
+        ax.scatter(self.beacons[0], self.beacons[1], color="blue", marker='^', s=100, label="Beacons")
         # Plot the goal state
         ax.scatter(
-            self.goal_state[0], self.goal_state[1], color="green", label="Goal State"
+            self.goal_state[0], self.goal_state[1], color="green", marker='*', s=200, label="Goal State"
         )
         # Plot the start state
         ax.scatter(
             self.start_state[0], self.start_state[1], color="red", label="Start State"
         )
+        # Plot circles around obstacles with transparent red background
+        for i in range(self.obstacles.shape[1]):
+            obstacle_x, obstacle_y = self.obstacles[0, i], self.obstacles[1, i]
+            circle = plt.Circle((obstacle_x, obstacle_y), self.obstacle_radius, 
+                              facecolor='red', edgecolor='none', alpha=0.3)
+            ax.add_patch(circle)
+        
         # Plot the obstacles
         ax.scatter(
             self.obstacles[0], self.obstacles[1], color="black", label="Obstacles"
@@ -198,16 +225,41 @@ class BaseLightDarkPOMDP(Environment, ABC):
         (path_line,) = ax.plot([], [], "r-", alpha=0.5, linewidth=2)
         # Initialize the action arrow
         arrow = plt.arrow(0, 0, 0, 0, color='red', width=0.1, head_width=0.3, head_length=0.3, length_includes_head=True)
-        # Initialize belief particles scatter plot
-        belief_scatter = ax.scatter([], [], c='purple', alpha=0.5, label='Belief Particles')
+        # Initialize belief particles scatter plots for different time steps
+        belief_scatters = []
+        max_history = min(len(path), 10)  # Show up to 10 previous time steps
+        # Create gradient from yellow to red
+        yellow_color = np.array([1.0, 1.0, 0.0])  # Yellow RGB
+        red_color = np.array([1.0, 0.0, 0.0])     # Red RGB
+        colors = []
+        for i in range(max_history):
+            # Interpolate between yellow (current) and red (old)
+            t = (max_history - 1 - i) / max_history  # 0 for current, 1 for oldest
+            color = yellow_color * (1 - t) + red_color * t
+            # Apply additional intensity decay
+            alpha_factor = 0.1 + 0.9 * (i / max_history)  # 0.1 to 1.0 - more extreme decay
+            color = color * alpha_factor
+            colors.append(color)
+        
+        for i in range(max_history):
+            scatter = ax.scatter([], [], c=[colors[i]], alpha=0.3 + 0.4 * (i / max_history), 
+                               s=50, label="")
+            belief_scatters.append(scatter)
+        
+        # Create a proper legend entry for belief particles
+        from matplotlib.lines import Line2D
+        legend_element = Line2D([0], [0], marker='o', color=belief_particles_color, 
+                               markersize=8, alpha=0.7, linestyle='', label='Belief Particles')
+        ax.add_artist(legend_element)
 
         def init():
             agent.set_data([], [])
             path_line.set_data([], [])
             arrow.set_data(x=0, y=0, dx=0, dy=0)
-            belief_scatter.set_offsets(np.empty((0, 2)))
-            belief_scatter.set_sizes([])
-            return agent, path_line, arrow, belief_scatter
+            for scatter in belief_scatters:
+                scatter.set_offsets(np.empty((0, 2)))
+                scatter.set_sizes([])
+            return [agent, path_line, arrow] + belief_scatters
 
         def update(frame):
             # Update current position
@@ -231,20 +283,26 @@ class BaseLightDarkPOMDP(Environment, ABC):
             else:
                 arrow.set_data(x=x, y=y, dx=0, dy=0)
 
-            # Update belief particles
-            belief = agent_belief_path[frame]
-            if len(belief.values) > 0:
-                # Convert belief values to array of positions
-                positions = np.array(belief.values)
-                # Scale probabilities to reasonable sizes for visualization (multiply by 1000)
-                sizes = np.array(belief.probs) * 1000
-                belief_scatter.set_offsets(positions)
-                belief_scatter.set_sizes(sizes)
-            else:
-                belief_scatter.set_offsets(np.empty((0, 2)))
-                belief_scatter.set_sizes([])
+            # Update belief particles with history
+            for i, scatter in enumerate(belief_scatters):
+                history_frame = frame - (len(belief_scatters) - 1 - i)
+                if history_frame >= 0 and history_frame < len(agent_belief_path):
+                    belief = agent_belief_path[history_frame]
+                    if len(belief.values) > 0:
+                        # Convert belief values to array of positions
+                        positions = np.array(belief.values)
+                        # Scale probabilities to reasonable sizes for visualization (multiply by 1000)
+                        sizes = np.array(belief.probs) * 1000
+                        scatter.set_offsets(positions)
+                        scatter.set_sizes(sizes)
+                    else:
+                        scatter.set_offsets(np.empty((0, 2)))
+                        scatter.set_sizes([])
+                else:
+                    scatter.set_offsets(np.empty((0, 2)))
+                    scatter.set_sizes([])
 
-            return agent, path_line, arrow, belief_scatter
+            return [agent, path_line, arrow] + belief_scatters
 
         ani = animation.FuncAnimation(
             fig, update, frames=len(path), init_func=init, blit=True, repeat=False

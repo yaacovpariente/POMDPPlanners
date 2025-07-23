@@ -91,6 +91,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             obstacle_reward=obstacle_reward,
             goal_reward=goal_reward,
             beacon_radius=beacon_radius,
+            obstacle_radius=obstacle_radius,
             fuel_cost=fuel_cost,
             grid_size=grid_size,
         )
@@ -107,7 +108,6 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self.observation_cov_matrix = observation_cov_matrix
         self.goal_state_radius = goal_state_radius
         self.beacon_radius = beacon_radius
-        self.obstacle_radius = obstacle_radius
         self.penalty_decay = penalty_decay
         
         # Initialize reward model based on type
