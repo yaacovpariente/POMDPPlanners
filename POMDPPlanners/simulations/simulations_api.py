@@ -56,7 +56,41 @@ class SimulationsAPI:
         )
         self.logger.info("Simulation run completed")
         return results
+
+    def run_multiple_environments_and_policies_remote_run(
+        self,
+        environment_run_params: List[EnvironmentRunParams],
+        alpha: float,
+        confidence_interval_level: float,
+        experiment_name: str = "POMDP_Planning_Comparison",
+        debug: bool = False,
+        n_jobs: int = -1,
+        cache_dir_path: Path = None,
+        clear_cache_on_start: bool = False,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        self.logger.info(f"Starting simulation run with {len(environment_run_params)} environment configurations")
+        self.logger.debug(f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}")
         
+        simulator = POMDPSimulator(
+            cache_dir_path=cache_dir_path,
+            experiment_name=experiment_name,
+            debug=debug,
+            task_manager_type=TaskManagerType.DASK,
+            n_jobs=n_jobs,
+            clear_cache_on_start=clear_cache_on_start,
+        )
+        
+        self.logger.info("Running simulation comparison")
+        results = simulator.compare_multiple_environments_policies(
+            environment_run_params=environment_run_params,
+            alpha=alpha,
+            confidence_interval_level=confidence_interval_level,
+            n_jobs=n_jobs,
+            cache_visualizations=True,
+        )
+        self.logger.info("Simulation run completed")
+        return results
+
     def run_multiple_environments_and_policies_local_run_with_initial_debug_run(
         self,
         environment_run_params: List[EnvironmentRunParams],
