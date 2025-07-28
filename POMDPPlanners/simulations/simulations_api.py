@@ -64,6 +64,7 @@ class SimulationsAPI:
         confidence_interval_level: float,
         experiment_name: str = "POMDP_Planning_Comparison",
         debug: bool = False,
+        scheduler_address: str = None,
         n_jobs: int = -1,
         cache_dir_path: Path = None,
         clear_cache_on_start: bool = False,
@@ -77,6 +78,7 @@ class SimulationsAPI:
             debug=debug,
             task_manager_type=TaskManagerType.DASK,
             n_jobs=n_jobs,
+            scheduler_address=scheduler_address,
             clear_cache_on_start=clear_cache_on_start,
         )
         
