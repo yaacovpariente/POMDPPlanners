@@ -53,7 +53,6 @@ class BaseSimulator(ABC):
         cache_dir: Optional[str] = None,
         clear_cache_on_start: bool = False,
         enable_profiling: bool = False,
-        profiling_stats_count: int = 50
     ):
         """Initialize the simulator.
         
@@ -67,14 +66,12 @@ class BaseSimulator(ABC):
             cache_dir: Directory for joblib cache (None for default)
             clear_cache_on_start: If True, clears the cache at startup
             enable_profiling: Whether to enable cProfile profiling
-            profiling_stats_count: Number of top functions to show in profiling results
         """
         self.cache_dir_path = cache_dir_path
         self.experiment_name = experiment_name
         self.debug = debug
         self.n_jobs = n_jobs
         self.enable_profiling = enable_profiling
-        self.profiling_stats_count = profiling_stats_count
         self.profiler = None
         
         self.logger = get_logger(
@@ -205,17 +202,17 @@ class BaseSimulator(ABC):
             
         s = io.StringIO()
         ps = pstats.Stats(self.profiler, stream=s).sort_stats('cumulative')
-        ps.print_stats(self.profiling_stats_count)
+        ps.print_stats()  # Show all functions, no restriction
         
         profiling_output = s.getvalue()
-        self.logger.info(f"Profiling results (top {self.profiling_stats_count} functions):\n{profiling_output}")
+        self.logger.info(f"Profiling results (all functions):\n{profiling_output}")
         
         # Save profiling results to file if cache directory is available
         if self.cache_dir_path:
             profiling_file = self.cache_dir_path / "profiling_results.txt"
             with open(profiling_file, 'w') as f:
                 ps = pstats.Stats(self.profiler, stream=f).sort_stats('cumulative')
-                ps.print_stats(self.profiling_stats_count)
+                ps.print_stats()  # Show all functions, no restriction
             self.logger.info(f"Detailed profiling results saved to: {profiling_file}")
     
     def _compare_multiple_environments_policies(
