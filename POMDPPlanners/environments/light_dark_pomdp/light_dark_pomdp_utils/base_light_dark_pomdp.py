@@ -243,7 +243,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
             colors.append(color)
         
         for i in range(max_history):
-            scatter = ax.scatter([], [], c=[colors[i]], alpha=0.3 + 0.4 * (i / max_history), 
+            scatter = ax.scatter([], [], c=[colors[i]], alpha=0.6 + 0.3 * (i / max_history), 
                                s=50, label="")
             belief_scatters.append(scatter)
         
@@ -292,8 +292,8 @@ class BaseLightDarkPOMDP(Environment, ABC):
                     if len(belief.values) > 0:
                         # Convert belief values to array of positions
                         positions = np.array(belief.values)
-                        # Scale probabilities to reasonable sizes for visualization (multiply by 1000)
-                        sizes = np.array(belief.probs) * 1000
+                        # Scale probabilities to reasonable sizes for visualization (multiply by 200)
+                        sizes = np.array(belief.probs) * 600
                         scatter.set_offsets(positions)
                         scatter.set_sizes(sizes)
                     else:
