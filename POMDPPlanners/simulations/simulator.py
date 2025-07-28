@@ -8,6 +8,9 @@ from abc import ABC, abstractmethod
 from joblib import Parallel, delayed
 import uuid
 import tempfile
+import cProfile
+import pstats
+import io
 
 import pandas as pd
 
@@ -48,7 +51,9 @@ class BaseSimulator(ABC):
         n_jobs: int = 1,
         scheduler_address: Optional[str] = None,
         cache_dir: Optional[str] = None,
-        clear_cache_on_start: bool = False
+        clear_cache_on_start: bool = False,
+        enable_profiling: bool = False,
+        profiling_stats_count: int = 50
     ):
         """Initialize the simulator.
         
@@ -61,11 +66,16 @@ class BaseSimulator(ABC):
             scheduler_address: Address of Dask scheduler (None for local)
             cache_dir: Directory for joblib cache (None for default)
             clear_cache_on_start: If True, clears the cache at startup
+            enable_profiling: Whether to enable cProfile profiling
+            profiling_stats_count: Number of top functions to show in profiling results
         """
         self.cache_dir_path = cache_dir_path
         self.experiment_name = experiment_name
         self.debug = debug
         self.n_jobs = n_jobs
+        self.enable_profiling = enable_profiling
+        self.profiling_stats_count = profiling_stats_count
+        self.profiler = None
         
         self.logger = get_logger(
             name=f"simulator.{experiment_name}",
@@ -150,6 +160,65 @@ class BaseSimulator(ABC):
             self.task_manager.__exit__(exc_type, exc_val, exc_tb)
     
     def compare_multiple_environments_policies(
+        self,
+        environment_run_params: List[EnvironmentRunParams],
+        alpha: float = 0.1,
+        confidence_interval_level: float = 0.95,
+        n_jobs: int = 1,
+        cache_visualizations: bool = True,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Compare multiple policies on multiple environments with optional profiling.
+        
+        Args:
+            environment_run_params: List of environment run parameters
+            alpha: Alpha value for statistics computation
+            confidence_interval_level: Confidence level for statistics
+            n_jobs: Number of parallel jobs
+            cache_visualizations: Whether to cache visualizations
+            
+        Returns:
+            Tuple of results dictionary and statistics DataFrame
+        """
+        if self.enable_profiling:
+            self.profiler = cProfile.Profile()
+            self.profiler.enable()
+            self.logger.info("Profiling enabled - starting cProfile")
+            
+        try:
+            result = self._compare_multiple_environments_policies(
+                environment_run_params=environment_run_params,
+                alpha=alpha,
+                confidence_interval_level=confidence_interval_level,
+                n_jobs=n_jobs,
+                cache_visualizations=cache_visualizations,
+            )
+            return result
+        finally:
+            if self.enable_profiling and self.profiler:
+                self.profiler.disable()
+                self._log_profiling_results()
+    
+    def _log_profiling_results(self) -> None:
+        """Log profiling results to logger and save to file."""
+        if not self.profiler:
+            return
+            
+        s = io.StringIO()
+        ps = pstats.Stats(self.profiler, stream=s).sort_stats('cumulative')
+        ps.print_stats(self.profiling_stats_count)
+        
+        profiling_output = s.getvalue()
+        self.logger.info(f"Profiling results (top {self.profiling_stats_count} functions):\n{profiling_output}")
+        
+        # Save profiling results to file if cache directory is available
+        if self.cache_dir_path:
+            profiling_file = self.cache_dir_path / "profiling_results.txt"
+            with open(profiling_file, 'w') as f:
+                ps = pstats.Stats(self.profiler, stream=f).sort_stats('cumulative')
+                ps.print_stats(self.profiling_stats_count)
+            self.logger.info(f"Detailed profiling results saved to: {profiling_file}")
+    
+    def _compare_multiple_environments_policies(
         self,
         environment_run_params: List[EnvironmentRunParams],
         alpha: float = 0.1,
@@ -458,6 +527,36 @@ class BaseSimulator(ABC):
         """Compute metrics for the simulation results."""
         pass
 
+    def _log_metrics_to_mlflow(
+        self,
+        metrics: Dict[str, Dict[str, List[MetricValue]]]
+    ) -> None:
+        """Log all metrics to MLflow for tracking and comparison.
+        
+        Args:
+            metrics: Dictionary mapping environment names to dictionaries mapping policy names to lists of MetricValue objects
+        """
+        self.logger.info("Logging metrics to MLflow")
+        
+        for env_name, policy_metrics_dict in metrics.items():
+            for policy_name, metric_list in policy_metrics_dict.items():
+                # Create metric prefix for this environment-policy pair
+                metric_prefix = f"{env_name}_{policy_name}"
+                
+                for metric in metric_list:
+                    # Log the main metric value
+                    mlflow.log_metric(f"{metric_prefix}_{metric.name}", metric.value)
+                    
+                    # Log confidence interval bounds
+                    mlflow.log_metric(f"{metric_prefix}_{metric.name}_ci_lower", metric.lower_confidence_bound)
+                    mlflow.log_metric(f"{metric_prefix}_{metric.name}_ci_upper", metric.upper_confidence_bound)
+                    
+                    # Log confidence interval width for easy comparison
+                    ci_width = metric.upper_confidence_bound - metric.lower_confidence_bound
+                    mlflow.log_metric(f"{metric_prefix}_{metric.name}_ci_width", ci_width)
+        
+        self.logger.info(f"Logged metrics for {len(metrics)} environments")
+
     def _create_environment_visualizations(
         self,
         env_name: str,
@@ -482,7 +581,9 @@ class POMDPSimulator(BaseSimulator):
         scheduler_address: Optional[str] = None,
         cache_dir: Optional[str] = None,
         clear_cache_on_start: bool = False,
-        task_console_output: bool = False
+        task_console_output: bool = False,
+        enable_profiling: bool = False,
+        profiling_stats_count: int = 50
     ):
         """Initialize the simulator.
         
@@ -498,6 +599,8 @@ class POMDPSimulator(BaseSimulator):
             task_console_output: Whether to enable console output for individual tasks (default: False).
                                Set to True to see console output from each task, but this can create
                                log mess when running in parallel.
+            enable_profiling: Whether to enable cProfile profiling
+            profiling_stats_count: Number of top functions to show in profiling results
         """
         super().__init__(
             cache_dir_path=cache_dir_path,
@@ -507,7 +610,9 @@ class POMDPSimulator(BaseSimulator):
             n_jobs=n_jobs,
             scheduler_address=scheduler_address,
             cache_dir=cache_dir,
-            clear_cache_on_start=clear_cache_on_start
+            clear_cache_on_start=clear_cache_on_start,
+            enable_profiling=enable_profiling,
+            profiling_stats_count=profiling_stats_count
         )
         self.task_console_output = task_console_output
             
@@ -589,36 +694,6 @@ class POMDPSimulator(BaseSimulator):
                 metrics_dict[env_name][policy_name] = metrics
                 
         return metrics_dict
-    
-    def _log_metrics_to_mlflow(
-        self,
-        metrics: Dict[str, Dict[str, List[MetricValue]]]
-    ) -> None:
-        """Log all metrics to MLflow for tracking and comparison.
-        
-        Args:
-            metrics: Dictionary mapping environment names to dictionaries mapping policy names to lists of MetricValue objects
-        """
-        self.logger.info("Logging metrics to MLflow")
-        
-        for env_name, policy_metrics_dict in metrics.items():
-            for policy_name, metric_list in policy_metrics_dict.items():
-                # Create metric prefix for this environment-policy pair
-                metric_prefix = f"{env_name}_{policy_name}"
-                
-                for metric in metric_list:
-                    # Log the main metric value
-                    mlflow.log_metric(f"{metric_prefix}_{metric.name}", metric.value)
-                    
-                    # Log confidence interval bounds
-                    mlflow.log_metric(f"{metric_prefix}_{metric.name}_ci_lower", metric.lower_confidence_bound)
-                    mlflow.log_metric(f"{metric_prefix}_{metric.name}_ci_upper", metric.upper_confidence_bound)
-                    
-                    # Log confidence interval width for easy comparison
-                    ci_width = metric.upper_confidence_bound - metric.lower_confidence_bound
-                    mlflow.log_metric(f"{metric_prefix}_{metric.name}_ci_width", ci_width)
-        
-        self.logger.info(f"Logged metrics for {len(metrics)} environments")
     
     def _create_environment_visualizations(
         self,
