@@ -249,7 +249,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         
         # Create a proper legend entry for belief particles
         from matplotlib.lines import Line2D
-        legend_element = Line2D([0], [0], marker='o', color=belief_particles_color, 
+        legend_element = Line2D([], [], marker='o', color=belief_particles_color, 
                                markersize=8, alpha=0.7, linestyle='', label='Belief Particles')
         ax.add_artist(legend_element)
 
