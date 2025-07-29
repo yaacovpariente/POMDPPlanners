@@ -53,6 +53,7 @@ class BaseSimulator(ABC):
         cache_dir: Optional[str] = None,
         clear_cache_on_start: bool = False,
         enable_profiling: bool = False,
+        profiling_output_limit: int = 50,
     ):
         """Initialize the simulator.
         
@@ -66,12 +67,14 @@ class BaseSimulator(ABC):
             cache_dir: Directory for joblib cache (None for default)
             clear_cache_on_start: If True, clears the cache at startup
             enable_profiling: Whether to enable cProfile profiling
+            profiling_output_limit: Maximum number of functions to show in profiling output (default: 50)
         """
         self.cache_dir_path = cache_dir_path
         self.experiment_name = experiment_name
         self.debug = debug
         self.n_jobs = n_jobs
         self.enable_profiling = enable_profiling
+        self.profiling_output_limit = profiling_output_limit
         self.profiler = None
         
         self.logger = get_logger(
@@ -202,7 +205,7 @@ class BaseSimulator(ABC):
             
         s = io.StringIO()
         ps = pstats.Stats(self.profiler, stream=s).sort_stats('cumulative')
-        ps.print_stats()  # Show all functions, no restriction
+        ps.print_stats(self.profiling_output_limit)  # Show all functions, no restriction
         
         profiling_output = s.getvalue()
         self.logger.info(f"Profiling results (all functions):\n{profiling_output}")
@@ -212,7 +215,7 @@ class BaseSimulator(ABC):
             profiling_file = self.cache_dir_path / "profiling_results.txt"
             with open(profiling_file, 'w') as f:
                 ps = pstats.Stats(self.profiler, stream=f).sort_stats('cumulative')
-                ps.print_stats()  # Show all functions, no restriction
+                ps.print_stats(self.profiling_output_limit)  # Show all functions, no restriction
             self.logger.info(f"Detailed profiling results saved to: {profiling_file}")
     
     def _compare_multiple_environments_policies(
@@ -580,6 +583,7 @@ class POMDPSimulator(BaseSimulator):
         clear_cache_on_start: bool = False,
         task_console_output: bool = False,
         enable_profiling: bool = False,
+        profiling_output_limit: int = 50,
     ):
         """Initialize the simulator.
         
@@ -596,6 +600,7 @@ class POMDPSimulator(BaseSimulator):
                                Set to True to see console output from each task, but this can create
                                log mess when running in parallel.
             enable_profiling: Whether to enable cProfile profiling
+            profiling_output_limit: Maximum number of functions to show in profiling output (default: 50)
         """
         super().__init__(
             cache_dir_path=cache_dir_path,
@@ -607,6 +612,7 @@ class POMDPSimulator(BaseSimulator):
             cache_dir=cache_dir,
             clear_cache_on_start=clear_cache_on_start,
             enable_profiling=enable_profiling,
+            profiling_output_limit=profiling_output_limit,
         )
         self.task_console_output = task_console_output
             

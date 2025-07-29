@@ -34,6 +34,7 @@ class SimulationsAPI:
         cache_dir_path: Path = None,
         clear_cache_on_start: bool = False,
         enable_profiling: bool = False,
+        profiling_output_limit: int = 50,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         self.logger.info(f"Starting simulation run with {len(environment_run_params)} environment configurations")
         self.logger.debug(f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}")
@@ -46,6 +47,7 @@ class SimulationsAPI:
             n_jobs=n_jobs,
             clear_cache_on_start=clear_cache_on_start,
             enable_profiling=enable_profiling,
+            profiling_output_limit=profiling_output_limit,
         )
         
         self.logger.info("Running simulation comparison")
@@ -70,6 +72,8 @@ class SimulationsAPI:
         n_jobs: int = -1,
         cache_dir_path: Path = None,
         clear_cache_on_start: bool = False,
+        enable_profiling: bool = False,
+        profiling_output_limit: int = 50,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         self.logger.info(f"Starting simulation run with {len(environment_run_params)} environment configurations")
         self.logger.debug(f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}")
@@ -82,6 +86,8 @@ class SimulationsAPI:
             n_jobs=n_jobs,
             scheduler_address=scheduler_address,
             clear_cache_on_start=clear_cache_on_start,
+            enable_profiling=enable_profiling,
+            profiling_output_limit=profiling_output_limit,
         )
         
         self.logger.info("Running simulation comparison")
@@ -104,6 +110,8 @@ class SimulationsAPI:
         n_jobs: int = -1,
         cache_dir_path: Path = None,
         clear_cache_on_start: bool = False,
+        enable_profiling: bool = False,
+        profiling_output_limit: int = 50,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         self.logger.info("Starting simulation run with initial debug run")
         self.logger.debug(f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}")
@@ -130,6 +138,8 @@ class SimulationsAPI:
             task_manager_type=TaskManagerType.JOBLIB,
             n_jobs=n_jobs,
             clear_cache_on_start=clear_cache_on_start,
+            enable_profiling=enable_profiling,
+            profiling_output_limit=profiling_output_limit,
         )
         
         simulator_debug.compare_multiple_environments_policies(
@@ -150,6 +160,8 @@ class SimulationsAPI:
             task_manager_type=TaskManagerType.JOBLIB,
             n_jobs=n_jobs,
             clear_cache_on_start=clear_cache_on_start,
+            enable_profiling=enable_profiling,
+            profiling_output_limit=profiling_output_limit,
         )
         
         results = simulator.compare_multiple_environments_policies(
