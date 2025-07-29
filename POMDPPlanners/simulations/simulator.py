@@ -580,7 +580,6 @@ class POMDPSimulator(BaseSimulator):
         clear_cache_on_start: bool = False,
         task_console_output: bool = False,
         enable_profiling: bool = False,
-        profiling_stats_count: int = 50
     ):
         """Initialize the simulator.
         
@@ -597,7 +596,6 @@ class POMDPSimulator(BaseSimulator):
                                Set to True to see console output from each task, but this can create
                                log mess when running in parallel.
             enable_profiling: Whether to enable cProfile profiling
-            profiling_stats_count: Number of top functions to show in profiling results
         """
         super().__init__(
             cache_dir_path=cache_dir_path,
@@ -609,7 +607,6 @@ class POMDPSimulator(BaseSimulator):
             cache_dir=cache_dir,
             clear_cache_on_start=clear_cache_on_start,
             enable_profiling=enable_profiling,
-            profiling_stats_count=profiling_stats_count
         )
         self.task_console_output = task_console_output
             
