@@ -19,7 +19,7 @@ def test_initialization():
         particles=particles,
         log_weights=log_weights,
         resampling=False,
-        ess_threshold=0.5,
+        ess_factor=0.5,
         reinvigoration_fraction=0.2
     )
     
@@ -42,7 +42,7 @@ def test_reinvigoration():
         particles=particles,
         log_weights=log_weights,
         resampling=False,
-        ess_threshold=0.5,
+        ess_factor=0.5,
         reinvigoration_fraction=0.2
     )
     
@@ -116,7 +116,7 @@ def test_full_coverage_initialization():
     belief = WeightedParticleBeliefDiscreteLightDarkFullCoverage(
         particles=particles,
         log_weights=log_weights,
-        ess_threshold=0.5,
+        ess_factor=0.5,
         reinvigoration_fraction=0.05
     )
     
@@ -139,7 +139,7 @@ def test_full_coverage_reinvigoration():
     belief = WeightedParticleBeliefDiscreteLightDarkFullCoverage(
         particles=particles,
         log_weights=log_weights,
-        ess_threshold=0.5,
+        ess_factor=0.5,
         reinvigoration_fraction=0.05
     )
     
@@ -192,7 +192,7 @@ def test_full_coverage_resampling():
     belief = WeightedParticleBeliefDiscreteLightDarkFullCoverage(
         particles=particles,
         log_weights=log_weights,
-        ess_threshold=0.5,
+        ess_factor=0.5,
         reinvigoration_fraction=0.05
     )
     
@@ -228,7 +228,7 @@ def test_continuous_full_coverage_initialization():
     belief = WeightedParticleBeliefContinuousLightDarkFullCoverage(
         particles=particles,
         log_weights=log_weights,
-        ess_threshold=0.5,
+        ess_factor=0.5,
         reinvigoration_fraction=0.05,
         reinvigoration_cov_matrix=cov_matrix
     )
@@ -254,7 +254,7 @@ def test_continuous_full_coverage_reinvigoration():
     belief = WeightedParticleBeliefContinuousLightDarkFullCoverage(
         particles=particles,
         log_weights=log_weights,
-        ess_threshold=0.5,
+        ess_factor=0.5,
         reinvigoration_fraction=0.05,
         reinvigoration_cov_matrix=cov_matrix
     )
@@ -318,7 +318,7 @@ def test_continuous_full_coverage_resampling():
     belief = WeightedParticleBeliefContinuousLightDarkFullCoverage(
         particles=particles,
         log_weights=log_weights,
-        ess_threshold=0.5,
+        ess_factor=0.5,
         reinvigoration_fraction=0.05,
         reinvigoration_cov_matrix=cov_matrix
     )
@@ -355,7 +355,7 @@ def test_continuous_full_coverage_gmm_sampling():
     belief = WeightedParticleBeliefContinuousLightDarkFullCoverage(
         particles=particles,
         log_weights=log_weights,
-        ess_threshold=0.5,
+        ess_factor=0.5,
         reinvigoration_fraction=0.2,  # Larger fraction for better statistics
         reinvigoration_cov_matrix=cov_matrix
     )

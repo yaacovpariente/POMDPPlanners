@@ -44,14 +44,14 @@ class WeightedParticleBeliefDiscreteLightDark(WeightedParticleBeliefReinvigorati
         particles: list, 
         log_weights: np.ndarray, 
         resampling: bool = False, 
-        ess_threshold: float = 0.5,
+        ess_factor: float = 0.5,
         reinvigoration_fraction: float = 0.2
     ):
         super().__init__(
             particles=particles,
             log_weights=log_weights,
             resampling=resampling,
-            ess_threshold=ess_threshold
+            ess_factor=ess_factor
         )
         
         self.reinvigoration_fraction = reinvigoration_fraction
@@ -85,14 +85,14 @@ class WeightedParticleBeliefDiscreteLightDarkFullCoverage(WeightedParticleBelief
         self, 
         particles: list, 
         log_weights: np.ndarray, 
-        ess_threshold: float = 0.5,
+        ess_factor: float = 0.5,
         reinvigoration_fraction: float = 0.05
     ):
         super().__init__(
             particles=particles,
             log_weights=log_weights,
             resampling=False, # resampling is done in only the reinvigorate method
-            ess_threshold=ess_threshold
+            ess_factor=ess_factor
         )
         
         self.reinvigoration_particles_weights_sum = reinvigoration_fraction
@@ -122,7 +122,7 @@ class WeightedParticleBeliefContinuousLightDarkFullCoverage(WeightedParticleBeli
         self, 
         particles: list, 
         log_weights: np.ndarray, 
-        ess_threshold: float = 0.5,
+        ess_factor: float = 0.5,
         reinvigoration_fraction: float = 0.05,
         reinvigoration_cov_matrix: np.ndarray = np.eye(2)
     ):
@@ -130,7 +130,7 @@ class WeightedParticleBeliefContinuousLightDarkFullCoverage(WeightedParticleBeli
             particles=particles,
             log_weights=log_weights,
             resampling=False, # resampling is done in only the reinvigorate method
-            ess_threshold=ess_threshold
+            ess_factor=ess_factor
         )
         
         self.reinvigoration_particles_weights_sum = reinvigoration_fraction
@@ -178,14 +178,14 @@ class WeightedParticleBeliefSanityPOMDP(WeightedParticleBeliefReinvigoration):
         particles: list, 
         log_weights: np.ndarray, 
         resampling: bool = False, 
-        ess_threshold: float = 0.5,
+        ess_factor: float = 0.5,
         reinvigoration_fraction: float = 0.2
     ):
         super().__init__(
             particles=particles,
             log_weights=log_weights,
             resampling=resampling,
-            ess_threshold=ess_threshold
+            ess_factor=ess_factor
         )
         
         self.reinvigoration_fraction = reinvigoration_fraction
@@ -206,5 +206,5 @@ class WeightedParticleBeliefSanityPOMDP(WeightedParticleBeliefReinvigoration):
             particles=new_particles,
             log_weights=new_log_weights,
             resampling=self.resampling,
-            ess_threshold=self.ess_threshold
+            ess_factor=self.ess_threshold
         )
