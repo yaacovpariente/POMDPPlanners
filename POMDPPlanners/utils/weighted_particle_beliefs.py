@@ -67,7 +67,7 @@ class WeightedParticleBeliefDiscreteLightDark(WeightedParticleBeliefReinvigorati
     def reinvigorate(self, action: Any, observation: Any, pomdp: Environment, belief: WeightedParticleBeliefReinvigoration) -> WeightedParticleBeliefReinvigoration:
         effective_sample_size = 1 / np.sum(np.square(self.normalized_weights))
         
-        if effective_sample_size > self.ess_threshold:
+        if effective_sample_size < self.ess_threshold:
             states = [observation + self.action_to_vector[action] for action in self.actions]
             states.append(observation)
             
@@ -108,6 +108,10 @@ class WeightedParticleBeliefDiscreteLightDarkFullCoverage(WeightedParticleBelief
 
     def reinvigorate(self, action: Any, observation: Any, pomdp: Environment, belief: WeightedParticleBeliefReinvigoration) -> WeightedParticleBeliefReinvigoration:
         self.particles, self.log_weights = self._resample(particles=self.particles, log_weights=self.log_weights)
+        
+        # Recalculate normalized weights after resampling
+        self.normalized_weights = np.exp(self.log_weights - np.max(self.log_weights))
+        self.normalized_weights = self.normalized_weights / np.sum(self.normalized_weights)
             
         states = [observation + self.action_to_vector[action] for action in self.actions]
         states.append(observation)
@@ -147,6 +151,10 @@ class WeightedParticleBeliefContinuousLightDarkFullCoverage(WeightedParticleBeli
 
     def reinvigorate(self, action: Any, observation: Any, pomdp: Environment, belief: WeightedParticleBeliefReinvigoration) -> WeightedParticleBeliefReinvigoration:
         self.particles, self.log_weights = self._resample(particles=self.particles, log_weights=self.log_weights)
+        
+        # Recalculate normalized weights after resampling
+        self.normalized_weights = np.exp(self.log_weights - np.max(self.log_weights))
+        self.normalized_weights = self.normalized_weights / np.sum(self.normalized_weights)
             
         states = [observation + self.action_to_vector[action] for action in self.actions]
         states.append(observation)
@@ -206,5 +214,5 @@ class WeightedParticleBeliefSanityPOMDP(WeightedParticleBeliefReinvigoration):
             particles=new_particles,
             log_weights=new_log_weights,
             resampling=self.resampling,
-            ess_factor=self.ess_threshold
+            ess_factor=self.ess_factor
         )
