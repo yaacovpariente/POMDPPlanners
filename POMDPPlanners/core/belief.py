@@ -118,7 +118,7 @@ class UnweightedParticleBelief(Belief):
 
 class WeightedParticleBelief(Belief):
     def __init__(
-        self, particles: list, log_weights: np.ndarray, resampling: bool = False, ess_threshold: float = 0.5
+        self, particles: list, log_weights: np.ndarray, resampling: bool = False, ess_factor: float = 0.5
     ):
         if not isinstance(particles, list):
             raise TypeError("particles must be a list")
@@ -141,7 +141,8 @@ class WeightedParticleBelief(Belief):
             self.normalized_weights
         )
         self.resampling = resampling
-        self.ess_threshold = ess_threshold
+        self.ess_factor = ess_factor
+        self.ess_threshold = len(particles) * ess_factor
 
         self.eps = 1e-10
 
@@ -155,7 +156,7 @@ class WeightedParticleBelief(Belief):
             'particles': self.particles,
             'log_weights': self.log_weights.tolist(),
             'resampling': self.resampling,
-            'ess_threshold': self.ess_threshold
+            'ess_factor': self.ess_factor
         }
 
     def to_unique_support_distribution(self) -> "DiscreteDistribution":
@@ -231,7 +232,7 @@ class WeightedParticleBelief(Belief):
         config_dict = {
             'particle_weight_pairs': particle_weight_pairs,
             'resampling': self.resampling,
-            'ess_threshold': self.ess_threshold
+            'ess_factor': self.ess_factor
         }
         config_dict = dict(sorted(config_dict.items()))
         return config_to_id(config_dict)
@@ -296,12 +297,12 @@ class WeightedParticleBelief(Belief):
         return self.particles[idx]
 
 class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
-    def __init__(self, particles: list, log_weights: np.ndarray, resampling: bool = True, ess_threshold: float = 0.5, reinvigoration_fraction: float = 0.2):
+    def __init__(self, particles: list, log_weights: np.ndarray, resampling: bool = True, ess_factor: float = 0.5, reinvigoration_fraction: float = 0.2):
         super().__init__(
             particles=particles, 
             log_weights=log_weights, 
             resampling=resampling, 
-            ess_threshold=ess_threshold
+            ess_factor=ess_factor
         )
         
         self.reinvigoration_fraction = reinvigoration_fraction

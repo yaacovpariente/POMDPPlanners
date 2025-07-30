@@ -459,7 +459,7 @@ def test_create_belief_from_config_basic():
         params={
             'n_particles': 5,
             'resampling': True,
-            'ess_threshold': 0.5
+            'ess_factor': 0.5
         }
     )
     env = TigerPOMDP(discount_factor=0.95)
@@ -469,7 +469,7 @@ def test_create_belief_from_config_basic():
     assert np.isclose(np.sum(np.exp(belief.log_weights - np.max(belief.log_weights))), 5)
     assert all(p in env.states for p in belief.particles)
     assert belief.resampling is True
-    assert belief.ess_threshold == 0.5
+    assert np.isclose(belief.ess_threshold, 2.5)  # ess_threshold = len(particles) * ess_factor = 5 * 0.5
 
 def test_create_belief_particles_and_weights():
     config = BeliefConfig(
@@ -477,7 +477,7 @@ def test_create_belief_particles_and_weights():
         params={
             'n_particles': 3,
             'resampling': False,
-            'ess_threshold': 0.1
+            'ess_factor': 0.1
         }
     )
     env = TigerPOMDP(discount_factor=0.95)
@@ -486,7 +486,7 @@ def test_create_belief_particles_and_weights():
     assert all(p in env.states for p in belief.particles)
     assert np.allclose(np.exp(belief.log_weights - np.max(belief.log_weights)), np.ones(3))
     assert belief.resampling is False
-    assert belief.ess_threshold == 0.1
+    assert np.isclose(belief.ess_threshold, 0.3)  # ess_threshold = len(particles) * ess_factor = 3 * 0.1
 
 def test_reinvigoration_discrete_light_dark():
     config = BeliefConfig(
@@ -494,7 +494,7 @@ def test_reinvigoration_discrete_light_dark():
         params={
             'n_particles': 5,
             'resampling': True,
-            'ess_threshold': 0.5,
+            'ess_factor': 0.5,
             'reinvigoration_fraction': 0.2
         }
     )
@@ -510,7 +510,7 @@ def test_reinvigoration_discrete_light_dark_full_coverage():
         class_name='WeightedParticleBeliefDiscreteLightDarkFullCoverage',
         params={
             'n_particles': 5,
-            'ess_threshold': 0.5,
+            'ess_factor': 0.5,
             'reinvigoration_fraction': 0.05
         }
     )
@@ -526,7 +526,7 @@ def test_reinvigoration_continuous_light_dark_full_coverage():
         class_name='WeightedParticleBeliefContinuousLightDarkFullCoverage',
         params={
             'n_particles': 5,
-            'ess_threshold': 0.5,
+            'ess_factor': 0.5,
             'reinvigoration_fraction': 0.05,
             'reinvigoration_cov_matrix': np.eye(2)
         }
@@ -544,7 +544,7 @@ def test_reinvigoration_sanity_pomdp():
         params={
             'n_particles': 5,
             'resampling': True,
-            'ess_threshold': 0.5,
+            'ess_factor': 0.5,
             'reinvigoration_fraction': 0.2
         }
     )
@@ -588,7 +588,7 @@ def test_belief_update_with_resampling():
     env = SanityPOMDP()
     particles = [0, 1, 0, 1]
     log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
-    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=True, ess_threshold=0.5)
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=True, ess_factor=0.5)
     
     action = 0
     observation = 0
