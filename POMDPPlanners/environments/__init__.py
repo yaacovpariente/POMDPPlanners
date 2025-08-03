@@ -3,7 +3,7 @@ from typing import Dict, Any, Type
 from POMDPPlanners.environments.push_pomdp import PushPOMDP
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import DiscreteLightDarkPOMDP
-from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDP, ContinuousLightDarkPOMDPDiscreteActions
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
@@ -14,6 +14,7 @@ __all__ = [
     "SafeAntVelocityPOMDP",
     "DiscreteLightDarkPOMDP",
     "ContinuousLightDarkPOMDP",
+    "ContinuousLightDarkPOMDPDiscreteActions",
     "TigerPOMDP",
     "SanityPOMDP",
     "CartPolePOMDP",
@@ -29,7 +30,8 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
     "SanityPOMDP": SanityPOMDP,
     "SafeAntVelocityPOMDP": SafeAntVelocityPOMDP,
     "DiscreteLightDarkPOMDP": DiscreteLightDarkPOMDP,
-    "ContinuousLightDarkPOMDP": ContinuousLightDarkPOMDP
+    "ContinuousLightDarkPOMDP": ContinuousLightDarkPOMDP,
+    "ContinuousLightDarkPOMDPDiscreteActions": ContinuousLightDarkPOMDPDiscreteActions,
 }
 
 def get_environment(env_type: str, **kwargs) -> Any:

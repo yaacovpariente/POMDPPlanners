@@ -74,6 +74,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         obstacle_radius: float = 1.5,
         reward_model_type: RewardModelType = RewardModelType.STANDARD,
         penalty_decay: float = 1.0,
+        is_obstacle_hit_terminal: bool = True,
     ):
         space_info = SpaceInfo(
             action_space=SpaceType.CONTINUOUS,
@@ -109,6 +110,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self.goal_state_radius = goal_state_radius
         self.beacon_radius = beacon_radius
         self.penalty_decay = penalty_decay
+        self.is_obstacle_hit_terminal = is_obstacle_hit_terminal
         
         # Initialize reward model based on type
         if reward_model_type == RewardModelType.STANDARD:
@@ -206,9 +208,12 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
 
         is_goal_state = np.linalg.norm(state - self.goal_state) <= self.goal_state_radius
 
-        is_obstacle_hit = np.any(
-            np.linalg.norm(state.reshape(-1, 1) - self.obstacles, axis=0) <= self.obstacle_radius
-        )
+        if self.is_obstacle_hit_terminal:
+            is_obstacle_hit = np.any(
+                np.linalg.norm(state.reshape(-1, 1) - self.obstacles, axis=0) <= self.obstacle_radius
+            )
+        else:
+            is_obstacle_hit = False
 
         is_out_of_grid = np.any(state < 0) or np.any(state > self.grid_size)
 
@@ -293,6 +298,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
         obstacles: np.ndarray = np.array([[3, 7], [5, 5]]),
         reward_model_type: RewardModelType = RewardModelType.STANDARD,
         penalty_decay: float = 1.0,
+        is_obstacle_hit_terminal: bool = True,
     ):
         super().__init__(
             discount_factor=discount_factor,
@@ -313,6 +319,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
             obstacle_radius=obstacle_radius,
             reward_model_type=reward_model_type,
             penalty_decay=penalty_decay,
+            is_obstacle_hit_terminal=is_obstacle_hit_terminal,
         )
 
         # Override space info
