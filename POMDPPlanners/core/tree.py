@@ -17,6 +17,7 @@ class BaseNode(NodeMixin):
         self.immediate_cost = None
         self.immediate_reward = None
         self.sample = []
+        
 class ActionNode(BaseNode):
     def __init__(self, action, parent=None, children=tuple(), data: Any = None):
         super().__init__(parent=parent, children=children, data=data)

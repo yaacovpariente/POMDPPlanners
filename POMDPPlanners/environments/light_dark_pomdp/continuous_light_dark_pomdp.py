@@ -224,9 +224,11 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         goal_reached = []
         obstacle_hits = []
+        obstacle_hit_counter = []
         for history in histories:
             goal_reached_in_history = False
             obstacle_hit_in_history = False
+            obstacle_hit_counter_in_history = 0
             
             for i, step in enumerate(history.history):
                 if np.linalg.norm(step.state - self.goal_state) <= self.goal_state_radius:
@@ -237,15 +239,18 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                     np.linalg.norm(step.state.reshape(-1, 1) - self.obstacles, axis=0) <= self.obstacle_radius
                 ):
                     obstacle_hit_in_history = True
+                    obstacle_hit_counter_in_history += 1
             
             goal_reached.append(1 if goal_reached_in_history else 0)
             obstacle_hits.append(1 if obstacle_hit_in_history else 0)
+            obstacle_hit_counter.append(obstacle_hit_counter_in_history)
 
         avg_goal_reached = np.mean(goal_reached)
         avg_obstacle_hits = np.mean(obstacle_hits)
-
+        avg_obstacle_hit_counter = np.mean(obstacle_hit_counter)
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
         obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)
+        obstacle_hit_counter_ci = confidence_interval(data=obstacle_hit_counter, confidence=0.95)
 
         return [
             MetricValue(
@@ -259,6 +264,12 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 value=avg_obstacle_hits,
                 lower_confidence_bound=obstacle_hits_ci[0],
                 upper_confidence_bound=obstacle_hits_ci[1],
+            ),
+            MetricValue(
+                name="avg_obstacle_hit_counter",
+                value=avg_obstacle_hit_counter,
+                lower_confidence_bound=obstacle_hit_counter_ci[0],
+                upper_confidence_bound=obstacle_hit_counter_ci[1],
             )
         ]
 
