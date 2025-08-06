@@ -1,3 +1,20 @@
+"""Module for POMDP belief state representations.
+
+This module provides belief state abstractions for POMDP environments, including
+particle filter implementations for approximate belief tracking and belief update
+mechanisms.
+
+Classes:
+    Belief: Abstract base class for belief representations
+    WeightedParticleBelief: Weighted particle filter for continuous observation spaces
+    UnweightedParticleBelief: Uniform particle filter for discrete observation spaces
+    WeightedParticleBeliefReinvigoration: Extended weighted filter with reinvigoration
+
+Functions:
+    sample_next_belief: Simulate one step of belief evolution
+    get_initial_belief: Create initial belief from environment's initial distribution
+"""
+
 from abc import ABC, abstractmethod
 from typing import Tuple, Any
 import random
@@ -9,8 +26,33 @@ from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 class Belief(ABC):
+    """Abstract base class for POMDP belief state representations.
+    
+    This class defines the interface for belief states in POMDP environments.
+    Belief states represent probability distributions over the state space,
+    capturing the agent's uncertainty about the current state.
+    
+    Note:
+        This is an abstract base class and cannot be instantiated directly.
+        Subclasses must implement the update() and sample() methods.
+    """
+    
     @classmethod
     def from_config(cls, config):
+        """Create a belief instance from configuration.
+        
+        Factory method that dynamically creates belief instances based on
+        configuration objects specifying the class name and parameters.
+        
+        Args:
+            config: Configuration object with class_name and params attributes
+            
+        Returns:
+            New belief instance of the specified type
+            
+        Raises:
+            ValueError: If the specified belief class is not found
+        """
         # Get all subclasses of Belief recursively
         def get_all_subclasses(c):
             subclasses = c.__subclasses__()
@@ -61,11 +103,37 @@ class Belief(ABC):
         return self.config_id == other.config_id
 
     @abstractmethod
-    def update(self, action, observation, pomdp: Environment) -> "Belief":
+    def update(self, action: Any, observation: Any, pomdp: Environment) -> "Belief":
+        """Update belief given an action-observation pair.
+        
+        Performs Bayesian belief update using the environment's transition
+        and observation models.
+        
+        Args:
+            action: Action that was executed
+            observation: Observation that was received
+            pomdp: Environment providing transition and observation models
+            
+        Returns:
+            Updated belief state reflecting the new information
+            
+        Note:
+            Subclasses must implement this method according to their
+            specific belief representation and update strategy.
+        """
         pass
 
     @abstractmethod
-    def sample(self):
+    def sample(self) -> Any:
+        """Sample a state from the current belief distribution.
+        
+        Returns:
+            A state sampled according to the belief's probability distribution
+            
+        Note:
+            Subclasses must implement this method to enable state sampling
+            for planning and simulation purposes.
+        """
         pass
 
 class UnweightedParticleBelief(Belief):
@@ -117,9 +185,57 @@ class UnweightedParticleBelief(Belief):
         pass
 
 class WeightedParticleBelief(Belief):
+    """Weighted particle filter implementation for POMDP belief states.
+    
+    This class implements a particle filter with weighted particles, suitable
+    for continuous observation spaces. It supports automatic resampling based
+    on effective sample size to maintain particle diversity.
+    
+    Attributes:
+        particles: List of state particles representing the belief
+        log_weights: Log-weights of particles in log space for numerical stability
+        normalized_weights: Normalized probability weights (computed automatically)
+        resampling: Whether automatic resampling is enabled
+        ess_factor: Effective sample size factor for resampling threshold
+        ess_threshold: Computed threshold for triggering resampling
+        eps: Small epsilon value for numerical stability in weight updates
+        
+    Example:
+        Creating and using a weighted particle belief::
+        
+            import numpy as np
+            
+            # Create belief with 1000 particles
+            particles = [[x, y] for x, y in zip(np.random.randn(1000), np.random.randn(1000))]
+            log_weights = np.log(np.ones(1000) / 1000)  # Uniform weights
+            
+            belief = WeightedParticleBelief(
+                particles=particles,
+                log_weights=log_weights,
+                resampling=True,
+                ess_factor=0.5
+            )
+            
+            # Sample a state and update belief
+            state = belief.sample()
+            updated_belief = belief.update(action, observation, pomdp)
+    """
+    
     def __init__(
         self, particles: list, log_weights: np.ndarray, resampling: bool = False, ess_factor: float = 0.5
     ):
+        """Initialize weighted particle belief.
+        
+        Args:
+            particles: List of state particles
+            log_weights: Log-weights for particles (must sum to 1 in probability space)
+            resampling: Enable automatic resampling when ESS drops. Defaults to False.
+            ess_factor: Effective sample size threshold factor (0 < ess_factor <= 1). Defaults to 0.5.
+            
+        Raises:
+            TypeError: If particles is not a list or log_weights is not a numpy array
+            ValueError: If particles and weights have different lengths, or weights are invalid
+        """
         if not isinstance(particles, list):
             raise TypeError("particles must be a list")
         if not isinstance(log_weights, np.ndarray):
@@ -332,6 +448,21 @@ class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
 def sample_next_belief(
     belief: Belief, action: Any, pomdp: "Environment"
 ) -> Tuple[Belief, Any]:
+    """Simulate one step of belief evolution.
+    
+    This function samples a state from the current belief, simulates the
+    environment dynamics, and updates the belief with the resulting observation.
+    
+    Args:
+        belief: Current belief state
+        action: Action to execute
+        pomdp: Environment providing dynamics models
+        
+    Returns:
+        Tuple containing:
+            - Updated belief after incorporating the observation
+            - Observation that was generated
+    """
     state = belief.sample()
     next_state = pomdp.state_transition_model(state=state, action=action).sample()[0]
     observation = pomdp.observation_model(next_state=next_state, action=action).sample()[0]
@@ -344,6 +475,20 @@ def sample_next_belief(
 def get_initial_belief(
     pomdp: Environment, n_particles: int, resampling: bool = True
 ) -> Belief:
+    """Create initial belief from environment's initial state distribution.
+    
+    Args:
+        pomdp: Environment to get initial distribution from
+        n_particles: Number of particles to generate for the belief
+        resampling: Enable resampling in the created belief. Defaults to True.
+        
+    Returns:
+        WeightedParticleBelief with uniform weights over initial states
+        
+    Raises:
+        TypeError: If n_particles is not an integer
+        ValueError: If n_particles is not positive
+    """
     if not isinstance(n_particles, int):
         raise TypeError("n_particles must be an integer")
     if n_particles <= 0:
