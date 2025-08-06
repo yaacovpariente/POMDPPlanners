@@ -1,3 +1,29 @@
+"""Safety Ant Velocity POMDP Environment Implementation.
+
+This module implements a safety-critical velocity control task where an agent
+must navigate while avoiding unsafe velocities. The challenge is balancing
+exploration and movement rewards with safety constraints under partial observability.
+
+The Safety Ant Velocity POMDP features:
+- Continuous 4D state space: [position_x, position_y, velocity_x, velocity_y]
+- Discrete action space: [0 (no force), 1 (small), 2 (medium), 3 (large force)]
+- Physics-based dynamics with force application and damping
+- Noisy observations of both position and velocity
+- Safety constraints on maximum velocity magnitude
+- Safety-focused metrics tracking violation rates
+
+Key aspects:
+- Rewards encourage movement but heavily penalize safety violations
+- Episode terminates if velocity becomes critically high
+- Force direction is randomized to create uncertainty
+- Safety metrics track violation rates over episodes
+
+Classes:
+    SafeAntVelocityStateTransition: Physics simulation with force control
+    SafeAntVelocityObservation: Noisy position and velocity observations
+    SafeAntVelocityPOMDP: Main safety-critical velocity control environment
+"""
+
 from typing import List, Any, Tuple, Optional
 import numpy as np
 from pathlib import Path
@@ -15,6 +41,54 @@ from POMDPPlanners.utils.statistics import confidence_interval
 
 
 class SafeAntVelocityStateTransition(StateTransitionModel):
+    """Physics-based state transition model for Safety Ant Velocity POMDP.
+    
+    This model simulates simplified physics with force application, damping, and
+    random force directions. The agent can choose different force magnitudes
+    but cannot control the direction, creating uncertainty in the outcomes.
+    
+    Physics equations:
+    - acceleration = (force - damping * velocity) / mass
+    - velocity += acceleration * dt
+    - position += velocity * dt
+    
+    Attributes:
+        state: Current state [position_x, position_y, velocity_x, velocity_y]
+        action: Force magnitude index (0=no force, 1=small, 2=medium, 3=large)
+        dt: Time step for physics integration
+        mass: Mass of the agent (affects acceleration)
+        damping: Damping coefficient (opposes velocity)
+        max_force: Maximum force magnitude
+        force_scales: Force scaling factors for each action [0.0, 0.33, 0.67, 1.0]
+        position: Current position [x, y]
+        velocity: Current velocity [vx, vy]
+        
+    Example:
+        Using the Safety Ant Velocity state transition model::
+        
+            import numpy as np
+            
+            # Define current state [pos_x, pos_y, vel_x, vel_y]
+            state = np.array([0.5, -0.2, 1.0, 0.5])
+            action = 2  # Apply medium force
+            
+            # Create transition model
+            transition = SafeAntVelocityStateTransition(
+                state=state,
+                action=action,
+                dt=0.1,
+                mass=1.0,
+                damping=0.1,
+                max_force=1.0
+            )
+            
+            # Simulate physics step with random force direction
+            next_state = transition.sample()[0]
+            # Returns new [pos_x, pos_y, vel_x, vel_y] after physics
+            new_pos = next_state[:2]
+            new_vel = next_state[2:4]
+    """
+    
     def __init__(
         self,
         state: np.ndarray,
@@ -24,10 +98,6 @@ class SafeAntVelocityStateTransition(StateTransitionModel):
         damping: float = 0.1,
         max_force: float = 1.0,
     ):
-        """
-        State: [position_x, position_y, velocity_x, velocity_y]
-        Action: Force magnitude index (0: no force, 1: small force, 2: medium force, 3: large force)
-        """
         super().__init__(state, action)
         self.dt = dt
         self.mass = mass
@@ -64,6 +134,47 @@ class SafeAntVelocityStateTransition(StateTransitionModel):
 
 
 class SafeAntVelocityObservation(ObservationModel):
+    """Noisy observation model for Safety Ant Velocity POMDP.
+    
+    This model adds Gaussian noise to both position and velocity measurements,
+    creating partial observability that makes velocity estimation challenging.
+    Higher noise in velocity measurements reflects the difficulty of measuring
+    velocity precisely in practice.
+    
+    Attributes:
+        next_state: True state after action execution
+        action: Action that was taken (not used in observation generation)
+        position_noise: Standard deviation of Gaussian noise for position
+        velocity_noise: Standard deviation of Gaussian noise for velocity
+        position: True position [x, y]
+        velocity: True velocity [vx, vy]
+        
+    Example:
+        Using the Safety Ant Velocity observation model::
+        
+            import numpy as np
+            
+            # True state after physics simulation
+            true_state = np.array([0.6, -0.1, 1.2, 0.8])  # [x, y, vx, vy]
+            action = 2
+            
+            # Create observation model
+            obs_model = SafeAntVelocityObservation(
+                next_state=true_state,
+                action=action,
+                position_noise=0.1,
+                velocity_noise=0.2
+            )
+            
+            # Sample noisy observation
+            observation = obs_model.sample()[0]
+            # Returns [noisy_x, noisy_y, noisy_vx, noisy_vy]
+            # Position noise: ±0.1, velocity noise: ±0.2
+            
+            # Calculate observation probability
+            prob = obs_model.probability(observation)
+    """
+    
     def __init__(
         self,
         next_state: np.ndarray,
@@ -103,6 +214,53 @@ class SafeAntVelocityObservation(ObservationModel):
 
 
 class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
+    """Safety-critical velocity control task formulated as a POMDP.
+    
+    This environment presents a safety-critical control problem where an agent
+    must navigate while keeping velocity below a safety threshold. The challenge
+    comes from balancing exploration rewards with safety constraints under noisy
+    velocity observations.
+    
+    Problem Structure:
+    - State: [position_x, position_y, velocity_x, velocity_y] (continuous)
+    - Actions: [0=no force, 1=small, 2=medium, 3=large force] (discrete)
+    - Observations: Noisy position and velocity measurements (continuous)
+    - Rewards: Movement reward - safety violation penalty (if unsafe)
+    - Safety constraint: velocity magnitude ≤ safe_velocity_threshold
+    - Termination: Velocity exceeds 1.5x safety threshold
+    
+    Safety Features:
+    - Tracks safety and critical violation rates
+    - Heavy penalties for constraint violations
+    - Configurable safety thresholds and penalties
+    - Physics simulation with uncertainty in force direction
+    
+    Example:
+        Creating and using a Safety Ant Velocity POMDP::
+        
+            # Create safety-critical environment
+            safe_env = SafeAntVelocityPOMDP(
+                discount_factor=0.99,
+                safe_velocity_threshold=2.0,
+                safety_violation_penalty=-100.0,
+                movement_reward_scale=1.0
+            )
+            
+            # Get initial state
+            initial_state_dist = safe_env.initial_state_dist()
+            state = initial_state_dist.sample()[0]  # [x, y, vx, vy]
+            
+            # Choose force magnitude action
+            actions = safe_env.get_actions()  # [0, 1, 2, 3]
+            action = 1  # Apply small force
+            reward = safe_env.reward(state, action)
+            
+            # Check safety constraint
+            velocity = state[2:4]
+            speed = np.linalg.norm(velocity)
+            is_safe = speed <= safe_env.safe_velocity_threshold
+    """
+    
     def __init__(
         self,
         discount_factor: float,

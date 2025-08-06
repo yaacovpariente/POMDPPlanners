@@ -1,3 +1,31 @@
+"""Continuous Light-Dark POMDP Environment Implementation.
+
+This module implements the continuous Light-Dark domain, a classic POMDP benchmark
+where an agent must navigate to a goal position in a continuous 2D space while
+dealing with position-dependent observation noise.
+
+The Continuous Light-Dark POMDP features:
+- Continuous 2D state space representing agent position
+- Discrete or continuous action space for movement
+- Light source at a specific location that affects observation quality
+- Observation noise that decreases closer to the light source
+- Goal region that agent must reach to maximize reward
+- Optional obstacles that cause negative rewards when hit
+
+Key characteristics:
+- State: [x, y] position in continuous 2D space
+- Actions: Movement vectors or discrete directions
+- Observations: Noisy position estimates (noise depends on distance from light)
+- Rewards: Goal reaching bonus, movement costs, obstacle penalties
+- Multiple reward model variants available
+
+Classes:
+    RewardModelType: Enumeration of available reward model types
+    StateTransitionModel: Continuous movement with Gaussian noise
+    ContinuousLightDarkPOMDP: Main environment class
+    ContinuousLightDarkPOMDPDiscreteActions: Discrete action variant
+"""
+
 from typing import List, Any
 from pathlib import Path
 from enum import Enum
@@ -28,6 +56,45 @@ class RewardModelType(Enum):
     DANGEROUS_STATES = "dangerous_states"
 
 class StateTransitionModel(Distribution):
+    """State transition model for Continuous Light-Dark POMDP.
+    
+    This model implements continuous movement in 2D space with Gaussian noise.
+    The agent's next position is determined by adding the action vector to the
+    current position, with additional Gaussian noise to model uncertainty.
+    
+    Attributes:
+        state: Current 2D position [x, y]
+        action: Movement vector [dx, dy]
+        state_transition_cov_matrix: Covariance matrix for transition noise
+        mean: Expected next position (state + action)
+        
+    Example:
+        Using the Continuous Light-Dark state transition model::
+        
+            import numpy as np
+            
+            # Define current position and movement action
+            state = np.array([3.0, 4.0])  # Current position
+            action = np.array([1.0, 0.5])  # Move right and slightly up
+            
+            # Define movement noise
+            cov_matrix = np.eye(2) * 0.1  # Small movement noise
+            
+            # Create transition model
+            transition = StateTransitionModel(
+                state=state,
+                action=action,
+                state_transition_cov_matrix=cov_matrix
+            )
+            
+            # Sample next position with noise
+            next_position = transition.sample()[0]
+            # Returns position around [4.0, 4.5] ± noise
+            
+            # Calculate probability of specific next position
+            prob = transition.probability([next_position])
+    """
+    
     def __init__(self, state: np.ndarray, action: np.ndarray, state_transition_cov_matrix: np.ndarray):
         self.state = state
         self.action = action
@@ -54,6 +121,44 @@ class StateTransitionModel(Distribution):
         
 
 class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
+    """Continuous Light-Dark POMDP environment with continuous actions.
+    
+    This environment extends the base Light-Dark problem to continuous 2D space
+    with continuous action vectors. The agent navigates toward a goal while
+    dealing with position-dependent observation noise and optional obstacles.
+    
+    Key features:
+    - Continuous 2D state and action spaces
+    - Light beacons reduce observation noise when nearby  
+    - Multiple reward models available (standard, decaying hit probability, dangerous states)
+    - Optional obstacles with configurable hit penalties
+    - Terminal conditions for goal reaching, obstacle hits, and boundary violations
+    
+    Example:
+        Creating and using a Continuous Light-Dark POMDP::
+        
+            import numpy as np
+            
+            # Create environment with custom parameters
+            env = ContinuousLightDarkPOMDP(
+                discount_factor=0.95,
+                goal_state=np.array([10, 5]),
+                start_state=np.array([0, 5]),
+                reward_model_type=RewardModelType.STANDARD
+            )
+            
+            # Sample initial state and take continuous action
+            state_dist = env.initial_state_dist()
+            state = state_dist.sample()[0]
+            
+            # Move toward goal with continuous action
+            action = np.array([1.0, 0.0])  # Move right
+            reward = env.reward(state, action)
+            
+            # Check termination
+            is_done = env.is_terminal(state)
+    """
+    
     def __init__(
         self, 
         discount_factor: float, 
@@ -289,6 +394,39 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         )
 
 class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
+    """Continuous Light-Dark POMDP environment with discrete actions.
+    
+    This variant of the Continuous Light-Dark POMDP uses discrete directional actions
+    (up, down, left, right) instead of continuous action vectors. The continuous
+    state space and observation model are preserved.
+    
+    Actions are mapped to unit vectors:
+    - "up": [0, 1]
+    - "down": [0, -1]  
+    - "right": [1, 0]
+    - "left": [-1, 0]
+    
+    Example:
+        Creating and using a Discrete Actions Light-Dark POMDP::
+        
+            import numpy as np
+            
+            # Create environment with discrete actions
+            env = ContinuousLightDarkPOMDPDiscreteActions(
+                discount_factor=0.95,
+                goal_state=np.array([10, 5]),
+                start_state=np.array([0, 5])
+            )
+            
+            # Get available actions and take one
+            actions = env.get_actions()  # ["up", "down", "right", "left"]
+            action = "right"  # Move right
+            
+            # Simulate step
+            state = env.start_state
+            reward = env.reward(state, action)
+    """
+    
     def __init__(
         self,
         discount_factor: float,

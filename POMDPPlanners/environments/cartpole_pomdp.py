@@ -1,3 +1,22 @@
+"""CartPole POMDP Environment Implementation.
+
+This module implements a CartPole balancing task as a POMDP, where an agent
+must balance a pole on a cart using discrete left/right force actions,
+with noisy observations of the cart-pole state.
+
+The CartPole POMDP features:
+- Continuous 4D state space: [cart_position, cart_velocity, pole_angle, pole_velocity]
+- Discrete binary action space: [left_force, right_force]
+- Noisy continuous observations of the state
+- Physics-based dynamics simulation
+- Episode termination when pole falls beyond threshold or cart moves too far
+
+Classes:
+    CartPoleStateTransition: Physics-based state transition model
+    CartPoleObservation: Gaussian noise observation model
+    CartPolePOMDP: Main CartPole environment with POMDP formulation
+"""
+
 from typing import List, Any, Optional
 from pathlib import Path
 
@@ -16,6 +35,51 @@ from POMDPPlanners.core.distributions import Distribution
 
 
 class CartPoleStateTransition(StateTransitionModel):
+    """Physics-based state transition model for CartPole POMDP.
+    
+    This model implements the classical cart-pole dynamics with deterministic
+    physics simulation. The cart experiences forces that affect both cart
+    acceleration and pole angular acceleration through coupled equations of motion.
+    
+    Attributes:
+        state: Current state [cart_position, cart_velocity, pole_angle, pole_velocity]
+        action: Force direction (0 for left, 1 for right)
+        force_mag: Magnitude of applied force
+        total_mass: Combined mass of cart and pole
+        polemass_length: Pole mass times pole length (moment calculation)
+        gravity: Gravitational acceleration constant
+        length: Half the pole's length
+        kinematics_integrator: Integration method ("euler" or "semi-implicit euler")
+        tau: Time step for integration
+        masspole: Mass of the pole
+        
+    Example:
+        Using the CartPole state transition model::
+        
+            import numpy as np
+            
+            # Define initial state [position, velocity, angle, angular_velocity]
+            state = np.array([0.0, 0.0, 0.1, 0.0])  # Cart at center, pole slightly tilted
+            action = 1  # Apply right force
+            
+            # Create transition model with physics parameters
+            transition = CartPoleStateTransition(
+                state=state,
+                action=action,
+                force_mag=10.0,
+                total_mass=1.1,
+                polemass_length=0.05,
+                gravity=9.8,
+                length=0.5,
+                kinematics_integrator="euler",
+                tau=0.02,
+                masspole=0.1
+            )
+            
+            # Simulate physics step
+            next_state = transition.sample()[0]  # Returns new [pos, vel, angle, ang_vel]
+    """
+    
     def __init__(
         self,
         state: np.ndarray,
@@ -81,6 +145,43 @@ class CartPoleStateTransition(StateTransitionModel):
 
 
 class CartPoleObservation(ObservationModel):
+    """Noisy observation model for CartPole POMDP.
+    
+    This model adds Gaussian noise to the true state to create partial observability.
+    The agent receives a noisy version of the full state vector, making it challenging
+    to determine the exact cart-pole configuration.
+    
+    Attributes:
+        next_state: True state after action execution
+        action: Action that was taken (not used in observation generation)
+        noise_cov: Covariance matrix for observation noise
+        
+    Example:
+        Using the CartPole observation model::
+        
+            import numpy as np
+            
+            # Define true state after action
+            true_state = np.array([0.1, 0.05, 0.02, -0.1])
+            action = 1
+            
+            # Define observation noise covariance
+            noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])  # Independent noise
+            
+            # Create observation model
+            obs_model = CartPoleObservation(
+                next_state=true_state,
+                action=action,
+                noise_cov=noise_cov
+            )
+            
+            # Sample noisy observation
+            observation = obs_model.sample()[0]  # Returns noisy version of true_state
+            
+            # Calculate probability of specific observation
+            prob = obs_model.probability([observation])
+    """
+    
     def __init__(self, next_state: np.ndarray, action: int, noise_cov: np.ndarray):
         super().__init__(next_state=next_state, action=action)
         self.noise_cov = noise_cov
@@ -95,10 +196,35 @@ class CartPoleObservation(ObservationModel):
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
         # Convert list of arrays to 2D numpy array for vectorized computation
         values_array = np.array(values)
-        return stats.multivariate_normal(self.next_state, self.noise_cov).pdf(values_array)
+        return np.array([stats.multivariate_normal(self.next_state, self.noise_cov).pdf(value) for value in values_array])
 
 
 class CartPoleInitialStateDistribution(Distribution):
+    """Initial state distribution for CartPole POMDP.
+    
+    This distribution generates random initial states for the cart-pole system
+    by sampling uniformly from a small range around the equilibrium position.
+    All state variables (position, velocity, angle, angular velocity) are
+    initialized close to zero with small random perturbations.
+    
+    Example:
+        Using the initial state distribution::
+        
+            # Create initial state distribution
+            initial_dist = CartPoleInitialStateDistribution()
+            
+            # Sample initial state
+            initial_state = initial_dist.sample()[0]
+            # Returns array like [-0.03, 0.01, 0.04, -0.02] (random values in [-0.05, 0.05])
+            
+            # Sample multiple initial states
+            states = initial_dist.sample(n_samples=3)
+            # Returns list of 3 random initial state arrays
+            
+            # Each state has 4 components: [cart_pos, cart_vel, pole_angle, pole_ang_vel]
+            position, velocity, angle, angular_velocity = initial_state
+    """
+    
     def __init__(self):
         super().__init__()
 
@@ -109,6 +235,43 @@ class CartPoleInitialStateDistribution(Distribution):
 
 
 class CartPolePOMDP(DiscreteActionsEnvironment):
+    """CartPole balancing task formulated as a POMDP.
+    
+    This environment simulates the classic cart-pole balancing problem where an agent
+    must apply left or right forces to keep a pole balanced on a moving cart.
+    The challenge comes from noisy observations of the cart-pole state.
+    
+    Problem Structure:
+    - State: [cart_position, cart_velocity, pole_angle, pole_velocity] (continuous)
+    - Actions: [left_force, right_force] (discrete)
+    - Observations: Noisy state measurements (continuous)
+    - Rewards: +1.0 per time step alive, 0.0 when terminated
+    - Termination: Pole falls beyond angle threshold or cart moves too far
+    
+    Example:
+        Creating and using a CartPole POMDP::
+        
+            import numpy as np
+            
+            # Create CartPole environment with observation noise
+            noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])  # Noise covariance matrix
+            cartpole = CartPolePOMDP(
+                discount_factor=0.99,
+                noise_cov=noise_cov
+            )
+            
+            # Get initial state and take action
+            initial_state_dist = cartpole.initial_state_dist()
+            state = initial_state_dist.sample()[0]
+            
+            # Apply force action (0=left, 1=right)
+            action = 1  # Apply right force
+            reward = cartpole.reward(state, action)
+            
+            # Check if episode should terminate
+            is_done = cartpole.is_terminal(state)
+    """
+    
     def __init__(self, discount_factor: float, noise_cov: np.ndarray, name: str = "CartPolePOMDP", output_dir: Optional[Path] = None, debug: bool = False):
         # Set all configuration parameters first
         self.noise_cov = noise_cov

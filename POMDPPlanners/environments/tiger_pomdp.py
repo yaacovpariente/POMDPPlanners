@@ -1,3 +1,23 @@
+"""Tiger POMDP Environment Implementation.
+
+This module implements the classic Tiger problem, a benchmark POMDP environment
+where an agent must determine which of two doors conceals a treasure and which
+conceals a tiger, using only noisy acoustic observations.
+
+The Tiger problem features:
+- Two doors (left and right) with a tiger behind one and treasure behind the other
+- Three actions: listen (to get information), open_left, open_right
+- Three observations: hear_left, hear_right, hear_nothing
+- Listening provides 85% accurate information about the tiger's location
+- Opening the correct door yields +10 reward, opening wrong door yields -100
+- Listening costs -1 per action
+
+Classes:
+    TigerStateTransition: State transition model for the Tiger problem
+    TigerObservation: Observation model with noisy acoustic feedback
+    TigerPOMDP: Main environment class implementing the Tiger problem
+"""
+
 from typing import List, Any, Optional
 from pathlib import Path
 
@@ -19,7 +39,38 @@ OBSERVATIONS = ["hear_left", "hear_right", "hear_nothing"]
 
 
 class TigerStateTransition(StateTransitionModel):
+    """State transition model for the Tiger POMDP.
+    
+    The state only changes when a door is opened, after which the tiger
+    is randomly placed behind one of the two doors for the next episode.
+    
+    Attributes:
+        state: Current state (tiger_left or tiger_right)
+        action: Action to be taken (listen, open_left, or open_right)
+        
+    Example:
+        Using the Tiger state transition model::
+        
+            # Create transition model for listening action
+            transition_listen = TigerStateTransition(state="tiger_left", action="listen")
+            next_state_listen = transition_listen.sample()[0]  # Returns "tiger_left" (no change)
+            
+            # Create transition model for opening door
+            transition_open = TigerStateTransition(state="tiger_left", action="open_left")
+            next_state_open = transition_open.sample()[0]  # Returns random: "tiger_left" or "tiger_right"
+            
+            # Check probabilities for different outcomes
+            prob_same = transition_listen.probability(["tiger_left"])  # Returns [1.0]
+            prob_random = transition_open.probability(["tiger_left"])  # Returns [0.5]
+    """
+    
     def __init__(self, state: str, action: str):
+        """Initialize the state transition model.
+        
+        Args:
+            state: Current state indicating tiger location
+            action: Action being executed
+        """
         self.state = state
         self.action = action
 
@@ -45,7 +96,39 @@ class TigerStateTransition(StateTransitionModel):
 
 
 class TigerObservation(ObservationModel):
+    """Observation model for the Tiger POMDP.
+    
+    Provides noisy acoustic feedback when listening, with 85% accuracy.
+    When doors are opened, no meaningful observation is provided.
+    
+    Attributes:
+        next_state: The state after action execution
+        action: The action that was taken
+        
+    Example:
+        Using the Tiger observation model::
+        
+            # Create observation model for listening when tiger is left
+            obs_listen = TigerObservation(next_state="tiger_left", action="listen")
+            observation = obs_listen.sample()[0]  # Usually "hear_left" (85% chance)
+            
+            # Create observation model for opening door
+            obs_open = TigerObservation(next_state="tiger_left", action="open_left")
+            observation_open = obs_open.sample()[0]  # Always "hear_nothing"
+            
+            # Check observation probabilities
+            prob_correct = obs_listen.probability(["hear_left"])  # Returns [0.85]
+            prob_wrong = obs_listen.probability(["hear_right"])   # Returns [0.15]
+            prob_nothing = obs_open.probability(["hear_nothing"]) # Returns [1.0]
+    """
+    
     def __init__(self, next_state: str, action: str):
+        """Initialize the observation model.
+        
+        Args:
+            next_state: State after taking the action
+            action: Action that was executed
+        """
         self.next_state = next_state
         self.action = action
 
@@ -81,7 +164,53 @@ class TigerObservation(ObservationModel):
 
 
 class TigerPOMDP(DiscreteActionsEnvironment):
+    """Tiger POMDP environment implementation.
+    
+    This is the classic Tiger problem where an agent must decide which door to open
+    to find treasure while avoiding the tiger. The agent can listen for acoustic cues
+    but receives noisy observations.
+    
+    Problem Structure:
+    - States: tiger_left, tiger_right (tiger's location)
+    - Actions: listen, open_left, open_right  
+    - Observations: hear_left, hear_right, hear_nothing
+    - Rewards: listen(-1), correct_door(+10), wrong_door(-100)
+    
+    Attributes:
+        states: List of possible states
+        actions: List of possible actions
+        observations: List of possible observations
+        
+    Example:
+        Creating and using a Tiger POMDP::
+        
+            # Create Tiger environment
+            tiger = TigerPOMDP(discount_factor=0.95)
+            
+            # Get initial belief and sample episode
+            initial_belief = get_initial_belief(tiger, n_particles=1000)
+            
+            # Sample state and take action
+            state = initial_belief.sample()
+            actions = tiger.get_actions()
+            reward = tiger.reward(state, "listen")
+            
+            # Check for terminal condition
+            is_done = tiger.is_terminal(state)
+    """
+    
     def __init__(self, discount_factor: float, name: str = "TigerPOMDP", output_dir: Optional[Path] = None, debug: bool = False):
+        """Initialize the Tiger POMDP environment.
+        
+        Args:
+            discount_factor: Discount factor for future rewards (0 < discount_factor <= 1)
+            name: Name identifier for this environment instance. Defaults to "TigerPOMDP".
+            output_dir: Optional directory for logging output. Defaults to None.
+            debug: Enable debug logging. Defaults to False.
+            
+        Raises:
+            ValueError: If discount_factor is not in valid range [0, 1]
+        """
         if not (0.0 <= discount_factor <= 1.0):
             raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
         

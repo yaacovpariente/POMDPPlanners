@@ -1,3 +1,24 @@
+"""POMDP Environment Implementations.
+
+This package contains concrete implementations of various POMDP environments
+used for testing and benchmarking planning algorithms. Each environment
+implements the core Environment interface with specific state spaces,
+action spaces, observation models, and reward functions.
+
+Available Environments:
+    TigerPOMDP: Classic tiger problem with discrete states and observations
+    CartPolePOMDP: Pole balancing task with continuous states, discrete actions
+    MountainCarPOMDP: Car climbing hill task with continuous state space
+    PushPOMDP: Object manipulation task with spatial reasoning
+    SafeAntVelocityPOMDP: Safety-constrained ant navigation
+    SanityPOMDP: Simple test environment for debugging
+    DiscreteLightDarkPOMDP: Grid-based light-dark navigation
+    ContinuousLightDarkPOMDP: Continuous light-dark navigation problem
+
+Factory Functions:
+    get_environment: Create environment instances by name with parameters
+"""
+
 from typing import Dict, Any, Type
 
 from POMDPPlanners.environments.push_pomdp import PushPOMDP
@@ -35,18 +56,36 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
 }
 
 def get_environment(env_type: str, **kwargs) -> Any:
-    """
-    Factory function to create environment instances.
+    """Factory function to create environment instances by name.
+    
+    This function provides a convenient way to create environment instances
+    using string identifiers, enabling configuration-driven environment creation.
     
     Args:
-        env_type: Type of environment to create
+        env_type: Name of the environment type to create
         **kwargs: Additional arguments to pass to the environment constructor
         
     Returns:
         An instance of the requested environment
         
     Raises:
-        ValueError: If the environment type is not supported
+        ValueError: If the environment type is not registered
+        
+    Example:
+        Creating different environments::
+        
+            # Create Tiger POMDP
+            tiger = get_environment("TigerPOMDP", discount_factor=0.95)
+            
+            # Create Light-Dark POMDP with custom parameters
+            lightdark = get_environment(
+                "ContinuousLightDarkPOMDP",
+                discount_factor=0.99,
+                light_loc=[5.0, 0.0]
+            )
+            
+            # Create CartPole POMDP
+            cartpole = get_environment("CartPolePOMDP", discount_factor=0.95)
     """
     if env_type not in ENVIRONMENT_REGISTRY:
         raise ValueError(f"Unsupported environment type: {env_type}. "
