@@ -31,8 +31,10 @@ from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.tree import ActionNode, get_optimal_action_reward_setting, BeliefNode
 from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
+from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
 
-class POMCP(Policy):
+
+class POMCP(PathSimulationPolicy):
     """POMCP (Partially Observable Monte Carlo Planning) algorithm.
     
     POMCP is a Monte Carlo Tree Search algorithm for POMDP planning that combines
@@ -53,6 +55,13 @@ class POMCP(Policy):
         timeout_in_seconds: Time limit for planning (mutually exclusive with n_simulations)
         n_simulations: Number of simulations to run (mutually exclusive with timeout)
         min_samples_per_node: Minimum samples before a node is considered reliable
+
+    Note:
+        In the original POMCP paper, the belief structure used was an unweighted particle belief
+        that can be found in :class:`POMDPPlanners.core.belief.UnweightedParticleBelief`. However,
+        in this implementation, we keep the belief structure abstract to allow users to choose
+        their preferred belief representation. In the usage example below, a weighted particle
+        belief is used via the :func:`POMDPPlanners.core.belief.get_initial_belief` function.
         
     Example:
         Creating and using a POMCP planner::
@@ -101,48 +110,19 @@ class POMCP(Policy):
             environment=environment, 
             discount_factor=discount_factor, 
             name=name,
+            n_simulations=n_simulations,
+            time_out_in_seconds=time_out_in_seconds,
             log_path=log_path,
             debug=debug
         )
         
         self.depth = depth
         self.exploration_constant = exploration_constant
-        self.timeout_in_seconds = time_out_in_seconds
-        self.n_simulations = n_simulations
         self.min_samples_per_node = min_samples_per_node
 
-    def action(self, belief: Belief) -> List[Any]:
-        tree = self.search(belief=belief)
-        tree_metrics = compute_tree_metrics(tree=tree)
-        action = get_optimal_action_reward_setting(belief_node=tree)
-        return [action], PolicyRunData(info_variables=tree_metrics)
-    
-    def search(self, belief: Belief) -> Any:
-        belief_node = BeliefNode(belief=belief, observation=None)
-        
-        if self.timeout_in_seconds is not None:
-            self._construct_tree_using_timeout(belief=belief, belief_node=belief_node)
-        else:
-            self._construct_tree_using_n_simulations(belief=belief, belief_node=belief_node)
-
-        return belief_node
-    
-    def _construct_tree_using_timeout(self, belief: Belief, belief_node: BeliefNode) -> BeliefNode:
-        if self.timeout_in_seconds is None:
-            raise ValueError("timeout_in_seconds must not be None")
-        
-        start_time = time.time()
-        while time.time() - start_time < self.timeout_in_seconds:
-            state = belief.sample()
-            self.simulate(state=state, belief_node=belief_node, depth=0)
-            
-    def _construct_tree_using_n_simulations(self, belief: Belief, belief_node: BeliefNode) -> BeliefNode:
-        if self.n_simulations is None:
-            raise ValueError("n_simulations must not be None")
-        
-        for _ in range(self.n_simulations):
-            state = belief.sample()
-            self.simulate(state=state, belief_node=belief_node, depth=0)
+    def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
+        state = belief_node.belief.sample()
+        self.simulate(state=state, belief_node=belief_node, depth=depth)
     
     def simulate(self, state: Any, belief_node: BeliefNode, depth: int) -> float:
         if depth > self.depth: 

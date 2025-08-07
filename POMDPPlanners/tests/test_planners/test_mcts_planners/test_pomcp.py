@@ -75,7 +75,7 @@ def test_initialization_with_n_simulations(environment, discount_factor, depth, 
     assert planner.depth == depth
     assert planner.exploration_constant == exploration_constant
     assert planner.n_simulations == 100
-    assert planner.timeout_in_seconds is None
+    assert planner.time_out_in_seconds is None
 
 
 def test_initialization_with_timeout(environment, discount_factor, depth, exploration_constant):
@@ -91,7 +91,7 @@ def test_initialization_with_timeout(environment, discount_factor, depth, explor
     assert planner.discount_factor == discount_factor
     assert planner.depth == depth
     assert planner.exploration_constant == exploration_constant
-    assert planner.timeout_in_seconds == 5
+    assert planner.time_out_in_seconds == 5
     assert planner.n_simulations is None
 
 
@@ -116,13 +116,11 @@ def test_action_selection(planner, belief, environment):
 
 
 def test_search_behavior_with_initial_belief(planner, belief, environment):
-    belief_node = planner.search(belief)
-    assert isinstance(belief_node, BeliefNode)
-    assert belief_node.belief == belief
-    assert belief_node.observation is None
-    assert belief_node.parent is None
-    assert len(belief_node.children) > 0
-    assert all(isinstance(child, ActionNode) for child in belief_node.children)
+    # The search method has been removed, so we test the action method instead
+    action, policy_run_data = planner.action(belief)
+    assert isinstance(action, list)
+    assert len(action) == 1
+    assert action[0] in environment.actions
 
 
 def test_random_rollout(planner):
@@ -167,7 +165,7 @@ def test_construct_tree_using_timeout(environment, discount_factor, depth, explo
     belief_node = BeliefNode(belief=belief, observation=None)
     
     start_time = time.time()
-    planner._construct_tree_using_timeout(belief=belief, belief_node=belief_node)
+    planner._construct_tree_using_timeout(belief_node=belief_node)
     end_time = time.time()
     
     # Verify the function ran for approximately the timeout duration
@@ -195,7 +193,7 @@ def test_construct_tree_using_n_simulations(environment, discount_factor, depth,
     # Count total visits to verify number of simulations
     initial_visit_count = belief_node.visit_count
     
-    planner._construct_tree_using_n_simulations(belief=belief, belief_node=belief_node)
+    planner._construct_tree_using_n_simulations(belief_node=belief_node)
     
     # Verify tree structure was created
     assert len(belief_node.children) > 0  # Should have at least one action node
@@ -221,7 +219,7 @@ def test_tree_structure_construction(environment, discount_factor, depth, explor
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
     root_belief_node = BeliefNode(belief=belief, observation=None)
     
-    planner._construct_tree_using_n_simulations(belief=belief, belief_node=root_belief_node)
+    planner._construct_tree_using_n_simulations(belief_node=root_belief_node)
     
     assert root_belief_node.height == 2 * depth + 1
     for node in PostOrderIter(root_belief_node):
