@@ -10,6 +10,45 @@ from POMDPPlanners.core.tree import BeliefNode, get_optimal_action_reward_settin
 from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
 
 class PathSimulationPolicy(Policy):
+    """Abstract base class for Monte Carlo Tree Search algorithms in POMDP planning.
+    
+    This class provides a common framework for MCTS-based POMDP planners that build
+    search trees through path simulations. It handles the core tree construction loop
+    and provides hooks for algorithm-specific simulation strategies.
+    
+    The class supports two termination criteria:
+    1. **Simulation count**: Run a fixed number of MCTS simulations
+    2. **Time limit**: Run simulations for a specified time duration
+    
+    Key Components:
+    - Tree construction with configurable termination criteria
+    - Automatic tree metrics collection for analysis
+    - Action selection from the constructed search tree
+    - Abstract simulation interface for algorithm specialization
+    
+    Subclass Responsibilities:
+    Concrete implementations must provide the `_simulate_path` method that defines
+    how individual MCTS simulations are performed, including:
+    - Node expansion strategies
+    - Action selection during tree traversal
+    - Value estimation and backpropagation
+    
+    Attributes:
+        environment: The POMDP environment for planning
+        discount_factor: Discount factor for future rewards (0 < γ ≤ 1)
+        n_simulations: Number of MCTS simulations to run (mutually exclusive with timeout)
+        time_out_in_seconds: Time limit for planning in seconds (mutually exclusive with n_simulations)
+        name: Identifier for the policy instance
+        
+    Algorithm Integration:
+    This base class is used by several MCTS algorithms in the framework:
+    - **POMCP**: Uses UCB1 for action selection with particle filtering
+    - **PFT-DPW**: Implements progressive widening for continuous action spaces
+    - **Sparse-PFT**: Combines sparse sampling with progressive widening
+    
+    The common interface allows easy comparison and benchmarking of different
+    MCTS variants while sharing the core tree construction infrastructure.
+    """
     def __init__(
         self, 
         environment: "Environment", 

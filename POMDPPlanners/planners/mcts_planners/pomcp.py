@@ -1,3 +1,25 @@
+"""POMCP (Partially Observable Monte Carlo Planning) Algorithm Implementation.
+
+This module implements POMCP, a Monte Carlo Tree Search algorithm for POMDP planning.
+POMCP builds a search tree by iteratively sampling trajectories and using UCB1 
+for action selection, providing an efficient approximation to optimal POMDP planning.
+
+The algorithm works by:
+1. Building a tree of belief-action nodes through Monte Carlo simulations
+2. Using UCB1 (Upper Confidence Bounds) for action selection during tree traversal
+3. Performing random rollouts from leaf nodes to estimate values
+4. Updating node statistics (visit counts, Q-values) based on simulation returns
+
+Key features:
+- Handles large or continuous observation spaces through particle filtering
+- Uses UCB1 for principled exploration-exploitation balance
+- Can be configured with time limits or simulation count limits
+- Provides theoretical convergence guarantees to optimal policy
+
+Classes:
+    POMCP: Monte Carlo Tree Search planner for POMDPs with UCB1 action selection
+"""
+
 from typing import Any, List, Optional
 import random
 import time
@@ -11,6 +33,52 @@ from POMDPPlanners.core.tree import ActionNode, get_optimal_action_reward_settin
 from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
 
 class POMCP(Policy):
+    """POMCP (Partially Observable Monte Carlo Planning) algorithm.
+    
+    POMCP is a Monte Carlo Tree Search algorithm for POMDP planning that combines
+    UCB1 action selection with particle filtering to handle continuous observation
+    spaces. It builds a search tree through repeated simulations and provides
+    theoretical convergence guarantees.
+    
+    The algorithm uses UCB1 (Upper Confidence Bounds) to balance exploration
+    and exploitation when selecting actions during tree search. It maintains
+    belief states using particle filters and performs random rollouts to
+    estimate values at leaf nodes.
+    
+    Attributes:
+        environment: The POMDP environment to plan for
+        discount_factor: Discount factor for future rewards (0 < γ ≤ 1)
+        depth: Maximum search depth for tree expansion
+        exploration_constant: UCB1 exploration parameter (higher = more exploration)
+        timeout_in_seconds: Time limit for planning (mutually exclusive with n_simulations)
+        n_simulations: Number of simulations to run (mutually exclusive with timeout)
+        min_samples_per_node: Minimum samples before a node is considered reliable
+        
+    Example:
+        Creating and using a POMCP planner::
+        
+            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            from POMDPPlanners.core.belief import get_initial_belief
+            
+            # Create environment and planner
+            env = TigerPOMDP(discount_factor=0.95)
+            planner = POMCP(
+                environment=env,
+                discount_factor=env.discount_factor,
+                depth=10,                   # Search 10 steps ahead
+                exploration_constant=1.0,   # UCB1 exploration parameter
+                name="POMCP_Tiger",
+                n_simulations=1000         # Run 1000 MCTS simulations
+            )
+            
+            # Plan action from initial belief
+            initial_belief = get_initial_belief(env, n_particles=1000)
+            action, run_data = planner.action(initial_belief)
+            
+            print(f"Selected action: {action[0]}")
+            print(f"Tree stats: {run_data.info_variables}")
+    """
+    
     def __init__(
         self, 
         environment: Environment, 

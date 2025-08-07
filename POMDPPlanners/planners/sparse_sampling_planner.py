@@ -1,3 +1,20 @@
+"""Sparse Sampling POMDP Planning Algorithm Implementation.
+
+This module implements the sparse sampling algorithm for POMDP planning, which builds
+a finite-depth lookahead tree by sampling a limited number of outcomes at each node.
+The algorithm provides theoretical guarantees on the quality of the computed policy.
+
+The sparse sampling approach works by:
+1. Building a finite-depth tree from the current belief
+2. Sampling a fixed number of next states and observations at each node
+3. Computing value estimates using dynamic programming
+4. Selecting the action with the best estimated value
+
+Classes:
+    SparseSamplingDiscreteActionsPlanner: Abstract base class for sparse sampling algorithms
+    StandardSparseSamplingDiscreteActionsPlanner: Concrete implementation with standard value updates
+"""
+
 from typing import Any, List, Tuple, Optional
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -14,6 +31,29 @@ from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action_c
 from POMDPPlanners.core.cost import belief_expectation_cost
 
 class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
+    """Abstract base class for sparse sampling POMDP planners.
+    
+    This class implements the core sparse sampling algorithm for POMDP planning.
+    It builds a finite-depth lookahead tree by sampling a limited number of outcomes
+    at each node, providing theoretical guarantees on policy quality.
+    
+    The algorithm works by building a tree where:
+    - Each belief node represents a belief state
+    - Each action node represents taking an action from a belief
+    - The tree depth is limited to control computational complexity
+    - Value estimates are computed using dynamic programming
+    
+    Attributes:
+        environment: The POMDP environment to plan for
+        branching_factor: Number of samples at each node (controls tree width)
+        depth: Maximum planning depth (controls tree height)
+        resampling: Whether to resample particles during belief updates
+        
+    Note:
+        This is an abstract base class. Subclasses must implement the value
+        update methods for leaf and non-leaf nodes.
+    """
+    
     def __init__(
         self,
         environment: DiscreteActionsEnvironment,
@@ -161,6 +201,39 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
 class StandardSparseSamplingDiscreteActionsPlanner(
     SparseSamplingDiscreteActionsPlanner
 ):
+    """Standard implementation of sparse sampling for POMDP planning.
+    
+    This concrete implementation of sparse sampling uses standard value updates:
+    - Q-values for actions are computed as immediate cost plus discounted future value
+    - V-values for beliefs are computed as the minimum Q-value over actions (cost formulation)
+    - Leaf nodes use only immediate cost estimates
+    
+    The algorithm provides theoretical guarantees: with probability 1-δ, the computed
+    policy is ε-optimal, where ε decreases with increasing depth and branching factor.
+    
+    Example:
+        Creating and using a sparse sampling planner::
+        
+            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            from POMDPPlanners.core.belief import get_initial_belief
+            
+            # Create environment and planner
+            env = TigerPOMDP(discount_factor=0.95)
+            planner = StandardSparseSamplingDiscreteActionsPlanner(
+                environment=env,
+                branching_factor=10,  # Sample 10 outcomes per node
+                depth=2,              # Plan 5 steps ahead
+                name="SparseSampling_Tiger"
+            )
+            
+            # Plan action from initial belief
+            initial_belief = get_initial_belief(env, n_particles=1000)
+            action, run_data = planner.action(initial_belief)
+            
+            print(f"Selected action: {action[0]}")
+            print(f"Planning completed with info: {run_data.info_variables}")
+    """
+    
     def __init__(
         self, environment: DiscreteActionsEnvironment, branching_factor: int, depth: int, name: str = "StandardSparseSamplingDiscreteActionsPlanner"
     ):

@@ -1,3 +1,27 @@
+"""PFT-DPW (Progressive Function Transfer with Double Progressive Widening) Algorithm.
+
+This module implements PFT-DPW, a Monte Carlo Tree Search algorithm for continuous
+action spaces in POMDPs. The algorithm uses progressive widening to gradually expand
+the action and observation spaces during tree search, enabling effective planning
+in problems with continuous or large discrete action spaces.
+
+Key features:
+- Progressive widening for both actions and observations
+- Handles continuous action spaces through adaptive sampling
+- Uses UCB1-style exploration with progressive expansion
+- Supports custom action samplers for domain-specific action generation
+
+The algorithm progressively expands the tree by:
+1. Using action progressive widening to add new actions based on visit counts
+2. Using observation progressive widening to add new observation branches
+3. Balancing exploration of new actions with exploitation of promising ones
+4. Performing random rollouts from leaf nodes for value estimation
+
+Classes:
+    ActionSampler: Abstract base class for action sampling strategies
+    PFT_DPW: Main PFT-DPW planner with progressive widening for continuous actions
+"""
+
 from abc import ABC, abstractmethod
 from typing import Any, Tuple, Optional
 import time
@@ -15,11 +39,171 @@ from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSim
 
 
 class ActionSampler(ABC):
+    """Abstract base class for action sampling strategies in PFT-DPW.
+    
+    Action samplers provide domain-specific strategies for generating new actions
+    during progressive widening. This allows PFT-DPW to work with continuous or
+    large discrete action spaces by intelligently sampling promising actions.
+    
+    Example:
+        Creating a custom action sampler for continuous control::
+        
+            import numpy as np
+            from POMDPPlanners.planners.mcts_planners.pft_dpw import ActionSampler
+            
+            class ContinuousControlSampler(ActionSampler):
+                def __init__(self, action_bounds=(-1.0, 1.0), action_dim=2):
+                    self.action_bounds = action_bounds
+                    self.action_dim = action_dim
+                
+                def sample(self, belief_node=None):
+                    # Sample uniformly from action space
+                    low, high = self.action_bounds
+                    return np.random.uniform(low, high, size=self.action_dim)
+            
+            # Use with PFT-DPW
+            sampler = ContinuousControlSampler(action_bounds=(-2.0, 2.0), action_dim=4)
+    """
+    
     @abstractmethod
     def sample(self, belief_node: BeliefNode = None) -> Any:
+        """Sample a new action for progressive widening.
+        
+        Args:
+            belief_node: Optional belief node context for informed sampling
+            
+        Returns:
+            A sampled action compatible with the environment's action space
+        """
         pass
 
 class PFT_DPW(PathSimulationPolicy):
+    """PFT-DPW (Progressive Function Transfer with Double Progressive Widening) Algorithm.
+    
+    PFT-DPW is a Monte Carlo Tree Search algorithm designed for continuous action spaces
+    in POMDPs. It uses progressive widening to gradually expand both the action and 
+    observation spaces during tree search, enabling effective planning in problems with
+    continuous or very large discrete action spaces.
+    
+    Algorithm Overview:
+    The algorithm operates through progressive expansion:
+    1. **Action Progressive Widening**: Gradually adds new actions based on visit counts
+    2. **Observation Progressive Widening**: Gradually adds new observation branches  
+    3. **UCB1 Exploration**: Balances exploration of new actions with exploitation
+    4. **Random Rollouts**: Estimates values from leaf nodes using random simulations
+    
+    Key Features:
+    - Handles continuous action spaces through adaptive sampling
+    - Uses UCB1-style exploration with progressive expansion
+    - Supports custom action samplers for domain-specific action generation
+    - Balances exploration of new actions with exploitation of promising ones
+    - Performs random rollouts from leaf nodes for value estimation
+    
+    Progressive Widening Parameters:
+    - k_a, alpha_a: Control action space expansion (more actions added as visit_count^alpha_a)
+    - k_o, alpha_o: Control observation space expansion
+    - exploration_constant: UCB1 exploration parameter (higher = more exploration)
+    
+    Attributes:
+        environment: The POMDP environment to plan for
+        discount_factor: Discount factor for future rewards (0 < γ ≤ 1)
+        depth: Maximum search depth for tree expansion
+        action_sampler: Strategy for sampling new actions during progressive widening
+        k_a, alpha_a: Action progressive widening parameters
+        k_o, alpha_o: Observation progressive widening parameters  
+        exploration_constant: UCB1 exploration parameter
+        n_simulations: Number of simulations to run (mutually exclusive with timeout)
+        time_out_in_seconds: Time limit for planning (mutually exclusive with n_simulations)
+        
+    Example:
+        Using PFT-DPW for continuous control in CartPole::
+        
+            import numpy as np
+            from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW, ActionSampler
+            from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+            from POMDPPlanners.core.belief import get_initial_belief
+            
+            # Custom action sampler for CartPole
+            class CartPoleActionSampler(ActionSampler):
+                def sample(self, belief_node=None):
+                    return np.random.choice([0, 1])  # Left or right force
+            
+            # Create CartPole environment
+            cartpole = CartPolePOMDP(
+                discount_factor=0.99,
+                noise_cov=np.diag([0.1, 0.1, 0.1, 0.1])
+            )
+            
+            # Create PFT-DPW planner
+            pft_planner = PFT_DPW(
+                environment=cartpole,
+                discount_factor=0.99,
+                depth=10,
+                name="PFT_DPW_CartPole",
+                action_sampler=CartPoleActionSampler(),
+                k_a=2.0,                    # Action widening parameter
+                alpha_a=0.5,                # Action widening exponent
+                k_o=1.0,                    # Observation widening parameter  
+                alpha_o=0.5,                # Observation widening exponent
+                exploration_constant=1.41,   # UCB1 exploration (√2)
+                n_simulations=1000          # Number of MCTS simulations
+            )
+            
+            # Plan from initial belief
+            initial_belief = get_initial_belief(cartpole, n_particles=500)
+            action, run_data = pft_planner.action(initial_belief)
+            
+            print(f"Selected action: {action[0]}")
+            print(f"Planning completed with {len(run_data.info_variables)} metrics")
+            
+    Example:
+        Using PFT-DPW for 2D continuous navigation::
+        
+            import numpy as np
+            from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW, ActionSampler
+            
+            class NavigationActionSampler(ActionSampler):
+                def __init__(self, max_velocity=1.0):
+                    self.max_velocity = max_velocity
+                
+                def sample(self, belief_node=None):
+                    # Sample 2D velocity vector
+                    angle = np.random.uniform(0, 2 * np.pi)
+                    speed = np.random.uniform(0, self.max_velocity)
+                    return np.array([speed * np.cos(angle), speed * np.sin(angle)])
+            
+            # Assume we have a 2D navigation environment
+            # nav_env = NavigationPOMDP(...)
+            
+            navigation_planner = PFT_DPW(
+                environment=nav_env,
+                discount_factor=0.95,
+                depth=15,
+                name="PFT_DPW_Navigation",
+                action_sampler=NavigationActionSampler(max_velocity=2.0),
+                k_a=3.0,                    # More aggressive action widening
+                alpha_a=0.6,                # Faster action space expansion
+                exploration_constant=2.0,    # Higher exploration
+                n_simulations=2000          # More simulations for complex space
+            )
+            
+    Mathematical Background:
+    Action progressive widening condition:
+        Add new action when: ⌊N(s)^α_a⌋ > ⌊(N(s)-1)^α_a⌋
+        where N(s) is the visit count of belief node s
+        
+    Observation progressive widening condition:
+        Add new observation when: |C(s,a)| ≤ k_o * N(s,a)^α_o
+        where |C(s,a)| is the number of observation children
+        
+    UCB1 action selection:
+        UCB(s,a) = Q(s,a) + c * √(ln(N(s)) / N(s,a))
+        where c is the exploration constant
+        
+    References:
+    - Couëtoux, A., et al. "Continuous Upper Confidence Trees." LION 2011.
+    - Browne, C., et al. "A Survey of Monte Carlo Tree Search Methods." IEEE TCIAIG 2012.
+    """
     def __init__(
         self, 
         environment: Environment, 
