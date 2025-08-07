@@ -402,21 +402,122 @@ def test_all_planners_usage_examples():
         return False
 
 def test_all_supporting_class_examples():
-    """Test all supporting class examples."""
+    """Test all supporting class examples with comprehensive validation."""
     print("Testing all supporting class examples...")
     
     try:
-        # Import and test all supporting classes
+        # Test Sanity POMDP supporting classes
+        print("  Testing Sanity POMDP supporting classes...")
         from POMDPPlanners.environments.sanity_pomdp import (
             SanityStateTransitionModel, SanityObservationModel, 
             SanityInitialStateDist, SanityInitialObservationDist
         )
+        
+        # Test SanityStateTransitionModel
+        transition_model = SanityStateTransitionModel(state=1, action=0)
+        next_state = transition_model.sample()[0]
+        prob = transition_model.probability([0])
+        prob_wrong = transition_model.probability([1])
+        assert next_state == 0, f"Expected 0, got {next_state}"
+        assert prob[0] == 1.0, f"Expected [1.0], got {prob}"
+        assert prob_wrong[0] == 0.0, f"Expected [0.0], got {prob_wrong}"
+        
+        # Test SanityObservationModel
+        obs_model = SanityObservationModel(next_state=0, action=0)
+        observation = obs_model.sample()[0]
+        prob_correct = obs_model.probability([0])
+        prob_wrong = obs_model.probability([1])
+        assert observation == 0, f"Expected 0, got {observation}"
+        assert prob_correct[0] == 1.0, f"Expected [1.0], got {prob_correct}"
+        assert prob_wrong[0] == 0.0, f"Expected [0.0], got {prob_wrong}"
+        
+        # Test SanityInitialStateDist
+        initial_dist = SanityInitialStateDist()
+        initial_state = initial_dist.sample()[0]
+        states = initial_dist.sample(n_samples=5)
+        prob_good = initial_dist.probability([0])
+        prob_bad = initial_dist.probability([1])
+        assert initial_state == 0, f"Expected 0, got {initial_state}"
+        assert all(s == 0 for s in states), f"Expected all 0s, got {states}"
+        assert prob_good[0] == 1.0, f"Expected [1.0], got {prob_good}"
+        assert prob_bad[0] == 0.0, f"Expected [0.0], got {prob_bad}"
+        
+        # Test SanityInitialObservationDist
+        initial_obs_dist = SanityInitialObservationDist()
+        initial_obs = initial_obs_dist.sample()[0]
+        observations = initial_obs_dist.sample(n_samples=3)
+        prob = initial_obs_dist.probability([0])
+        assert initial_obs == 0, f"Expected 0, got {initial_obs}"
+        assert all(o == 0 for o in observations), f"Expected all 0s, got {observations}"
+        assert prob[0] == 1.0, f"Expected [1.0], got {prob}"
+        
+        # Test Tiger POMDP supporting classes
+        print("  Testing Tiger POMDP supporting classes...")
         from POMDPPlanners.environments.tiger_pomdp import (
             TigerStateTransition, TigerObservation
         )
+        
+        # Test TigerStateTransition for listening
+        transition_listen = TigerStateTransition(state="tiger_left", action="listen")
+        next_state_listen = transition_listen.sample()[0]
+        prob_same = transition_listen.probability(["tiger_left"])
+        assert next_state_listen == "tiger_left", f"Expected tiger_left, got {next_state_listen}"
+        assert prob_same[0] == 1.0, f"Expected [1.0], got {prob_same}"
+        
+        # Test TigerStateTransition for opening door
+        transition_open = TigerStateTransition(state="tiger_left", action="open_left")
+        next_state_open = transition_open.sample()[0]
+        prob_random = transition_open.probability(["tiger_left"])
+        assert next_state_open in ["tiger_left", "tiger_right"], f"Unexpected state: {next_state_open}"
+        assert prob_random[0] == 0.5, f"Expected [0.5], got {prob_random}"
+        
+        # Test TigerObservation for listening
+        obs_listen = TigerObservation(next_state="tiger_left", action="listen")
+        observation = obs_listen.sample()[0]
+        prob_correct = obs_listen.probability(["hear_left"])
+        prob_wrong = obs_listen.probability(["hear_right"])
+        assert observation in ["hear_left", "hear_right"], f"Unexpected observation: {observation}"
+        assert prob_correct[0] == 0.85, f"Expected [0.85], got {prob_correct}"
+        assert prob_wrong[0] == 0.15, f"Expected [0.15], got {prob_wrong}"
+        
+        # Test CartPole supporting classes
+        print("  Testing CartPole POMDP supporting classes...")
         from POMDPPlanners.environments.cartpole_pomdp import (
             CartPoleStateTransition, CartPoleObservation, CartPoleInitialStateDistribution
         )
+        
+        # Test CartPoleStateTransition
+        state = np.array([0.0, 0.0, 0.1, 0.0])
+        cartpole_transition = CartPoleStateTransition(
+            state=state, action=1, force_mag=10.0, total_mass=1.1,
+            polemass_length=0.05, gravity=9.8, length=0.5,
+            kinematics_integrator="euler", tau=0.02, masspole=0.1
+        )
+        cartpole_next_state = cartpole_transition.sample()[0]
+        assert isinstance(cartpole_next_state, np.ndarray), f"Expected ndarray, got {type(cartpole_next_state)}"
+        assert len(cartpole_next_state) == 4, f"Expected length 4, got {len(cartpole_next_state)}"
+        
+        # Test CartPoleObservation
+        true_state = np.array([0.1, 0.05, 0.02, -0.1])
+        noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
+        obs_model = CartPoleObservation(next_state=true_state, action=1, noise_cov=noise_cov)
+        observation = obs_model.sample()[0]
+        prob = obs_model.probability([observation])
+        assert isinstance(observation, np.ndarray), f"Expected ndarray, got {type(observation)}"
+        assert len(observation) == 4, f"Expected length 4, got {len(observation)}"
+        assert isinstance(prob, (np.ndarray, float, np.float64)), f"Expected array or float, got {type(prob)}"
+        
+        # Test CartPoleInitialStateDistribution
+        initial_dist = CartPoleInitialStateDistribution()
+        initial_state = initial_dist.sample()[0]
+        states = initial_dist.sample(n_samples=3)
+        assert isinstance(initial_state, np.ndarray), f"Expected ndarray, got {type(initial_state)}"
+        assert len(initial_state) == 4, f"Expected length 4, got {len(initial_state)}"
+        assert len(states) == 3, f"Expected 3 states, got {len(states)}"
+        assert all(len(s) == 4 for s in states), "All states should have length 4"
+        
+        # Test additional supporting classes from other environments
+        print("  Testing additional supporting classes...")
         from POMDPPlanners.environments.mountain_car_pomdp import (
             MountainCarTransition, MountainCarObservation
         )
@@ -430,27 +531,24 @@ def test_all_supporting_class_examples():
             StateTransitionModel
         )
         
-        # Test a few key examples to ensure imports work
-        
-        # Test Sanity POMDP supporting class
-        transition_model = SanityStateTransitionModel(state=1, action=0)
-        next_state = transition_model.sample()[0]
-        assert next_state == 0
-        
-        # Test Tiger POMDP supporting class
-        tiger_transition = TigerStateTransition(state="tiger_left", action="listen")
-        tiger_next_state = tiger_transition.sample()[0]
-        assert tiger_next_state == "tiger_left"
-        
-        # Test CartPole supporting class
-        state = np.array([0.0, 0.0, 0.1, 0.0])
-        cartpole_transition = CartPoleStateTransition(
-            state=state, action=1, force_mag=10.0, total_mass=1.1,
-            polemass_length=0.05, gravity=9.8, length=0.5,
-            kinematics_integrator="euler", tau=0.02, masspole=0.1
+        # Quick tests to ensure imports and basic functionality work
+        # MountainCar
+        mc_state = (-0.5, 0.0)
+        mc_transition = MountainCarTransition(
+            state=mc_state, action=1, power=0.001, gravity=0.0025, 
+            max_speed=0.07, min_position=-1.2, max_position=0.6
         )
-        cartpole_next_state = cartpole_transition.sample()[0]
-        assert isinstance(cartpole_next_state, np.ndarray)
+        mc_next_state = mc_transition.sample()[0]
+        assert isinstance(mc_next_state, np.ndarray), "MountainCar transition should return ndarray"
+        
+        # Light-Dark
+        ld_state = np.array([3.0, 4.0])
+        ld_action = np.array([1.0, 0.5])
+        ld_transition = StateTransitionModel(
+            state=ld_state, action=ld_action, state_transition_cov_matrix=np.eye(2) * 0.1
+        )
+        ld_next_state = ld_transition.sample()[0]
+        assert isinstance(ld_next_state, np.ndarray), "Light-Dark transition should return ndarray"
         
         print("  ✓ All supporting class examples work!")
         return True
