@@ -10,6 +10,96 @@ from POMDPPlanners.core.environment import Environment
 def compute_statistics_environment_policy_pair(
     env: Environment, histories: List[History], alpha: float, confidence_interval_level: float = 0.95
 ) -> List[MetricValue]:
+    """Compute comprehensive statistics and metrics for a single environment-policy pair.
+    
+    This function analyzes simulation histories to compute a wide range of performance
+    metrics including returns, risk measures, timing statistics, and custom environment
+    metrics. All metrics include confidence intervals for statistical significance testing.
+    
+    Computed Metrics:
+    - Average return: Mean discounted return across episodes
+    - CVaR (Conditional Value at Risk): Expected return in worst α fraction of cases
+    - VaR (Value at Risk): α-quantile of return distribution  
+    - Timing metrics: Average times for each simulation component
+    - Episode statistics: Step counts and terminal state rates
+    - Custom environment metrics: Domain-specific performance measures
+    
+    Args:
+        env: The POMDP environment used in the simulation
+        histories: List of episode histories from simulation runs
+        alpha: Risk level for CVaR and VaR computation (0 < α < 1)
+        confidence_interval_level: Confidence level for statistical intervals (0 < level < 1)
+        
+    Returns:
+        List of MetricValue objects, each containing:
+        - name: Metric identifier
+        - value: Point estimate of the metric
+        - lower_confidence_bound: Lower bound of confidence interval
+        - upper_confidence_bound: Upper bound of confidence interval
+        
+    Raises:
+        TypeError: If histories is not a list or contains non-History objects
+        ValueError: If histories is empty
+        
+    Example:
+        Computing statistics for POMCP on Tiger POMDP::
+        
+            from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environment_policy_pair
+            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+            from POMDPPlanners.core.belief import get_initial_belief
+            from POMDPPlanners.simulations.episodes import run_episode
+            from POMDPPlanners.utils.logger import get_logger
+            
+            # Set up environment and policy
+            env = TigerPOMDP(discount_factor=0.95)
+            policy = POMCP(
+                environment=env,
+                discount_factor=0.95,
+                depth=10,
+                exploration_constant=1.0,
+                name="POMCP",
+                n_simulations=1000
+            )
+            
+            # Run multiple episodes
+            histories = []
+            initial_belief = get_initial_belief(env, n_particles=1000)
+            logger = get_logger("stats_example")
+            
+            for episode in range(50):
+                history = run_episode(
+                    environment=env,
+                    policy=policy,
+                    initial_belief=initial_belief,
+                    num_steps=20,
+                    logger=logger
+                )
+                histories.append(history)
+            
+            # Compute comprehensive statistics
+            metrics = compute_statistics_environment_policy_pair(
+                env=env,
+                histories=histories,
+                alpha=0.05,  # 5% risk level
+                confidence_interval_level=0.95  # 95% confidence intervals
+            )
+            
+            # Analyze results
+            for metric in metrics:
+                print(f"{metric.name}: {metric.value:.3f} "
+                      f"[{metric.lower_confidence_bound:.3f}, {metric.upper_confidence_bound:.3f}]")
+            
+            # Find specific metrics
+            avg_return = next(m for m in metrics if m.name == "average_return")
+            cvar = next(m for m in metrics if m.name == "return_cvar")
+            action_time = next(m for m in metrics if m.name == "average_action_time")
+            
+            print(f"\\nKey Performance Indicators:")
+            print(f"Average Return: {avg_return.value:.3f} ± {(avg_return.upper_confidence_bound - avg_return.lower_confidence_bound)/2:.3f}")
+            print(f"CVaR (5%): {cvar.value:.3f}")
+            print(f"Planning Time: {action_time.value:.4f} seconds/step")
+    """
     if not isinstance(histories, list):
         raise TypeError("histories must be a list")
     if len(histories) == 0:
@@ -227,14 +317,90 @@ def compute_statistics_environments_policies_comparison(
 def metrics_dict_to_dataframe(
     metrics_dict: Dict[str, Dict[str, List[MetricValue]]]
 ) -> pd.DataFrame:
-    """
-    Convert a dictionary of metrics into a DataFrame with environment and policy columns.
+    """Convert a nested dictionary of metrics into a structured DataFrame for analysis.
+    
+    This function transforms the hierarchical metrics structure returned by simulation
+    runs into a flat DataFrame format suitable for statistical analysis, visualization,
+    and reporting. Each row represents one environment-policy combination.
+    
+    The resulting DataFrame includes:
+    - Environment and policy identification columns
+    - Point estimates for all computed metrics
+    - Confidence interval bounds for each metric (lower and upper)
+    - Automatically handles missing metrics with appropriate defaults
     
     Args:
-        metrics_dict: Dictionary mapping environment names to dictionaries mapping policy names to lists of MetricValue objects
+        metrics_dict: Nested dictionary with structure:
+            {environment_name: {policy_name: [MetricValue, ...], ...}, ...}
+            where MetricValue objects contain name, value, and confidence bounds
         
     Returns:
-        DataFrame where each row represents an environment-policy pair and columns are metrics with confidence intervals
+        DataFrame with columns:
+        - 'environment': Environment name identifier
+        - 'policy': Policy name identifier  
+        - For each metric 'X': 'X', 'X_ci_lower', 'X_ci_upper' columns
+        
+    Raises:
+        TypeError: If metrics_dict structure is invalid
+        ValueError: If metrics_dict is empty
+        
+    Example:
+        Converting simulation results to DataFrame for analysis::
+        
+            from POMDPPlanners.simulations.simulation_statistics import (
+                compute_statistics_environment_policy_pair, metrics_dict_to_dataframe
+            )
+            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+            # ... other imports and setup ...
+            
+            # Assume we have simulation results for multiple environment-policy pairs
+            metrics_dict = {
+                'TigerPOMDP': {
+                    'POMCP': pomcp_metrics,  # List[MetricValue] from compute_statistics_...
+                    'SparseSampling': sparse_metrics
+                },
+                'CartPolePOMDP': {
+                    'POMCP': cartpole_pomcp_metrics
+                }
+            }
+            
+            # Convert to DataFrame
+            results_df = metrics_dict_to_dataframe(metrics_dict)
+            
+            # Analyze results
+            print("DataFrame shape:", results_df.shape)
+            print("Columns:", results_df.columns.tolist())
+            print("\\nEnvironments:", results_df['environment'].unique())
+            print("Policies:", results_df['policy'].unique())
+            
+            # Compare average returns across policies
+            avg_return_comparison = results_df[['environment', 'policy', 'average_return', 
+                                             'average_return_ci_lower', 'average_return_ci_upper']]
+            print("\\nAverage Return Comparison:")
+            print(avg_return_comparison)
+            
+            # Find best performing policy per environment
+            for env in results_df['environment'].unique():
+                env_data = results_df[results_df['environment'] == env]
+                best_policy = env_data.loc[env_data['average_return'].idxmax(), 'policy']
+                best_return = env_data['average_return'].max()
+                print(f"{env}: Best policy is {best_policy} with return {best_return:.3f}")
+            
+            # Statistical significance testing
+            import scipy.stats as stats
+            
+            tiger_data = results_df[results_df['environment'] == 'TigerPOMDP']
+            if len(tiger_data) >= 2:
+                policy1_stats = tiger_data.iloc[0]
+                policy2_stats = tiger_data.iloc[1]
+                
+                # Check if confidence intervals overlap
+                p1_ci = (policy1_stats['average_return_ci_lower'], policy1_stats['average_return_ci_upper'])
+                p2_ci = (policy2_stats['average_return_ci_lower'], policy2_stats['average_return_ci_upper'])
+                
+                overlap = not (p1_ci[1] < p2_ci[0] or p2_ci[1] < p1_ci[0])
+                print(f"\\nConfidence intervals overlap: {overlap}")
     """
     if not isinstance(metrics_dict, dict):
         raise TypeError("metrics_dict must be a dict")

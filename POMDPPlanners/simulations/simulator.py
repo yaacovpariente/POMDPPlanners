@@ -40,7 +40,57 @@ from POMDPPlanners.simulations.simulations_deployment import TaskManagerFactory
 
 
 class BaseSimulator(ABC):
-    """A base class for POMDP simulators."""
+    """Abstract base class for POMDP simulation frameworks.
+    
+    This class provides a foundation for running large-scale POMDP simulations with
+    support for parallel execution, experiment tracking, and result analysis. It handles
+    the orchestration of multiple environment-policy combinations and provides infrastructure
+    for caching, logging, and visualization.
+    
+    Key Features:
+    - Parallel simulation execution using configurable task managers (Dask, Joblib)
+    - MLflow integration for experiment tracking and artifact logging  
+    - Statistical analysis with confidence intervals and risk metrics
+    - Automatic visualization generation and caching
+    - Flexible caching strategies and performance profiling
+    
+    Attributes:
+        cache_dir_path: Path for storing simulation results and artifacts
+        experiment_name: Name of the MLflow experiment for tracking
+        debug: Whether debug logging is enabled
+        n_jobs: Number of parallel jobs for simulation execution
+        task_manager: Task manager instance for handling parallel execution
+        
+    Example:
+        Creating a custom simulator by extending BaseSimulator::
+        
+            from pathlib import Path
+            from POMDPPlanners.simulations.simulator import BaseSimulator
+            from POMDPPlanners.simulations.simulations_deployment.task_managers import TaskManagerType
+            
+            class CustomSimulator(BaseSimulator):
+                def _create_simulation_tasks(self, environment_run_params):
+                    # Implement task creation logic
+                    pass
+                    
+                def _compute_metrics(self, results, environment_run_params, alpha, confidence_interval_level):
+                    # Implement metrics computation
+                    pass
+                    
+            # Use the custom simulator
+            with CustomSimulator(
+                cache_dir_path=Path("./results"),
+                experiment_name="Custom_Experiment",
+                task_manager_type=TaskManagerType.DASK,
+                n_jobs=4,
+                enable_profiling=True
+            ) as simulator:
+                results = simulator.compare_multiple_environments_policies(
+                    environment_run_params=env_params,
+                    alpha=0.05,
+                    confidence_interval_level=0.95
+                )
+    """
     
     def __init__(
         self,
@@ -569,7 +619,103 @@ class BaseSimulator(ABC):
         pass
     
 class POMDPSimulator(BaseSimulator):
-    """A class to handle POMDP simulations and comparisons."""
+    """Concrete implementation of BaseSimulator for POMDP planning algorithm comparisons.
+    
+    This class provides a complete simulation framework for comparing POMDP planning algorithms
+    across multiple environments. It executes episodes in parallel, collects comprehensive
+    statistics, and generates visualizations for analysis.
+    
+    The simulator supports:
+    - Episode-based simulation with configurable number of steps and episodes
+    - Parallel execution using Dask or Joblib task managers
+    - Comprehensive timing and performance metrics collection
+    - Statistical analysis with confidence intervals and risk measures
+    - Automatic visualization generation for individual policies and comparisons
+    - MLflow experiment tracking with structured logging
+    
+    Key Metrics Collected:
+    - Average return and discounted return statistics
+    - Conditional Value at Risk (CVaR) and Value at Risk (VaR)
+    - Timing metrics (action selection, belief updates, state transitions)
+    - Episode completion rates and terminal state statistics
+    - Custom environment-specific metrics
+    
+    Example:
+        Comparing POMCP and Sparse Sampling on Tiger POMDP::
+        
+            from pathlib import Path
+            from POMDPPlanners.simulations.simulator import POMDPSimulator
+            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+            from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+            from POMDPPlanners.core.belief import get_initial_belief
+            from POMDPPlanners.core.simulation import EnvironmentRunParams
+            from POMDPPlanners.simulations.simulations_deployment.task_managers import TaskManagerType
+            
+            # Create environment
+            tiger_env = TigerPOMDP(discount_factor=0.95)
+            initial_belief = get_initial_belief(tiger_env, n_particles=1000)
+            
+            # Create policies to compare
+            pomcp = POMCP(
+                environment=tiger_env,
+                discount_factor=0.95,
+                depth=10,
+                exploration_constant=1.0,
+                name="POMCP",
+                n_simulations=1000
+            )
+            
+            sparse_sampling = StandardSparseSamplingDiscreteActionsPlanner(
+                environment=tiger_env,
+                branching_factor=5,
+                depth=5,
+                name="SparseSampling"
+            )
+            
+            # Configure simulation parameters
+            env_params = [
+                EnvironmentRunParams(
+                    environment=tiger_env,
+                    belief=initial_belief,
+                    policies=[pomcp, sparse_sampling],
+                    num_episodes=100,
+                    num_steps=20
+                )
+            ]
+            
+            # Run simulation with profiling
+            with POMDPSimulator(
+                cache_dir_path=Path("./tiger_comparison"),
+                experiment_name="Tiger_POMDP_Comparison",
+                task_manager_type=TaskManagerType.JOBLIB,
+                n_jobs=4,
+                enable_profiling=True
+            ) as simulator:
+                results, statistics_df = simulator.compare_multiple_environments_policies(
+                    environment_run_params=env_params,
+                    alpha=0.05,  # 5% risk level for CVaR
+                    confidence_interval_level=0.95,
+                    n_jobs=4
+                )
+            
+            # Analyze results
+            print("Simulation completed!")
+            print(f"Results structure: {results.keys()}")
+            print(f"Statistics shape: {statistics_df.shape}")
+            
+            # Access policy-specific results
+            tiger_results = results['TigerPOMDP']
+            pomcp_histories = tiger_results['POMCP']
+            sparse_histories = tiger_results['SparseSampling']
+            
+            # Compare average returns
+            pomcp_stats = statistics_df[statistics_df['policy'] == 'POMCP']
+            sparse_stats = statistics_df[statistics_df['policy'] == 'SparseSampling']
+            
+            print(f"POMCP average return: {pomcp_stats['average_return'].iloc[0]:.3f}")
+            print(f"Sparse Sampling average return: {sparse_stats['average_return'].iloc[0]:.3f}")
+    """
     
     def __init__(
         self,

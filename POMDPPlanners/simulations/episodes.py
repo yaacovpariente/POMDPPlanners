@@ -20,20 +20,76 @@ def run_episode(
     num_steps: int,
     logger: Logger,
 ) -> History:
-    """Run a single episode without caching.
+    """Run a single episode without caching and collect detailed performance metrics.
+    
+    This function executes a single episode of interaction between a policy and environment,
+    collecting detailed timing information and performance metrics at each step. The episode
+    runs until either the maximum number of steps is reached or a terminal state is encountered.
+    
+    The function tracks several timing metrics:
+    - Action selection time: Time spent by the policy choosing actions
+    - State sampling time: Time spent sampling next states from transition model
+    - Observation time: Time spent generating observations
+    - Belief update time: Time spent updating belief states
+    - Reward computation time: Time spent computing rewards
     
     Args:
-        environment: The environment to run the episode in
-        policy: The policy to use
-        initial_belief: Initial belief state
-        num_steps: Number of steps to run
+        environment: The POMDP environment to run the episode in
+        policy: The policy to use for action selection
+        initial_belief: Initial belief state for the episode
+        num_steps: Maximum number of steps to run
+        logger: Logger instance for debugging and information output
         
     Returns:
-        History object containing episode data
+        History object containing:
+        - Step-by-step episode data (states, actions, observations, rewards)
+        - Average timing metrics for each component
+        - Episode summary statistics (actual steps taken, terminal state reached)
+        - Policy run data from action selection
         
     Raises:
-        ValueError: If any input parameters are invalid
+        ValueError: If any input parameters are invalid (None, non-positive num_steps)
         TypeError: If any input parameters are of incorrect type
+        
+    Example:
+        Running a single episode with POMCP on Tiger POMDP::
+        
+            from POMDPPlanners.simulations.episodes import run_episode
+            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP  
+            from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+            from POMDPPlanners.core.belief import get_initial_belief
+            from POMDPPlanners.utils.logger import get_logger
+            
+            # Create environment and policy
+            env = TigerPOMDP(discount_factor=0.95)
+            policy = POMCP(
+                environment=env,
+                discount_factor=0.95,
+                depth=10,
+                exploration_constant=1.0,
+                name="POMCP_Tiger",
+                n_simulations=1000
+            )
+            
+            # Set up initial belief and logger
+            initial_belief = get_initial_belief(env, n_particles=1000)
+            logger = get_logger("episode_runner", debug=True)
+            
+            # Run episode
+            history = run_episode(
+                environment=env,
+                policy=policy,
+                initial_belief=initial_belief,
+                num_steps=20,
+                logger=logger
+            )
+            
+            # Access results
+            total_reward = sum(step.reward for step in history.history if step.reward is not None)
+            print(f"Total reward: {total_reward}")
+            print(f"Episode length: {history.actual_num_steps}")
+            print(f"Average action time: {history.average_action_time:.4f}s")
+            print(f"Reached terminal: {history.reach_terminal_state}")
     """
     # Input validation
     if environment is None:
