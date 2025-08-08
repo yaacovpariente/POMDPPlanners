@@ -197,7 +197,7 @@ def run_episode(
 
             belief_update_start_time = time()
             belief = belief.update(
-                action=action, observation=observation, pomdp=environment
+                action=action, observation=observation, pomdp=environment, state=next_state
             )
             belief_update_time = time() - belief_update_start_time
             average_belief_update_time = (
