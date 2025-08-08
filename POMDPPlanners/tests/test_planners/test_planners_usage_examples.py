@@ -54,7 +54,8 @@ def test_pft_dpw_usage_example():
     print("Testing PFT-DPW usage example...")
     
     try:
-        from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW, ActionSampler
+        from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+        from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
         from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
         from POMDPPlanners.core.belief import get_initial_belief
         import numpy as np
@@ -229,7 +230,8 @@ def test_space_info_consistency():
         from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
         from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
         from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
-        from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW, ActionSampler
+        from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+        from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
         from POMDPPlanners.core.environment import SpaceType
         import numpy as np
         

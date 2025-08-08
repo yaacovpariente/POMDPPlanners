@@ -366,7 +366,8 @@ def test_all_planners_usage_examples():
         assert action[0] in ["listen", "open_left", "open_right"]
         
         # Test PFT-DPW usage example
-        from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW, ActionSampler
+        from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+        from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
         from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
         import numpy as np
         

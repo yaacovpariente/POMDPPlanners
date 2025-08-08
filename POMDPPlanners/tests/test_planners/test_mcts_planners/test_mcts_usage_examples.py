@@ -55,7 +55,8 @@ def test_pft_dpw_cartpole_usage_example():
     
     try:
         import numpy as np
-        from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW, ActionSampler
+        from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+        from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
         from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
         from POMDPPlanners.core.belief import get_initial_belief
         
@@ -110,7 +111,7 @@ def test_pft_dpw_navigation_usage_example():
     
     try:
         import numpy as np
-        from POMDPPlanners.planners.mcts_planners.pft_dpw import ActionSampler
+        from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
         
         # Test the NavigationActionSampler from the docstring
         class NavigationActionSampler(ActionSampler):
@@ -160,7 +161,7 @@ def test_action_sampler_usage_example():
     
     try:
         import numpy as np
-        from POMDPPlanners.planners.mcts_planners.pft_dpw import ActionSampler
+        from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
         
         # ContinuousControlSampler from docstring
         class ContinuousControlSampler(ActionSampler):
@@ -439,7 +440,7 @@ def test_pomcpow_comprehensive_usage_example():
         from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         from POMDPPlanners.core.belief import get_initial_belief
         from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-        from POMDPPlanners.planners.mcts_planners.pft_dpw import ActionSampler
+        from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
         import random
         
         # Create a simple action sampler (from docstring)
@@ -502,7 +503,8 @@ def test_mcts_algorithms_integration():
         from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
         from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
-        from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW, ActionSampler
+        from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+        from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
         from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
         from POMDPPlanners.core.belief import get_initial_belief
         from POMDPPlanners.core.environment import SpaceType
