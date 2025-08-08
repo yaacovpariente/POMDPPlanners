@@ -23,19 +23,15 @@ Classes:
     POMCPOW: Monte Carlo Tree Search planner with double progressive widening
 """
 
-from dataclasses import KW_ONLY
-from typing import Any, List, Optional
-import random
-import time
+from typing import Any, Optional
 from math import floor
 import numpy as np
 from pathlib import Path
 
-from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, PolicyRunData
+from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.environment import Environment, SpaceType
-from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.tree import ActionNode, get_optimal_action_reward_setting, BeliefNode
-from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
+from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
+from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
 from POMDPPlanners.planners.mcts_planners.pft_dpw import ActionSampler
 
@@ -77,9 +73,11 @@ class POMCPOW(PathSimulationPolicy):
         alpha_o: Observation progressive widening exponent
         alpha_a: Action progressive widening exponent
         action_sampler: Action sampling strategy for progressive widening
-        timeout_in_seconds: Time limit for planning (mutually exclusive with n_simulations)
+        time_out_in_seconds: Time limit for planning (mutually exclusive with n_simulations)
         n_simulations: Number of simulations to run (mutually exclusive with timeout)
         min_samples_per_node: Minimum samples before a node is considered reliable
+        log_path: Optional path for logging policy execution
+        debug: Enable debug logging if True
         
     Example:
         Creating and using a POMCPOW planner::
@@ -241,23 +239,18 @@ class POMCPOW(PathSimulationPolicy):
             next_belief_node = action_node.get_belief_node_child(observation=next_observation)
             if next_belief_node is None:
                 # Create a dummy belief - the actual belief is stored in data
-                dummy_belief = belief_node.belief  # Use parent belief as dummy
-                next_belief_node = BeliefNode(belief=dummy_belief, observation=next_observation, parent=action_node)
-                next_belief_node.data = {'states': [], 'weights': []}
+                next_belief_node = BeliefNode(belief=WeightedParticleBeliefStateUpdate(), observation=next_observation, parent=action_node)
             
             next_belief_node.visit_count += 1
         else:
             next_belief_node = action_node.sample_child_node()
-
-        next_belief_node.data['states'].append(next_state)
-        next_belief_node.data['weights'].append(observation_probability)
+        
+        next_belief_node.belief.inplace_update(action=action_node.action, observation=next_observation, pomdp=self.environment, state=next_state)
     
         if next_belief_node.is_leaf:
             total = reward + self.discount_factor * self._rollout(state=next_state, depth=depth + 1)
         else:
-            weights = np.array(next_belief_node.data['weights'])
-            weights = weights / weights.sum()  # Normalize weights
-            next_state = np.random.choice(next_belief_node.data['states'], p=weights)
+            next_state = next_belief_node.belief.sample()
             total = reward + self.discount_factor * self._simulate_state_path(state=next_state, belief_node=next_belief_node, depth=depth + 1)
 
         belief_node.visit_count += 1
