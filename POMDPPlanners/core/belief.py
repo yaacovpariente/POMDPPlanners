@@ -9,6 +9,7 @@ Classes:
     WeightedParticleBelief: Weighted particle filter for continuous observation spaces
     UnweightedParticleBelief: Uniform particle filter for discrete observation spaces
     WeightedParticleBeliefReinvigoration: Extended weighted filter with reinvigoration
+    WeightedParticleBeliefStateUpdate: Incremental weighted particle belief for online learning
 
 Functions:
     sample_next_belief: Simulate one step of belief evolution
@@ -16,7 +17,7 @@ Functions:
 """
 
 from abc import ABC, abstractmethod
-from typing import Tuple, Any
+from typing import Tuple, Any, Optional
 import random
 
 import numpy as np
@@ -103,7 +104,7 @@ class Belief(ABC):
         return self.config_id == other.config_id
 
     @abstractmethod
-    def update(self, action: Any, observation: Any, pomdp: Environment) -> "Belief":
+    def update(self, action: Any, observation: Any, pomdp: Environment, state: Optional[Any] = None) -> "Belief":
         """Update belief given an action-observation pair.
         
         Performs Bayesian belief update using the environment's transition
@@ -396,7 +397,7 @@ class WeightedParticleBelief(Belief):
 
         return next_particles, next_log_weights
 
-    def update(self, action, observation, pomdp: Environment) -> "WeightedParticleBelief":
+    def update(self, action, observation, pomdp: Environment, state: Optional[Any] = None) -> "WeightedParticleBelief":
         next_particles, next_log_weights = self._update_weights(action=action, observation=observation, pomdp=pomdp)
         
         if self.resampling:
@@ -444,6 +445,227 @@ class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
         """This function should be implemented for a specific POMDP environment."""
         pass
         
+
+class WeightedParticleBeliefStateUpdate(Belief):
+    """Incremental weighted particle belief for online state estimation.
+    
+    This class implements a lightweight belief representation that incrementally
+    accumulates state particles with associated observation likelihood weights.
+    It is designed for online learning and planning algorithms that build beliefs
+    by sequentially adding individual state samples rather than maintaining a
+    fixed-size particle set.
+    
+    Key Features:
+    - Incremental particle accumulation with observation-based weighting
+    - Efficient in-place updates for online algorithms
+    - Weighted sampling based on observation likelihoods
+    - Maintains running sum of weights for efficient normalization
+    
+    The belief maintains particles (states) and their corresponding weights
+    (observation probabilities), enabling weighted sampling for planning
+    and value estimation in POMDP algorithms.
+    
+    Attributes:
+        particles: List of state particles representing possible world states
+        weights: List of observation likelihood weights for each particle
+        weights_sum: Running sum of all weights for efficient normalization
+        
+    Example:
+        Creating and updating a weighted particle belief::\
+        
+            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            
+            # Create environment and empty belief
+            env = TigerPOMDP(discount_factor=0.95)
+            belief = WeightedParticleBeliefStateUpdate(particles=[], weights=[])
+            
+            # Add states incrementally with observations
+            belief.inplace_update(
+                action="listen", 
+                observation="hear_left", 
+                pomdp=env, 
+                state="tiger_left"
+            )
+            belief.inplace_update(
+                action="listen", 
+                observation="hear_left", 
+                pomdp=env, 
+                state="tiger_right"
+            )
+            
+            # Sample weighted by observation probabilities
+            sampled_state = belief.sample()  # More likely to be "tiger_left"
+            
+            # Create new belief with additional particle
+            new_belief = belief.update(
+                action="listen",
+                observation="hear_right", 
+                pomdp=env,
+                state="tiger_right"
+            )
+    """
+    
+    def __init__(self, particles: list = [], weights: list = []):
+        """Initialize weighted particle belief.
+        
+        Creates a belief state with given particles and weights. Empty lists
+        create an empty belief that can be populated incrementally.
+        
+        Args:
+            particles: List of state particles. Defaults to empty list.
+            weights: List of observation likelihood weights corresponding to particles.
+                Must have same length as particles. Defaults to empty list.
+                
+        Raises:
+            ValueError: If particles and weights have different lengths.
+            
+        Note:
+            When weights is empty, weights_sum is automatically set to 0.
+            This handles the case where an empty belief is initialized.
+        """
+        if len(particles) != len(weights):
+            raise ValueError("particles and weights must have the same length")
+            
+        self.particles = particles
+        self.weights = weights
+        self.weights_sum = sum(weights) if weights else 0
+
+    def update(self, action: Any, observation: Any, pomdp: Environment, state: Optional[Any] = None) -> "WeightedParticleBeliefStateUpdate":
+        """Create new belief by adding a state particle with observation weight.
+        
+        This method creates a new belief instance without modifying the current one.
+        The new particle's weight is computed as the observation likelihood given
+        the state and action using the environment's observation model.
+        
+        Args:
+            action: Action that was executed to reach the state
+            observation: Observation received after executing the action
+            pomdp: Environment providing the observation model for weight computation
+            state: State particle to add to the belief. If None, no particle is added.
+            
+        Returns:
+            New WeightedParticleBeliefStateUpdate instance with the additional particle
+            and updated weights.
+            
+        Example:
+            Creating a new belief with an additional particle::\
+            
+                # Original belief with 2 particles
+                belief = WeightedParticleBeliefStateUpdate(
+                    particles=["state1", "state2"], 
+                    weights=[0.7, 0.3]
+                )
+                
+                # Create new belief with additional particle
+                new_belief = belief.update(
+                    action="action1",
+                    observation="obs1", 
+                    pomdp=environment,
+                    state="state3"
+                )
+                
+                # Original belief unchanged, new belief has 3 particles
+                assert len(belief.particles) == 2
+                assert len(new_belief.particles) == 3
+        """
+        new_particles = self.particles + [state]
+        observation_probability = pomdp.observation_model(next_state=state, action=action).probability([observation])[0]
+        new_weights = self.weights + [observation_probability]
+        new_belief = WeightedParticleBeliefStateUpdate(particles=new_particles, weights=new_weights)
+        
+        return new_belief
+
+    def inplace_update(self, action: Any, observation: Any, pomdp: Environment, state: Optional[Any] = None) -> None:
+        """Add a state particle with observation weight to current belief.
+        
+        This method modifies the current belief in-place by appending a new particle
+        and its corresponding observation likelihood weight. The weight is computed
+        using the environment's observation model and efficiently updates the
+        running weight sum.
+        
+        Args:
+            action: Action that was executed to reach the state
+            observation: Observation received after executing the action  
+            pomdp: Environment providing the observation model for weight computation
+            state: State particle to add to the belief. If None, no particle is added.
+            
+        Example:
+            Incrementally building a belief::\
+            
+                belief = WeightedParticleBeliefStateUpdate([], [])
+                
+                # Add particles one by one
+                belief.inplace_update("listen", "hear_left", env, "tiger_left")
+                belief.inplace_update("listen", "hear_right", env, "tiger_right") 
+                belief.inplace_update("listen", "hear_left", env, "tiger_left")
+                
+                # Belief now contains 3 particles with observation-based weights
+                assert len(belief.particles) == 3
+                assert belief.weights_sum > 0
+        """
+        self.particles.append(state)
+        observation_probability = pomdp.observation_model(next_state=state, action=action).probability([observation])[0]
+        self.weights.append(observation_probability)
+        self.weights_sum += observation_probability
+
+    def sample(self) -> Any:
+        """Sample a state from the current belief distribution.
+        
+        Returns:
+            A state sampled according to the belief's probability distribution
+            
+        Raises:
+            ValueError: If belief is empty or has zero weights.
+        """
+        if not self.particles or self.weights_sum == 0:
+            raise ValueError("Cannot sample from empty or unnormalized belief")
+        
+        # Normalize weights for sampling
+        normalized_weights = [w / self.weights_sum for w in self.weights]
+        
+        # Sample based on normalized weights
+        return random.choices(self.particles, weights=normalized_weights, k=1)[0]
+
+    @property
+    def config_id(self) -> str:
+        """Generate a deterministic identifier based on belief configuration.
+        
+        This implementation ensures that config_id is invariant to the order
+        of particles and weights, similar to WeightedParticleBelief.
+        """
+        def serialize_value(value):
+            """Helper function to serialize values in a deterministic way."""
+            if isinstance(value, np.ndarray):
+                return value.tolist()
+            elif isinstance(value, (str, int, float, bool)):
+                return value
+            elif isinstance(value, (list, tuple)):
+                return [serialize_value(v) for v in value]
+            elif isinstance(value, dict):
+                return {str(k): serialize_value(v) for k, v in sorted(value.items())}
+            elif hasattr(value, '__dict__'):
+                return serialize_value(value.__dict__)
+            else:
+                return str(value)
+        
+        # Create a list of particle-weight pairs to maintain order
+        particle_weight_pairs = []
+        for particle, weight in zip(self.particles, self.weights):
+            # Convert particle to a serializable format if needed
+            if isinstance(particle, np.ndarray):
+                particle = particle.tolist()
+            particle_weight_pairs.append((serialize_value(particle), float(weight)))
+        
+        # Sort particle-weight pairs to make config_id invariant to order
+        particle_weight_pairs.sort(key=lambda x: (str(x[0]), x[1]))
+        
+        config_dict = {
+            'particle_weight_pairs': particle_weight_pairs,
+            'weights_sum': self.weights_sum
+        }
+        config_dict = dict(sorted(config_dict.items()))
+        return config_to_id(config_dict)
+
 
 def sample_next_belief(
     belief: Belief, action: Any, pomdp: "Environment"
