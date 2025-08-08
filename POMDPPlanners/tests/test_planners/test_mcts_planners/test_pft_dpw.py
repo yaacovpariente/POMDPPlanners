@@ -2,7 +2,9 @@ import pytest
 import numpy as np
 import random
 from typing import Any
-from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW, ActionSampler
+from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+from POMDPPlanners.planners.planners_utils.dpw import action_progressive_widening
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDP
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.tree import BeliefNode
@@ -67,11 +69,21 @@ def test_action_progressive_widening(planner, initial_belief):
     belief_node = BeliefNode(belief=initial_belief)
     
     # First call should create a new action node
-    action_node1 = planner.action_progressive_widening(belief_node=belief_node)
+    action_node1 = action_progressive_widening(
+        belief_node=belief_node,
+        alpha_a=planner.alpha_a,
+        action_sampler=planner.action_sampler,
+        exploration_constant=planner.exploration_constant
+    )
     assert len(belief_node.children) == 1
     
     # Second call should create another action node
-    action_node2 = planner.action_progressive_widening(belief_node=belief_node)
+    action_node2 = action_progressive_widening(
+        belief_node=belief_node,
+        alpha_a=planner.alpha_a,
+        action_sampler=planner.action_sampler,
+        exploration_constant=planner.exploration_constant
+    )
     assert len(belief_node.children) == 2
 
 def test_simulate_path(planner, initial_belief, environment):

@@ -22,11 +22,7 @@ Classes:
     PFT_DPW: Main PFT-DPW planner with progressive widening for continuous actions
 """
 
-from abc import ABC, abstractmethod
 from typing import Any, Tuple, Optional
-import time
-from math import floor
-import random
 from pathlib import Path
 
 import numpy as np
@@ -36,46 +32,8 @@ from POMDPPlanners.core.tree import BeliefNode, ActionNode
 from POMDPPlanners.core.cost import belief_expectation_reward
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
+from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
 
-
-class ActionSampler(ABC):
-    """Abstract base class for action sampling strategies in PFT-DPW.
-    
-    Action samplers provide domain-specific strategies for generating new actions
-    during progressive widening. This allows PFT-DPW to work with continuous or
-    large discrete action spaces by intelligently sampling promising actions.
-    
-    Example:
-        Creating a custom action sampler for continuous control::
-        
-            import numpy as np
-            from POMDPPlanners.planners.mcts_planners.pft_dpw import ActionSampler
-            
-            class ContinuousControlSampler(ActionSampler):
-                def __init__(self, action_bounds=(-1.0, 1.0), action_dim=2):
-                    self.action_bounds = action_bounds
-                    self.action_dim = action_dim
-                
-                def sample(self, belief_node=None):
-                    # Sample uniformly from action space
-                    low, high = self.action_bounds
-                    return np.random.uniform(low, high, size=self.action_dim)
-            
-            # Use with PFT-DPW
-            sampler = ContinuousControlSampler(action_bounds=(-2.0, 2.0), action_dim=4)
-    """
-    
-    @abstractmethod
-    def sample(self, belief_node: BeliefNode = None) -> Any:
-        """Sample a new action for progressive widening.
-        
-        Args:
-            belief_node: Optional belief node context for informed sampling
-            
-        Returns:
-            A sampled action compatible with the environment's action space
-        """
-        pass
 
 class PFT_DPW(PathSimulationPolicy):
     """PFT-DPW (Progressive Function Transfer with Double Progressive Widening) Algorithm.
@@ -270,7 +228,12 @@ class PFT_DPW(PathSimulationPolicy):
             belief_node.visit_count += 1
             return 0
         
-        action_node = self.action_progressive_widening(belief_node=belief_node)
+        action_node = action_progressive_widening(
+            belief_node=belief_node,
+            alpha_a=self.alpha_a,
+            action_sampler=self.action_sampler,
+            exploration_constant=self.exploration_constant
+        )
         
         return_sample = self._simulate_return(
             belief_node=belief_node, 
@@ -286,22 +249,6 @@ class PFT_DPW(PathSimulationPolicy):
         
         return return_sample
     
-    def action_progressive_widening(self, belief_node: BeliefNode) -> ActionNode:
-        if belief_node.is_leaf or belief_node.visit_count == 0 or floor(belief_node.visit_count ** self.alpha_a) > floor((belief_node.visit_count - 1) ** self.alpha_a):
-            action = self.action_sampler.sample()
-            action_node = ActionNode(action=action, parent=belief_node)
-            return action_node
-        
-        return self._explored_action_node(belief_node=belief_node)
-        
-    def _explored_action_node(self, belief_node: BeliefNode) -> ActionNode:
-        q_vals = [child.q_value for child in belief_node.children]
-        children_visit_counts = [child.visit_count for child in belief_node.children]
-        
-        ucb = q_vals + self.exploration_constant * np.sqrt(np.log(belief_node.visit_count) / children_visit_counts)
-        
-        return belief_node.children[np.argmax(ucb)]
-        
     def _simulate_return(self, belief_node: BeliefNode, action_node: ActionNode, depth: int) -> float:
         if len(action_node.children) <= self.k_o * action_node.visit_count ** self.alpha_o:
             next_belief_node, immediate_reward = self._sample_new_belief_node(belief_node=belief_node, action_node=action_node)
