@@ -24,9 +24,18 @@ Classes:
 """
 
 from typing import Any, Optional
+import random
+import time
 from math import floor
 import numpy as np
 from pathlib import Path
+
+# Python 3.9 compatibility - KW_ONLY was introduced in Python 3.10
+try:
+    from dataclasses import KW_ONLY
+except ImportError:
+    # For Python 3.9 compatibility, define KW_ONLY as None
+    KW_ONLY = None
 
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.environment import Environment, SpaceType
@@ -233,12 +242,10 @@ class POMCPOW(PathSimulationPolicy):
  
         action_node = self.action_progressive_widening(belief_node=belief_node)
         next_state, next_observation, reward = self.environment.sample_next_step(state=state, action=action_node.action)
-        observation_probability = self.environment.observation_model(next_state, action_node.action).probability([next_observation])[0]
 
         if len(action_node.children) <= self.k_o * action_node.visit_count ** self.alpha_o:
             next_belief_node = action_node.get_belief_node_child(observation=next_observation)
             if next_belief_node is None:
-                # Create a dummy belief - the actual belief is stored in data
                 next_belief_node = BeliefNode(belief=WeightedParticleBeliefStateUpdate(), observation=next_observation, parent=action_node)
             
             next_belief_node.visit_count += 1

@@ -338,20 +338,22 @@ def test_progressive_widening_parameters(planner, belief):
 
 
 def test_belief_node_data_structure(planner, belief):
-    """Test that belief nodes maintain proper data structure for states and weights."""
+    """Test that belief nodes maintain proper belief structure for states and weights."""
     belief_node = BeliefNode(belief=belief, observation=None)
     
     # Simulate one path to set up the data structure
     planner._simulate_path(belief_node=belief_node, depth=0)
     
-    # Check that children have proper data structure
+    # Check that children have proper belief structure
     for action_node in belief_node.children:
         for child_belief_node in action_node.children:
-            assert hasattr(child_belief_node, 'data')
-            assert 'states' in child_belief_node.data
-            assert 'weights' in child_belief_node.data
-            assert isinstance(child_belief_node.data['states'], list)
-            assert isinstance(child_belief_node.data['weights'], list)
+            # Check that the belief is a WeightedParticleBeliefStateUpdate instance
+            from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
+            assert isinstance(child_belief_node.belief, WeightedParticleBeliefStateUpdate)
+            assert hasattr(child_belief_node.belief, 'particles')
+            assert hasattr(child_belief_node.belief, 'weights')
+            assert isinstance(child_belief_node.belief.particles, list)
+            assert isinstance(child_belief_node.belief.weights, list)
 
 
 def test_sanity_pomdp_action_selection():
