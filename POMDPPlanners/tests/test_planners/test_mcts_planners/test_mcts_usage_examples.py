@@ -431,6 +431,69 @@ def test_sparse_pft_parameter_comparison_example():
         traceback.print_exc()
         return False
 
+def test_pomcpow_comprehensive_usage_example():
+    """Test the comprehensive POMCPOW usage example from the class docstring."""
+    print("Testing POMCPOW comprehensive usage example...")
+    
+    try:
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        from POMDPPlanners.core.belief import get_initial_belief
+        from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+        from POMDPPlanners.planners.mcts_planners.pft_dpw import ActionSampler
+        import random
+        
+        # Create a simple action sampler (from docstring)
+        class DiscreteActionSampler(ActionSampler):
+            def __init__(self, actions):
+                self.actions = actions
+                
+            def sample(self, belief_node=None):
+                return random.choice(self.actions)
+        
+        # Initialize environment and belief (from docstring)
+        environment = TigerPOMDP(discount_factor=0.95)
+        action_sampler = DiscreteActionSampler(environment.get_actions())
+        
+        # Create POMCPOW planner (from docstring, reduced parameters for testing)
+        planner = POMCPOW(
+            environment=environment,
+            discount_factor=0.95,
+            depth=5,                    # Reduced for testing
+            exploration_constant=1.0,
+            k_o=3.0,                    # Observation progressive widening coefficient
+            k_a=3.0,                    # Action progressive widening coefficient  
+            alpha_o=0.5,                # Observation progressive widening exponent
+            alpha_a=0.5,                # Action progressive widening exponent
+            action_sampler=action_sampler,
+            n_simulations=10,           # Reduced for testing
+            name="POMCPOW_Planner"
+        )
+        
+        # Get initial belief and plan action (from docstring)
+        belief = get_initial_belief(
+            pomdp=environment,
+            n_particles=50,             # Reduced for testing
+            resampling=True
+        )
+        
+        action, run_data = planner.action(belief)
+        
+        # Verify results match documented example
+        assert len(action) == 1, f"Expected single action, got {len(action)}"
+        assert action[0] in ["listen", "open_left", "open_right"], f"Unexpected action: {action[0]}"
+        assert hasattr(run_data, 'info_variables'), "Missing info_variables in run_data"
+        assert len(run_data.info_variables) > 0, "No tree metrics collected"
+        
+        print(f"  ✓ Selected action: {action[0]}")
+        print(f"  ✓ Tree metrics: {[m.name for m in run_data.info_variables]}")
+        print("  ✓ POMCPOW comprehensive usage example passed!")
+        return True
+        
+    except Exception as e:
+        print(f"  ✗ POMCPOW comprehensive usage example failed: {e}")
+        traceback.print_exc()
+        return False
+
 def test_mcts_algorithms_integration():
     """Test that all MCTS algorithms work together and can be compared."""
     print("Testing MCTS algorithms integration...")
@@ -440,6 +503,7 @@ def test_mcts_algorithms_integration():
         from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
         from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
         from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW, ActionSampler
+        from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
         from POMDPPlanners.core.belief import get_initial_belief
         from POMDPPlanners.core.environment import SpaceType
         import numpy as np
@@ -487,8 +551,22 @@ def test_mcts_algorithms_integration():
             n_simulations=3
         )
         
+        pomcpow = POMCPOW(
+            environment=env,
+            discount_factor=0.95,
+            depth=3,
+            exploration_constant=1.0,
+            k_o=2.0,
+            k_a=2.0,
+            alpha_o=0.5,
+            alpha_a=0.5,
+            action_sampler=DiscreteActionSampler(env.get_actions()),
+            n_simulations=3,
+            name="POMCPOW_Integration"
+        )
+        
         # Test all planners
-        planners = [pomcp, sparse_pft, pft_dpw]
+        planners = [pomcp, sparse_pft, pft_dpw, pomcpow]
         results = []
         
         for planner in planners:
@@ -499,6 +577,8 @@ def test_mcts_algorithms_integration():
             space_info = planner.get_space_info()
             if planner.name.startswith("PFT_DPW"):
                 expected_action_space = SpaceType.CONTINUOUS
+            elif planner.name.startswith("POMCPOW"):
+                expected_action_space = SpaceType.MIXED
             else:
                 expected_action_space = SpaceType.DISCRETE
             
@@ -534,6 +614,7 @@ def main():
         test_path_simulation_policy_custom_mcts_example,
         test_sparse_pft_tiger_usage_example,
         test_sparse_pft_parameter_comparison_example,
+        test_pomcpow_comprehensive_usage_example,
         test_mcts_algorithms_integration,
     ]
     
