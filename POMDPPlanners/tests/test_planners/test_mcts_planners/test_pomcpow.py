@@ -3,7 +3,7 @@ import numpy as np
 from anytree import PostOrderIter
 
 from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-from POMDPPlanners.planners.mcts_planners.pft_dpw import ActionSampler
+from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
@@ -183,7 +183,13 @@ def test_action_progressive_widening_new_action(planner, belief):
     belief_node = BeliefNode(belief=belief, observation=None)
     belief_node.visit_count = 0
     
-    action_node = planner.action_progressive_widening(belief_node)
+    # Use the function from dpw module directly
+    action_node = action_progressive_widening(
+        belief_node=belief_node,
+        alpha_a=planner.alpha_a,
+        action_sampler=planner.action_sampler,
+        exploration_constant=planner.exploration_constant
+    )
     assert isinstance(action_node, ActionNode)
     assert action_node.parent == belief_node
     assert action_node in belief_node.children
@@ -201,7 +207,13 @@ def test_action_progressive_widening_existing_action(planner, belief, action_sam
     
     belief_node.visit_count = 50
     
-    action_node = planner.action_progressive_widening(belief_node)
+    # Use the function from dpw module directly
+    action_node = action_progressive_widening(
+        belief_node=belief_node,
+        alpha_a=planner.alpha_a,
+        action_sampler=planner.action_sampler,
+        exploration_constant=planner.exploration_constant
+    )
     assert isinstance(action_node, ActionNode)
     assert action_node in belief_node.children
 
@@ -219,26 +231,49 @@ def test_explored_action_node_ucb_selection(planner, belief):
         action_node.q_value = q_val
         action_node.visit_count = visit_count
     
-    selected_action_node = planner._explored_action_node(belief_node)
+    # Use the function from dpw module directly
+    from POMDPPlanners.planners.planners_utils.dpw import ucb1_exploration
+    selected_action_node = ucb1_exploration(
+        belief_node=belief_node,
+        exploration_constant=planner.exploration_constant
+    )
     assert isinstance(selected_action_node, ActionNode)
     assert selected_action_node in belief_node.children
 
 
 def test_rollout(planner):
+    # Test the random_rollout_action_sampler function that POMCPOW uses
+    from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
+    
     state = "tiger_left"
     depth = 0
-    return_value = planner._rollout(state=state, depth=depth)
+    return_value = random_rollout_action_sampler(
+        state=state, 
+        depth=depth, 
+        action_sampler=planner.action_sampler, 
+        environment=planner.environment, 
+        discount_factor=planner.discount_factor
+    )
     assert isinstance(return_value, float)
 
 
 def test_rollout_terminal_state(planner):
+    # Test the random_rollout_action_sampler function with terminal state
+    from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
+    
     # Create a mock terminal state
     original_is_terminal = planner.environment.is_terminal
     planner.environment.is_terminal = lambda state: True
     
     state = "tiger_left"
     depth = 0
-    return_value = planner._rollout(state=state, depth=depth)
+    return_value = random_rollout_action_sampler(
+        state=state, 
+        depth=depth, 
+        action_sampler=planner.action_sampler, 
+        environment=planner.environment, 
+        discount_factor=planner.discount_factor
+    )
     assert return_value == 0
     
     # Restore original method
@@ -246,9 +281,21 @@ def test_rollout_terminal_state(planner):
 
 
 def test_rollout_max_depth(planner):
+    # Test the random_rollout_action_sampler function with max depth
+    from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
+    
     state = "tiger_left"
-    depth = planner.depth + 1
-    return_value = planner._rollout(state=state, depth=depth)
+    depth = planner.depth + 1  # This is 4 (planner.depth = 3)
+    max_depth = depth  # Set max_depth to match the depth being tested
+    
+    return_value = random_rollout_action_sampler(
+        state=state, 
+        depth=depth, 
+        action_sampler=planner.action_sampler, 
+        environment=planner.environment, 
+        discount_factor=planner.discount_factor,
+        max_depth=max_depth  # Pass the max_depth parameter
+    )
     assert return_value == 0
 
 

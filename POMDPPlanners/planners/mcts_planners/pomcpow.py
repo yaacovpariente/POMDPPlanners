@@ -40,9 +40,11 @@ except ImportError:
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
-from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.core.tree import BeliefNode
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
-from POMDPPlanners.planners.mcts_planners.pft_dpw import ActionSampler
+from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+from POMDPPlanners.planners.planners_utils.dpw import action_progressive_widening
+from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
 
 
 class POMCPOW(PathSimulationPolicy):
@@ -94,7 +96,7 @@ class POMCPOW(PathSimulationPolicy):
             from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             from POMDPPlanners.core.belief import get_initial_belief
             from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-            from POMDPPlanners.planners.mcts_planners.pft_dpw import ActionSampler
+            from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
             
             # Create a simple action sampler
             class DiscreteActionSampler(ActionSampler):
@@ -240,7 +242,13 @@ class POMCPOW(PathSimulationPolicy):
             belief_node.visit_count += 1
             return 0
  
-        action_node = self.action_progressive_widening(belief_node=belief_node)
+        action_node = action_progressive_widening(
+            belief_node=belief_node,
+            alpha_a=self.alpha_a,
+            action_sampler=self.action_sampler,
+            exploration_constant=self.exploration_constant
+        )
+
         next_state, next_observation, reward = self.environment.sample_next_step(state=state, action=action_node.action)
 
         if len(action_node.children) <= self.k_o * action_node.visit_count ** self.alpha_o:
@@ -255,7 +263,7 @@ class POMCPOW(PathSimulationPolicy):
         next_belief_node.belief.inplace_update(action=action_node.action, observation=next_observation, pomdp=self.environment, state=next_state)
     
         if next_belief_node.is_leaf:
-            total = reward + self.discount_factor * self._rollout(state=next_state, depth=depth + 1)
+            total = reward + self.discount_factor * random_rollout_action_sampler(state=next_state, depth=depth + 1, action_sampler=self.action_sampler, environment=self.environment, discount_factor=self.discount_factor)
         else:
             next_state = next_belief_node.belief.sample()
             total = reward + self.discount_factor * self._simulate_state_path(state=next_state, belief_node=next_belief_node, depth=depth + 1)
@@ -266,69 +274,6 @@ class POMCPOW(PathSimulationPolicy):
         belief_node.v_value = max([child.q_value for child in belief_node.children])
 
         return total
-
-    def action_progressive_widening(self, belief_node: BeliefNode) -> ActionNode:
-        """Select or add action using progressive widening strategy.
-        
-        Progressive widening gradually expands the action space based on visit counts.
-        New actions are added when ⌊n^α_a⌋ > ⌊(n-1)^α_a⌋, where n is the visit count.
-        Otherwise, existing actions are selected using UCB1.
-        
-        Args:
-            belief_node: Current belief node to select action from
-            
-        Returns:
-            Selected or newly created action node
-        """
-        if belief_node.is_leaf or belief_node.visit_count == 0 or floor(belief_node.visit_count ** self.alpha_a) > floor((belief_node.visit_count - 1) ** self.alpha_a):
-            action = self.action_sampler.sample()
-            action_node = ActionNode(action=action, parent=belief_node)
-            return action_node
-        
-        return self._explored_action_node(belief_node=belief_node)
-        
-    def _explored_action_node(self, belief_node: BeliefNode) -> ActionNode:
-        """Select action from existing children using UCB1 criterion.
-        
-        Uses Upper Confidence Bounds (UCB1) to balance exploration and exploitation:
-        UCB1(a) = Q(a) + c * sqrt(log(N) / N(a))
-        where Q(a) is the average reward, N is parent visits, N(a) is action visits,
-        and c is the exploration constant.
-        
-        Args:
-            belief_node: Belief node with existing action children
-            
-        Returns:
-            Action node with highest UCB1 value
-        """
-        q_vals = [child.q_value for child in belief_node.children]
-        children_visit_counts = [child.visit_count for child in belief_node.children]
-        
-        ucb = q_vals + self.exploration_constant * np.sqrt(np.log(belief_node.visit_count) / children_visit_counts)
-        
-        return belief_node.children[np.argmax(ucb)]
-
-    def _rollout(self, state: Any, depth: int) -> float:
-        """Perform random rollout to estimate value from leaf node.
-        
-        Rollout policy samples random actions using the action_sampler until
-        reaching maximum depth or terminal state. This provides value estimates
-        for leaf nodes in the search tree.
-        
-        Args:
-            state: Current state to rollout from
-            depth: Current depth in rollout
-            
-        Returns:
-            Total discounted return from rollout
-        """
-        if depth > self.depth or self.environment.is_terminal(state=state):
-            return 0
-        
-        action = self.action_sampler.sample()
-        next_state, next_observation, reward = self.environment.sample_next_step(state=state, action=action)
-        
-        return reward + self.discount_factor * self._rollout(state=next_state, depth=depth + 1)
 
     def get_space_info(self) -> PolicySpaceInfo:
         """Get information about action and observation spaces.
