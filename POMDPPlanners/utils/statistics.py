@@ -3,6 +3,105 @@ from scipy import stats
 from scipy.stats import binom
 
 def cvar_estimator(vec: np.ndarray, alpha: float) -> float:
+    """Calculate Conditional Value at Risk (CVaR) for risk-sensitive POMDP evaluation.
+    
+    CVaR measures the expected value of the worst-case outcomes, providing a
+    risk-sensitive performance metric that goes beyond simple mean rewards.
+    This is particularly valuable for safety-critical applications where
+    tail risk matters more than average performance.
+    
+    Mathematical Definition:
+        CVaR_α(X) = E[X | X ≥ VaR_α(X)]
+        
+    Where VaR_α is the Value at Risk at confidence level α.
+    
+    The implementation uses a vectorized approach for computational efficiency,
+    calculating CVaR by integrating over the tail distribution above the α-quantile.
+    
+    Args:
+        vec: Array of values (typically returns, costs, or performance metrics)  
+        alpha: Confidence level (0 < α ≤ 1), where higher values focus on worse outcomes
+        
+    Returns:
+        CVaR value representing expected worst-case performance
+        
+    Raises:
+        ValueError: If alpha not in [0,1] or vec is empty
+        
+    Example:
+        Risk analysis of POMDP algorithm performance::
+        
+            import numpy as np
+            from POMDPPlanners.utils.statistics import cvar_estimator
+            
+            # Simulate algorithm returns from multiple episodes  
+            returns = np.array([12.5, 8.3, 15.7, -2.1, 9.8, 13.2, 6.4, 11.0, -1.5, 14.3])
+            
+            # Calculate risk metrics
+            mean_return = np.mean(returns)
+            cvar_90 = cvar_estimator(returns, alpha=0.9)  # Worst 10% outcomes
+            cvar_95 = cvar_estimator(returns, alpha=0.95) # Worst 5% outcomes
+            
+            print(f"Mean return: {mean_return:.2f}")
+            print(f"CVaR (90%): {cvar_90:.2f}")  # Focus on worst 10%
+            print(f"CVaR (95%): {cvar_95:.2f}")  # Focus on worst 5% 
+            
+            # Lower CVaR indicates higher tail risk
+            
+    Example:
+        Comparing algorithm risk profiles::
+        
+            # Algorithm performance data from experiments
+            pomcp_returns = np.array([10.2, 12.8, 9.5, 11.3, 8.7, 12.1, 10.9, 9.8, 11.5, 10.4])
+            pft_returns = np.array([15.1, 7.2, 14.8, 13.3, 6.9, 15.5, 8.1, 14.2, 12.7, 9.3])
+            
+            # Compare risk-adjusted performance
+            pomcp_mean = np.mean(pomcp_returns)
+            pft_mean = np.mean(pft_returns) 
+            
+            pomcp_cvar = cvar_estimator(pomcp_returns, alpha=0.9)
+            pft_cvar = cvar_estimator(pft_returns, alpha=0.9)
+            
+            print("Algorithm Risk Comparison:")
+            print(f"POMCP - Mean: {pomcp_mean:.2f}, CVaR(90%): {pomcp_cvar:.2f}")
+            print(f"PFT-DPW - Mean: {pft_mean:.2f}, CVaR(90%): {pft_cvar:.2f}")
+            
+            # Interpretation:
+            # - Higher mean = better average performance  
+            # - Higher CVaR = better worst-case performance (lower risk)
+            
+    Example:
+        Safety-critical application analysis::
+        
+            # Safety constraint violations (negative rewards)
+            safety_violations = np.array([-50, -20, -10, -100, -5, -30, -15, -25, -40, -60])
+            
+            # Assess safety risk with different confidence levels
+            risk_metrics = {}
+            for alpha in [0.8, 0.9, 0.95, 0.99]:
+                risk_metrics[alpha] = cvar_estimator(safety_violations, alpha)
+                
+            for alpha, cvar in risk_metrics.items():
+                worst_pct = (1 - alpha) * 100
+                print(f"CVaR({alpha:.0%}): {cvar:.1f} (worst {worst_pct:.0f}% avg)")
+                
+            # Use CVaR to set safety thresholds and compare algorithms
+            
+    Risk Assessment Applications:
+        **Portfolio Analysis**: Compare multiple algorithms' risk-return profiles
+        
+        **Safety-Critical Systems**: Evaluate worst-case performance guarantees
+        
+        **Robust Planning**: Select algorithms with acceptable tail risk
+        
+        **Performance Bounds**: Establish confidence intervals for worst-case scenarios
+        
+    Mathematical Properties:
+        - **Monotonic**: CVaR_α ≥ VaR_α (CVaR is always at least as large as VaR)
+        - **Coherent**: Satisfies subadditivity, monotonicity, positive homogeneity
+        - **Tail Sensitivity**: Higher α values emphasize extreme outcomes more
+        - **Computational**: More stable than VaR, especially for small samples
+    """
     """
     Calculate the Conditional Value at Risk (CVaR) for a given vector of values.
     CVaR is the expected value of the worst (1-alpha)% of cases, where "worst"
@@ -50,6 +149,123 @@ def cvar_estimator(vec: np.ndarray, alpha: float) -> float:
 
 
 def confidence_interval(data, confidence=0.95):
+    """Calculate confidence interval for the mean using t-distribution.
+    
+    Computes confidence intervals for algorithm performance means, providing
+    statistical bounds on the true expected performance. This is essential
+    for making statistically sound comparisons between POMDP algorithms.
+    
+    Uses the t-distribution to account for sample size uncertainty, which is
+    more appropriate than normal distribution for small to moderate sample sizes
+    common in POMDP experiments.
+    
+    Args:
+        data: Sample data (algorithm returns, rewards, or performance metrics)
+        confidence: Confidence level (0 < confidence < 1, typically 0.95)
+        
+    Returns:
+        Tuple of (lower_bound, upper_bound) for the confidence interval
+        
+    Raises:
+        ValueError: If insufficient data or contains NaN values
+        
+    Example:
+        Statistical comparison of algorithm performance::
+        
+            import numpy as np
+            from POMDPPlanners.utils.statistics import confidence_interval
+            
+            # Algorithm performance from multiple runs
+            pomcp_rewards = [12.3, 11.8, 13.1, 12.7, 11.9, 12.5, 13.0, 12.1, 12.8, 12.4]
+            pft_rewards = [11.5, 13.2, 12.8, 11.9, 12.3, 13.5, 12.1, 12.9, 11.7, 12.6]
+            
+            # Calculate 95% confidence intervals
+            pomcp_ci = confidence_interval(pomcp_rewards, confidence=0.95)
+            pft_ci = confidence_interval(pft_rewards, confidence=0.95)
+            
+            print(f"POMCP mean: {np.mean(pomcp_rewards):.2f}")
+            print(f"POMCP 95% CI: [{pomcp_ci[0]:.2f}, {pomcp_ci[1]:.2f}]")
+            print(f"PFT-DPW mean: {np.mean(pft_rewards):.2f}")  
+            print(f"PFT-DPW 95% CI: [{pft_ci[0]:.2f}, {pft_ci[1]:.2f}]")
+            
+            # Check for statistical significance
+            if pomcp_ci[1] < pft_ci[0]:
+                print("PFT-DPW significantly outperforms POMCP")
+            elif pft_ci[1] < pomcp_ci[0]:
+                print("POMCP significantly outperforms PFT-DPW") 
+            else:
+                print("No statistically significant difference")
+                
+    Example:
+        Multi-algorithm performance study::
+        
+            # Results from comparative study
+            algorithms = {
+                'POMCP': [15.2, 14.8, 15.5, 14.9, 15.1, 15.3, 14.7, 15.0, 15.2, 14.8],
+                'PFT_DPW': [16.1, 15.9, 16.3, 15.7, 16.0, 16.2, 15.8, 16.1, 15.9, 16.0],
+                'SparsePFT': [14.5, 14.9, 14.7, 14.3, 14.8, 14.6, 14.4, 14.7, 14.5, 14.6],
+                'OpenLoop': [12.3, 12.7, 12.1, 12.5, 12.4, 12.6, 12.2, 12.8, 12.3, 12.5]
+            }
+            
+            # Statistical analysis with confidence intervals
+            print("Algorithm Performance Analysis (95% CI):")
+            print("-" * 50)
+            for name, rewards in algorithms.items():
+                mean_reward = np.mean(rewards)
+                ci_lower, ci_upper = confidence_interval(rewards, confidence=0.95)
+                ci_width = ci_upper - ci_lower
+                
+                print(f"{name:12}: {mean_reward:.2f} [{ci_lower:.2f}, {ci_upper:.2f}] (±{ci_width/2:.2f})")
+                
+    Example:
+        Sample size analysis for experiment design::
+        
+            # Analyze how confidence interval width changes with sample size
+            true_mean = 12.0
+            std_dev = 2.0
+            
+            sample_sizes = [5, 10, 20, 50, 100]
+            print("Sample Size Effect on Confidence Interval Width:")
+            print("-" * 50)
+            
+            for n in sample_sizes:
+                # Simulate data
+                np.random.seed(42)  # For reproducibility
+                data = np.random.normal(true_mean, std_dev, n)
+                
+                ci_lower, ci_upper = confidence_interval(data, confidence=0.95)
+                ci_width = ci_upper - ci_lower
+                
+                print(f"n={n:3d}: CI width = {ci_width:.3f}")
+                
+            # Shows that larger samples give narrower, more precise intervals
+            
+    Statistical Interpretation:
+        **Confidence Level**: 95% confidence means that if we repeated the
+        experiment many times, 95% of computed intervals would contain the true mean.
+        
+        **Interval Width**: Narrower intervals indicate more precise estimates.
+        Width depends on sample size, variance, and confidence level.
+        
+        **Overlapping Intervals**: If confidence intervals overlap significantly,
+        there may not be a statistically meaningful difference between algorithms.
+        
+        **Non-overlapping Intervals**: Strong evidence of a real performance difference.
+        
+    Experimental Design Guidelines:
+        **Sample Size**: Larger samples give narrower confidence intervals
+        - n ≥ 30: Generally adequate for robust estimates  
+        - n ≥ 10: Minimum for t-distribution approximation
+        - n < 10: Use with caution, consider bootstrap methods
+        
+        **Confidence Level Selection**:
+        - 90%: Less stringent, wider intervals, higher power
+        - 95%: Standard for most scientific applications  
+        - 99%: More stringent, narrower intervals, lower power
+        
+        **Multiple Comparisons**: When comparing many algorithms, consider
+        Bonferroni correction or other methods to control family-wise error rate.
+    """
     """
     Calculate the confidence interval for the mean of a dataset using the t-distribution.
 
