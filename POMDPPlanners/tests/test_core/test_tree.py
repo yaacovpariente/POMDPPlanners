@@ -137,3 +137,135 @@ def test_node_properties(test_belief):
     assert belief_node.visit_count == 5
     assert belief_node.lower_confidence_bound == 0.2
     assert belief_node.upper_confidence_bound == 0.8
+
+
+def test_sample_child_node(test_belief):
+    """Test the sample_child_node method of ActionNode."""
+    # Create an action node with multiple belief node children
+    action_node = ActionNode("test_action", children=())
+    
+    # Create belief nodes with different visit counts
+    belief1 = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
+    belief1.visit_count = 10
+    
+    belief2 = BeliefNode(test_belief, observation="obs2", parent=action_node, children=())
+    belief2.visit_count = 5
+    
+    belief3 = BeliefNode(test_belief, observation="obs3", parent=action_node, children=())
+    belief3.visit_count = 15
+    
+    # Test sampling with different visit counts
+    # Since this is probabilistic, we'll test multiple times to ensure it works
+    sampled_nodes = []
+    for _ in range(100):
+        sampled_node = action_node.sample_child_node()
+        sampled_nodes.append(sampled_node)
+        assert sampled_node in [belief1, belief2, belief3]
+    
+    # Check that all nodes are sampled at least once (very likely with 100 samples)
+    unique_sampled = set(sampled_nodes)
+    assert len(unique_sampled) >= 2  # At least 2 different nodes should be sampled
+    
+    # Test with equal visit counts
+    action_node_equal = ActionNode("test_action_equal", children=())
+    belief_equal1 = BeliefNode(test_belief, observation="obs1", parent=action_node_equal, children=())
+    belief_equal1.visit_count = 5
+    
+    belief_equal2 = BeliefNode(test_belief, observation="obs2", parent=action_node_equal, children=())
+    belief_equal2.visit_count = 5
+    
+    # Test sampling with equal visit counts
+    sampled_nodes_equal = []
+    for _ in range(50):
+        sampled_node = action_node_equal.sample_child_node()
+        sampled_nodes_equal.append(sampled_node)
+        assert sampled_node in [belief_equal1, belief_equal2]
+    
+    # Both nodes should be sampled roughly equally
+    count_belief1 = sampled_nodes_equal.count(belief_equal1)
+    count_belief2 = sampled_nodes_equal.count(belief_equal2)
+    assert count_belief1 > 0 and count_belief2 > 0
+
+
+def test_sample_child_node_single_child(test_belief):
+    """Test sample_child_node with only one child."""
+    action_node = ActionNode("test_action", children=())
+    belief = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
+    belief.visit_count = 5
+    
+    # Should always return the single child
+    sampled_node = action_node.sample_child_node()
+    assert sampled_node == belief
+
+
+def test_sample_child_node_no_children():
+    """Test sample_child_node with no children (should raise error)."""
+    action_node = ActionNode("test_action", children=())
+    
+    # This should raise a ValueError because sum(child_visit_counts) would be 0
+    with pytest.raises(ValueError):
+        action_node.sample_child_node()
+
+
+def test_get_belief_node_child(test_belief):
+    """Test the get_belief_node_child method of ActionNode."""
+    # Create an action node with multiple belief node children
+    action_node = ActionNode("test_action", children=())
+    
+    # Create belief nodes with different observations
+    belief1 = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
+    belief2 = BeliefNode(test_belief, observation="obs2", parent=action_node, children=())
+    belief3 = BeliefNode(test_belief, observation="obs3", parent=action_node, children=())
+    
+    # Test getting existing observations
+    result1 = action_node.get_belief_node_child("obs1")
+    assert result1 == belief1
+    
+    result2 = action_node.get_belief_node_child("obs2")
+    assert result2 == belief2
+    
+    result3 = action_node.get_belief_node_child("obs3")
+    assert result3 == belief3
+    
+    # Test getting non-existing observation
+    result_none = action_node.get_belief_node_child("non_existent_obs")
+    assert result_none is None
+
+
+def test_get_belief_node_child_no_children(test_belief):
+    """Test get_belief_node_child with no children."""
+    action_node = ActionNode("test_action", children=())
+    
+    # Should return None for any observation
+    result = action_node.get_belief_node_child("any_observation")
+    assert result is None
+
+
+def test_get_belief_node_child_duplicate_observations(test_belief):
+    """Test get_belief_node_child with duplicate observations (should return first match)."""
+    action_node = ActionNode("test_action", children=())
+    
+    # Create belief nodes with the same observation
+    belief1 = BeliefNode(test_belief, observation="same_obs", parent=action_node, children=())
+    belief2 = BeliefNode(test_belief, observation="same_obs", parent=action_node, children=())
+    
+    # Should return the first child with matching observation
+    result = action_node.get_belief_node_child("same_obs")
+    assert result == belief1
+
+
+def test_get_belief_node_child_none_observation(test_belief):
+    """Test get_belief_node_child with None observation."""
+    action_node = ActionNode("test_action", children=())
+    
+    # Create belief nodes with None observation
+    belief_none = BeliefNode(test_belief, observation=None, parent=action_node, children=())
+    belief_obs = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
+    
+    # Test getting None observation
+    result = action_node.get_belief_node_child(None)
+    assert result == belief_none
+    
+    # Test getting regular observation
+    result_obs = action_node.get_belief_node_child("obs1")
+    assert result_obs == belief_obs

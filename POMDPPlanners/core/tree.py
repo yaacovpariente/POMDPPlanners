@@ -16,7 +16,7 @@ class BaseNode(NodeMixin):
         self.upper_confidence_bound = 0.0
         self.immediate_cost = None
         self.immediate_reward = None
-        self.sample = []
+        self.sample = []    
         
 class ActionNode(BaseNode):
     def __init__(self, action, parent=None, children=tuple(), data: Any = None):
@@ -33,7 +33,19 @@ class ActionNode(BaseNode):
         return self.spec
 
     def print(self):
-        print_tree(self)        
+        print_tree(self)
+
+    def sample_child_node(self) -> 'BeliefNode':
+        child_visit_counts = np.array([child.visit_count for child in self.children])
+        weights = child_visit_counts / sum(child_visit_counts)
+        return np.random.choice(self.children, p=weights)
+
+    def get_belief_node_child(self, observation: Any) -> Union['BeliefNode', None]:
+        for child in self.children:
+            if child.observation == observation:
+                return child
+
+        return None
 
 class BeliefNode(BaseNode):
     def __init__(self, belief: Belief, observation: Any = None, parent=None, children=tuple(), data: Any = None):
