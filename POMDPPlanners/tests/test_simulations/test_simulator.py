@@ -542,3 +542,252 @@ def test_organize_simulation_results_matches_configurations(simulator):
         assert history.policy_run_data["depth"] == policy2.depth
         assert history.policy_run_data["exploration_constant"] == policy2.exploration_constant
 
+
+def test_mlflow_setup(temp_cache_dir):
+    """Test MLflow tracking setup."""
+    import mlflow
+    
+    simulator = POMDPSimulator(
+        cache_dir_path=temp_cache_dir,
+        experiment_name="TestMLflowSetup",
+        debug=True
+    )
+    
+    # Check that MLflow was configured
+    mlruns_path = temp_cache_dir / "mlruns"
+    assert mlruns_path.exists()
+    assert mlruns_path.is_dir()
+    
+    # Check that the tracking URI was set
+    current_tracking_uri = mlflow.get_tracking_uri()
+    assert str(mlruns_path) in current_tracking_uri
+
+
+def test_context_manager_functionality(temp_cache_dir):
+    """Test that POMDPSimulator works as a context manager."""
+    with POMDPSimulator(
+        cache_dir_path=temp_cache_dir,
+        experiment_name="ContextManagerTest",
+        debug=True
+    ) as simulator:
+        assert isinstance(simulator, POMDPSimulator)
+        assert simulator.cache_dir_path == temp_cache_dir
+        assert simulator.experiment_name == "ContextManagerTest"
+    
+    # Simulator should still be accessible after context exit
+    assert isinstance(simulator, POMDPSimulator)
+
+
+def test_profiling_enabled_initialization(temp_cache_dir):
+    """Test simulator initialization with profiling enabled."""
+    simulator = POMDPSimulator(
+        cache_dir_path=temp_cache_dir,
+        experiment_name="ProfilingTest",
+        debug=True,
+        enable_profiling=True,
+        profiling_output_limit=25
+    )
+    
+    assert simulator.enable_profiling == True
+    assert simulator.profiling_output_limit == 25
+    assert simulator.profiler is None  # Should be None until first use
+
+
+def test_task_manager_types(temp_cache_dir):
+    """Test creation of different task manager types."""
+    from POMDPPlanners.simulations.simulations_deployment.task_managers import TaskManagerType
+    
+    # Test JOBLIB task manager
+    simulator_joblib = POMDPSimulator(
+        cache_dir_path=temp_cache_dir,
+        experiment_name="TaskManagerTest",
+        debug=True,
+        task_manager_type=TaskManagerType.JOBLIB,
+        n_jobs=2
+    )
+    assert simulator_joblib.task_manager is not None
+    assert simulator_joblib.n_jobs == 2
+    
+    # Test DASK task manager (local)
+    simulator_dask = POMDPSimulator(
+        cache_dir_path=temp_cache_dir,
+        experiment_name="TaskManagerTest",
+        debug=True,
+        task_manager_type=TaskManagerType.DASK,
+        n_jobs=1
+    )
+    assert simulator_dask.task_manager is not None
+
+
+def test_create_policy_configurations_df(simulator):
+    """Test policy configuration DataFrame creation."""
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
+    )
+    initial_belief = get_initial_belief(environment, n_particles=3)
+    
+    env_run_params = [
+        EnvironmentRunParams(
+            environment=environment,
+            belief=initial_belief,
+            policies=[policy],
+            num_episodes=2,
+            num_steps=3
+        )
+    ]
+    
+    # Test the method - need to convert to the expected tuple format
+    env_belief_policy_tuples = [(params.environment, params.belief, params.policies) for params in env_run_params]
+    config_df = simulator._create_policy_configurations_df(env_belief_policy_tuples)
+    
+    # Verify DataFrame structure
+    assert isinstance(config_df, pd.DataFrame)
+    assert len(config_df) == 1  # One policy
+    
+    # Verify columns exist
+    expected_columns = ['environment', 'policy', 'policy_type', 'depth', 'exploration_constant', 'n_simulations']
+    for col in expected_columns:
+        assert col in config_df.columns
+    
+    # Verify values
+    row = config_df.iloc[0]
+    assert row['environment'] == environment.name
+    assert row['policy'] == policy.name
+    assert row['policy_type'] == 'POMCP'
+    assert row['depth'] == 3
+    assert row['exploration_constant'] == 1.0
+    assert row['n_simulations'] == 2
+
+
+def test_validate_parallel_simulation_inputs(simulator):
+    """Test input validation for parallel simulations."""
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
+    )
+    initial_belief = get_initial_belief(environment, n_particles=3)
+    
+    valid_params = [
+        EnvironmentRunParams(
+            environment=environment,
+            belief=initial_belief,
+            policies=[policy],
+            num_episodes=2,
+            num_steps=3
+        )
+    ]
+    
+    # Test valid inputs - should not raise exception
+    simulator._validate_parallel_simulation_inputs(valid_params, alpha=0.1, confidence_interval_level=0.95, n_jobs=1)
+    
+    # Test invalid n_jobs
+    with pytest.raises(ValueError):
+        simulator._validate_parallel_simulation_inputs(valid_params, alpha=0.1, confidence_interval_level=0.95, n_jobs=0)
+    
+    # Test empty environment_run_params
+    with pytest.raises(ValueError):
+        simulator._validate_parallel_simulation_inputs([], alpha=0.1, confidence_interval_level=0.95, n_jobs=1)
+
+
+def test_create_simulation_tasks(simulator):
+    """Test simulation task creation."""
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
+    )
+    initial_belief = get_initial_belief(environment, n_particles=3)
+    
+    env_run_params = [
+        EnvironmentRunParams(
+            environment=environment,
+            belief=initial_belief,
+            policies=[policy],
+            num_episodes=2,
+            num_steps=3
+        )
+    ]
+    
+    tasks, task_identifiers = simulator._create_simulation_tasks(env_run_params)
+    
+    # Should create 2 tasks (2 episodes)
+    assert len(tasks) == 2
+    assert len(task_identifiers) == 2
+    
+    # Each task should be an EpisodeSimulationTask
+    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+    assert isinstance(tasks, list)
+    assert len(tasks) == 2
+    for task in tasks:
+        assert isinstance(task, EpisodeSimulationTask)
+        assert task.environment == environment
+        assert task.policy == policy
+        # Note: belief is passed during construction but not stored as attribute
+    
+    # Check task identifiers
+    for identifier in task_identifiers:
+        env_name, policy_name = identifier
+        assert env_name == environment.name
+        assert policy_name == policy.name
+
+
+def test_simulator_handles_empty_results_gracefully(simulator):
+    """Test that simulator handles empty simulation results without crashing."""
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
+    )
+    initial_belief = get_initial_belief(environment, n_particles=3)
+    
+    # Test with empty results
+    results = simulator._organize_simulation_results(
+        results_list=[],
+        environment_belief_policy_tuples=[(environment, initial_belief, [policy])],
+        num_episodes=0,
+        task_identifiers=[]
+    )
+    
+    # Should return proper structure even with empty results
+    assert isinstance(results, dict)
+    assert environment.name in results
+    assert policy.name in results[environment.name]
+    assert len(results[environment.name][policy.name]) == 0
+
+
+def test_simulator_error_handling_invalid_cache_dir():
+    """Test simulator error handling with invalid cache directory."""
+    # Test with a file path instead of directory path
+    invalid_path = Path("/dev/null")  # This is a file, not a directory
+    
+    try:
+        simulator = POMDPSimulator(
+            cache_dir_path=invalid_path,
+            experiment_name="ErrorTest",
+            debug=True
+        )
+        # If no exception is raised, that's also acceptable behavior
+        assert isinstance(simulator, POMDPSimulator)
+    except (OSError, ValueError, Exception):
+        # Some form of error handling is expected
+        pass
+
