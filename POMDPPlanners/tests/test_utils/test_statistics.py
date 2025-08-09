@@ -7,7 +7,16 @@ from POMDPPlanners.utils.statistics import cvar_estimator
 
 
 def test_cvar_estimator_negative_values():
-    """Test CVaR calculation with negative values."""
+    """Test CVaR calculation with negative values.
+    
+    Purpose: Validates cvar estimator negative values
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     values = np.array([-5.0, -3.0, -1.0, 0.0, 2.0])
     alpha = 0.8
     result = cvar_estimator(values, alpha)
@@ -16,7 +25,16 @@ def test_cvar_estimator_negative_values():
 
 
 def test_cvar_estimator_alpha_boundaries():
-    """Test CVaR calculation at alpha boundaries."""
+    """Test CVaR calculation at alpha boundaries.
+    
+    Purpose: Validates cvar estimator alpha boundaries
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     values = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
 
     # Test alpha = 1.0 (should return maximum value)
@@ -29,7 +47,16 @@ def test_cvar_estimator_alpha_boundaries():
 
 
 def test_cvar_estimator_identical_values():
-    """Test CVaR calculation with identical values."""
+    """Test CVaR calculation with identical values.
+    
+    Purpose: Validates cvar estimator identical values
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     values = np.array([10.0, 10.0, 10.0, 10.0])
     alpha = 0.9
     result = cvar_estimator(values, alpha)
@@ -37,7 +64,16 @@ def test_cvar_estimator_identical_values():
 
 
 def test_cvar_estimator_invalid_input():
-    """Test CVaR estimator with invalid inputs."""
+    """Test CVaR estimator with invalid inputs.
+    
+    Purpose: Validates cvar estimator invalid input
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     values = np.array([1.0, 2.0, 3.0])
 
     # Test invalid alpha values
@@ -52,7 +88,16 @@ def test_cvar_estimator_invalid_input():
 
 
 def test_cvar_estimator_known_distribution():
-    """Test CVaR calculation with a known distribution."""
+    """Test CVaR calculation with a known distribution.
+    
+    Purpose: Validates cvar estimator known distribution
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create a uniform distribution
     values = np.linspace(0, 1, 1000)
     alpha = 0.9
@@ -65,7 +110,16 @@ def test_cvar_estimator_known_distribution():
 
 
 def test_cvar_estimator_mixed_cases():
-    """Test CVaR calculation with mixed cases and different alphas."""
+    """Test CVaR calculation with mixed cases and different alphas.
+    
+    Purpose: Validates cvar estimator mixed cases
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     vec2 = np.array([1.0, 1.0, 1.0, 1.0, 5.0])
     result = cvar_estimator(vec2, alpha=0.2)
     assert np.isclose(result, 5.0)
@@ -83,14 +137,32 @@ def test_cvar_estimator_mixed_cases():
 
 
 def test_cvar_estimator_single_element():
-    """Test CVaR calculation with a single-element array."""
+    """Test CVaR calculation with a single-element array.
+    
+    Purpose: Validates cvar estimator single element
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     vec4 = np.array([1.0])
     result = cvar_estimator(vec4, alpha=0.5)
     assert np.isclose(result, 1.0)
 
 
 def test_cvar_estimator_from_dist():
-    """Test CVaR calculation from discrete probability distribution."""
+    """Test CVaR calculation from discrete probability distribution.
+    
+    Purpose: Validates cvar estimator from dist
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     from POMDPPlanners.utils.statistics import cvar_estimator_from_dist
     
     # Test single value case

@@ -21,7 +21,16 @@ def create_test_belief():
     )
 
 def test_history_equality():
-    """Test History class equality comparison."""
+    """Test History class equality comparison.
+    
+    Purpose: Validates equality comparison for history 
+    
+    Given: Objects with same or different configurations
+    When: Equality comparison is performed
+    Then: Objects are correctly identified as equal or unequal
+    
+    Test type: unit
+    """
     # Create test data
     step_data1 = StepData(
         state="state1",
@@ -120,7 +129,16 @@ def test_history_equality():
     assert history1 != history5, "Histories with different lengths should not be equal"
 
 def test_history_serialization():
-    """Test History serialization and deserialization."""
+    """Test History serialization and deserialization.
+    
+    Purpose: Validates history serialization
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create test data
     step_data = StepData(
         state="state1",
@@ -190,7 +208,16 @@ class TestTaskManagerExternalDB(TaskManagerExternalDB):
         return [task.run() for task in tasks]
 
 def test_task_manager_external_db():
-    """Test TaskManagerExternalDB with successful and failed tasks."""
+    """Test TaskManagerExternalDB with successful and failed tasks.
+    
+    Purpose: Validates task manager external db
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create mock database and task manager
     mock_db = MockDatabase()
     task_manager = TestTaskManagerExternalDB(mock_db)
@@ -228,7 +255,16 @@ def test_task_manager_external_db():
     assert successful_ids2 == successful_ids
 
 def test_task_manager_external_db_all_failed():
-    """Test TaskManagerExternalDB when all tasks fail."""
+    """Test TaskManagerExternalDB when all tasks fail.
+    
+    Purpose: Validates task manager external db all failed
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     mock_db = MockDatabase()
     task_manager = TestTaskManagerExternalDB(mock_db)
     
@@ -247,7 +283,16 @@ def test_task_manager_external_db_all_failed():
     assert len(successful_ids) == 0
 
 def test_task_manager_external_db_all_cached():
-    """Test TaskManagerExternalDB when all tasks are cached."""
+    """Test TaskManagerExternalDB when all tasks are cached.
+    
+    Purpose: Validates task manager external db all cached
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     mock_db = MockDatabase()
     task_manager = TestTaskManagerExternalDB(mock_db)
     

@@ -59,6 +59,16 @@ def temp_cache_dir():
 
 
 def test_plot_statistics_comparison():
+    """Test plot statistics comparison.
+    
+    Purpose: Validates plot statistics comparison
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     with tempfile.TemporaryDirectory() as temp_cache_dir:
         temp_cache_dir = Path(temp_cache_dir)
         environment = TigerPOMDP(discount_factor=0.95)
@@ -118,6 +128,16 @@ def test_plot_statistics_comparison():
 
 
 def test_plot_statistics_comparison_multiple_envs_policies():
+    """Test plot statistics comparison multiple envs policies.
+    
+    Purpose: Validates plot statistics comparison multiple envs policies
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
     with tempfile.TemporaryDirectory() as temp_cache_dir:
         temp_cache_dir = Path(temp_cache_dir)
         environment1 = TigerPOMDP(discount_factor=0.95)
@@ -191,6 +211,16 @@ def test_plot_statistics_comparison_multiple_envs_policies():
 
 
 def test_plot_statistics_comparison_empty_statistics(temp_cache_dir):
+    """Test plot statistics comparison empty statistics.
+    
+    Purpose: Validates plot statistics comparison empty statistics
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = StandardSparseSamplingDiscreteActionsPlanner(
@@ -208,7 +238,16 @@ def test_plot_statistics_comparison_empty_statistics(temp_cache_dir):
 
 
 def test_plot_policy_returns_tiger_pomdp(temp_cache_dir):
-    """Test plotting policy returns for Tiger POMDP with timeout."""
+    """Test plotting policy returns for Tiger POMDP with timeout.
+    
+    Purpose: Validates plot policy returns tiger pomdp
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
     
@@ -243,7 +282,16 @@ def test_plot_policy_returns_tiger_pomdp(temp_cache_dir):
 
 
 def test_plot_policy_returns_discrete_light_dark_pomdp(temp_cache_dir):
-    """Test plotting policy returns for Discrete Light Dark POMDP with timeout."""
+    """Test plotting policy returns for Discrete Light Dark POMDP with timeout.
+    
+    Purpose: Validates plot policy returns discrete light dark pomdp
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Setup
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
@@ -306,7 +354,16 @@ def test_plot_policy_returns_discrete_light_dark_pomdp(temp_cache_dir):
 
 
 def test_plot_policy_returns_continuous_light_dark_pomdp(temp_cache_dir):
-    """Test plotting policy returns for Continuous Light Dark POMDP with timeout."""
+    """Test plotting policy returns for Continuous Light Dark POMDP with timeout.
+    
+    Purpose: Validates plot policy returns continuous light dark pomdp
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Setup
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
@@ -370,7 +427,16 @@ def test_plot_policy_returns_continuous_light_dark_pomdp(temp_cache_dir):
 
 
 def test_plot_policy_returns_empty_paths(temp_cache_dir):
-    """Test plotting policy returns with empty paths."""
+    """Test plotting policy returns with empty paths.
+    
+    Purpose: Validates plot policy returns empty paths
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
     
@@ -385,7 +451,16 @@ def test_plot_policy_returns_empty_paths(temp_cache_dir):
 
 
 def test_plot_policy_returns_invalid_n_samples(temp_cache_dir):
-    """Test plotting policy returns with invalid n_samples."""
+    """Test plotting policy returns with invalid n_samples.
+    
+    Purpose: Validates sampling behavior for plot policy returns invalid n s
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     # Setup
     env = TigerPOMDP(discount_factor=0.95)
     agent_paths = [

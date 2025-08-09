@@ -111,7 +111,16 @@ def temp_log_dir(tmp_path):
 
 class TestPolicyLogger:
     def test_logger_initialization(self, base_environment, temp_log_dir):
-        """Test that logger is properly initialized with different configurations."""
+        """Test that logger is properly initialized with different configurations.
+    
+    Purpose: Validates proper initialization of logger 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
         # Test with default settings (console only)
         policy = MockPolicy(base_environment, discount_factor=0.9, name="test_policy")
         assert policy.logger.name == "policy.test_policy"
@@ -149,7 +158,16 @@ class TestPolicyLogger:
         assert len(policy.logger.handlers) == 2  # Console and file handlers
 
     def test_logger_output(self, base_environment, temp_log_dir, caplog):
-        """Test that logger produces expected output."""
+        """Test that logger produces expected output.
+    
+    Purpose: Validates logger output
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         # Test normal mode (INFO level)
         policy = MockPolicy(
             base_environment, 
@@ -206,7 +224,16 @@ class TestPolicyLogger:
         assert "Debug message in debug mode" in log_content
 
     def test_logger_initialization_message(self, base_environment, caplog):
-        """Test that the logger outputs the correct initialization message."""
+        """Test that the logger outputs the correct initialization message.
+    
+    Purpose: Validates proper initialization of logger  message
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
         with caplog.at_level(logging.INFO):
             policy = MockPolicy(
                 base_environment,
@@ -218,14 +245,32 @@ class TestPolicyLogger:
 
 class TestPolicyConfigId:
     def test_config_id_generation(self, base_policy):
-        """Test that config_id generates a deterministic hash."""
+        """Test that config_id generates a deterministic hash.
+    
+    Purpose: Validates config_id behavior for  generation
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         config_id = base_policy.config_id
         assert isinstance(config_id, str)
         assert len(config_id) == 64  # SHA-256 produces 64 hex characters
         assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters
 
     def test_config_id_includes_logger_settings(self, base_environment, temp_log_dir):
-        """Test that logger settings are included in config_id."""
+        """Test that logger settings are included in config_id.
+    
+    Purpose: Validates config_id behavior for  includes logger settings
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         # Create policies with different debug settings but same name
         policy1 = MockPolicy(
             base_environment, 

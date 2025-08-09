@@ -85,14 +85,32 @@ def belief_node_with_children(belief_node):
 
 
 def test_action_sampler_abstract_class():
-    """Test that ActionSampler is an abstract base class."""
+    """Test that ActionSampler is an abstract base class.
+    
+    Purpose: Validates sampling behavior for action r abstract class
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     # Should not be able to instantiate ActionSampler directly
     with pytest.raises(TypeError):
         ActionSampler()
 
 
 def test_concrete_action_sampler_implementation(discrete_action_sampler):
-    """Test that concrete ActionSampler implementation works correctly."""
+    """Test that concrete ActionSampler implementation works correctly.
+    
+    Purpose: Validates sampling behavior for concrete action r implementation
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     # Test sampling
     action = discrete_action_sampler.sample()
     assert action in discrete_action_sampler.actions
@@ -103,7 +121,16 @@ def test_concrete_action_sampler_implementation(discrete_action_sampler):
 
 
 def test_continuous_action_sampler(continuous_action_sampler):
-    """Test continuous action sampler."""
+    """Test continuous action sampler.
+    
+    Purpose: Validates sampling behavior for continuous action r
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     action = continuous_action_sampler.sample()
     assert isinstance(action, np.ndarray)
     assert action.shape == (2,)
@@ -111,7 +138,16 @@ def test_continuous_action_sampler(continuous_action_sampler):
 
 
 def test_action_progressive_widening_new_action(belief_node, discrete_action_sampler):
-    """Test action progressive widening when a new action should be created."""
+    """Test action progressive widening when a new action should be created.
+    
+    Purpose: Validates action progressive widening new action
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Set up belief node as leaf (no children)
     belief_node.visit_count = 0
     
@@ -130,7 +166,16 @@ def test_action_progressive_widening_new_action(belief_node, discrete_action_sam
 
 
 def test_action_progressive_widening_existing_action(belief_node_with_children, discrete_action_sampler):
-    """Test action progressive widening when an existing action should be selected."""
+    """Test action progressive widening when an existing action should be selected.
+    
+    Purpose: Validates action progressive widening existing action
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = belief_node_with_children
     
     # Set visit count so that floor(n^alpha) == floor((n-1)^alpha)
@@ -150,7 +195,16 @@ def test_action_progressive_widening_existing_action(belief_node_with_children, 
 
 
 def test_action_progressive_widening_progressive_expansion(belief_node, discrete_action_sampler):
-    """Test that action progressive widening expands the action space progressively."""
+    """Test that action progressive widening expands the action space progressively.
+    
+    Purpose: Validates action progressive widening progressive expansion
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node.visit_count = 0
     
     # First call should create a new action
@@ -174,7 +228,16 @@ def test_action_progressive_widening_progressive_expansion(belief_node, discrete
 
 
 def test_action_progressive_widening_alpha_parameter(belief_node, discrete_action_sampler):
-    """Test that alpha parameter affects progressive widening behavior."""
+    """Test that alpha parameter affects progressive widening behavior.
+    
+    Purpose: Validates action progressive widening alpha parameter
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node.visit_count = 1
     
     # With alpha=0.5, floor(1^0.5) = 1, floor(0^0.5) = 0, so should create new action
@@ -200,7 +263,16 @@ def test_action_progressive_widening_alpha_parameter(belief_node, discrete_actio
 
 
 def test_ucb1_exploration(belief_node_with_children):
-    """Test UCB1 exploration for selecting existing actions."""
+    """Test UCB1 exploration for selecting existing actions.
+    
+    Purpose: Validates ucb1 exploration
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = belief_node_with_children
     
     action_node = ucb1_exploration(
@@ -214,7 +286,16 @@ def test_ucb1_exploration(belief_node_with_children):
 
 
 def test_ucb1_exploration_exploration_vs_exploitation(belief_node_with_children):
-    """Test that UCB1 balances exploration and exploitation."""
+    """Test that UCB1 balances exploration and exploitation.
+    
+    Purpose: Validates ucb1 exploration exploration vs exploitation
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = belief_node_with_children
     
     # Test with different exploration constants
@@ -236,7 +317,16 @@ def test_ucb1_exploration_exploration_vs_exploitation(belief_node_with_children)
 
 
 def test_ucb1_exploration_mathematical_correctness(belief_node_with_children):
-    """Test that UCB1 calculation is mathematically correct."""
+    """Test that UCB1 calculation is mathematically correct.
+    
+    Purpose: Validates ucb1 exploration mathematical correctness
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = belief_node_with_children
     
     # Calculate UCB1 values manually
@@ -261,7 +351,16 @@ def test_ucb1_exploration_mathematical_correctness(belief_node_with_children):
 
 
 def test_action_progressive_widening_edge_cases(belief_node, discrete_action_sampler):
-    """Test edge cases for action progressive widening."""
+    """Test edge cases for action progressive widening.
+    
+    Purpose: Validates action progressive widening edge cases
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test with alpha_a = 0
     belief_node.visit_count = 1
     action_node = action_progressive_widening(
@@ -285,7 +384,16 @@ def test_action_progressive_widening_edge_cases(belief_node, discrete_action_sam
 
 
 def test_ucb1_exploration_edge_cases(belief_node_with_children):
-    """Test edge cases for UCB1 exploration."""
+    """Test edge cases for UCB1 exploration.
+    
+    Purpose: Validates ucb1 exploration edge cases
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = belief_node_with_children
     
     # Test with exploration_constant = 0 (pure exploitation)
@@ -304,7 +412,16 @@ def test_ucb1_exploration_edge_cases(belief_node_with_children):
 
 
 def test_action_progressive_widening_integration(belief_node, discrete_action_sampler):
-    """Test integration of action progressive widening with UCB1 exploration."""
+    """Test integration of action progressive widening with UCB1 exploration.
+    
+    Purpose: Validates action progressive widening integration
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
     belief_node.visit_count = 0
     
     # First few calls should create new actions
@@ -330,7 +447,16 @@ def test_action_progressive_widening_integration(belief_node, discrete_action_sa
 
 
 def test_action_sampler_with_belief_node_context(discrete_action_sampler, belief_node):
-    """Test that action sampler can optionally use belief node context."""
+    """Test that action sampler can optionally use belief node context.
+    
+    Purpose: Validates sampling behavior for action r with belief node context
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     # This test verifies that the action sampler interface supports belief node context
     action = discrete_action_sampler.sample(belief_node=belief_node)
     assert action in discrete_action_sampler.actions
@@ -344,7 +470,16 @@ def test_action_sampler_with_belief_node_context(discrete_action_sampler, belief
 # Following the project standard of testing all usage examples from docstrings
 
 def test_continuous_control_sampler_usage_example():
-    """Test the ContinuousControlSampler usage example from ActionSampler docstring."""
+    """Test the ContinuousControlSampler usage example from ActionSampler docstring.
+    
+    Purpose: Validates sampling behavior for continuous control r usage example
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: example
+    """
     from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
     import numpy as np
     
@@ -369,7 +504,16 @@ def test_continuous_control_sampler_usage_example():
 
 
 def test_weighted_discrete_action_sampler_usage_example():
-    """Test the WeightedDiscreteActionSampler usage example from ActionSampler docstring."""
+    """Test the WeightedDiscreteActionSampler usage example from ActionSampler docstring.
+    
+    Purpose: Validates sampling behavior for weighted discrete action r usage example
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: example
+    """
     from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
     import numpy as np
     
@@ -402,7 +546,16 @@ def test_weighted_discrete_action_sampler_usage_example():
 
 
 def test_adaptive_action_sampler_usage_example():
-    """Test the AdaptiveActionSampler usage example from ActionSampler docstring."""
+    """Test the AdaptiveActionSampler usage example from ActionSampler docstring.
+    
+    Purpose: Validates sampling behavior for adaptive action r usage example
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: example
+    """
     from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
     from POMDPPlanners.core.tree import BeliefNode, ActionNode
     from POMDPPlanners.core.belief import WeightedParticleBelief
@@ -459,7 +612,16 @@ def test_adaptive_action_sampler_usage_example():
 
 
 def test_multi_modal_action_sampler_usage_example():
-    """Test the MultiModalActionSampler usage example from ActionSampler docstring."""
+    """Test the MultiModalActionSampler usage example from ActionSampler docstring.
+    
+    Purpose: Validates sampling behavior for multi modal action r usage example
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: example
+    """
     from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
     import numpy as np
     
@@ -506,7 +668,16 @@ def test_multi_modal_action_sampler_usage_example():
 
 
 def test_goal_directed_action_sampler_usage_example():
-    """Test the GoalDirectedActionSampler usage example from ActionSampler docstring."""
+    """Test the GoalDirectedActionSampler usage example from ActionSampler docstring.
+    
+    Purpose: Validates sampling behavior for goal directed action r usage example
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: example
+    """
     from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
     from POMDPPlanners.core.tree import BeliefNode
     from POMDPPlanners.core.belief import WeightedParticleBelief
@@ -564,7 +735,16 @@ def test_goal_directed_action_sampler_usage_example():
 
 
 def test_action_progressive_widening_basic_usage_example():
-    """Test the basic action_progressive_widening usage example from function docstring."""
+    """Test the basic action_progressive_widening usage example from function docstring.
+    
+    Purpose: Validates action progressive widening basic usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     import numpy as np
     from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
     from POMDPPlanners.core.tree import BeliefNode
@@ -599,7 +779,16 @@ def test_action_progressive_widening_basic_usage_example():
 
 
 def test_action_progressive_widening_alpha_comparison_example():
-    """Test the alpha_a comparison example from action_progressive_widening docstring."""
+    """Test the alpha_a comparison example from action_progressive_widening docstring.
+    
+    Purpose: Validates action progressive widening alpha comparison example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     import numpy as np
     from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
     from POMDPPlanners.core.tree import BeliefNode
@@ -640,7 +829,16 @@ def test_action_progressive_widening_alpha_comparison_example():
 
 
 def test_action_progressive_widening_loop_simulation_example():
-    """Test the progressive widening loop simulation example from docstring."""
+    """Test the progressive widening loop simulation example from docstring.
+    
+    Purpose: Validates action progressive widening loop simulation example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     import numpy as np
     from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
     from POMDPPlanners.core.tree import BeliefNode, ActionNode
@@ -687,7 +885,16 @@ def test_action_progressive_widening_loop_simulation_example():
 
 
 def test_ucb1_exploration_basic_usage_example():
-    """Test the basic UCB1 exploration usage example from function docstring."""
+    """Test the basic UCB1 exploration usage example from function docstring.
+    
+    Purpose: Validates ucb1 exploration basic usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     import numpy as np
     from POMDPPlanners.planners.planners_utils.dpw import ucb1_exploration
     from POMDPPlanners.core.tree import BeliefNode, ActionNode
@@ -725,7 +932,16 @@ def test_ucb1_exploration_basic_usage_example():
 
 
 def test_ucb1_exploration_constants_comparison_example():
-    """Test the exploration constants comparison example from UCB1 docstring."""
+    """Test the exploration constants comparison example from UCB1 docstring.
+    
+    Purpose: Validates ucb1 exploration constants comparison example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     import numpy as np
     from POMDPPlanners.planners.planners_utils.dpw import ucb1_exploration
     from POMDPPlanners.core.tree import BeliefNode, ActionNode
@@ -773,7 +989,16 @@ def test_ucb1_exploration_constants_comparison_example():
 
 
 def test_ucb1_exploration_manual_calculation_example():
-    """Test the manual UCB1 calculation example from function docstring."""
+    """Test the manual UCB1 calculation example from function docstring.
+    
+    Purpose: Validates ucb1 exploration manual calculation example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     import numpy as np
     from POMDPPlanners.planners.planners_utils.dpw import ucb1_exploration
     from POMDPPlanners.core.tree import BeliefNode, ActionNode
@@ -822,7 +1047,16 @@ def test_ucb1_exploration_manual_calculation_example():
 
 
 def test_progressive_widening_parameter_tuning_example():
-    """Test the progressive widening parameter tuning example from docstring."""
+    """Test the progressive widening parameter tuning example from docstring.
+    
+    Purpose: Validates progressive widening parameter tuning example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     from math import floor
     
     # Effect of alpha_a on action creation (from docstring)

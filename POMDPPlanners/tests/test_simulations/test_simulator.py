@@ -44,27 +44,52 @@ def simulator(temp_cache_dir):
         debug=True
     )
 
-def test_simulator_initialization():
-    """Test that the simulator initializes correctly."""
-    # Test with default parameters
-    simulator = POMDPSimulator()
-    assert simulator.cache_dir_path is None
-    assert simulator.experiment_name == "POMDP_Planning_Comparison"
+def test_pomdp_simulator_initialization_default_parameters_creates_configured_instance():
+    """
+    Purpose: Validates POMDPSimulator initializes correctly with default and custom configurations
     
-    # Test with custom parameters
-    cache_dir = Path("/tmp/test_cache")
-    simulator = POMDPSimulator(
-        cache_dir_path=cache_dir,
-        experiment_name="Custom_Experiment",
+    Given: Default initialization and custom parameters (cache_dir, experiment_name, debug=True)
+    When: POMDPSimulator instances are created with different parameter sets
+    Then: Simulators are configured with correct attributes and ready for experiment execution
+    
+    Test type: unit
+    """
+    # ARRANGE: Define expected default and custom configuration values
+    expected_default_name = "POMDP_Planning_Comparison"
+    custom_cache_dir = Path("/tmp/test_cache")
+    custom_experiment_name = "Custom_Experiment"
+    
+    # ACT: Create simulator instances with different configurations
+    default_simulator = POMDPSimulator()
+    custom_simulator = POMDPSimulator(
+        cache_dir_path=custom_cache_dir,
+        experiment_name=custom_experiment_name,
         debug=True
     )
-    assert simulator.cache_dir_path == cache_dir
-    assert simulator.experiment_name == "Custom_Experiment"
+    
+    # ASSERT: Verify correct initialization of both configurations
+    # Default configuration
+    assert default_simulator.cache_dir_path is None
+    assert default_simulator.experiment_name == expected_default_name
+    assert isinstance(default_simulator.experiment_name, str)
+    
+    # Custom configuration  
+    assert custom_simulator.cache_dir_path == custom_cache_dir
+    assert custom_simulator.experiment_name == custom_experiment_name
+    assert hasattr(custom_simulator, 'debug')  # Debug mode enabled
     
 
-def test_simulate_multiple_environments_and_policies_parallel(simulator):
-    """Test parallel simulation of multiple environments and policies."""
-    # Setup
+def test_pomdp_simulator_parallel_execution_completes_multiple_policy_episodes(simulator):
+    """
+    Purpose: Verifies parallel simulation executes multiple episodes across different policies correctly
+    
+    Given: TigerPOMDP environment, POMCP policy with 2 simulations, and initial belief with 3 particles
+    When: Parallel simulation runs 2 episodes of 3 steps each with n_jobs=1
+    Then: Returns structured results with correct episode histories and step counts for each policy
+    
+    Test type: integration
+    """
+    # ARRANGE: Setup TigerPOMDP environment with POMCP policy for parallel testing
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
         environment=environment,
@@ -75,40 +100,54 @@ def test_simulate_multiple_environments_and_policies_parallel(simulator):
         n_simulations=2
     )
     initial_belief = get_initial_belief(environment, n_particles=3)
-    num_episodes = 2
-    num_steps = 3
+    expected_episodes = 2
+    expected_steps = 3
+    confidence_alpha = 0.1
+    parallel_jobs = 1
 
-    # Execute
+    # ACT: Execute parallel simulation with configured parameters
     results = simulator.simulate_multiple_environments_and_policies_parallel(
         environment_run_params=[
             EnvironmentRunParams(
                 environment=environment,
                 belief=initial_belief,
                 policies=[policy],
-                num_episodes=num_episodes,
-                num_steps=num_steps
+                num_episodes=expected_episodes,
+                num_steps=expected_steps
             )
         ],
-        alpha=0.1,
-        n_jobs=1
+        alpha=confidence_alpha,
+        n_jobs=parallel_jobs
     )
 
-    # Assert
+    # ASSERT: Verify parallel execution produces correct structured results
     assert isinstance(results, dict)
     assert environment.name in results
     assert policy.name in results[environment.name]
-    assert len(results[environment.name][policy.name]) == num_episodes
+    assert len(results[environment.name][policy.name]) == expected_episodes
 
-    # Check each history
-    for history in results[environment.name][policy.name]:
-        assert isinstance(history, History)
-        assert len(history.history) == num_steps
-        assert history.actual_num_steps == num_steps
+    # Verify each episode history contains correct step data
+    for episode_idx, history in enumerate(results[environment.name][policy.name]):
+        assert isinstance(history, History), f"Episode {episode_idx} history is not History instance"
+        assert len(history.history) == expected_steps, f"Episode {episode_idx} has {len(history.history)} steps, expected {expected_steps}"
+        assert history.actual_num_steps == expected_steps
         assert isinstance(history.reach_terminal_state, bool)
+        
+        # Verify history contains valid step data (state, action, reward, done)
+        for step_idx, step_data in enumerate(history.history):
+            assert len(step_data) == 4, f"Episode {episode_idx}, step {step_idx} has invalid data format"
 
 
-def test_compare_multiple_environments_policies(simulator):
-    """Test comparison of multiple environments and policies."""
+def test_pomdp_simulator_comparison_generates_statistics_dataframe(simulator):
+    """
+    Purpose: Validates simulator comparison produces both episode histories and statistical DataFrame
+    
+    Given: TigerPOMDP environment with POMCP policy configured for 2 episodes of 3 steps
+    When: Comparison method is executed with alpha=0.1 confidence interval
+    Then: Returns episode histories dictionary and DataFrame with policy configuration statistics
+    
+    Test type: integration
+    """
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
@@ -165,7 +204,16 @@ def test_compare_multiple_environments_policies(simulator):
 
 
 def test_parallel_execution_maintains_statistical_properties(simulator):
-    """Test that parallel execution maintains statistical properties."""
+    """Test that parallel execution maintains statistical properties.
+    
+    Purpose: Validates parallel execution maintains statistical properties
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
@@ -222,7 +270,16 @@ def test_parallel_execution_maintains_statistical_properties(simulator):
 
 
 def test_invalid_jobs_parameter(simulator):
-    """Test that invalid number of jobs raises appropriate error."""
+    """Test that invalid number of jobs raises appropriate error.
+    
+    Purpose: Validates invalid jobs parameter
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
@@ -255,7 +312,16 @@ def test_invalid_jobs_parameter(simulator):
 
 
 def test_organize_simulation_results_basic(simulator):
-    """Test basic organization of simulation results with a single environment and policy."""
+    """Test basic organization of simulation results with a single environment and policy.
+    
+    Purpose: Validates organize simulation results basic
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
@@ -306,7 +372,16 @@ def test_organize_simulation_results_basic(simulator):
 
 
 def test_organize_simulation_results_multiple(simulator):
-    """Test organization of simulation results with multiple environments and policies."""
+    """Test organization of simulation results with multiple environments and policies.
+    
+    Purpose: Validates organize simulation results multiple
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
     # Setup
     env1 = TigerPOMDP(discount_factor=0.95, name="Tiger1")
     env2 = TigerPOMDP(discount_factor=0.95, name="Tiger2")
@@ -392,7 +467,16 @@ def test_organize_simulation_results_multiple(simulator):
 
 
 def test_organize_simulation_results_edge_cases(simulator):
-    """Test edge cases for organizing simulation results."""
+    """Test edge cases for organizing simulation results.
+    
+    Purpose: Validates organize simulation results edge cases
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
@@ -445,7 +529,16 @@ def test_organize_simulation_results_edge_cases(simulator):
 
 
 def test_organize_simulation_results_matches_configurations(simulator):
-    """Test that histories are correctly matched to their environment-policy configurations."""
+    """Test that histories are correctly matched to their environment-policy configurations.
+    
+    Purpose: Validates organize simulation results matches configurations
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: configuration
+    """
     # Setup two environments with different names
     env1 = TigerPOMDP(discount_factor=0.95, name="Tiger1")
     env2 = TigerPOMDP(discount_factor=0.95, name="Tiger2")
@@ -543,28 +636,50 @@ def test_organize_simulation_results_matches_configurations(simulator):
         assert history.policy_run_data["exploration_constant"] == policy2.exploration_constant
 
 
-def test_mlflow_setup(temp_cache_dir):
-    """Test MLflow tracking setup."""
-    import mlflow
+def test_pomdp_simulator_mlflow_tracking_configures_experiment_directory(temp_cache_dir):
+    """
+    Purpose: Validates POMDPSimulator correctly configures MLflow tracking for experiment logging
     
+    Given: Temporary cache directory and experiment name "TestMLflowSetup"
+    When: POMDPSimulator is initialized with cache directory and debug enabled
+    Then: MLflow tracking directory is created and tracking URI points to correct location
+    
+    Test type: unit
+    """
+    # ARRANGE: Setup test configuration and expected MLflow paths
+    import mlflow
+    experiment_name = "TestMLflowSetup"
+    expected_mlruns_path = temp_cache_dir / "mlruns"
+    
+    # ACT: Initialize simulator with MLflow configuration
     simulator = POMDPSimulator(
         cache_dir_path=temp_cache_dir,
-        experiment_name="TestMLflowSetup",
+        experiment_name=experiment_name,
         debug=True
     )
-    
-    # Check that MLflow was configured
-    mlruns_path = temp_cache_dir / "mlruns"
-    assert mlruns_path.exists()
-    assert mlruns_path.is_dir()
-    
-    # Check that the tracking URI was set
     current_tracking_uri = mlflow.get_tracking_uri()
-    assert str(mlruns_path) in current_tracking_uri
+    
+    # ASSERT: Verify MLflow tracking setup is correctly configured
+    assert expected_mlruns_path.exists(), f"MLflow runs directory not created at {expected_mlruns_path}"
+    assert expected_mlruns_path.is_dir(), "MLflow runs path is not a directory"
+    assert str(expected_mlruns_path) in current_tracking_uri, f"Tracking URI {current_tracking_uri} does not contain expected path {expected_mlruns_path}"
+    
+    # Verify simulator is ready for experiment logging
+    assert simulator.experiment_name == experiment_name
+    assert simulator.cache_dir_path == temp_cache_dir
 
 
 def test_context_manager_functionality(temp_cache_dir):
-    """Test that POMDPSimulator works as a context manager."""
+    """Test that POMDPSimulator works as a context manager.
+    
+    Purpose: Validates context manager functionality
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     with POMDPSimulator(
         cache_dir_path=temp_cache_dir,
         experiment_name="ContextManagerTest",
@@ -579,7 +694,16 @@ def test_context_manager_functionality(temp_cache_dir):
 
 
 def test_profiling_enabled_initialization(temp_cache_dir):
-    """Test simulator initialization with profiling enabled."""
+    """Test simulator initialization with profiling enabled.
+    
+    Purpose: Validates proper initialization of profiling enabled 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     simulator = POMDPSimulator(
         cache_dir_path=temp_cache_dir,
         experiment_name="ProfilingTest",
@@ -594,7 +718,16 @@ def test_profiling_enabled_initialization(temp_cache_dir):
 
 
 def test_task_manager_types(temp_cache_dir):
-    """Test creation of different task manager types."""
+    """Test creation of different task manager types.
+    
+    Purpose: Validates task manager types
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     from POMDPPlanners.simulations.simulations_deployment.task_managers import TaskManagerType
     
     # Test JOBLIB task manager
@@ -620,7 +753,16 @@ def test_task_manager_types(temp_cache_dir):
 
 
 def test_create_policy_configurations_df(simulator):
-    """Test policy configuration DataFrame creation."""
+    """Test policy configuration DataFrame creation.
+    
+    Purpose: Validates create policy configurations df
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: configuration
+    """
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
         environment=environment,
@@ -666,7 +808,16 @@ def test_create_policy_configurations_df(simulator):
 
 
 def test_validate_parallel_simulation_inputs(simulator):
-    """Test input validation for parallel simulations."""
+    """Test input validation for parallel simulations.
+    
+    Purpose: Validates validate parallel simulation inputs
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
         environment=environment,
@@ -701,7 +852,16 @@ def test_validate_parallel_simulation_inputs(simulator):
 
 
 def test_create_simulation_tasks(simulator):
-    """Test simulation task creation."""
+    """Test simulation task creation.
+    
+    Purpose: Validates create simulation tasks
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
         environment=environment,
@@ -747,7 +907,16 @@ def test_create_simulation_tasks(simulator):
 
 
 def test_simulator_handles_empty_results_gracefully(simulator):
-    """Test that simulator handles empty simulation results without crashing."""
+    """Test that simulator handles empty simulation results without crashing.
+    
+    Purpose: Validates simulator handles empty results gracefully
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
         environment=environment,
@@ -775,7 +944,16 @@ def test_simulator_handles_empty_results_gracefully(simulator):
 
 
 def test_simulator_error_handling_invalid_cache_dir():
-    """Test simulator error handling with invalid cache directory."""
+    """Test simulator error handling with invalid cache directory.
+    
+    Purpose: Validates error handling for simulator  handling invalid cache dir
+    
+    Given: Invalid inputs or error conditions
+    When: Operation is attempted
+    Then: Appropriate exception is raised
+    
+    Test type: unit
+    """
     # Test with a file path instead of directory path
     invalid_path = Path("/dev/null")  # This is a file, not a directory
     

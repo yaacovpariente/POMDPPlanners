@@ -62,6 +62,16 @@ def belief(environment, n_particles):
 
 
 def test_initialization_with_n_simulations(environment, discount_factor, depth, exploration_constant):
+    """Test initialization with n simulations.
+    
+    Purpose: Validates proper initialization of  with n simulations
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     planner = POMCP(
         environment=environment,
         discount_factor=discount_factor,
@@ -79,6 +89,16 @@ def test_initialization_with_n_simulations(environment, discount_factor, depth, 
 
 
 def test_initialization_with_timeout(environment, discount_factor, depth, exploration_constant):
+    """Test initialization with timeout.
+    
+    Purpose: Validates proper initialization of  with timeout
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     planner = POMCP(
         environment=environment,
         discount_factor=discount_factor,
@@ -96,6 +116,16 @@ def test_initialization_with_timeout(environment, discount_factor, depth, explor
 
 
 def test_invalid_initialization(environment, discount_factor, depth, exploration_constant):
+    """Test invalid initialization.
+    
+    Purpose: Validates proper initialization of invalid 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     with pytest.raises(ValueError):
         POMCP(
             environment=environment,
@@ -109,6 +139,16 @@ def test_invalid_initialization(environment, discount_factor, depth, exploration
 
 
 def test_action_selection(planner, belief, environment):
+    """Test action selection.
+    
+    Purpose: Validates action selection
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     action, policy_run_data = planner.action(belief)
     assert isinstance(action, list)
     assert len(action) == 1
@@ -116,6 +156,16 @@ def test_action_selection(planner, belief, environment):
 
 
 def test_search_behavior_with_initial_belief(planner, belief, environment):
+    """Test search behavior with initial belief.
+    
+    Purpose: Validates search behavior with initial belief
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # The search method has been removed, so we test the action method instead
     action, policy_run_data = planner.action(belief)
     assert isinstance(action, list)
@@ -124,12 +174,32 @@ def test_search_behavior_with_initial_belief(planner, belief, environment):
 
 
 def test_random_rollout(planner):
+    """Test random rollout.
+    
+    Purpose: Validates random rollout
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     state = "tiger_left"
     return_value = planner.random_rollout(state=state, depth=0)
     assert isinstance(return_value, float)
 
 
 def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles):
+    """Test integration with tiger pomdp.
+    
+    Purpose: Validates integration with tiger pomdp
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
     current_belief = belief
     for _ in range(5):
         action, policy_run_data = planner.action(current_belief)
@@ -151,6 +221,16 @@ def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles)
 
 
 def test_construct_tree_using_timeout(environment, discount_factor, depth, exploration_constant):
+    """Test construct tree using timeout.
+    
+    Purpose: Validates construct tree using timeout
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     timeout_seconds = 1
     planner = POMCP(
         environment=environment,
@@ -177,6 +257,16 @@ def test_construct_tree_using_timeout(environment, discount_factor, depth, explo
 
 
 def test_construct_tree_using_n_simulations(environment, discount_factor, depth, exploration_constant):
+    """Test construct tree using n simulations.
+    
+    Purpose: Validates construct tree using n simulations
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     n_sims = 50
     planner = POMCP(
         environment=environment,
@@ -205,6 +295,16 @@ def test_construct_tree_using_n_simulations(environment, discount_factor, depth,
 
 
 def test_tree_structure_construction(environment, discount_factor, depth, exploration_constant):
+    """Test tree structure construction.
+    
+    Purpose: Validates tree structure construction
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     n_sims = 100
     planner = POMCP(
         environment=environment,
@@ -250,6 +350,16 @@ def test_tree_structure_construction(environment, discount_factor, depth, explor
 
 
 def test_sanity_pomdp_action_selection():
+    """Test sanity pomdp action selection.
+    
+    Purpose: Validates sanity pomdp action selection
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create environment and planner
     environment = SanityPOMDP()
     planner = POMCP(

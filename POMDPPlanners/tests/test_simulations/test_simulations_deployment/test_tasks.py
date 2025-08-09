@@ -38,7 +38,16 @@ def policy(environment):
     )
 
 def test_episode_simulation_task_creation(environment, policy):
-    """Test creation and basic properties of EpisodeSimulationTask."""
+    """Test creation and basic properties of EpisodeSimulationTask.
+    
+    Purpose: Validates episode simulation task creation
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief = create_test_belief()
     
     task = EpisodeSimulationTask(
@@ -65,7 +74,16 @@ def test_episode_simulation_task_creation(environment, policy):
     assert len(task._cache_key) > 0
 
 def test_episode_simulation_task_invalid_steps(environment, policy):
-    """Test that EpisodeSimulationTask raises error for invalid num_steps."""
+    """Test that EpisodeSimulationTask raises error for invalid num_steps.
+    
+    Purpose: Validates episode simulation task invalid steps
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief = create_test_belief()
     
     with pytest.raises(ValueError, match="num_steps must be a positive integer"):
@@ -80,7 +98,16 @@ def test_episode_simulation_task_invalid_steps(environment, policy):
         )
 
 def test_episode_simulation_task_equality(environment, policy):
-    """Test task equality and hashing."""
+    """Test task equality and hashing.
+    
+    Purpose: Validates equality comparison for episode simulation task 
+    
+    Given: Objects with same or different configurations
+    When: Equality comparison is performed
+    Then: Objects are correctly identified as equal or unequal
+    
+    Test type: unit
+    """
     belief = create_test_belief()
     
     # Create identical tasks
@@ -121,7 +148,16 @@ def test_episode_simulation_task_equality(environment, policy):
     assert hash(task1) != hash(task3)
 
 def test_episode_simulation_task_serialization(environment, policy):
-    """Test task serialization and deserialization."""
+    """Test task serialization and deserialization.
+    
+    Purpose: Validates episode simulation task serialization
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief = create_test_belief()
     
     original_task = EpisodeSimulationTask(
@@ -150,7 +186,16 @@ def test_episode_simulation_task_serialization(environment, policy):
     assert reconstructed_task == original_task
 
 def test_episode_simulation_task_execution(environment, policy):
-    """Test actual task execution with real environment and policy."""
+    """Test actual task execution with real environment and policy.
+    
+    Purpose: Validates episode simulation task execution
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief = create_test_belief()
     
     task = EpisodeSimulationTask(

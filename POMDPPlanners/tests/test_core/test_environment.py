@@ -113,7 +113,16 @@ def base_environment_with_logging(tmp_path) -> MockEnvironment:
 def test_discount_factor_equality(base_environment: MockEnvironment, 
                                 discount_factor: float, 
                                 expected_equal: bool):
-    """Test equality comparison with different discount factors."""
+    """Test equality comparison with different discount factors.
+    
+    Purpose: Validates equality comparison for discount factor 
+    
+    Given: Objects with same or different configurations
+    When: Equality comparison is performed
+    Then: Objects are correctly identified as equal or unequal
+    
+    Test type: unit
+    """
     other_env = MockEnvironment(discount_factor=discount_factor)
     assert (base_environment == other_env) == expected_equal
 
@@ -124,23 +133,59 @@ def test_discount_factor_equality(base_environment: MockEnvironment,
 def test_array_equality(base_environment: MockEnvironment, 
                        test_array: np.ndarray, 
                        expected_equal: bool):
-    """Test equality comparison with different numpy arrays."""
+    """Test equality comparison with different numpy arrays.
+    
+    Purpose: Validates equality comparison for array 
+    
+    Given: Objects with same or different configurations
+    When: Equality comparison is performed
+    Then: Objects are correctly identified as equal or unequal
+    
+    Test type: unit
+    """
     other_env = MockEnvironment(discount_factor=0.9, test_array=test_array)
     assert (base_environment == other_env) == expected_equal
 
 def test_different_environment_class(base_environment: MockEnvironment):
-    """Test equality comparison with a different environment class."""
+    """Test equality comparison with a different environment class.
+    
+    Purpose: Validates different environment class
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     different_env = DifferentEnvironment(discount_factor=0.9)
     assert base_environment != different_env
 
 def test_non_environment_comparison(base_environment: MockEnvironment):
-    """Test equality comparison with non-Environment objects."""
+    """Test equality comparison with non-Environment objects.
+    
+    Purpose: Validates non environment comparison
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     assert base_environment != "not an environment"
     assert base_environment != 42
     assert base_environment != None
 
 def test_missing_attribute(base_environment: MockEnvironment):
-    """Test equality comparison when an attribute is missing."""
+    """Test equality comparison when an attribute is missing.
+    
+    Purpose: Validates missing attribute
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     other_env = MockEnvironment(discount_factor=0.9)
     delattr(other_env, 'test_array')
     assert base_environment != other_env
@@ -152,7 +197,16 @@ def test_missing_attribute(base_environment: MockEnvironment):
 def test_attribute_presence(base_environment: MockEnvironment, 
                           attr_name: str, 
                           attr_value: object):
-    """Test that attributes are present and have correct values."""
+    """Test that attributes are present and have correct values.
+    
+    Purpose: Validates attribute presence
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     assert hasattr(base_environment, attr_name)
     if isinstance(attr_value, np.ndarray):
         assert np.array_equal(getattr(base_environment, attr_name), attr_value)
@@ -168,33 +222,87 @@ class TestEnvironmentConfigId:
     """Test suite for Environment config_id property."""
     
     def test_same_config_same_id(self, base_environment: MockEnvironment):
-        """Test that environments with same configuration have same config_id."""
+        """Test that environments with same configuration have same config_id.
+    
+    Purpose: Validates same config same id
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: configuration
+    """
         other_env = MockEnvironment(discount_factor=0.9)
         assert base_environment.config_id == other_env.config_id
     
     def test_different_discount_factor(self, base_environment: MockEnvironment):
-        """Test that different discount factor results in different config_id."""
+        """Test that different discount factor results in different config_id.
+    
+    Purpose: Validates different discount factor
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = MockEnvironment(discount_factor=0.8)
         assert base_environment.config_id != other_env.config_id
     
     def test_different_array(self, base_environment: MockEnvironment):
-        """Test that different numpy array results in different config_id."""
+        """Test that different numpy array results in different config_id.
+    
+    Purpose: Validates different array
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = MockEnvironment(discount_factor=0.9, test_array=np.array([4, 5, 6]))
         assert base_environment.config_id != other_env.config_id
     
     def test_different_environment_class(self, base_environment: MockEnvironment):
-        """Test that different environment class results in different config_id."""
+        """Test that different environment class results in different config_id.
+    
+    Purpose: Validates different environment class
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         different_env = DifferentEnvironment(discount_factor=0.9)
         assert base_environment.config_id != different_env.config_id
     
     def test_config_id_consistency(self, base_environment: MockEnvironment):
-        """Test that config_id remains consistent across multiple calls."""
+        """Test that config_id remains consistent across multiple calls.
+    
+    Purpose: Validates config_id behavior for  consistency
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         id1 = base_environment.config_id
         id2 = base_environment.config_id
         assert id1 == id2
     
     def test_tiger_pomdp_config_id(self, base_tiger_environment: TigerPOMDP):
-        """Test config_id with TigerPOMDP environment."""
+        """Test config_id with TigerPOMDP environment.
+    
+    Purpose: Validates config_id behavior for tiger pomdp 
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         # Same configuration should have same ID
         other_env = TigerPOMDP(discount_factor=0.95)
         assert base_tiger_environment.config_id == other_env.config_id
@@ -204,7 +312,16 @@ class TestEnvironmentConfigId:
         assert base_tiger_environment.config_id != different_env.config_id
     
     def test_config_id_format(self, base_environment: MockEnvironment):
-        """Test that config_id is a valid SHA-256 hash."""
+        """Test that config_id is a valid SHA-256 hash.
+    
+    Purpose: Validates config_id behavior for  format
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         config_id = base_environment.config_id
         assert len(config_id) == 64  # SHA-256 produces 64 hex characters
         assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters
@@ -213,25 +330,70 @@ class TestEnvironmentLogger:
     """Test suite for Environment logger functionality."""
     
     def test_logger_initialization(self, base_environment_with_logging: MockEnvironment):
-        """Test that logger is properly initialized."""
+        """Test that logger is properly initialized.
+    
+    Purpose: Validates proper initialization of logger 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
         assert hasattr(base_environment_with_logging, 'logger')
         assert base_environment_with_logging.logger.name == "environment.MockEnvironment"
     
     def test_logger_without_output_dir(self, base_environment: MockEnvironment):
-        """Test that logger works without output directory."""
+        """Test that logger works without output directory.
+    
+    Purpose: Validates logger without output dir
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         assert hasattr(base_environment, 'logger')
         assert base_environment.logger.name == "environment.MockEnvironment"
     
     def test_logger_debug_mode(self, base_environment_with_logging: MockEnvironment):
-        """Test that debug mode affects logger level."""
+        """Test that debug mode affects logger level.
+    
+    Purpose: Validates logger debug mode
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         assert base_environment_with_logging.logger.level <= 10  # DEBUG level is 10
     
     def test_logger_normal_mode(self, base_environment: MockEnvironment):
-        """Test that normal mode sets correct logger level."""
+        """Test that normal mode sets correct logger level.
+    
+    Purpose: Validates logger normal mode
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         assert base_environment.logger.level == 20  # INFO level is 20
     
     def test_logger_output_dir(self, tmp_path):
-        """Test that logger creates log files in output directory."""
+        """Test that logger creates log files in output directory.
+    
+    Purpose: Validates logger output dir
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         env = MockEnvironment(discount_factor=0.9, output_dir=tmp_path)
         logs_dir = tmp_path / "logs"
         assert logs_dir.exists()

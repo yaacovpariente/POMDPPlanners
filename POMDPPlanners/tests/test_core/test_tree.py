@@ -22,7 +22,8 @@ class TestEnvironment(Environment):
 
 @pytest.fixture
 def test_belief():
-    # Create a simple particle belief with two particles
+    """Create weighted particle belief for tree node testing."""
+    # Create a simple particle belief with two particles for tree tests
     particles = [1, 2]  # Simple integer particles
     log_weights = np.log(np.array([0.6, 0.4]))  # Convert to log weights
     return WeightedParticleBelief(particles=particles, log_weights=log_weights)
@@ -30,34 +31,69 @@ def test_belief():
 
 @pytest.fixture
 def test_env():
+    """Test env.
+    
+    Purpose: Validates env
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     return TestEnvironment()
 
 
-def test_action_node_initialization():
-    # Test basic initialization
-    action = "move_forward"
-    node = ActionNode(
-        action, children=()
-    )  # Initialize with empty tuple instead of None
-    assert node.action == action
-    assert node.q_value == 0.0
-    assert node.visit_count == 0
-    assert node.immediate_cost == None
-    assert node.sample == []
-    assert node.lower_confidence_bound == 0.0
-    assert node.upper_confidence_bound == 0.0
-    assert node.parent is None
-    assert node.children == ()
-
-    # Test initialization with parent and data
-    parent = ActionNode("parent_action", children=())
-    data = {"test": "data"}
-    node = ActionNode(action, parent=parent, data=data, children=())
-    assert node.parent == parent
-    assert node.data == data
+def test_action_node_initialization_creates_mcts_tree_node():
+    """
+    Purpose: Validates ActionNode initializes correctly for MCTS tree construction
+    
+    Given: Action string "move_forward" and optional parent node with test data
+    When: ActionNode instances are created with basic and parent-child configurations
+    Then: Nodes are initialized with correct action, default values, and proper tree relationships
+    
+    Test type: unit
+    """
+    # ARRANGE: Setup action and test data for node initialization
+    test_action = "move_forward"
+    parent_action = "parent_action"
+    test_data = {"test": "data"}
+    
+    # ACT: Create basic ActionNode without parent
+    basic_node = ActionNode(test_action, children=())
+    
+    # Create ActionNode with parent and data
+    parent_node = ActionNode(parent_action, children=())
+    child_node = ActionNode(test_action, parent=parent_node, data=test_data, children=())
+    
+    # ASSERT: Verify basic node initialization with correct defaults
+    assert basic_node.action == test_action
+    assert basic_node.q_value == 0.0  # Default Q-value for new nodes
+    assert basic_node.visit_count == 0  # No visits initially
+    assert basic_node.immediate_cost is None
+    assert basic_node.sample == []  # Empty sample list
+    assert basic_node.lower_confidence_bound == 0.0
+    assert basic_node.upper_confidence_bound == 0.0
+    assert basic_node.parent is None  # Root node has no parent
+    assert basic_node.children == ()  # No children initially
+    
+    # Verify parent-child relationship and data storage
+    assert child_node.parent == parent_node
+    assert child_node.data == test_data
+    assert child_node.action == test_action
 
 
 def test_belief_node_initialization(test_belief):
+    """Test belief node initialization.
+    
+    Purpose: Validates proper initialization of belief node 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Test basic initialization
     node = BeliefNode(test_belief, children=())
     assert node.belief == test_belief
@@ -77,6 +113,16 @@ def test_belief_node_initialization(test_belief):
 
 
 def test_tree_structure(test_belief):
+    """Test tree structure.
+    
+    Purpose: Validates tree structure
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create a simple tree structure
     root = BeliefNode(test_belief, children=())
     action1 = ActionNode("action1", parent=root, children=())
@@ -93,6 +139,16 @@ def test_tree_structure(test_belief):
 
 
 def test_get_optimal_action(test_belief):
+    """Test get optimal action.
+    
+    Purpose: Validates get optimal action
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create a belief node with multiple action children
     belief_node = BeliefNode(test_belief, children=())
 
@@ -111,6 +167,16 @@ def test_get_optimal_action(test_belief):
     assert optimal_action == "action3"
 
 def test_node_properties(test_belief):
+    """Test node properties.
+    
+    Purpose: Validates node properties
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test updating node properties
     action_node = ActionNode("test_action", children=())
     action_node.q_value = 1.5
@@ -140,7 +206,16 @@ def test_node_properties(test_belief):
 
 
 def test_sample_child_node(test_belief):
-    """Test the sample_child_node method of ActionNode."""
+    """Test the sample_child_node method of ActionNode.
+    
+    Purpose: Validates sampling behavior for  child node
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     # Create an action node with multiple belief node children
     action_node = ActionNode("test_action", children=())
     
@@ -188,7 +263,16 @@ def test_sample_child_node(test_belief):
 
 
 def test_sample_child_node_single_child(test_belief):
-    """Test sample_child_node with only one child."""
+    """Test sample_child_node with only one child.
+    
+    Purpose: Validates sampling behavior for  child node single child
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     action_node = ActionNode("test_action", children=())
     belief = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
     belief.visit_count = 5
@@ -199,7 +283,16 @@ def test_sample_child_node_single_child(test_belief):
 
 
 def test_sample_child_node_no_children():
-    """Test sample_child_node with no children (should raise error)."""
+    """Test sample_child_node with no children (should raise error).
+    
+    Purpose: Validates sampling behavior for  child node no children
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     action_node = ActionNode("test_action", children=())
     
     # This should raise a ValueError because sum(child_visit_counts) would be 0
@@ -208,7 +301,16 @@ def test_sample_child_node_no_children():
 
 
 def test_get_belief_node_child(test_belief):
-    """Test the get_belief_node_child method of ActionNode."""
+    """Test the get_belief_node_child method of ActionNode.
+    
+    Purpose: Validates get belief node child
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create an action node with multiple belief node children
     action_node = ActionNode("test_action", children=())
     
@@ -233,7 +335,16 @@ def test_get_belief_node_child(test_belief):
 
 
 def test_get_belief_node_child_no_children(test_belief):
-    """Test get_belief_node_child with no children."""
+    """Test get_belief_node_child with no children.
+    
+    Purpose: Validates get belief node child no children
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     action_node = ActionNode("test_action", children=())
     
     # Should return None for any observation
@@ -242,7 +353,16 @@ def test_get_belief_node_child_no_children(test_belief):
 
 
 def test_get_belief_node_child_duplicate_observations(test_belief):
-    """Test get_belief_node_child with duplicate observations (should return first match)."""
+    """Test get_belief_node_child with duplicate observations (should return first match).
+    
+    Purpose: Validates get belief node child duplicate observations
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     action_node = ActionNode("test_action", children=())
     
     # Create belief nodes with the same observation
@@ -255,7 +375,16 @@ def test_get_belief_node_child_duplicate_observations(test_belief):
 
 
 def test_get_belief_node_child_none_observation(test_belief):
-    """Test get_belief_node_child with None observation."""
+    """Test get_belief_node_child with None observation.
+    
+    Purpose: Validates get belief node child none observation
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     action_node = ActionNode("test_action", children=())
     
     # Create belief nodes with None observation

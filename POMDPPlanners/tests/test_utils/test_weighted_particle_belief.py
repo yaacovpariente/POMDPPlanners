@@ -8,7 +8,16 @@ from POMDPPlanners.utils.weighted_particle_beliefs import (
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDPDiscreteActions
 
 def test_initialization():
-    """Test proper initialization of WeightedParticleBeliefDiscreteLightDark"""
+    """Test proper initialization of WeightedParticleBeliefDiscreteLightDark
+    
+    Purpose: Validates proper initialization of 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Create test data
     n_particles = 10
     particles = [np.array([0, 0]) for _ in range(n_particles)]
@@ -31,7 +40,16 @@ def test_initialization():
     assert belief.action_to_vector["up"] == pytest.approx(np.array([0, 1]))
 
 def test_reinvigoration():
-    """Test reinvigoration functionality"""
+    """Test reinvigoration functionality
+    
+    Purpose: Validates reinvigoration
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create test data
     n_particles = 10
     particles = [np.array([0, 0]) for _ in range(n_particles)]
@@ -63,7 +81,16 @@ def test_reinvigoration():
     assert n_reinvigorate > 0
 
 def test_invalid_initialization():
-    """Test initialization with invalid parameters"""
+    """Test initialization with invalid parameters
+    
+    Purpose: Validates proper initialization of invalid 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Test with mismatched particles and weights
     with pytest.raises(ValueError):
         WeightedParticleBeliefDiscreteLightDark(
@@ -82,7 +109,16 @@ def test_invalid_initialization():
         )
 
 def test_action_to_vector_mapping():
-    """Test action to vector mapping"""
+    """Test action to vector mapping
+    
+    Purpose: Validates action to vector mapping
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create test data with non-zero log weights
     n_particles = 1
     particles = [np.array([0, 0])]
@@ -106,7 +142,16 @@ def test_action_to_vector_mapping():
         _ = belief.action_to_vector["invalid_action"]
 
 def test_full_coverage_initialization():
-    """Test proper initialization of WeightedParticleBeliefDiscreteLightDarkFullCoverage"""
+    """Test proper initialization of WeightedParticleBeliefDiscreteLightDarkFullCoverage
+    
+    Purpose: Validates proper initialization of full coverage 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Create test data
     n_particles = 10
     particles = [np.array([0, 0]) for _ in range(n_particles)]
@@ -129,7 +174,16 @@ def test_full_coverage_initialization():
     assert not belief.resampling  # Should be False as specified in __init__
 
 def test_full_coverage_reinvigoration():
-    """Test reinvigoration functionality of WeightedParticleBeliefDiscreteLightDarkFullCoverage"""
+    """Test reinvigoration functionality of WeightedParticleBeliefDiscreteLightDarkFullCoverage
+    
+    Purpose: Validates full coverage reinvigoration
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create test data
     n_particles = 10
     particles = [np.array([0, 0]) for _ in range(n_particles)]
@@ -164,7 +218,16 @@ def test_full_coverage_reinvigoration():
         assert np.array_equal(reinvigorated_belief.particles[-(i+1)], expected_states[-(i+1)])
 
 def test_full_coverage_invalid_initialization():
-    """Test initialization with invalid parameters for WeightedParticleBeliefDiscreteLightDarkFullCoverage"""
+    """Test initialization with invalid parameters for WeightedParticleBeliefDiscreteLightDarkFullCoverage
+    
+    Purpose: Validates proper initialization of full coverage invalid 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Test with mismatched particles and weights
     with pytest.raises(ValueError):
         WeightedParticleBeliefDiscreteLightDarkFullCoverage(
@@ -182,7 +245,16 @@ def test_full_coverage_invalid_initialization():
         )
 
 def test_full_coverage_resampling():
-    """Test that resampling is performed during reinvigoration when ESS is below threshold"""
+    """Test that resampling is performed during reinvigoration when ESS is below threshold
+    
+    Purpose: Validates full coverage resampling
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create test data with degenerate weights
     n_particles = 10
     particles = [np.array([0, 0]) for _ in range(n_particles)]
@@ -222,7 +294,16 @@ def test_full_coverage_resampling():
         assert np.array_equal(reinvigorated_belief.particles[-(i+1)], expected_states[-(i+1)])
 
 def test_continuous_full_coverage_initialization():
-    """Test proper initialization of WeightedParticleBeliefContinuousLightDarkFullCoverage"""
+    """Test proper initialization of WeightedParticleBeliefContinuousLightDarkFullCoverage
+    
+    Purpose: Validates proper initialization of continuous full coverage 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Create test data
     n_particles = 10
     particles = [np.array([0, 0]) for _ in range(n_particles)]
@@ -248,7 +329,16 @@ def test_continuous_full_coverage_initialization():
     assert not belief.resampling  # Should be False as specified in __init__
 
 def test_continuous_full_coverage_reinvigoration():
-    """Test reinvigoration functionality of WeightedParticleBeliefContinuousLightDarkFullCoverage"""
+    """Test reinvigoration functionality of WeightedParticleBeliefContinuousLightDarkFullCoverage
+    
+    Purpose: Validates continuous full coverage reinvigoration
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create test data
     n_particles = 10
     particles = [np.array([0, 0]) for _ in range(n_particles)]
@@ -286,7 +376,16 @@ def test_continuous_full_coverage_reinvigoration():
         assert particle.shape == (2,)  # Check shape
 
 def test_continuous_full_coverage_invalid_initialization():
-    """Test initialization with invalid parameters for WeightedParticleBeliefContinuousLightDarkFullCoverage"""
+    """Test initialization with invalid parameters for WeightedParticleBeliefContinuousLightDarkFullCoverage
+    
+    Purpose: Validates proper initialization of continuous full coverage invalid 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Test with mismatched particles and weights
     with pytest.raises(ValueError):
         WeightedParticleBeliefContinuousLightDarkFullCoverage(
@@ -312,7 +411,16 @@ def test_continuous_full_coverage_invalid_initialization():
         )
 
 def test_continuous_full_coverage_resampling():
-    """Test that resampling is performed during reinvigoration when ESS is below threshold"""
+    """Test that resampling is performed during reinvigoration when ESS is below threshold
+    
+    Purpose: Validates continuous full coverage resampling
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create test data with degenerate weights
     n_particles = 10
     particles = [np.array([0, 0]) for _ in range(n_particles)]
@@ -355,7 +463,16 @@ def test_continuous_full_coverage_resampling():
         assert particle.shape == (2,)
 
 def test_continuous_full_coverage_gmm_sampling():
-    """Test that GMM sampling produces expected distribution of particles"""
+    """Test that GMM sampling produces expected distribution of particles
+    
+    Purpose: Validates continuous full coverage gmm sampling
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create test data
     n_particles = 1000  # Use more particles for better statistical testing
     particles = [np.array([0, 0]) for _ in range(n_particles)]

@@ -15,6 +15,16 @@ def pomdp():
     return SafeAntVelocityPOMDP(discount_factor=0.95)
 
 def test_safe_velocity_pomdp_initialization():
+    """Test safe velocity pomdp initialization.
+    
+    Purpose: Validates proper initialization of safe velocity pomdp 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Test basic initialization
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
@@ -42,6 +52,16 @@ def test_safe_velocity_pomdp_initialization():
     assert env.actions == [0, 1, 2, 3]
 
 def test_state_transition():
+    """Test state transition.
+    
+    Purpose: Validates state transition
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test state transition with known parameters
     state = np.array([0.0, 0.0, 1.0, 1.0])  # [pos_x, pos_y, vel_x, vel_y]
     action = 3  # Maximum force
@@ -71,6 +91,16 @@ def test_state_transition():
     assert not np.array_equal(next_state[2:], state[2:])
 
 def test_state_transition_no_force():
+    """Test state transition no force.
+    
+    Purpose: Validates state transition no force
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test state transition with no force
     state = np.array([0.0, 0.0, 1.0, 1.0])
     action = 0  # No force
@@ -94,6 +124,16 @@ def test_state_transition_no_force():
     assert np.linalg.norm(next_state[2:]) < np.linalg.norm(state[2:])
 
 def test_observation_model():
+    """Test observation model.
+    
+    Purpose: Validates observation model
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test observation model
     state = np.array([0.0, 0.0, 1.0, 1.0])
     action = 1
@@ -119,6 +159,16 @@ def test_observation_model():
     assert not np.array_equal(observation[2:], state[2:])
 
 def test_reward_function():
+    """Test reward function.
+    
+    Purpose: Validates reward function
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
         safe_velocity_threshold=2.0,
@@ -137,6 +187,16 @@ def test_reward_function():
     assert reward_unsafe < 0  # Negative reward due to safety violation
 
 def test_terminal_state():
+    """Test terminal state.
+    
+    Purpose: Validates terminal state
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
         safe_velocity_threshold=2.0,
@@ -151,6 +211,16 @@ def test_terminal_state():
     assert env.is_terminal(state_unsafe)
 
 def test_initial_state_distribution():
+    """Test initial state distribution.
+    
+    Purpose: Validates initial state distribution
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = SafeAntVelocityPOMDP(discount_factor=0.95)
     initial_dist = env.initial_state_dist()
     
@@ -169,6 +239,16 @@ def test_initial_state_distribution():
         assert np.allclose(state[2:], 0)
 
 def test_get_actions():
+    """Test get actions.
+    
+    Purpose: Validates get actions
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = SafeAntVelocityPOMDP(discount_factor=0.95)
     actions = env.get_actions()
     
@@ -177,6 +257,16 @@ def test_get_actions():
     assert 3 in actions  # Maximum force
 
 def test_is_equal_observation():
+    """Test is equal observation.
+    
+    Purpose: Validates is equal observation
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = SafeAntVelocityPOMDP(discount_factor=0.95)
     
     # Test equal observations
@@ -189,6 +279,16 @@ def test_is_equal_observation():
     assert not env.is_equal_observation(obs1, obs3)
 
 def test_sample_next_step():
+    """Test sample next step.
+    
+    Purpose: Validates sampling behavior for  next step
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     env = SafeAntVelocityPOMDP(discount_factor=0.95)
     state = np.array([0.0, 0.0, 1.0, 1.0])
     action = 2  # Medium force
@@ -214,6 +314,16 @@ def test_sample_next_step():
     assert np.isclose(reward, expected_reward, rtol=1e-10)
 
 def test_compute_metrics():
+    """Test compute metrics.
+    
+    Purpose: Validates compute metrics
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = SafeAntVelocityPOMDP(
         discount_factor=0.95,
         safe_velocity_threshold=2.0,
@@ -334,6 +444,16 @@ def test_compute_metrics():
     assert metrics_dict["critical_violation_rate"].upper_confidence_bound >= metrics_dict["critical_violation_rate"].value
 
 def test_environment_equality():
+    """Test environment equality.
+    
+    Purpose: Validates equality comparison for environment 
+    
+    Given: Objects with same or different configurations
+    When: Equality comparison is performed
+    Then: Objects are correctly identified as equal or unequal
+    
+    Test type: unit
+    """
     # Create two identical environments
     env1 = SafeAntVelocityPOMDP(
         discount_factor=0.95,
@@ -379,6 +499,16 @@ def test_environment_equality():
     assert env1 != env3
 
 def test_config_id():
+    """Test config id.
+    
+    Purpose: Validates config_id behavior for 
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
     # Create two environments with same parameters
     env1 = SafeAntVelocityPOMDP(
         discount_factor=0.95,
@@ -424,6 +554,16 @@ def test_config_id():
     assert env1.config_id != env3.config_id
 
 def test_state_transition_model(pomdp):
+    """Test state transition model.
+    
+    Purpose: Validates state transition model
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test state transition
     state = np.array([0.0, 0.0, 0.0, 0.0])
     action = 0
@@ -441,6 +581,26 @@ def test_state_transition_model(pomdp):
 
 
 def test_observation_model(pomdp):
+    """Test initial state distribution.
+    
+    Purpose: Validates initial state distribution
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
+    """Test observation model.
+    
+    Purpose: Validates observation model
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test observation model
     state = np.array([0.0, 0.0, 0.0, 0.0])
     action = 0

@@ -5,8 +5,17 @@ from POMDPPlanners.core.config_types import BeliefConfig
 from POMDPPlanners.utils.weighted_particle_beliefs import create_belief, WeightedParticleBeliefDiscreteLightDark, WeightedParticleBeliefDiscreteLightDarkFullCoverage, WeightedParticleBeliefContinuousLightDarkFullCoverage, WeightedParticleBeliefSanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
-def test_belief_config_id_deterministic():
-    """Test that config_id is deterministic for identical beliefs."""
+def test_belief_config_id_identical_values_produces_same_hash():
+    """
+    Purpose: Validates that identical belief objects produce the same config_id hash for caching
+    
+    Given: Two TestBelief instances initialized with identical values (42)
+    When: Config IDs are generated for both belief objects
+    Then: Both beliefs produce identical config_id values for proper cache functionality
+    
+    Test type: unit
+    """
+    # ARRANGE: Define test belief class and create identical instances
     class TestBelief(Belief):
         def __init__(self, value):
             self.value = value
@@ -17,15 +26,29 @@ def test_belief_config_id_deterministic():
         def sample(self):
             return self.value
     
-    # Create two identical beliefs
-    belief1 = TestBelief(value=42)
-    belief2 = TestBelief(value=42)
+    identical_value = 42
+    belief1 = TestBelief(value=identical_value)
+    belief2 = TestBelief(value=identical_value)
     
-    # Config IDs should be identical for identical beliefs
-    assert belief1.config_id == belief2.config_id
+    # ACT: Generate config IDs for both beliefs
+    config_id1 = belief1.config_id
+    config_id2 = belief2.config_id
+    
+    # ASSERT: Verify identical beliefs produce same config_id
+    assert config_id1 == config_id2
+    assert isinstance(config_id1, str)
+    assert len(config_id1) > 0
 
-def test_belief_config_id_changes_with_value():
-    """Test that config_id changes when belief values change."""
+def test_belief_config_id_different_values_produces_different_hash():
+    """
+    Purpose: Ensures belief objects with different values generate unique config_id hashes
+    
+    Given: Two TestBelief instances with different values (42 and 43)
+    When: Config IDs are computed for both belief objects  
+    Then: The beliefs produce different config_id values to prevent cache collisions
+    
+    Test type: unit
+    """
     class TestBelief(Belief):
         def __init__(self, value):
             self.value = value
@@ -36,15 +59,30 @@ def test_belief_config_id_changes_with_value():
         def sample(self):
             return self.value
     
-    # Create two beliefs with different values
-    belief1 = TestBelief(value=42)
-    belief2 = TestBelief(value=43)
+    # ARRANGE: Create belief instances with different values
+    value1, value2 = 42, 43
+    belief1 = TestBelief(value=value1)
+    belief2 = TestBelief(value=value2)
     
-    # Config IDs should be different
-    assert belief1.config_id != belief2.config_id
+    # ACT: Generate config IDs for different beliefs
+    config_id1 = belief1.config_id
+    config_id2 = belief2.config_id
+    
+    # ASSERT: Verify different beliefs produce different config_ids
+    assert config_id1 != config_id2
+    assert isinstance(config_id1, str)
+    assert isinstance(config_id2, str)
 
-def test_belief_config_id_with_numpy_values():
-    """Test config_id with numpy array values."""
+def test_belief_config_id_numpy_arrays_handles_identical_content():
+    """
+    Purpose: Verifies config_id generation works correctly with numpy array belief values
+    
+    Given: Two TestBelief instances containing identical numpy arrays [1, 2, 3]
+    When: Config IDs are generated for both numpy-based beliefs
+    Then: Both beliefs produce identical config_id values despite being separate array objects
+    
+    Test type: unit
+    """
     class TestBelief(Belief):
         def __init__(self, value):
             self.value = value
@@ -55,15 +93,30 @@ def test_belief_config_id_with_numpy_values():
         def sample(self):
             return self.value
     
-    # Create two beliefs with identical numpy arrays
-    belief1 = TestBelief(value=np.array([1, 2, 3]))
-    belief2 = TestBelief(value=np.array([1, 2, 3]))
+    # ARRANGE: Create beliefs with identical numpy array content
+    array_content = [1, 2, 3]
+    belief1 = TestBelief(value=np.array(array_content))
+    belief2 = TestBelief(value=np.array(array_content))
     
-    # Config IDs should be identical
-    assert belief1.config_id == belief2.config_id
+    # ACT: Generate config IDs for numpy array beliefs
+    config_id1 = belief1.config_id
+    config_id2 = belief2.config_id
+    
+    # ASSERT: Verify identical array content produces same config_id
+    assert config_id1 == config_id2
+    assert not np.array_equal(belief1.value is belief2.value, True)  # Different objects
+    assert np.array_equal(belief1.value, belief2.value)  # Same content
 
-def test_belief_hashable():
-    """Test that beliefs are hashable."""
+def test_belief_objects_usable_as_dictionary_keys_and_set_members():
+    """
+    Purpose: Validates belief objects can be used as dictionary keys and set members for caching
+    
+    Given: Two identical TestBelief instances with same value (42)
+    When: Beliefs are used in sets and as dictionary keys
+    Then: Set deduplicates identical beliefs and dictionary access works with both objects
+    
+    Test type: unit
+    """
     class TestBelief(Belief):
         def __init__(self, value):
             self.value = value
@@ -74,17 +127,31 @@ def test_belief_hashable():
         def sample(self):
             return self.value
     
-    # Create two identical beliefs
-    belief1 = TestBelief(value=42)
-    belief2 = TestBelief(value=42)
+    # ARRANGE: Create identical belief instances for hashability testing
+    class TestBelief(Belief):
+        def __init__(self, value):
+            self.value = value
+            
+        def update(self, action, observation, pomdp):
+            return self
+            
+        def sample(self):
+            return self.value
     
-    # Test that beliefs can be used in a set
+    test_value = 42
+    belief1 = TestBelief(value=test_value)
+    belief2 = TestBelief(value=test_value)
+    
+    # ACT: Use beliefs in set and dictionary operations
     belief_set = {belief1, belief2}
-    assert len(belief_set) == 1  # Should only have one unique belief
+    belief_dict = {belief1: "cached_value"}
+    dict_access_result = belief_dict[belief2]
     
-    # Test that beliefs can be used as dictionary keys
-    belief_dict = {belief1: "value1"}
-    assert belief_dict[belief2] == "value1"  # Should be able to access using belief2
+    # ASSERT: Verify hashable behavior works correctly
+    assert len(belief_set) == 1  # Identical beliefs deduplicated in set
+    assert dict_access_result == "cached_value"  # Dictionary access works with equivalent belief
+    assert belief1 in belief_set
+    assert belief2 in belief_set
 
 def test_belief_equality():
     """Test belief equality."""

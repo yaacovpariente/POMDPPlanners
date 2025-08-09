@@ -11,7 +11,16 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def test_pomcp_usage_example():
-    """Test the POMCP usage example from the class docstring."""
+    """Test the POMCP usage example from the class docstring.
+    
+    Purpose: Validates pomcp usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing POMCP usage example...")
     
     try:
@@ -50,7 +59,16 @@ def test_pomcp_usage_example():
         return False
 
 def test_pft_dpw_usage_example():
-    """Test the PFT-DPW usage example with a custom action sampler."""
+    """Test the PFT-DPW usage example with a custom action sampler.
+    
+    Purpose: Validates pft dpw usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing PFT-DPW usage example...")
     
     try:
@@ -102,7 +120,16 @@ def test_pft_dpw_usage_example():
         return False
 
 def test_sparse_sampling_usage_example():
-    """Test the StandardSparseSamplingDiscreteActionsPlanner usage example."""
+    """Test the StandardSparseSamplingDiscreteActionsPlanner usage example.
+    
+    Purpose: Validates sparse sampling usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing Sparse Sampling usage example...")
     
     try:
@@ -139,7 +166,16 @@ def test_sparse_sampling_usage_example():
         return False
 
 def test_sparse_pft_usage_example():
-    """Test the Sparse-PFT usage example from the class docstring."""
+    """Test the Sparse-PFT usage example from the class docstring.
+    
+    Purpose: Validates sparse pft usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing Sparse-PFT usage example...")
     
     try:
@@ -183,7 +219,16 @@ def test_sparse_pft_usage_example():
         return False
 
 def test_discrete_action_sequences_planner_example():
-    """Test the DiscreteActionSequencesPlanner if it exists."""
+    """Test the DiscreteActionSequencesPlanner if it exists.
+    
+    Purpose: Validates discrete action sequences planner example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing Discrete Action Sequences Planner example...")
     
     try:
@@ -222,7 +267,16 @@ def test_discrete_action_sequences_planner_example():
         return False
 
 def test_space_info_consistency():
-    """Test that all planners report consistent space info."""
+    """Test that all planners report consistent space info.
+    
+    Purpose: Validates space info consistency
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     print("Testing planner space info consistency...")
     
     try:

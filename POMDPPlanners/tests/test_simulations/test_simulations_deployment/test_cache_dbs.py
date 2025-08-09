@@ -71,7 +71,16 @@ def policy(environment):
     )
 
 def test_disk_cache_db_initialization(temp_cache_dir):
-    """Test DiskCacheDB initialization and cleanup."""
+    """Test DiskCacheDB initialization and cleanup.
+    
+    Purpose: Validates proper initialization of disk cache db 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     cache_db = DiskCacheDB(cache_dir=temp_cache_dir)
     try:
         assert isinstance(cache_db.cache_dir, Path)
@@ -81,7 +90,16 @@ def test_disk_cache_db_initialization(temp_cache_dir):
         cache_db.close()
 
 def test_disk_cache_db_operations(temp_cache_dir, environment, policy):
-    """Test basic cache operations (set, get, is_key_in_cache)."""
+    """Test basic cache operations (set, get, is_key_in_cache).
+    
+    Purpose: Validates disk cache db operations
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     cache_db = DiskCacheDB(cache_dir=temp_cache_dir)
     try:
         # Create a real simulation task and run it
@@ -117,7 +135,16 @@ def test_disk_cache_db_operations(temp_cache_dir, environment, policy):
         cache_db.close()
 
 def test_disk_cache_db_store_and_retrieve(cache_db, environment, policy):
-    """Test storing and retrieving tasks from disk cache."""
+    """Test storing and retrieving tasks from disk cache.
+    
+    Purpose: Validates disk cache db store and retrieve
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief = create_test_belief()
     
     task = EpisodeSimulationTask(
@@ -156,7 +183,16 @@ def test_disk_cache_db_store_and_retrieve(cache_db, environment, policy):
     assert retrieved_history == history
 
 def test_disk_cache_db_clear(cache_db, environment, policy):
-    """Test clearing the disk cache."""
+    """Test clearing the disk cache.
+    
+    Purpose: Validates disk cache db clear
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief = create_test_belief()
     
     task = EpisodeSimulationTask(

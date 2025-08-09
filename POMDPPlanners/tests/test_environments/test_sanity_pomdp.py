@@ -25,7 +25,16 @@ class TestSanityPOMDPInitialization:
     """Test suite for SanityPOMDP initialization."""
     
     def test_initialization(self, sanity_pomdp):
-        """Test basic initialization."""
+        """Test basic initialization.
+    
+    Purpose: Validates proper initialization of 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
         assert sanity_pomdp.discount_factor == 0.95
         assert sanity_pomdp.name == "SanityPOMDP"
         assert sanity_pomdp.space_info.action_space.value == "discrete"
@@ -33,11 +42,29 @@ class TestSanityPOMDPInitialization:
         assert sanity_pomdp.debug is False
     
     def test_initialization_with_debug(self, sanity_pomdp_debug):
-        """Test initialization with debug mode."""
+        """Test initialization with debug mode.
+    
+    Purpose: Validates proper initialization of  with debug
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
         assert sanity_pomdp_debug.debug is True
     
     def test_initialization_with_output_dir(self):
-        """Test initialization with output directory."""
+        """Test initialization with output directory.
+    
+    Purpose: Validates proper initialization of  with output dir
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
         from pathlib import Path
         output_dir = Path("/tmp/test_output")
         env = SanityPOMDP(discount_factor=0.95, output_dir=output_dir)
@@ -48,25 +75,61 @@ class TestSanityPOMDPEquality:
     """Test suite for SanityPOMDP equality comparisons."""
     
     def test_same_environment_equality(self, sanity_pomdp):
-        """Test that identical environments are equal."""
+        """Test that identical environments are equal.
+    
+    Purpose: Validates equality comparison for same environment 
+    
+    Given: Objects with same or different configurations
+    When: Equality comparison is performed
+    Then: Objects are correctly identified as equal or unequal
+    
+    Test type: unit
+    """
         other_env = SanityPOMDP(discount_factor=0.95)
         assert sanity_pomdp == other_env
         assert other_env == sanity_pomdp  # Test symmetry
     
     def test_different_discount_factor(self, sanity_pomdp):
-        """Test that environments with different discount factors are not equal."""
+        """Test that environments with different discount factors are not equal.
+    
+    Purpose: Validates different discount factor
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = SanityPOMDP(discount_factor=0.8)
         assert sanity_pomdp != other_env
         assert other_env != sanity_pomdp  # Test symmetry
     
     def test_different_debug_mode(self, sanity_pomdp):
-        """Test that environments with different debug modes are not equal."""
+        """Test that environments with different debug modes are not equal.
+    
+    Purpose: Validates different debug mode
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = SanityPOMDP(discount_factor=0.95, debug=True)
         assert sanity_pomdp != other_env
         assert other_env != sanity_pomdp  # Test symmetry
     
     def test_comparison_with_non_environment(self, sanity_pomdp):
-        """Test comparison with non-Environment objects."""
+        """Test comparison with non-Environment objects.
+    
+    Purpose: Validates comparison with non environment
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         assert sanity_pomdp != "not an environment"
         assert sanity_pomdp != 42
         assert sanity_pomdp != None
@@ -76,29 +139,74 @@ class TestSanityPOMDPConfigId:
     """Test suite for SanityPOMDP config_id functionality."""
     
     def test_config_id_consistency(self, sanity_pomdp):
-        """Test that config_id is consistent for identical environments."""
+        """Test that config_id is consistent for identical environments.
+    
+    Purpose: Validates config_id behavior for  consistency
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         other_env = SanityPOMDP(discount_factor=0.95)
         assert sanity_pomdp.config_id == other_env.config_id
     
     def test_config_id_different_discount_factor(self, sanity_pomdp):
-        """Test that config_id changes with different discount factor."""
+        """Test that config_id changes with different discount factor.
+    
+    Purpose: Validates config_id behavior for  different discount factor
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         other_env = SanityPOMDP(discount_factor=0.8)
         assert sanity_pomdp.config_id != other_env.config_id
     
     def test_config_id_different_debug_mode(self, sanity_pomdp):
-        """Test that config_id changes with different debug mode."""
+        """Test that config_id changes with different debug mode.
+    
+    Purpose: Validates config_id behavior for  different debug mode
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         other_env = SanityPOMDP(discount_factor=0.95, debug=True)
         assert sanity_pomdp.config_id != other_env.config_id
     
     def test_config_id_format(self, sanity_pomdp):
-        """Test that config_id is a valid SHA-256 hash."""
+        """Test that config_id is a valid SHA-256 hash.
+    
+    Purpose: Validates config_id behavior for  format
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         config_id = sanity_pomdp.config_id
         assert isinstance(config_id, str)
         assert len(config_id) == 64  # SHA-256 hash length
         assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters
     
     def test_config_id_deterministic(self, sanity_pomdp):
-        """Test that config_id is deterministic (same input always produces same output)."""
+        """Test that config_id is deterministic (same input always produces same output).
+    
+    Purpose: Validates config_id behavior for  deterministic
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         config_id1 = sanity_pomdp.config_id
         config_id2 = sanity_pomdp.config_id
         assert config_id1 == config_id2
@@ -108,7 +216,16 @@ class TestSanityPOMDPActions:
     """Test suite for SanityPOMDP action-related functionality."""
     
     def test_get_actions(self, sanity_pomdp):
-        """Test that get_actions returns the correct actions."""
+        """Test that get_actions returns the correct actions.
+    
+    Purpose: Validates get actions
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         actions = sanity_pomdp.get_actions()
         assert actions == [0, 1]
         assert len(actions) == 2
@@ -118,27 +235,63 @@ class TestSanityStateTransitionModel:
     """Test suite for SanityStateTransitionModel."""
     
     def test_initialization(self):
-        """Test model initialization."""
+        """Test model initialization.
+    
+    Purpose: Validates proper initialization of 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
         model = SanityStateTransitionModel(state=0, action=1)
         assert model.state == 0
         assert model.action == 1
     
     def test_sample_action_0(self):
-        """Test sampling with action 0 (should always lead to state 0)."""
+        """Test sampling with action 0 (should always lead to state 0).
+    
+    Purpose: Validates sampling behavior for  action 0
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
         model = SanityStateTransitionModel(state=0, action=0)
         samples = model.sample(n_samples=10)
         assert all(s == 0 for s in samples)
         assert len(samples) == 10
     
     def test_sample_action_1(self):
-        """Test sampling with action 1 (should always lead to state 1)."""
+        """Test sampling with action 1 (should always lead to state 1).
+    
+    Purpose: Validates sampling behavior for  action 1
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
         model = SanityStateTransitionModel(state=0, action=1)
         samples = model.sample(n_samples=10)
         assert all(s == 1 for s in samples)
         assert len(samples) == 10
     
     def test_sample_different_states(self):
-        """Test that state doesn't affect transition (only action matters)."""
+        """Test that state doesn't affect transition (only action matters).
+    
+    Purpose: Validates sampling behavior for  different states
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
         # Action 0 should always lead to state 0 regardless of current state
         for state in [0, 1]:
             model = SanityStateTransitionModel(state=state, action=0)
@@ -152,7 +305,16 @@ class TestSanityStateTransitionModel:
             assert all(s == 1 for s in samples)
     
     def test_probability_action_0(self):
-        """Test probability calculation for action 0."""
+        """Test probability calculation for action 0.
+    
+    Purpose: Validates probability action 0
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         model = SanityStateTransitionModel(state=0, action=0)
         values = [0, 1, 0, 1]
         probs = model.probability(values)
@@ -160,7 +322,16 @@ class TestSanityStateTransitionModel:
         np.testing.assert_array_equal(probs, expected)
     
     def test_probability_action_1(self):
-        """Test probability calculation for action 1."""
+        """Test probability calculation for action 1.
+    
+    Purpose: Validates probability action 1
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         model = SanityStateTransitionModel(state=0, action=1)
         values = [0, 1, 0, 1]
         probs = model.probability(values)
@@ -172,27 +343,63 @@ class TestSanityObservationModel:
     """Test suite for SanityObservationModel."""
     
     def test_initialization(self):
-        """Test model initialization."""
+        """Test model initialization.
+    
+    Purpose: Validates proper initialization of 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
         model = SanityObservationModel(next_state=1, action=0)
         assert model.next_state == 1
         assert model.action == 0
     
     def test_sample_state_0(self):
-        """Test sampling with state 0 (should always observe 0)."""
+        """Test sampling with state 0 (should always observe 0).
+    
+    Purpose: Validates sampling behavior for  state 0
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
         model = SanityObservationModel(next_state=0, action=0)
         samples = model.sample(n_samples=10)
         assert all(s == 0 for s in samples)
         assert len(samples) == 10
     
     def test_sample_state_1(self):
-        """Test sampling with state 1 (should always observe 1)."""
+        """Test sampling with state 1 (should always observe 1).
+    
+    Purpose: Validates sampling behavior for  state 1
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
         model = SanityObservationModel(next_state=1, action=0)
         samples = model.sample(n_samples=10)
         assert all(s == 1 for s in samples)
         assert len(samples) == 10
     
     def test_sample_different_actions(self):
-        """Test that action doesn't affect observation (only state matters)."""
+        """Test that action doesn't affect observation (only state matters).
+    
+    Purpose: Validates sampling behavior for  different actions
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
         # State 0 should always give observation 0 regardless of action
         for action in [0, 1]:
             model = SanityObservationModel(next_state=0, action=action)
@@ -206,7 +413,16 @@ class TestSanityObservationModel:
             assert all(s == 1 for s in samples)
     
     def test_probability_state_0(self):
-        """Test probability calculation for state 0."""
+        """Test probability calculation for state 0.
+    
+    Purpose: Validates probability state 0
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         model = SanityObservationModel(next_state=0, action=0)
         values = [0, 1, 0, 1]
         probs = model.probability(values)
@@ -214,7 +430,16 @@ class TestSanityObservationModel:
         np.testing.assert_array_equal(probs, expected)
     
     def test_probability_state_1(self):
-        """Test probability calculation for state 1."""
+        """Test probability calculation for state 1.
+    
+    Purpose: Validates probability state 1
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         model = SanityObservationModel(next_state=1, action=0)
         values = [0, 1, 0, 1]
         probs = model.probability(values)
@@ -226,14 +451,32 @@ class TestSanityInitialStateDist:
     """Test suite for SanityInitialStateDist."""
     
     def test_sample(self):
-        """Test that initial state distribution always returns state 0."""
+        """Test that initial state distribution always returns state 0.
+    
+    Purpose: Validates sampling behavior for 
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
         dist = SanityInitialStateDist()
         samples = dist.sample(n_samples=10)
         assert all(s == 0 for s in samples)
         assert len(samples) == 10
     
     def test_probability(self):
-        """Test probability calculation for initial state distribution."""
+        """Test probability calculation for initial state distribution.
+    
+    Purpose: Validates probability
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         dist = SanityInitialStateDist()
         values = [0, 1, 0, 1]
         probs = dist.probability(values)
@@ -245,14 +488,32 @@ class TestSanityInitialObservationDist:
     """Test suite for SanityInitialObservationDist."""
     
     def test_sample(self):
-        """Test that initial observation distribution always returns observation 0."""
+        """Test that initial observation distribution always returns observation 0.
+    
+    Purpose: Validates sampling behavior for 
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
         dist = SanityInitialObservationDist()
         samples = dist.sample(n_samples=10)
         assert all(s == 0 for s in samples)
         assert len(samples) == 10
     
     def test_probability(self):
-        """Test probability calculation for initial observation distribution."""
+        """Test probability calculation for initial observation distribution.
+    
+    Purpose: Validates probability
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         dist = SanityInitialObservationDist()
         values = [0, 1, 0, 1]
         probs = dist.probability(values)
@@ -264,26 +525,62 @@ class TestSanityPOMDPModels:
     """Test suite for SanityPOMDP model creation."""
     
     def test_state_transition_model(self, sanity_pomdp):
-        """Test state transition model creation."""
+        """Test state transition model creation.
+    
+    Purpose: Validates state transition model
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         model = sanity_pomdp.state_transition_model(state=0, action=1)
         assert isinstance(model, SanityStateTransitionModel)
         assert model.state == 0
         assert model.action == 1
     
     def test_observation_model(self, sanity_pomdp):
-        """Test observation model creation."""
+        """Test observation model creation.
+    
+    Purpose: Validates observation model
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         model = sanity_pomdp.observation_model(next_state=1, action=0)
         assert isinstance(model, SanityObservationModel)
         assert model.next_state == 1
         assert model.action == 0
     
     def test_initial_state_dist(self, sanity_pomdp):
-        """Test initial state distribution creation."""
+        """Test initial state distribution creation.
+    
+    Purpose: Validates initial state dist
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         dist = sanity_pomdp.initial_state_dist()
         assert isinstance(dist, SanityInitialStateDist)
     
     def test_initial_observation_dist(self, sanity_pomdp):
-        """Test initial observation distribution creation."""
+        """Test initial observation distribution creation.
+    
+    Purpose: Validates initial observation dist
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         dist = sanity_pomdp.initial_observation_dist()
         assert isinstance(dist, SanityInitialObservationDist)
 
@@ -292,7 +589,16 @@ class TestSanityPOMDPTerminal:
     """Test suite for SanityPOMDP terminal state detection."""
     
     def test_is_terminal(self, sanity_pomdp):
-        """Test that no states are terminal."""
+        """Test that no states are terminal.
+    
+    Purpose: Validates is terminal
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         for state in [0, 1]:
             assert not sanity_pomdp.is_terminal(state)
 
@@ -301,7 +607,16 @@ class TestSanityPOMDPObservationEquality:
     """Test suite for SanityPOMDP observation equality."""
     
     def test_is_equal_observation(self, sanity_pomdp):
-        """Test observation equality comparison."""
+        """Test observation equality comparison.
+    
+    Purpose: Validates is equal observation
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         assert sanity_pomdp.is_equal_observation(0, 0)
         assert sanity_pomdp.is_equal_observation(1, 1)
         assert not sanity_pomdp.is_equal_observation(0, 1)
@@ -312,21 +627,48 @@ class TestSanityPOMDPSampleNextStep:
     """Test suite for SanityPOMDP sample_next_step functionality."""
     
     def test_sample_next_step_action_0(self, sanity_pomdp):
-        """Test sample_next_step with action 0."""
+        """Test sample_next_step with action 0.
+    
+    Purpose: Validates sampling behavior for  next step action 0
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
         next_state, next_observation, reward = sanity_pomdp.sample_next_step(state=0, action=0)
         assert next_state == 0  # Action 0 leads to state 0
         assert next_observation == 0  # State 0 gives observation 0
         assert reward == 1.0  # State 0 gives reward 1.0
     
     def test_sample_next_step_action_1(self, sanity_pomdp):
-        """Test sample_next_step with action 1."""
+        """Test sample_next_step with action 1.
+    
+    Purpose: Validates sampling behavior for  next step action 1
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
         next_state, next_observation, reward = sanity_pomdp.sample_next_step(state=0, action=1)
         assert next_state == 1  # Action 1 leads to state 1
         assert next_observation == 1  # State 1 gives observation 1
         assert reward == 0.0  # State 1 gives reward 0.0
     
     def test_sample_next_step_from_state_1(self, sanity_pomdp):
-        """Test sample_next_step starting from state 1."""
+        """Test sample_next_step starting from state 1.
+    
+    Purpose: Validates sampling behavior for  next step from state 1
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
         next_state, next_observation, reward = sanity_pomdp.sample_next_step(state=1, action=0)
         assert next_state == 0  # Action 0 leads to state 0
         assert next_observation == 0  # State 0 gives observation 0
@@ -337,12 +679,30 @@ class TestSanityPOMDPMetrics:
     """Test suite for SanityPOMDP compute_metrics functionality."""
     
     def test_compute_metrics_empty_histories(self, sanity_pomdp):
-        """Test metrics computation with empty histories."""
+        """Test metrics computation with empty histories.
+    
+    Purpose: Validates compute metrics empty histories
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         metrics = sanity_pomdp.compute_metrics([])
         assert metrics == []
     
     def test_compute_metrics_with_histories(self, sanity_pomdp):
-        """Test metrics computation with sample histories."""
+        """Test metrics computation with sample histories.
+    
+    Purpose: Validates compute metrics with histories
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         # Create a simple history
         steps = [
             StepData(
@@ -383,7 +743,16 @@ class TestSanityPOMDPIntegration:
     """Integration tests for SanityPOMDP."""
     
     def test_full_episode_simulation(self, sanity_pomdp):
-        """Test a full episode simulation."""
+        """Test a full episode simulation.
+    
+    Purpose: Validates full episode simulation
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         # Start with initial state
         initial_state_dist = sanity_pomdp.initial_state_dist()
         initial_obs_dist = sanity_pomdp.initial_observation_dist()
@@ -407,7 +776,16 @@ class TestSanityPOMDPIntegration:
         assert reward == 0.0
     
     def test_deterministic_behavior(self, sanity_pomdp):
-        """Test that the environment behaves deterministically."""
+        """Test that the environment behaves deterministically.
+    
+    Purpose: Validates deterministic behavior
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         # Test multiple samples with same parameters
         for _ in range(10):
             next_state, next_observation, reward = sanity_pomdp.sample_next_step(0, 0)

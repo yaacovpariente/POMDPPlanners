@@ -5,6 +5,16 @@ from pathlib import Path
 from POMDPPlanners.utils.logger import get_logger
 
 def test_logger_console_output_true(capsys):
+    """Test logger console output true.
+    
+    Purpose: Validates logger console output true
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     logger = get_logger("test.console", debug=True, console_output=True)
     logger.info("This is a test message for console output.")
     captured = capsys.readouterr()
@@ -12,6 +22,16 @@ def test_logger_console_output_true(capsys):
 
 
 def test_logger_console_output_false(capsys):
+    """Test logger console output false.
+    
+    Purpose: Validates logger console output false
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     logger = get_logger("test.no_console", debug=True, console_output=False)
     logger.info("This should not appear in the console.")
     captured = capsys.readouterr()
@@ -20,6 +40,16 @@ def test_logger_console_output_false(capsys):
 
 
 def test_logger_file_output(tmp_path):
+    """Test logger file output.
+    
+    Purpose: Validates logger file output
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     log_dir = tmp_path / "logs"
     logger = get_logger("test.file", debug=True, output_dir=tmp_path, console_output=False)
     logger.info("This is a test message for file output.")
@@ -32,6 +62,16 @@ def test_logger_file_output(tmp_path):
 
 
 def test_logger_no_duplicate_handlers(tmp_path):
+    """Test logger no duplicate handlers.
+    
+    Purpose: Validates logger no duplicate handlers
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     logger = get_logger("test.duplicate", debug=True, output_dir=tmp_path, console_output=True)
     logger.info("First message.")
     # Call get_logger again to simulate repeated calls

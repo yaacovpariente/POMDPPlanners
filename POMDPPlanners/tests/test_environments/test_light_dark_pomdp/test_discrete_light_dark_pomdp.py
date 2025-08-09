@@ -30,7 +30,16 @@ class TestDiscreteLightDarkPOMDPEquality:
     """Test suite for DiscreteLightDarkPOMDP equality comparisons."""
     
     def test_same_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with same discount factor are equal."""
+        """Test that DiscreteLightDarkPOMDPs with same discount factor are equal.
+    
+    Purpose: Validates same discount factor
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.05,
@@ -46,7 +55,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert other_env == base_light_dark_environment  # Test symmetry
     
     def test_different_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with different discount factors are not equal."""
+        """Test that DiscreteLightDarkPOMDPs with different discount factors are not equal.
+    
+    Purpose: Validates different discount factor
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.8,
             transition_error_prob=0.05,
@@ -62,7 +80,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert other_env != base_light_dark_environment  # Test symmetry
     
     def test_different_transition_error(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with different transition error probabilities are not equal."""
+        """Test that DiscreteLightDarkPOMDPs with different transition error probabilities are not equal.
+    
+    Purpose: Validates error handling for different transition 
+    
+    Given: Invalid inputs or error conditions
+    When: Operation is attempted
+    Then: Appropriate exception is raised
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.1,  # Different transition error
@@ -77,7 +104,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != other_env
     
     def test_different_observation_error(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with different observation error probabilities are not equal."""
+        """Test that DiscreteLightDarkPOMDPs with different observation error probabilities are not equal.
+    
+    Purpose: Validates error handling for different observation 
+    
+    Given: Invalid inputs or error conditions
+    When: Operation is attempted
+    Then: Appropriate exception is raised
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.05,
@@ -92,7 +128,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != other_env
     
     def test_different_beacons(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with different beacon positions are not equal."""
+        """Test that DiscreteLightDarkPOMDPs with different beacon positions are not equal.
+    
+    Purpose: Validates different beacons
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.05,
@@ -108,7 +153,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != other_env
     
     def test_different_obstacles(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with different obstacle positions are not equal."""
+        """Test that DiscreteLightDarkPOMDPs with different obstacle positions are not equal.
+    
+    Purpose: Validates different obstacles
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.05,
@@ -124,7 +178,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != other_env
     
     def test_different_goal_state(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with different goal states are not equal."""
+        """Test that DiscreteLightDarkPOMDPs with different goal states are not equal.
+    
+    Purpose: Validates different goal state
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.05,
@@ -140,7 +203,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != other_env
     
     def test_different_start_state(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with different start states are not equal."""
+        """Test that DiscreteLightDarkPOMDPs with different start states are not equal.
+    
+    Purpose: Validates different start state
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.05,
@@ -156,7 +228,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != other_env
     
     def test_different_rewards(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with different rewards are not equal."""
+        """Test that DiscreteLightDarkPOMDPs with different rewards are not equal.
+    
+    Purpose: Validates different rewards
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.05,
@@ -171,7 +252,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != other_env
     
     def test_different_grid_size(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with different grid sizes are not equal."""
+        """Test that DiscreteLightDarkPOMDPs with different grid sizes are not equal.
+    
+    Purpose: Validates different grid size
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.05,
@@ -186,7 +276,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != other_env
     
     def test_different_beacon_radius(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with different beacon radii are not equal."""
+        """Test that DiscreteLightDarkPOMDPs with different beacon radii are not equal.
+    
+    Purpose: Validates different beacon radius
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.05,
@@ -202,7 +301,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != other_env
     
     def test_different_stochastic_reward(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that DiscreteLightDarkPOMDPs with different stochastic reward settings are not equal."""
+        """Test that DiscreteLightDarkPOMDPs with different stochastic reward settings are not equal.
+    
+    Purpose: Validates different stochastic reward
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.05,
@@ -217,13 +325,31 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != other_env
     
     def test_comparison_with_non_environment(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test comparison with non-Environment objects."""
+        """Test comparison with non-Environment objects.
+    
+    Purpose: Validates comparison with non environment
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         assert base_light_dark_environment != "not an environment"
         assert base_light_dark_environment != 42
         assert base_light_dark_environment != None
     
     def test_missing_attributes(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test equality when attributes are missing."""
+        """Test equality when attributes are missing.
+    
+    Purpose: Validates missing attributes
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.05,
@@ -253,7 +379,16 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != other_env
     
     def test_deep_copy_equality(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that a deep copy of DiscreteLightDarkPOMDP is equal to original."""
+        """Test that a deep copy of DiscreteLightDarkPOMDP is equal to original.
+    
+    Purpose: Validates equality comparison for deep copy 
+    
+    Given: Objects with same or different configurations
+    When: Equality comparison is performed
+    Then: Objects are correctly identified as equal or unequal
+    
+    Test type: unit
+    """
         import copy
         copied_env = copy.deepcopy(base_light_dark_environment)
         assert copied_env == base_light_dark_environment
@@ -264,7 +399,16 @@ class TestDiscreteLightDarkPOMDPConfigId:
     """Test suite for DiscreteLightDarkPOMDP config_id functionality."""
     
     def test_config_id_consistency(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that config_id is consistent for identical environments."""
+        """Test that config_id is consistent for identical environments.
+    
+    Purpose: Validates config_id behavior for  consistency
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
             transition_error_prob=0.05,
@@ -279,7 +423,16 @@ class TestDiscreteLightDarkPOMDPConfigId:
         assert base_light_dark_environment.config_id == other_env.config_id
     
     def test_config_id_different_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that config_id changes with different discount factor."""
+        """Test that config_id changes with different discount factor.
+    
+    Purpose: Validates config_id behavior for  different discount factor
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.8,
             transition_error_prob=0.05,
@@ -294,7 +447,16 @@ class TestDiscreteLightDarkPOMDPConfigId:
         assert base_light_dark_environment.config_id != other_env.config_id
     
     def test_config_id_different_parameters(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that config_id changes with different parameters."""
+        """Test that config_id changes with different parameters.
+    
+    Purpose: Validates config_id behavior for  different parameters
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         # Test different transition error
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
@@ -339,20 +501,47 @@ class TestDiscreteLightDarkPOMDPConfigId:
         assert base_light_dark_environment.config_id != other_env.config_id
     
     def test_config_id_format(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that config_id is a valid SHA-256 hash."""
+        """Test that config_id is a valid SHA-256 hash.
+    
+    Purpose: Validates config_id behavior for  format
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         config_id = base_light_dark_environment.config_id
         assert isinstance(config_id, str)
         assert len(config_id) == 64  # SHA-256 hash length
         assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters
     
     def test_config_id_deterministic(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that config_id is deterministic (same input always produces same output)."""
+        """Test that config_id is deterministic (same input always produces same output).
+    
+    Purpose: Validates config_id behavior for  deterministic
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         config_id1 = base_light_dark_environment.config_id
         config_id2 = base_light_dark_environment.config_id
         assert config_id1 == config_id2
     
     def test_config_id_order_invariance(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
-        """Test that config_id is invariant to the order of beacons and obstacles."""
+        """Test that config_id is invariant to the order of beacons and obstacles.
+    
+    Purpose: Validates config_id behavior for  order invariance
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         # Create environment with same beacons but in different order
         beacons_reordered = base_light_dark_environment.beacons.copy()
         # Swap first and last beacon columns
@@ -409,7 +598,16 @@ class TestDiscreteLightDarkPOMDPConfigId:
 
 
 def test_initialization():
-    """Test initialization with default parameters"""
+    """Test initialization with default parameters
+    
+    Purpose: Validates proper initialization of 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
         transition_error_prob=0.05,
@@ -448,7 +646,16 @@ def test_initialization():
 
 
 def test_state_transition_model():
-    """Test state transition model"""
+    """Test state transition model
+    
+    Purpose: Validates state transition model
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = DiscreteLightDarkPOMDP(discount_factor=0.95, transition_error_prob=0.1)
     state = np.array([5, 5])
 
@@ -475,7 +682,16 @@ def test_state_transition_model():
 
 
 def test_observation_model():
-    """Test observation model"""
+    """Test observation model
+    
+    Purpose: Validates observation model
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = DiscreteLightDarkPOMDP(discount_factor=0.95, observation_error_prob=0.1)
     state = np.array([5, 5])
 
@@ -493,7 +709,16 @@ def test_observation_model():
 
 
 def test_reward_function():
-    """Test reward function"""
+    """Test reward function
+    
+    Purpose: Validates reward function
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = DiscreteLightDarkPOMDP(discount_factor=0.95, obstacle_hit_probability=1.0)
 
     # Test goal state reward
@@ -513,7 +738,16 @@ def test_reward_function():
 
 
 def test_is_terminal():
-    """Test terminal state detection"""
+    """Test terminal state detection
+    
+    Purpose: Validates is terminal
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = DiscreteLightDarkPOMDP(discount_factor=0.95)
 
     # Test goal state
@@ -531,7 +765,16 @@ def test_is_terminal():
 
 
 def test_initial_distributions():
-    """Test initial state and observation distributions"""
+    """Test initial state and observation distributions
+    
+    Purpose: Validates initial distributions
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = DiscreteLightDarkPOMDP(discount_factor=0.95)
 
     # Test initial state distribution
@@ -548,14 +791,32 @@ def test_initial_distributions():
 
 
 def test_get_actions():
-    """Test action list retrieval"""
+    """Test action list retrieval
+    
+    Purpose: Validates get actions
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = DiscreteLightDarkPOMDP(discount_factor=0.95)
     actions = env.get_actions()
     assert set(actions) == {"up", "down", "right", "left"}
 
 
 def test_visualize_path(tmp_path):
-    """Test path visualization"""
+    """Test path visualization
+    
+    Purpose: Validates visualize path
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = DiscreteLightDarkPOMDP(discount_factor=0.95)
     path = [np.array([0, 5]), np.array([1, 5]), np.array([2, 5]), np.array([3, 5])]
     
@@ -577,7 +838,16 @@ def test_visualize_path(tmp_path):
 
 
 def test_compute_metrics():
-    """Test computation of metrics for different simulation histories"""
+    """Test computation of metrics for different simulation histories
+    
+    Purpose: Validates compute metrics
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = DiscreteLightDarkPOMDP(discount_factor=0.95)
     
     # Create test histories

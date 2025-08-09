@@ -37,14 +37,32 @@ def planner(tiger_pomdp):
 
 
 def test_initialization(planner, tiger_pomdp):
-    """Test that the planner initializes correctly"""
+    """Test that the planner initializes correctly
+    
+    Purpose: Validates proper initialization of 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     assert planner.environment == tiger_pomdp
     assert planner.branching_factor == 2
     assert planner.depth == 2
 
 
 def test_action_selection(planner, initial_belief):
-    """Test that action selection returns a valid action"""
+    """Test that action selection returns a valid action
+    
+    Purpose: Validates action selection
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     action, run_data = planner.action(initial_belief)
     assert isinstance(action, list)
     assert len(action) == 1
@@ -54,7 +72,16 @@ def test_action_selection(planner, initial_belief):
 
 
 def test_belief_tree_construction(planner, initial_belief):
-    """Test that the belief tree is constructed correctly"""
+    """Test that the belief tree is constructed correctly
+    
+    Purpose: Validates belief tree construction
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     tree = BeliefNode(belief=initial_belief)
     planner._build_tree(belief_node=tree, current_depth=0)
 
@@ -69,7 +96,16 @@ def test_belief_tree_construction(planner, initial_belief):
 
 
 def test_node_statistics(planner, initial_belief):
-    """Test that node statistics are updated correctly"""
+    """Test that node statistics are updated correctly
+    
+    Purpose: Validates node statistics
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     tree = BeliefNode(
         belief=initial_belief,
         parent=None,
@@ -92,7 +128,16 @@ def test_node_statistics(planner, initial_belief):
 
 
 def test_leaf_node_statistics(planner, initial_belief):
-    """Test that leaf node statistics are calculated correctly"""
+    """Test that leaf node statistics are calculated correctly
+    
+    Purpose: Validates leaf node statistics
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     tree = planner._learn_belief_tree(initial_belief)
 
     for node in PostOrderIter(tree):
@@ -103,7 +148,16 @@ def test_leaf_node_statistics(planner, initial_belief):
 
 
 def test_non_leaf_action_node_statistics(planner, initial_belief):
-    """Test that non-leaf action node statistics are calculated correctly using fixed expected values"""
+    """Test that non-leaf action node statistics are calculated correctly using fixed expected values
+    
+    Purpose: Validates non leaf action node statistics
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     tree = BeliefNode(belief=initial_belief)
 
     # Create an action node
@@ -135,7 +189,16 @@ def test_non_leaf_action_node_statistics(planner, initial_belief):
 
 
 def test_belief_node_statistics(planner, initial_belief):
-    """Test that belief node statistics are calculated correctly using fixed expected values"""
+    """Test that belief node statistics are calculated correctly using fixed expected values
+    
+    Purpose: Validates belief node statistics
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create a belief node
     belief_node = BeliefNode(belief=initial_belief)
 
@@ -162,7 +225,16 @@ def test_belief_node_statistics(planner, initial_belief):
 
 
 def test_invalid_branching_factor():
-    """Test that invalid branching factor raises an error"""
+    """Test that invalid branching factor raises an error
+    
+    Purpose: Validates invalid branching factor
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = TigerPOMDP(discount_factor=0.95)
     with pytest.raises(ValueError):
         StandardSparseSamplingDiscreteActionsPlanner(
@@ -173,7 +245,16 @@ def test_invalid_branching_factor():
 
 
 def test_invalid_depth():
-    """Test that invalid depth raises an error"""
+    """Test that invalid depth raises an error
+    
+    Purpose: Validates invalid depth
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = TigerPOMDP(discount_factor=0.95)
     with pytest.raises(ValueError):
         StandardSparseSamplingDiscreteActionsPlanner(
@@ -184,7 +265,16 @@ def test_invalid_depth():
 
 
 def test_sanity_pomdp_action_selection():
-    """Test that the sparse sampling planner correctly identifies the better action in SanityPOMDP"""
+    """Test that the sparse sampling planner correctly identifies the better action in SanityPOMDP
+    
+    Purpose: Validates sanity pomdp action selection
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create environment and planner with higher branching factor and depth for better accuracy
     environment = SanityPOMDP()
     planner = StandardSparseSamplingDiscreteActionsPlanner(

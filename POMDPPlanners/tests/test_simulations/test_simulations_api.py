@@ -68,7 +68,16 @@ def sample_environment_run_params(tiger_environment, sparse_pft_policy):
 
 class TestSimulationsAPI:
     def test_init(self):
-        """Test SimulationsAPI initialization."""
+        """Test SimulationsAPI initialization.
+    
+    Purpose: Validates init
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         api = SimulationsAPI()
         assert isinstance(api, SimulationsAPI)
 
@@ -77,7 +86,16 @@ class TestSimulationsAPI:
         temp_cache_dir,
         sample_environment_run_params
     ):
-        """Test successful execution of run_multiple_environments_and_policies_local_run."""
+        """Test successful execution of run_multiple_environments_and_policies_local_run.
+    
+    Purpose: Validates run multiple environments and policies local run success
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
         api = SimulationsAPI()
         results, stats_df = api.run_multiple_environments_and_policies_local_run(
             environment_run_params=sample_environment_run_params,
@@ -111,7 +129,16 @@ class TestSimulationsAPI:
         temp_cache_dir,
         sample_environment_run_params
     ):
-        """Test error handling in run_multiple_environments_and_policies_local_run."""
+        """Test error handling in run_multiple_environments_and_policies_local_run.
+    
+    Purpose: Validates error handling for run multiple environments and policies local run 
+    
+    Given: Invalid inputs or error conditions
+    When: Operation is attempted
+    Then: Appropriate exception is raised
+    
+    Test type: integration
+    """
         api = SimulationsAPI()
         # Force an error by mocking the environment's state_transition_model to return None
         sample_environment_run_params[0].environment.state_transition_model = lambda *args: None
@@ -128,7 +155,16 @@ class TestSimulationsAPI:
         temp_cache_dir,
         sample_environment_run_params
     ):
-        """Test run_multiple_environments_and_policies_local_run with invalid parameters."""
+        """Test run_multiple_environments_and_policies_local_run with invalid parameters.
+    
+    Purpose: Validates run multiple environments and policies local run invalid params
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
         api = SimulationsAPI()
         # Test invalid alpha
         with pytest.raises(ValueError, match="alpha must be between 0 and 1"):

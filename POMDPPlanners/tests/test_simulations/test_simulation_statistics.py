@@ -57,6 +57,16 @@ def get_metric_value(metrics: List[MetricValue], name: str) -> MetricValue:
 
 
 def test_compute_statistics_basic():
+    """Test compute statistics basic.
+    
+    Purpose: Validates compute statistics basic
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create test histories with known rewards
     histories = [
         create_test_history([1.0, 2.0, 3.0]),  # Return = 1 + 2*0.95 + 3*0.95^2
@@ -98,6 +108,16 @@ def test_compute_statistics_basic():
 
 
 def test_compute_statistics_single_history():
+    """Test compute statistics single history.
+    
+    Purpose: Validates compute statistics single history
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test with a single history
     histories = [
         create_test_history([1.0, 2.0, 3.0]),
@@ -129,6 +149,16 @@ def test_compute_statistics_single_history():
 
 
 def test_compute_statistics_negative_rewards():
+    """Test compute statistics negative rewards.
+    
+    Purpose: Validates compute statistics negative rewards
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test with negative rewards
     histories = [
         create_test_history([-1.0, -2.0, -3.0]),
@@ -161,6 +191,16 @@ def test_compute_statistics_negative_rewards():
 
 
 def test_compute_statistics_zero_rewards():
+    """Test compute statistics zero rewards.
+    
+    Purpose: Validates compute statistics zero rewards
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test with zero rewards
     histories = [
         create_test_history([0.0, 0.0, 0.0]),
@@ -193,6 +233,16 @@ def test_compute_statistics_zero_rewards():
 
 
 def test_compute_statistics_environment_policy_pair():
+    """Test compute statistics environment policy pair.
+    
+    Purpose: Validates compute statistics environment policy pair
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create a simple environment
     environment = TigerPOMDP(discount_factor=0.95)
     
@@ -297,6 +347,16 @@ def test_compute_statistics_environment_policy_pair():
 
 
 def test_compute_statistics_environments_policies_comparison():
+    """Test compute statistics environments policies comparison.
+    
+    Purpose: Validates compute statistics environments policies comparison
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create environments
     env1 = TigerPOMDP(discount_factor=0.95, name="TigerPOMDP_1")
     env2 = TigerPOMDP(discount_factor=0.99, name="TigerPOMDP_2")

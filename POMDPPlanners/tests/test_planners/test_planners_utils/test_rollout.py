@@ -69,7 +69,16 @@ def cartpole_action_sampler():
 
 
 def test_rollout_basic_functionality(tiger_environment, tiger_action_sampler):
-    """Test basic rollout functionality."""
+    """Test basic rollout functionality.
+    
+    Purpose: Validates rollout basic functionality
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     initial_state = "tiger_left"
     
     rollout_value = random_rollout_action_sampler(
@@ -90,7 +99,16 @@ def test_rollout_basic_functionality(tiger_environment, tiger_action_sampler):
 
 
 def test_rollout_terminal_state_handling(tiger_environment, tiger_action_sampler):
-    """Test that rollout handles terminal states correctly."""
+    """Test that rollout handles terminal states correctly.
+    
+    Purpose: Validates rollout terminal state handling
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Mock terminal state
     original_is_terminal = tiger_environment.is_terminal
     tiger_environment.is_terminal = lambda state: True
@@ -112,7 +130,16 @@ def test_rollout_terminal_state_handling(tiger_environment, tiger_action_sampler
 
 
 def test_rollout_max_depth_handling(sanity_environment, sanity_action_sampler):
-    """Test that rollout respects max_depth parameter."""
+    """Test that rollout respects max_depth parameter.
+    
+    Purpose: Validates rollout max depth handling
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     initial_state = 0
     
     # Test with different max depths
@@ -132,7 +159,16 @@ def test_rollout_max_depth_handling(sanity_environment, sanity_action_sampler):
 
 
 def test_rollout_at_max_depth(sanity_environment, sanity_action_sampler):
-    """Test rollout behavior when starting at max depth."""
+    """Test rollout behavior when starting at max depth.
+    
+    Purpose: Validates rollout at max depth
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     rollout_value = random_rollout_action_sampler(
         state=0,
         depth=5,  # At max depth
@@ -147,7 +183,16 @@ def test_rollout_at_max_depth(sanity_environment, sanity_action_sampler):
 
 
 def test_rollout_discount_factor_effect(sanity_environment, sanity_action_sampler):
-    """Test that discount factor affects rollout values appropriately."""
+    """Test that discount factor affects rollout values appropriately.
+    
+    Purpose: Validates rollout discount factor effect
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     state = 0  # Good state in SanityPOMDP
     
     # Test with different discount factors
@@ -177,7 +222,16 @@ def test_rollout_discount_factor_effect(sanity_environment, sanity_action_sample
 
 
 def test_rollout_deterministic_behavior(sanity_environment):
-    """Test rollout with deterministic action sampler."""
+    """Test rollout with deterministic action sampler.
+    
+    Purpose: Validates rollout deterministic behavior
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create deterministic sampler that always chooses action 0 (good action in SanityPOMDP)
     det_sampler = DeterministicActionSampler(action=0)
     
@@ -198,7 +252,16 @@ def test_rollout_deterministic_behavior(sanity_environment):
 
 
 def test_rollout_different_initial_states(sanity_environment, sanity_action_sampler):
-    """Test rollout from different initial states."""
+    """Test rollout from different initial states.
+    
+    Purpose: Validates rollout different initial states
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     max_depth = 8
     n_rollouts = 50
     
@@ -237,7 +300,16 @@ def test_rollout_different_initial_states(sanity_environment, sanity_action_samp
 
 
 def test_rollout_with_continuous_environment(cartpole_environment, cartpole_action_sampler):
-    """Test rollout with continuous state environment."""
+    """Test rollout with continuous state environment.
+    
+    Purpose: Validates rollout with continuous environment
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Sample initial state
     initial_state_dist = cartpole_environment.initial_state_dist()
     state = initial_state_dist.sample()[0]
@@ -259,7 +331,16 @@ def test_rollout_with_continuous_environment(cartpole_environment, cartpole_acti
 
 
 def test_rollout_variance_reduction():
-    """Test that multiple rollouts reduce variance in value estimates."""
+    """Test that multiple rollouts reduce variance in value estimates.
+    
+    Purpose: Validates rollout variance reduction
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     sanity = SanityPOMDP(discount_factor=0.95)
     sampler = MockActionSampler([0, 1])
     state = 0
@@ -300,7 +381,16 @@ def test_rollout_variance_reduction():
 
 
 def test_rollout_recursion_depth():
-    """Test that rollout doesn't cause stack overflow with deep recursion."""
+    """Test that rollout doesn't cause stack overflow with deep recursion.
+    
+    Purpose: Validates rollout recursion depth
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     sanity = SanityPOMDP(discount_factor=0.99)
     sampler = MockActionSampler([0, 1])
     
@@ -323,7 +413,16 @@ def test_rollout_recursion_depth():
 # Following the project standard of testing all usage examples from docstrings
 
 def test_basic_tiger_rollout_usage_example():
-    """Test the basic Tiger POMDP rollout usage example from docstring."""
+    """Test the basic Tiger POMDP rollout usage example from docstring.
+    
+    Purpose: Validates basic tiger rollout usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     import numpy as np
     from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
     from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
@@ -355,7 +454,16 @@ def test_basic_tiger_rollout_usage_example():
 
 
 def test_cartpole_rollout_usage_example():
-    """Test the CartPole rollout usage example from docstring."""
+    """Test the CartPole rollout usage example from docstring.
+    
+    Purpose: Validates cartpole rollout usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     import numpy as np
     from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
     from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
@@ -390,7 +498,16 @@ def test_cartpole_rollout_usage_example():
 
 
 def test_multiple_rollouts_usage_example():
-    """Test the multiple rollouts for variance reduction usage example from docstring."""
+    """Test the multiple rollouts for variance reduction usage example from docstring.
+    
+    Purpose: Validates multiple rollouts usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
     import numpy as np
     from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
     from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
@@ -433,7 +550,16 @@ def test_multiple_rollouts_usage_example():
 
 
 def test_rollout_depth_comparison_usage_example():
-    """Test the rollout depth comparison usage example from docstring."""
+    """Test the rollout depth comparison usage example from docstring.
+    
+    Purpose: Validates rollout depth comparison usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     import numpy as np
     from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
     from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
@@ -479,7 +605,16 @@ def test_rollout_depth_comparison_usage_example():
 
 
 def test_informed_action_sampler_usage_example():
-    """Test the custom informed action sampler usage example from docstring."""
+    """Test the custom informed action sampler usage example from docstring.
+    
+    Purpose: Validates sampling behavior for informed action r usage example
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: example
+    """
     import numpy as np
     from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
     from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
@@ -535,7 +670,16 @@ def test_informed_action_sampler_usage_example():
 
 
 def test_rollout_parameter_validation():
-    """Test rollout function with edge case parameters."""
+    """Test rollout function with edge case parameters.
+    
+    Purpose: Validates rollout parameter validation
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     sanity = SanityPOMDP(discount_factor=0.5)
     sampler = MockActionSampler([0, 1])
     
@@ -567,7 +711,16 @@ def test_rollout_parameter_validation():
 
 
 def test_rollout_action_sampler_integration():
-    """Test that rollout works with different types of action samplers."""
+    """Test that rollout works with different types of action samplers.
+    
+    Purpose: Validates sampling behavior for rollout action r integration
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: integration
+    """
     tiger = TigerPOMDP(discount_factor=0.95)
     
     # Test with different action samplers

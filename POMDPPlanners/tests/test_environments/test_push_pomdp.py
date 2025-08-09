@@ -9,6 +9,16 @@ from POMDPPlanners.environments.push_pomdp import (
 )
 
 def test_push_pomdp_initialization():
+    """Test push pomdp initialization.
+    
+    Purpose: Validates proper initialization of push pomdp 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Test basic initialization
     env = PushPOMDP(
         discount_factor=0.95,
@@ -27,6 +37,16 @@ def test_push_pomdp_initialization():
     assert np.array_equal(env.target_pos, np.array([9, 9]))  # grid_size - 1
 
 def test_state_transition():
+    """Test state transition.
+    
+    Purpose: Validates state transition
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test state transition with known parameters
     state = np.array([5.0, 5.0, 6.0, 5.0, 9.0, 9.0])  # Robot to the left of object
     action = "right"
@@ -61,6 +81,16 @@ def test_state_transition():
     assert np.all(next_state < grid_size)
 
 def test_state_transition_no_push():
+    """Test state transition no push.
+    
+    Purpose: Validates state transition no push
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test state transition when robot is too far to push
     state = np.array([1.0, 1.0, 8.0, 8.0, 9.0, 9.0])  # Robot far from object
     action = "right"
@@ -85,6 +115,16 @@ def test_state_transition_no_push():
     assert np.array_equal(next_state[2:4], state[2:4])
 
 def test_observation_model():
+    """Test observation model.
+    
+    Purpose: Validates observation model
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test observation model
     state = np.array([5.0, 5.0, 4.0, 5.0, 9.0, 9.0])
     action = "right"
@@ -113,6 +153,16 @@ def test_observation_model():
     assert np.array_equal(observation[4:], state[4:])
 
 def test_reward_function():
+    """Test reward function.
+    
+    Purpose: Validates reward function
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = PushPOMDP(discount_factor=0.95)
     
     # Test reward for object far from target
@@ -131,6 +181,16 @@ def test_reward_function():
     assert reward_at_target > 0  # Positive reward for reaching target
 
 def test_terminal_state():
+    """Test terminal state.
+    
+    Purpose: Validates terminal state
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = PushPOMDP(discount_factor=0.95)
     
     # Test non-terminal state
@@ -142,6 +202,16 @@ def test_terminal_state():
     assert env.is_terminal(state_near)
 
 def test_initial_state_distribution():
+    """Test initial state distribution.
+    
+    Purpose: Validates initial state distribution
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = PushPOMDP(discount_factor=0.95, grid_size=10)
     initial_dist = env.initial_state_dist()
     
@@ -163,6 +233,16 @@ def test_initial_state_distribution():
         assert distance >= 2.0  # Minimum distance constraint
 
 def test_get_actions():
+    """Test get actions.
+    
+    Purpose: Validates get actions
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = PushPOMDP(discount_factor=0.95)
     actions = env.get_actions()
     
@@ -173,6 +253,16 @@ def test_get_actions():
     assert "left" in actions
 
 def test_is_equal_observation():
+    """Test is equal observation.
+    
+    Purpose: Validates is equal observation
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     env = PushPOMDP(discount_factor=0.95)
     
     # Test equal observations
@@ -185,6 +275,16 @@ def test_is_equal_observation():
     assert not env.is_equal_observation(obs1, obs3)
 
 def test_sample_next_step():
+    """Test sample next step.
+    
+    Purpose: Validates sampling behavior for  next step
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     env = PushPOMDP(discount_factor=0.95)
     state = np.array([5.0, 5.0, 4.0, 5.0, 9.0, 9.0])
     action = "right"
@@ -208,6 +308,16 @@ def test_sample_next_step():
     assert reward == env.reward(next_state, action)
 
 def test_environment_equality():
+    """Test environment equality.
+    
+    Purpose: Validates equality comparison for environment 
+    
+    Given: Objects with same or different configurations
+    When: Equality comparison is performed
+    Then: Objects are correctly identified as equal or unequal
+    
+    Test type: unit
+    """
     # Create two identical environments
     env1 = PushPOMDP(
         discount_factor=0.95,
@@ -238,6 +348,16 @@ def test_environment_equality():
     assert env1 != env3
 
 def test_config_id():
+    """Test config id.
+    
+    Purpose: Validates config_id behavior for 
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
     # Create two environments with same parameters
     env1 = PushPOMDP(
         discount_factor=0.95,

@@ -11,7 +11,16 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def test_pomcp_comprehensive_usage_example():
-    """Test the comprehensive POMCP usage example from the class docstring."""
+    """Test the comprehensive POMCP usage example from the class docstring.
+    
+    Purpose: Validates pomcp comprehensive usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing POMCP comprehensive usage example...")
     
     try:
@@ -50,7 +59,16 @@ def test_pomcp_comprehensive_usage_example():
         return False
 
 def test_pft_dpw_cartpole_usage_example():
-    """Test the CartPole usage example from PFT_DPW class docstring."""
+    """Test the CartPole usage example from PFT_DPW class docstring.
+    
+    Purpose: Validates pft dpw cartpole usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing PFT-DPW CartPole usage example...")
     
     try:
@@ -106,7 +124,16 @@ def test_pft_dpw_cartpole_usage_example():
         return False
 
 def test_pft_dpw_navigation_usage_example():
-    """Test the 2D navigation usage example from PFT_DPW class docstring."""
+    """Test the 2D navigation usage example from PFT_DPW class docstring.
+    
+    Purpose: Validates pft dpw navigation usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing PFT-DPW 2D navigation usage example...")
     
     try:
@@ -156,7 +183,16 @@ def test_pft_dpw_navigation_usage_example():
         return False
 
 def test_action_sampler_usage_example():
-    """Test the ActionSampler usage example from the class docstring."""
+    """Test the ActionSampler usage example from the class docstring.
+    
+    Purpose: Validates sampling behavior for action r usage example
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: example
+    """
     print("Testing ActionSampler usage example...")
     
     try:
@@ -201,7 +237,16 @@ def test_action_sampler_usage_example():
         return False
 
 def test_path_simulation_policy_custom_mcts_example():
-    """Test the custom MCTS implementation from PathSimulationPolicy docstring."""
+    """Test the custom MCTS implementation from PathSimulationPolicy docstring.
+    
+    Purpose: Validates path simulation policy custom mcts example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing PathSimulationPolicy custom MCTS usage example...")
     
     try:
@@ -319,7 +364,16 @@ def test_path_simulation_policy_custom_mcts_example():
         return False
 
 def test_sparse_pft_tiger_usage_example():
-    """Test the Tiger POMDP usage example from SparsePFT class docstring."""
+    """Test the Tiger POMDP usage example from SparsePFT class docstring.
+    
+    Purpose: Validates sparse pft tiger usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing SparsePFT Tiger usage example...")
     
     try:
@@ -369,7 +423,16 @@ def test_sparse_pft_tiger_usage_example():
         return False
 
 def test_sparse_pft_parameter_comparison_example():
-    """Test the parameter comparison example from SparsePFT class docstring."""
+    """Test the parameter comparison example from SparsePFT class docstring.
+    
+    Purpose: Validates sparse pft parameter comparison example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing SparsePFT parameter comparison usage example...")
     
     try:
@@ -433,7 +496,16 @@ def test_sparse_pft_parameter_comparison_example():
         return False
 
 def test_pomcpow_comprehensive_usage_example():
-    """Test the comprehensive POMCPOW usage example from the class docstring."""
+    """Test the comprehensive POMCPOW usage example from the class docstring.
+    
+    Purpose: Validates pomcpow comprehensive usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing POMCPOW comprehensive usage example...")
     
     try:
@@ -496,7 +568,16 @@ def test_pomcpow_comprehensive_usage_example():
         return False
 
 def test_mcts_algorithms_integration():
-    """Test that all MCTS algorithms work together and can be compared."""
+    """Test that all MCTS algorithms work together and can be compared.
+    
+    Purpose: Validates mcts algorithms integration
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
     print("Testing MCTS algorithms integration...")
     
     try:

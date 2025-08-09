@@ -20,7 +20,16 @@ class TestCartPolePOMDPEquality:
     """Test suite for CartPolePOMDP equality comparisons."""
     
     def test_same_discount_factor(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that CartPolePOMDPs with same discount factor are equal."""
+        """Test that CartPolePOMDPs with same discount factor are equal.
+    
+    Purpose: Validates same discount factor
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = CartPolePOMDP(
             discount_factor=0.95,
             noise_cov=base_cartpole_environment.noise_cov
@@ -29,7 +38,16 @@ class TestCartPolePOMDPEquality:
         assert other_env == base_cartpole_environment  # Test symmetry
     
     def test_different_discount_factor(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that CartPolePOMDPs with different discount factors are not equal."""
+        """Test that CartPolePOMDPs with different discount factors are not equal.
+    
+    Purpose: Validates different discount factor
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = CartPolePOMDP(
             discount_factor=0.8,
             noise_cov=base_cartpole_environment.noise_cov
@@ -38,7 +56,16 @@ class TestCartPolePOMDPEquality:
         assert other_env != base_cartpole_environment  # Test symmetry
     
     def test_different_noise_covariance(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that CartPolePOMDPs with different noise covariance are not equal."""
+        """Test that CartPolePOMDPs with different noise covariance are not equal.
+    
+    Purpose: Validates different noise covariance
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = CartPolePOMDP(
             discount_factor=0.95,
             noise_cov=np.eye(4) * 0.2  # Different noise covariance
@@ -47,7 +74,16 @@ class TestCartPolePOMDPEquality:
         assert other_env != base_cartpole_environment  # Test symmetry
     
     def test_different_physical_parameters(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that CartPolePOMDPs with different physical parameters are not equal."""
+        """Test that CartPolePOMDPs with different physical parameters are not equal.
+    
+    Purpose: Validates different physical parameters
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = CartPolePOMDP(
             discount_factor=0.95,
             noise_cov=base_cartpole_environment.noise_cov
@@ -63,13 +99,31 @@ class TestCartPolePOMDPEquality:
         assert base_cartpole_environment != other_env
     
     def test_comparison_with_non_environment(self, base_cartpole_environment: CartPolePOMDP):
-        """Test comparison with non-Environment objects."""
+        """Test comparison with non-Environment objects.
+    
+    Purpose: Validates comparison with non environment
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         assert base_cartpole_environment != "not an environment"
         assert base_cartpole_environment != 42
         assert base_cartpole_environment != None
     
     def test_missing_attributes(self, base_cartpole_environment: CartPolePOMDP):
-        """Test equality when attributes are missing."""
+        """Test equality when attributes are missing.
+    
+    Purpose: Validates missing attributes
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
         other_env = CartPolePOMDP(
             discount_factor=0.95,
             noise_cov=base_cartpole_environment.noise_cov
@@ -85,7 +139,16 @@ class TestCartPolePOMDPEquality:
         assert base_cartpole_environment != other_env
     
     def test_deep_copy_equality(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that a deep copy of CartPolePOMDP is equal to original."""
+        """Test that a deep copy of CartPolePOMDP is equal to original.
+    
+    Purpose: Validates equality comparison for deep copy 
+    
+    Given: Objects with same or different configurations
+    When: Equality comparison is performed
+    Then: Objects are correctly identified as equal or unequal
+    
+    Test type: unit
+    """
         import copy
         copied_env = copy.deepcopy(base_cartpole_environment)
         assert copied_env == base_cartpole_environment
@@ -96,7 +159,16 @@ class TestCartPolePOMDPConfigId:
     """Test suite for CartPolePOMDP config_id functionality."""
     
     def test_config_id_consistency(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that config_id is consistent for identical environments."""
+        """Test that config_id is consistent for identical environments.
+    
+    Purpose: Validates config_id behavior for  consistency
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         other_env = CartPolePOMDP(
             discount_factor=0.95,
             noise_cov=base_cartpole_environment.noise_cov
@@ -104,7 +176,16 @@ class TestCartPolePOMDPConfigId:
         assert base_cartpole_environment.config_id == other_env.config_id
     
     def test_config_id_different_discount_factor(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that config_id changes with different discount factor."""
+        """Test that config_id changes with different discount factor.
+    
+    Purpose: Validates config_id behavior for  different discount factor
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         other_env = CartPolePOMDP(
             discount_factor=0.8,
             noise_cov=base_cartpole_environment.noise_cov
@@ -112,7 +193,16 @@ class TestCartPolePOMDPConfigId:
         assert base_cartpole_environment.config_id != other_env.config_id
     
     def test_config_id_different_noise_covariance(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that config_id changes with different noise covariance."""
+        """Test that config_id changes with different noise covariance.
+    
+    Purpose: Validates config_id behavior for  different noise covariance
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         other_env = CartPolePOMDP(
             discount_factor=0.95,
             noise_cov=np.eye(4) * 0.2  # Different noise covariance
@@ -120,7 +210,16 @@ class TestCartPolePOMDPConfigId:
         assert base_cartpole_environment.config_id != other_env.config_id
     
     def test_config_id_different_physical_parameters(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that config_id changes with different physical parameters."""
+        """Test that config_id changes with different physical parameters.
+    
+    Purpose: Validates config_id behavior for  different physical parameters
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         other_env = CartPolePOMDP(
             discount_factor=0.95,
             noise_cov=base_cartpole_environment.noise_cov
@@ -136,20 +235,48 @@ class TestCartPolePOMDPConfigId:
         assert base_cartpole_environment.config_id != other_env.config_id
     
     def test_config_id_format(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that config_id is a valid SHA-256 hash."""
+        """Test that config_id is a valid SHA-256 hash.
+    
+    Purpose: Validates config_id behavior for  format
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         config_id = base_cartpole_environment.config_id
         assert isinstance(config_id, str)
         assert len(config_id) == 64  # SHA-256 hash length
         assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters
     
     def test_config_id_deterministic(self, base_cartpole_environment: CartPolePOMDP):
-        """Test that config_id is deterministic (same input always produces same output)."""
+        """Test that config_id is deterministic (same input always produces same output).
+    
+    Purpose: Validates config_id behavior for  deterministic
+    
+    Given: Belief objects with specific configurations
+    When: Config IDs are generated or compared
+    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    
+    Test type: configuration
+    """
         config_id1 = base_cartpole_environment.config_id
         config_id2 = base_cartpole_environment.config_id
         assert config_id1 == config_id2
 
 
 def test_state_transition_model(base_cartpole_environment):
+    """Test state transition model.
+    
+    Purpose: Validates state transition model
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test state transition
     state = np.array([0.0, 0.0, 0.0, 0.0])
     action = 0
@@ -160,6 +287,16 @@ def test_state_transition_model(base_cartpole_environment):
 
 
 def test_observation_model(base_cartpole_environment):
+    """Test observation model.
+    
+    Purpose: Validates observation model
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test observation model
     state = np.array([0.0, 0.0, 0.0, 0.0])
     action = 0
@@ -170,6 +307,16 @@ def test_observation_model(base_cartpole_environment):
 
 
 def test_initial_state_distribution(base_cartpole_environment):
+    """Test initial state distribution.
+    
+    Purpose: Validates initial state distribution
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test initial state distribution
     dist = base_cartpole_environment.initial_state_dist()
     state = dist.sample()[0]
@@ -178,6 +325,16 @@ def test_initial_state_distribution(base_cartpole_environment):
 
 
 def test_cartpole_pomdp_initialization():
+    """Test cartpole pomdp initialization.
+    
+    Purpose: Validates proper initialization of cartpole pomdp 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Test POMDP initialization
     noise_cov = np.eye(4) * 0.1
 
@@ -192,6 +349,16 @@ def test_cartpole_pomdp_initialization():
 
 
 def test_cartpole_pomdp_reward():
+    """Test cartpole pomdp reward.
+    
+    Purpose: Validates cartpole pomdp reward
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test reward function
     env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
 
@@ -208,6 +375,16 @@ def test_cartpole_pomdp_reward():
 
 
 def test_cartpole_pomdp_terminal():
+    """Test cartpole pomdp terminal.
+    
+    Purpose: Validates cartpole pomdp terminal
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test terminal state detection
     env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
 
@@ -225,6 +402,16 @@ def test_cartpole_pomdp_terminal():
 
 
 def test_cartpole_pomdp_models():
+    """Test cartpole pomdp models.
+    
+    Purpose: Validates cartpole pomdp models
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test model creation
     env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
     state = np.array([0.0, 0.0, 0.0, 0.0])

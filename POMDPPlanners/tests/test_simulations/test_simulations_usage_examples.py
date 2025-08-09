@@ -13,7 +13,16 @@ import shutil
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def test_run_episode_usage_example():
-    """Test the run_episode usage example from the function docstring."""
+    """Test the run_episode usage example from the function docstring.
+    
+    Purpose: Validates run episode usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing run_episode usage example...")
     
     try:
@@ -74,7 +83,16 @@ def test_run_episode_usage_example():
         return False
 
 def test_pomdp_simulator_usage_example():
-    """Test the POMDPSimulator usage example (simplified version)."""
+    """Test the POMDPSimulator usage example (simplified version).
+    
+    Purpose: Validates pomdp simulator usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing POMDPSimulator usage example...")
     
     try:
@@ -181,7 +199,16 @@ def test_pomdp_simulator_usage_example():
         return False
 
 def test_simulations_api_usage_example():
-    """Test the SimulationsAPI usage example (simplified version)."""
+    """Test the SimulationsAPI usage example (simplified version).
+    
+    Purpose: Validates simulations api usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing SimulationsAPI usage example...")
     
     try:
@@ -279,7 +306,16 @@ def test_simulations_api_usage_example():
         return False
 
 def test_simulation_statistics_usage_example():
-    """Test the compute_statistics_environment_policy_pair usage example."""
+    """Test the compute_statistics_environment_policy_pair usage example.
+    
+    Purpose: Validates simulation statistics usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing simulation statistics usage example...")
     
     try:
@@ -365,7 +401,16 @@ def test_simulation_statistics_usage_example():
         return False
 
 def test_metrics_dict_to_dataframe_usage_example():
-    """Test the metrics_dict_to_dataframe usage example."""
+    """Test the metrics_dict_to_dataframe usage example.
+    
+    Purpose: Validates metrics dict to dataframe usage example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing metrics_dict_to_dataframe usage example...")
     
     try:

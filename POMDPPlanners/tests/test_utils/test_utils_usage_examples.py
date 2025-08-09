@@ -13,7 +13,16 @@ import logging
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def test_unit_circle_action_sampler_basic_usage():
-    """Test the basic usage example from UnitCircleActionSampler docstring."""
+    """Test the basic usage example from UnitCircleActionSampler docstring.
+    
+    Purpose: Validates sampling behavior for unit circle action r basic usage
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: example
+    """
     print("Testing UnitCircleActionSampler basic usage example...")
     
     try:
@@ -72,7 +81,16 @@ def test_unit_circle_action_sampler_basic_usage():
         return False
 
 def test_unit_circle_action_sampler_magnitude_comparison():
-    """Test the magnitude comparison example from UnitCircleActionSampler docstring."""
+    """Test the magnitude comparison example from UnitCircleActionSampler docstring.
+    
+    Purpose: Validates sampling behavior for unit circle action r magnitude comparison
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     print("Testing UnitCircleActionSampler magnitude comparison example...")
     
     try:
@@ -115,7 +133,16 @@ def test_unit_circle_action_sampler_magnitude_comparison():
         return False
 
 def test_config_loader_basic_usage():
-    """Test the basic usage example from load_config docstring."""
+    """Test the basic usage example from load_config docstring.
+    
+    Purpose: Validates config loader basic usage
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing config_loader basic usage example...")
     
     try:
@@ -188,7 +215,16 @@ def test_config_loader_basic_usage():
         return False
 
 def test_config_loader_environment_integration():
-    """Test environment integration example from load_config docstring."""
+    """Test environment integration example from load_config docstring.
+    
+    Purpose: Validates config loader environment integration
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
     print("Testing config_loader environment integration example...")
     
     try:
@@ -258,7 +294,16 @@ def test_config_loader_environment_integration():
         return False
 
 def test_logger_basic_usage():
-    """Test the basic logger usage example from get_logger docstring."""
+    """Test the basic logger usage example from get_logger docstring.
+    
+    Purpose: Validates logger basic usage
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing logger basic usage example...")
     
     try:
@@ -293,7 +338,16 @@ def test_logger_basic_usage():
         return False
 
 def test_logger_file_logging():
-    """Test file logging example from get_logger docstring."""
+    """Test file logging example from get_logger docstring.
+    
+    Purpose: Validates logger file logging
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     print("Testing logger file logging example...")
     
     try:
@@ -343,7 +397,16 @@ def test_logger_file_logging():
         return False
 
 def test_cvar_estimator_basic_usage():
-    """Test the basic CVaR usage example from cvar_estimator docstring."""
+    """Test the basic CVaR usage example from cvar_estimator docstring.
+    
+    Purpose: Validates cvar estimator basic usage
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing cvar_estimator basic usage example...")
     
     try:
@@ -380,7 +443,16 @@ def test_cvar_estimator_basic_usage():
         return False
 
 def test_cvar_estimator_algorithm_comparison():
-    """Test algorithm comparison example from cvar_estimator docstring."""
+    """Test algorithm comparison example from cvar_estimator docstring.
+    
+    Purpose: Validates cvar estimator algorithm comparison
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     print("Testing cvar_estimator algorithm comparison example...")
     
     try:
@@ -416,7 +488,16 @@ def test_cvar_estimator_algorithm_comparison():
         return False
 
 def test_confidence_interval_basic_usage():
-    """Test the basic confidence interval usage example."""
+    """Test the basic confidence interval usage example.
+    
+    Purpose: Validates confidence interval basic usage
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing confidence_interval basic usage example...")
     
     try:
@@ -466,7 +547,16 @@ def test_confidence_interval_basic_usage():
         return False
 
 def test_confidence_interval_multi_algorithm():
-    """Test multi-algorithm confidence interval example."""
+    """Test multi-algorithm confidence interval example.
+    
+    Purpose: Validates confidence interval multi algorithm
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     print("Testing confidence_interval multi-algorithm example...")
     
     try:
@@ -515,7 +605,16 @@ def test_confidence_interval_multi_algorithm():
         return False
 
 def test_tree_statistics_basic_usage():
-    """Test the basic tree statistics usage example."""
+    """Test the basic tree statistics usage example.
+    
+    Purpose: Validates tree statistics basic usage
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing tree statistics basic usage example...")
     
     try:
@@ -567,7 +666,16 @@ def test_tree_statistics_basic_usage():
         return False
 
 def test_tree_statistics_algorithm_comparison():
-    """Test algorithm comparison example from tree statistics."""
+    """Test algorithm comparison example from tree statistics.
+    
+    Purpose: Validates tree statistics algorithm comparison
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     print("Testing tree statistics algorithm comparison example...")
     
     try:

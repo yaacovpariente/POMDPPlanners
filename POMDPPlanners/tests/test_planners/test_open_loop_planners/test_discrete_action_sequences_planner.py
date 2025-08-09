@@ -25,6 +25,16 @@ def planner(tiger_pomdp):
 
 
 def test_initialization(tiger_pomdp):
+    """Test initialization.
+    
+    Purpose: Validates proper initialization of 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Test valid initialization
     planner = DiscreteActionSequencesPlanner(
         environment=tiger_pomdp,
@@ -70,6 +80,16 @@ def test_initialization(tiger_pomdp):
 
 
 def test_action_selection(planner, tiger_pomdp):
+    """Test action selection.
+    
+    Purpose: Validates action selection
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create a belief with equal probability for both states
     particles = ["tiger_left", "tiger_right"] * 5  # 10 particles total
     log_weights = np.log(np.ones(10) / 10)  # Equal weights
@@ -102,6 +122,16 @@ def test_action_selection(planner, tiger_pomdp):
 
 
 def test_compute_return(planner, tiger_pomdp):
+    """Test compute return.
+    
+    Purpose: Validates compute return
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create a belief
     particles = ["tiger_left", "tiger_right"] * 5  # 10 particles total
     log_weights = np.log(np.ones(10) / 10)  # Equal weights
@@ -125,6 +155,16 @@ def test_compute_return(planner, tiger_pomdp):
 
 
 def test_search_behavior(planner, tiger_pomdp):
+    """Test search behavior.
+    
+    Purpose: Validates search behavior
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create a belief
     particles = ["tiger_left", "tiger_right"] * 5  # 10 particles total
     log_weights = np.log(np.ones(10) / 10)  # Equal weights
@@ -141,6 +181,16 @@ def test_search_behavior(planner, tiger_pomdp):
 
 
 def test_integration_with_tiger_pomdp(planner, tiger_pomdp):
+    """Test integration with tiger pomdp.
+    
+    Purpose: Validates integration with tiger pomdp
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
     # Test with different initial beliefs
     beliefs = [
         WeightedParticleBelief(

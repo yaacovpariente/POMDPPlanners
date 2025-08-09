@@ -105,7 +105,21 @@ def belief(environment, n_particles):
     )
 
 
-def test_initialization_with_n_simulations(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
+def test_pomcp_dpw_initialization_n_simulations_creates_configured_planner():
+    """
+    Purpose: Validates POMCP_DPW planner initializes correctly with simulation count configuration
+    
+    Given: TigerPOMDP environment and progressive widening parameters (k_o=3, k_a=3, alpha=0.5)
+    When: POMCP_DPW planner is initialized with n_simulations=100
+    Then: Planner is configured with all parameters and simulation-based termination
+    
+    Test type: unit
+    """
+    # ARRANGE: Setup planner configuration parameters
+    expected_simulations = 100
+    expected_name = "TestPOMCP_DPW"
+    
+    # ACT: Initialize POMCP_DPW planner with simulation count
     planner = POMCP_DPW(
         environment=environment,
         discount_factor=discount_factor,
@@ -115,10 +129,12 @@ def test_initialization_with_n_simulations(environment, discount_factor, depth, 
         k_a=k_a,
         alpha_o=alpha_o,
         alpha_a=alpha_a,
-        n_simulations=100,
+        n_simulations=expected_simulations,
         action_sampler=action_sampler,
-        name="TestPOMCP_DPW"
+        name=expected_name
     )
+    
+    # ASSERT: Verify all parameters configured correctly
     assert planner.environment == environment
     assert planner.discount_factor == discount_factor
     assert planner.depth == depth
@@ -127,12 +143,27 @@ def test_initialization_with_n_simulations(environment, discount_factor, depth, 
     assert planner.k_a == k_a
     assert planner.alpha_o == alpha_o
     assert planner.alpha_a == alpha_a
-    assert planner.n_simulations == 100
-    assert planner.time_out_in_seconds is None
+    assert planner.n_simulations == expected_simulations
+    assert planner.time_out_in_seconds is None  # Mutually exclusive with n_simulations
     assert planner.action_sampler == action_sampler
+    assert planner.name == expected_name
 
 
-def test_initialization_with_timeout(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
+def test_pomcp_dpw_initialization_timeout_creates_time_limited_planner():
+    """
+    Purpose: Ensures POMCP_DPW planner initializes correctly with time-based termination
+    
+    Given: TigerPOMDP environment and progressive widening configuration
+    When: POMCP_DPW planner is initialized with time_out_in_seconds=5
+    Then: Planner is configured for time-based termination instead of simulation count
+    
+    Test type: unit
+    """
+    # ARRANGE: Setup time-based termination configuration
+    expected_timeout = 5
+    expected_name = "TestPOMCP_DPW"
+    
+    # ACT: Initialize POMCP_DPW with timeout configuration
     planner = POMCP_DPW(
         environment=environment,
         discount_factor=discount_factor,
@@ -142,20 +173,37 @@ def test_initialization_with_timeout(environment, discount_factor, depth, explor
         k_a=k_a,
         alpha_o=alpha_o,
         alpha_a=alpha_a,
-        time_out_in_seconds=5,
+        time_out_in_seconds=expected_timeout,
         action_sampler=action_sampler,
-        name="TestPOMCP_DPW"
+        name=expected_name
     )
+    
+    # ASSERT: Verify timeout-based configuration
     assert planner.environment == environment
     assert planner.discount_factor == discount_factor
     assert planner.depth == depth
     assert planner.exploration_constant == exploration_constant
-    assert planner.time_out_in_seconds == 5
-    assert planner.n_simulations is None
+    assert planner.time_out_in_seconds == expected_timeout
+    assert planner.n_simulations is None  # Mutually exclusive with timeout
+    assert planner.name == expected_name
 
 
-def test_invalid_initialization(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
-    with pytest.raises(ValueError):
+def test_pomcp_dpw_initialization_both_termination_criteria_raises_error():
+    """
+    Purpose: Validates proper error handling when both termination criteria are provided
+    
+    Given: Valid POMCP_DPW configuration parameters
+    When: Planner initialization attempts to set both n_simulations=100 and time_out_in_seconds=5
+    Then: ValueError is raised indicating mutually exclusive termination criteria
+    
+    Test type: unit
+    """
+    # ARRANGE: Setup invalid configuration with both termination criteria
+    invalid_simulations = 100
+    invalid_timeout = 5
+    
+    # ACT & ASSERT: Verify ValueError raised for conflicting termination criteria
+    with pytest.raises(ValueError) as exc_info:
         POMCP_DPW(
             environment=environment,
             discount_factor=discount_factor,
@@ -165,35 +213,71 @@ def test_invalid_initialization(environment, discount_factor, depth, exploration
             k_a=k_a,
             alpha_o=alpha_o,
             alpha_a=alpha_a,
-            n_simulations=100,
-            time_out_in_seconds=5,
+            n_simulations=invalid_simulations,
+            time_out_in_seconds=invalid_timeout,
             action_sampler=action_sampler,
             name="TestPOMCP_DPW"
         )
+    
+    # ASSERT: Verify error message content
+    assert "mutually exclusive" in str(exc_info.value).lower() or "both" in str(exc_info.value).lower()
 
 
-def test_action_selection(planner, belief):
-    action, policy_run_data = planner.action(belief)
-    assert isinstance(action, list)
-    assert len(action) == 1
-    assert action[0] in planner.action_sampler.get_space()
+def test_pomcp_dpw_action_selection_returns_valid_action_from_sampler():
+    """
+    Purpose: Validates POMCP_DPW selects valid actions from configured action sampler
+    
+    Given: POMCP_DPW planner with MockActionSampler containing actions [0, 1, 2] and initial belief
+    When: Action selection is performed using the planner
+    Then: Selected action is a single-element list with action from the sampler space
+    
+    Test type: unit
+    """
+    # ARRANGE: Use configured planner and belief from fixtures
+    expected_action_space = planner.action_sampler.get_space()
+    
+    # ACT: Perform action selection
+    selected_action, policy_run_data = planner.action(belief)
+    
+    # ASSERT: Verify valid action selection format and content
+    assert isinstance(selected_action, list)
+    assert len(selected_action) == 1
+    assert selected_action[0] in expected_action_space
+    assert hasattr(policy_run_data, 'info_variables')  # Contains MCTS tree statistics
 
 
-def test_action_progressive_widening_new_action(planner, belief):
+def test_pomcp_dpw_progressive_widening_adds_new_action_to_unvisited_node():
+    """
+    Purpose: Verifies action progressive widening adds new actions to unvisited belief nodes
+    
+    Given: Unvisited belief node (visit_count=0) and POMCP_DPW progressive widening parameters
+    When: Action progressive widening is applied to the belief node
+    Then: New ActionNode is created and added as child with valid action from sampler
+    
+    Test type: unit
+    """
+    # ARRANGE: Create unvisited belief node for progressive widening test
     belief_node = BeliefNode(belief=belief, observation=None)
     belief_node.visit_count = 0
+    initial_children_count = len(belief_node.children)
+    expected_action_space = planner.action_sampler.get_space()
     
-    # Use the function from dpw module directly
+    # ACT: Apply action progressive widening to unvisited node
     action_node = action_progressive_widening(
         belief_node=belief_node,
         alpha_a=planner.alpha_a,
         action_sampler=planner.action_sampler,
         exploration_constant=planner.exploration_constant
     )
+    
+    # ASSERT: Verify new action node created and properly linked
     assert isinstance(action_node, ActionNode)
     assert action_node.parent == belief_node
     assert action_node in belief_node.children
-    assert action_node.action in planner.action_sampler.get_space()
+    assert len(belief_node.children) == initial_children_count + 1
+    assert action_node.action in expected_action_space
+    assert action_node.visit_count == 0  # Newly created node
+    assert action_node.q_value == 0.0  # Initial Q-value
 
 
 def test_action_progressive_widening_existing_action(planner, belief, action_sampler):

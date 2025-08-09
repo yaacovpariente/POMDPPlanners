@@ -69,21 +69,48 @@ def cache_db(temp_cache_dir):
 
 # Tests for DaskTaskManager
 def test_dask_task_manager_initialization():
-    """Test DaskTaskManager initialization and cleanup (no cache_db)."""
+    """Test DaskTaskManager initialization and cleanup (no cache_db).
+    
+    Purpose: Validates proper initialization of dask task manager 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     with DaskTaskManager() as task_manager:
         assert task_manager.client is not None
         assert task_manager.cache is not None
         assert not task_manager.cache_registered  # Cache not registered by default
 
 def test_dask_task_manager_with_cache_clear():
-    """Test DaskTaskManager initialization with cache clearing (no cache_db)."""
+    """Test DaskTaskManager initialization with cache clearing (no cache_db).
+    
+    Purpose: Validates dask task manager with cache clear
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     with DaskTaskManager(clear_cache_on_start=True) as task_manager:
         assert task_manager.client is not None
         assert task_manager.cache is not None
         assert not task_manager.cache_registered  # Cache not registered when cleared
 
 def test_dask_task_manager_run_tasks(environment, policy):
-    """Test running tasks with DaskTaskManager (no cache_db)."""
+    """Test running tasks with DaskTaskManager (no cache_db).
+    
+    Purpose: Validates dask task manager run tasks
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     with DaskTaskManager() as task_manager:
         # Create multiple tasks
         tasks = []
@@ -112,7 +139,16 @@ def test_dask_task_manager_run_tasks(environment, policy):
             assert len(result.history) <= 2
 
 def test_dask_task_manager_task_status(environment, policy):
-    """Test getting task status with DaskTaskManager (no cache_db)."""
+    """Test getting task status with DaskTaskManager (no cache_db).
+    
+    Purpose: Validates dask task manager task status
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     with DaskTaskManager() as task_manager:
         # Create and submit a task
         belief = create_test_belief()
@@ -134,21 +170,48 @@ def test_dask_task_manager_task_status(environment, policy):
 
 # Tests for JoblibTaskManager
 def test_joblib_task_manager_initialization(cache_db):
-    """Test JoblibTaskManager initialization."""
+    """Test JoblibTaskManager initialization.
+    
+    Purpose: Validates proper initialization of joblib task manager 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     with JoblibTaskManager(cache_db=cache_db) as task_manager:
         assert task_manager.n_jobs == -1  # Default to all cores
         assert task_manager.verbose == 0
         assert task_manager.memory is not None
 
 def test_joblib_task_manager_with_cache_clear(cache_db):
-    """Test JoblibTaskManager initialization with cache clearing."""
+    """Test JoblibTaskManager initialization with cache clearing.
+    
+    Purpose: Validates joblib task manager with cache clear
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     with JoblibTaskManager(cache_db=cache_db, clear_cache_on_start=True) as task_manager:
         assert task_manager.memory is not None
         # Cache should be empty after clearing
         assert len(list(task_manager.memory.store_backend.get_items())) == 0
 
 def test_joblib_task_manager_run_tasks(cache_db, environment, policy):
-    """Test running tasks with JoblibTaskManager."""
+    """Test running tasks with JoblibTaskManager.
+    
+    Purpose: Validates joblib task manager run tasks
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     with JoblibTaskManager(cache_db=cache_db) as task_manager:
         # Create multiple tasks
         tasks = []
@@ -179,7 +242,16 @@ def test_joblib_task_manager_run_tasks(cache_db, environment, policy):
             assert len(result.history) <= 2
 
 def test_joblib_task_manager_cache(cache_db, environment, policy):
-    """Test caching behavior of JoblibTaskManager."""
+    """Test caching behavior of JoblibTaskManager.
+    
+    Purpose: Validates joblib task manager cache
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     with JoblibTaskManager(cache_db=cache_db) as task_manager:
         # Create a task
         belief = create_test_belief()
@@ -228,7 +300,16 @@ def test_joblib_task_manager_cache(cache_db, environment, policy):
         assert task_identifier in ids3
 
 def test_joblib_task_manager_logging(cache_db, environment, policy, temp_cache_dir):
-    """Test that JoblibTaskManager writes logs properly."""
+    """Test that JoblibTaskManager writes logs properly.
+    
+    Purpose: Validates joblib task manager logging
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     import os
     from pathlib import Path
     
@@ -262,7 +343,16 @@ def test_joblib_task_manager_logging(cache_db, environment, policy, temp_cache_d
         # Note: We don't check directory structure as it may change
 
 def test_joblib_task_manager_logging_with_multiple_tasks(cache_db, environment, policy, temp_cache_dir):
-    """Test that JoblibTaskManager logs progress updates for multiple tasks."""
+    """Test that JoblibTaskManager logs progress updates for multiple tasks.
+    
+    Purpose: Validates joblib task manager logging with multiple tasks
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
     import os
     from pathlib import Path
     

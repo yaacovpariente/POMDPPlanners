@@ -73,7 +73,16 @@ def planner(environment, discount_factor, depth, c_ucb, beta_ucb, belief_child_n
 
 
 def test_initialization(planner, environment):
-    """Test that the planner initializes correctly"""
+    """Test that the planner initializes correctly
+    
+    Purpose: Validates proper initialization of 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     assert planner.environment == environment
     assert planner.discount_factor == 0.9
     assert planner.gamma == 0.9
@@ -85,7 +94,16 @@ def test_initialization(planner, environment):
 
 
 def test_action_selection(planner, initial_belief):
-    """Test that action selection returns a valid action"""
+    """Test that action selection returns a valid action
+    
+    Purpose: Validates action selection
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     action, policy_run_data = planner.action(belief=initial_belief)
     assert isinstance(action, list)
     assert len(action) == 1
@@ -93,7 +111,16 @@ def test_action_selection(planner, initial_belief):
 
 
 def test_get_explored_action_node(planner):
-    """Test that action node exploration works correctly"""
+    """Test that action node exploration works correctly
+    
+    Purpose: Validates get explored action node
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create a belief node with children
     belief = WeightedParticleBelief(
         particles=["tiger_left", "tiger_right"],
@@ -131,7 +158,16 @@ def test_get_explored_action_node(planner):
 
 
 def test_sample_next_existing_belief(planner):
-    """Test sampling from existing belief nodes"""
+    """Test sampling from existing belief nodes
+    
+    Purpose: Validates sampling behavior for  next existing belief
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     # Create a belief node and action node
     belief = WeightedParticleBelief(
         particles=["tiger_left", "tiger_right"],
@@ -168,7 +204,16 @@ def test_sample_next_existing_belief(planner):
 
 
 def test_generate_belief(planner):
-    """Test generating a new belief node"""
+    """Test generating a new belief node
+    
+    Purpose: Validates generate belief
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create a belief node and action node
     belief = WeightedParticleBelief(
         particles=["tiger_left", "tiger_right"],
@@ -196,7 +241,16 @@ def test_generate_belief(planner):
 
 
 def test_random_rollout(planner):
-    """Test random rollout from a state"""
+    """Test random rollout from a state
+    
+    Purpose: Validates random rollout
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     state = "tiger_left"
     return_value = planner.random_rollout(state=state, depth=0)
     assert isinstance(return_value, float)
@@ -211,7 +265,16 @@ def test_random_rollout(planner):
 
 
 def test_update_node_statistics(planner):
-    """Test updating node statistics"""
+    """Test updating node statistics
+    
+    Purpose: Validates update functionality for  node statistics
+    
+    Given: Initial object state and update parameters
+    When: Update operation is performed
+    Then: Object state is correctly modified
+    
+    Test type: unit
+    """
     # Create a belief node and action node
     belief = WeightedParticleBelief(
         particles=["tiger_left", "tiger_right"],
@@ -248,7 +311,16 @@ def test_update_node_statistics(planner):
 
 
 def test_integration_with_tiger_pomdp(planner, initial_belief, environment, n_particles):
-    """Test integration with Tiger POMDP environment"""
+    """Test integration with Tiger POMDP environment
+    
+    Purpose: Validates integration with tiger pomdp
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
     current_belief = initial_belief
     for _ in range(5):
         # Create a belief node with children
@@ -292,7 +364,16 @@ def test_integration_with_tiger_pomdp(planner, initial_belief, environment, n_pa
 
 
 def test_tree_structure_construction(planner, initial_belief, environment):
-    """Test that the tree structure is constructed correctly"""
+    """Test that the tree structure is constructed correctly
+    
+    Purpose: Validates tree structure construction
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Learn the tree
     tree = planner._learn_tree(belief=initial_belief)
     
@@ -340,7 +421,16 @@ def test_tree_structure_construction(planner, initial_belief, environment):
 
 
 def test_sanity_pomdp_action_selection():
-    """Test that SparsePFT correctly identifies the better action in SanityPOMDP"""
+    """Test that SparsePFT correctly identifies the better action in SanityPOMDP
+    
+    Purpose: Validates sanity pomdp action selection
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Create environment and planner with appropriate parameters
     environment = SanityPOMDP()
     planner = SparsePFT(
@@ -379,7 +469,16 @@ def test_sanity_pomdp_action_selection():
 
 
 def test_sanity_pomdp_belief_children():
-    """Test that SparsePFT generates appropriate belief children for SanityPOMDP"""
+    """Test that SparsePFT generates appropriate belief children for SanityPOMDP
+    
+    Purpose: Validates sanity pomdp belief children
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     environment = SanityPOMDP()
     planner = SparsePFT(
         environment=environment,

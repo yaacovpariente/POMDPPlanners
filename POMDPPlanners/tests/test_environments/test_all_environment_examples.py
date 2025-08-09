@@ -10,7 +10,16 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 def test_sanity_pomdp_main_example():
-    """Test the main SanityPOMDP class example."""
+    """Test the main SanityPOMDP class example.
+    
+    Purpose: Validates sanity pomdp main example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing SanityPOMDP main class example...")
     
     try:
@@ -43,7 +52,16 @@ def test_sanity_pomdp_main_example():
         return False
 
 def test_tiger_pomdp_main_example():
-    """Test the main TigerPOMDP class example."""
+    """Test the main TigerPOMDP class example.
+    
+    Purpose: Validates tiger pomdp main example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing TigerPOMDP main class example...")
     
     try:
@@ -81,7 +99,16 @@ def test_tiger_pomdp_main_example():
         return False
 
 def test_cartpole_pomdp_main_example():
-    """Test the main CartPolePOMDP class example."""
+    """Test the main CartPolePOMDP class example.
+    
+    Purpose: Validates cartpole pomdp main example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing CartPolePOMDP main class example...")
     
     try:
@@ -120,7 +147,16 @@ def test_cartpole_pomdp_main_example():
         return False
 
 def test_mountain_car_pomdp_main_example():
-    """Test the main MountainCarPOMDP class example."""
+    """Test the main MountainCarPOMDP class example.
+    
+    Purpose: Validates mountain car pomdp main example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing MountainCarPOMDP main class example...")
     
     try:
@@ -157,7 +193,16 @@ def test_mountain_car_pomdp_main_example():
         return False
 
 def test_push_pomdp_main_example():
-    """Test the main PushPOMDP class example."""
+    """Test the main PushPOMDP class example.
+    
+    Purpose: Validates push pomdp main example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing PushPOMDP main class example...")
     
     try:
@@ -200,7 +245,16 @@ def test_push_pomdp_main_example():
         return False
 
 def test_safety_ant_velocity_pomdp_main_example():
-    """Test the main SafeAntVelocityPOMDP class example."""
+    """Test the main SafeAntVelocityPOMDP class example.
+    
+    Purpose: Validates safety ant velocity pomdp main example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing SafeAntVelocityPOMDP main class example...")
     
     try:
@@ -246,7 +300,16 @@ def test_safety_ant_velocity_pomdp_main_example():
         return False
 
 def test_continuous_light_dark_pomdp_main_example():
-    """Test the main ContinuousLightDarkPOMDP class example."""
+    """Test the main ContinuousLightDarkPOMDP class example.
+    
+    Purpose: Validates continuous light dark pomdp main example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing ContinuousLightDarkPOMDP main class example...")
     
     try:
@@ -289,7 +352,16 @@ def test_continuous_light_dark_pomdp_main_example():
         return False
 
 def test_continuous_light_dark_pomdp_discrete_actions_example():
-    """Test the ContinuousLightDarkPOMDPDiscreteActions class example."""
+    """Test the ContinuousLightDarkPOMDPDiscreteActions class example.
+    
+    Purpose: Validates continuous light dark pomdp discrete actions example
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing ContinuousLightDarkPOMDPDiscreteActions main class example...")
     
     try:
@@ -327,7 +399,16 @@ def test_continuous_light_dark_pomdp_discrete_actions_example():
         return False
 
 def test_all_planners_usage_examples():
-    """Test usage examples from all planner classes."""
+    """Test usage examples from all planner classes.
+    
+    Purpose: Validates all planners usage examples
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing all planners usage examples...")
     
     try:
@@ -403,7 +484,16 @@ def test_all_planners_usage_examples():
         return False
 
 def test_all_supporting_class_examples():
-    """Test all supporting class examples with comprehensive validation."""
+    """Test all supporting class examples with comprehensive validation.
+    
+    Purpose: Validates all supporting class examples
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing all supporting class examples...")
     
     try:
@@ -560,7 +650,16 @@ def test_all_supporting_class_examples():
         return False
 
 def test_all_simulations_class_examples():
-    """Test usage examples from simulations classes."""
+    """Test usage examples from simulations classes.
+    
+    Purpose: Validates all simulations class examples
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: example
+    """
     print("Testing all simulations class examples...")
     
     try:

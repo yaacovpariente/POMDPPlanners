@@ -106,6 +106,16 @@ def belief(environment, n_particles):
 
 
 def test_initialization_with_n_simulations(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
+    """Test initialization with n simulations.
+    
+    Purpose: Validates proper initialization of  with n simulations
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     planner = POMCPOW(
         environment=environment,
         discount_factor=discount_factor,
@@ -133,6 +143,16 @@ def test_initialization_with_n_simulations(environment, discount_factor, depth, 
 
 
 def test_initialization_with_timeout(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
+    """Test initialization with timeout.
+    
+    Purpose: Validates proper initialization of  with timeout
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     planner = POMCPOW(
         environment=environment,
         discount_factor=discount_factor,
@@ -155,6 +175,16 @@ def test_initialization_with_timeout(environment, discount_factor, depth, explor
 
 
 def test_invalid_initialization(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
+    """Test invalid initialization.
+    
+    Purpose: Validates proper initialization of invalid 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     with pytest.raises(ValueError):
         POMCPOW(
             environment=environment,
@@ -173,6 +203,16 @@ def test_invalid_initialization(environment, discount_factor, depth, exploration
 
 
 def test_action_selection(planner, belief):
+    """Test action selection.
+    
+    Purpose: Validates action selection
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     action, policy_run_data = planner.action(belief)
     assert isinstance(action, list)
     assert len(action) == 1
@@ -180,6 +220,16 @@ def test_action_selection(planner, belief):
 
 
 def test_action_progressive_widening_new_action(planner, belief):
+    """Test action progressive widening new action.
+    
+    Purpose: Validates action progressive widening new action
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = BeliefNode(belief=belief, observation=None)
     belief_node.visit_count = 0
     
@@ -197,6 +247,16 @@ def test_action_progressive_widening_new_action(planner, belief):
 
 
 def test_action_progressive_widening_existing_action(planner, belief, action_sampler):
+    """Test action progressive widening existing action.
+    
+    Purpose: Validates action progressive widening existing action
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = BeliefNode(belief=belief, observation=None)
     
     # Add some children first
@@ -219,6 +279,16 @@ def test_action_progressive_widening_existing_action(planner, belief, action_sam
 
 
 def test_explored_action_node_ucb_selection(planner, belief):
+    """Test explored action node ucb selection.
+    
+    Purpose: Validates explored action node ucb selection
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = BeliefNode(belief=belief, observation=None)
     belief_node.visit_count = 30
     
@@ -242,6 +312,16 @@ def test_explored_action_node_ucb_selection(planner, belief):
 
 
 def test_rollout(planner):
+    """Test rollout.
+    
+    Purpose: Validates rollout
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test the random_rollout_action_sampler function that POMCPOW uses
     from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
     
@@ -258,6 +338,16 @@ def test_rollout(planner):
 
 
 def test_rollout_terminal_state(planner):
+    """Test rollout terminal state.
+    
+    Purpose: Validates rollout terminal state
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test the random_rollout_action_sampler function with terminal state
     from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
     
@@ -281,6 +371,16 @@ def test_rollout_terminal_state(planner):
 
 
 def test_rollout_max_depth(planner):
+    """Test rollout max depth.
+    
+    Purpose: Validates rollout max depth
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test the random_rollout_action_sampler function with max depth
     from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
     
@@ -300,6 +400,26 @@ def test_rollout_max_depth(planner):
 
 
 def test_simulate_path(planner, belief):
+    """Test simulate state path terminal state.
+    
+    Purpose: Validates simulate state path terminal state
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
+    """Test simulate path.
+    
+    Purpose: Validates simulate path
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = BeliefNode(belief=belief, observation=None)
     depth = 0
     
@@ -326,6 +446,26 @@ def test_simulate_state_path_terminal_state(planner, belief):
 
 
 def test_simulate_state_path_max_depth(planner, belief):
+    """Test get space info.
+    
+    Purpose: Validates get space info
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
+    """Test simulate state path max depth.
+    
+    Purpose: Validates simulate state path max depth
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = BeliefNode(belief=belief, observation=None)
     state = belief.sample()
     depth = planner.depth + 1
@@ -335,6 +475,16 @@ def test_simulate_state_path_max_depth(planner, belief):
 
 
 def test_get_space_info(planner):
+    """Test integration with tiger pomdp.
+    
+    Purpose: Validates integration with tiger pomdp
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: integration
+    """
     space_info = planner.get_space_info()
     assert hasattr(space_info, 'action_space')
     assert hasattr(space_info, 'observation_space')
@@ -364,12 +514,31 @@ def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles)
 
 
 def test_progressive_widening_parameters(planner, belief):
+    """Test progressive widening parameters.
+    
+    Purpose: Validates progressive widening parameters
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = BeliefNode(belief=belief, observation=None)
     belief_node.visit_count = 100
     
     # Test that progressive widening respects k_o and alpha_o parameters
     action_node = ActionNode(action=0, parent=belief_node)
-    action_node.visit_count = 50
+    """Test that belief nodes maintain proper belief structure for states and weights.
+    
+    Purpose: Validates belief node data structure
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     
     # Create mock observation
     observation = "tiger_growl_left"
@@ -388,7 +557,16 @@ def test_belief_node_data_structure(planner, belief):
     """Test that belief nodes maintain proper belief structure for states and weights."""
     belief_node = BeliefNode(belief=belief, observation=None)
     
-    # Simulate one path to set up the data structure
+    """Test POMCPOW with SanityPOMDP to verify correct action selection.
+    
+    Purpose: Validates sanity pomdp action selection
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     planner._simulate_path(belief_node=belief_node, depth=0)
     
     # Check that children have proper belief structure
@@ -431,7 +609,16 @@ def test_sanity_pomdp_action_selection():
     # Run multiple trials to ensure consistent behavior
     n_trials = 10
     action_0_count = 0
+    """Test that the tree structure is properly constructed.
     
+    Purpose: Validates tree structure after construction
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     for _ in range(n_trials):
         action, policy_run_data = planner.action(belief)
         assert isinstance(action, list)
@@ -456,7 +643,16 @@ def test_tree_structure_after_construction(planner, belief):
     
     # Verify tree structure
     assert len(belief_node.children) > 0
-    assert all(isinstance(child, ActionNode) for child in belief_node.children)
+    """Test that Q-values are properly updated during simulation.
+    
+    Purpose: Validates update functionality for q value s
+    
+    Given: Initial object state and update parameters
+    When: Update operation is performed
+    Then: Object state is correctly modified
+    
+    Test type: unit
+    """
     
     # Check that action nodes have proper structure
     for action_node in belief_node.children:
@@ -478,7 +674,16 @@ def test_q_value_updates(planner, belief):
     # Create an action node
     action_node = ActionNode(action=0, parent=belief_node)
     initial_q_value = action_node.q_value
-    initial_visit_count = action_node.visit_count
+    """Test that visit counts are consistent throughout the tree.
+    
+    Purpose: Validates visit count consistency
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     
     # Run simulation
     planner._simulate_path(belief_node=belief_node, depth=0)

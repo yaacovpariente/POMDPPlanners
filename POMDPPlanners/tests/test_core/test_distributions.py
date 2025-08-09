@@ -4,6 +4,16 @@ from POMDPPlanners.core.distributions import DiscreteDistribution, Numpy2DDistri
 
 
 def test_discrete_distribution_initialization():
+    """Test discrete distribution initialization.
+    
+    Purpose: Validates proper initialization of discrete distribution 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Test valid initialization
     values = [1, 2, 3]
     probs = np.array([0.3, 0.3, 0.4])
@@ -17,6 +27,16 @@ def test_discrete_distribution_initialization():
 
 
 def test_discrete_distribution_sample():
+    """Test discrete distribution sample.
+    
+    Purpose: Validates sampling behavior for discrete distribution 
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     # Test sampling from a simple distribution
     values = [1, 2, 3]
     probs = np.array([0.0, 1.0, 0.0])  # Always returns 2
@@ -37,6 +57,16 @@ def test_discrete_distribution_sample():
 
 
 def test_discrete_distribution_probability():
+    """Test discrete distribution probability.
+    
+    Purpose: Validates discrete distribution probability
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test probability calculation
     values = [1, 2, 3]
     probs = np.array([0.2, 0.5, 0.3])
@@ -55,6 +85,16 @@ def test_discrete_distribution_probability():
 
 
 def test_numpy2d_distribution_initialization():
+    """Test numpy2d distribution initialization.
+    
+    Purpose: Validates proper initialization of numpy2d distribution 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     # Test valid initialization
     values = np.array([[1, 2, 3], [4, 5, 6]])
     probs = np.array([0.3, 0.3, 0.4])
@@ -72,6 +112,16 @@ def test_numpy2d_distribution_initialization():
 
 
 def test_numpy2d_distribution_sample():
+    """Test numpy2d distribution sample.
+    
+    Purpose: Validates sampling behavior for numpy2d distribution 
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     # Test sampling from a simple distribution
     values = np.array([[1, 2, 3], [4, 5, 6]])
     probs = np.array([0.0, 1.0, 0.0])  # Always returns [2, 5]
@@ -93,6 +143,16 @@ def test_numpy2d_distribution_sample():
 
 
 def test_numpy2d_distribution_probability():
+    """Test numpy2d distribution probability.
+    
+    Purpose: Validates numpy2d distribution probability
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     # Test probability calculation
     values = np.array([[1, 2, 3], [4, 5, 6]])
     probs = np.array([0.2, 0.5, 0.3])

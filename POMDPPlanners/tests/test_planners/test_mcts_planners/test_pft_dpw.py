@@ -47,7 +47,16 @@ def initial_belief(environment):
     ) 
 
 def test_initialization(planner):
-    """Test that the planner initializes correctly with valid parameters."""
+    """Test that the planner initializes correctly with valid parameters.
+    
+    Purpose: Validates proper initialization of 
+    
+    Given: Constructor parameters and initial conditions
+    When: Object is initialized
+    Then: Object is properly constructed with expected attributes
+    
+    Test type: unit
+    """
     assert planner.depth == 5
     assert planner.min_samples_per_node == 10
     assert planner.min_visit_count_per_action == 1
@@ -58,14 +67,32 @@ def test_initialization(planner):
     assert planner.exploration_constant == 1.0
 
 def test_action_sampler(action_sampler):
-    """Test that the action sampler returns valid actions."""
+    """Test that the action sampler returns valid actions.
+    
+    Purpose: Validates sampling behavior for action r
+    
+    Given: Configured object with sampling capabilities
+    When: Sample method is called
+    Then: Valid samples are returned according to distribution
+    
+    Test type: unit
+    """
     action = action_sampler.sample()
     assert isinstance(action, np.ndarray)
     assert action.shape == (2,)
     assert np.linalg.norm(action) <= 1.0  # Action should be within unit circle
 
 def test_action_progressive_widening(planner, initial_belief):
-    """Test that action progressive widening creates new action nodes when needed."""
+    """Test that action progressive widening creates new action nodes when needed.
+    
+    Purpose: Validates action progressive widening
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = BeliefNode(belief=initial_belief)
     
     # First call should create a new action node
@@ -87,7 +114,16 @@ def test_action_progressive_widening(planner, initial_belief):
     assert len(belief_node.children) == 2
 
 def test_simulate_path(planner, initial_belief, environment):
-    """Test that path simulation updates node statistics correctly."""
+    """Test that path simulation updates node statistics correctly.
+    
+    Purpose: Validates simulate path
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = BeliefNode(belief=initial_belief)
     
     # Run a simulation
