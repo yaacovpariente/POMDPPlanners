@@ -4,11 +4,15 @@ from anytree import NodeMixin, RenderTree, PostOrderIter
 
 from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action_cost_setting
 from POMDPPlanners.core.belief import WeightedParticleBelief
-from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 
 
 # Create a simple test environment for belief updates
 class TestEnvironment(Environment):
+    def __init__(self):
+        space_info = SpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE)
+        super().__init__(discount_factor=0.95, name="TestEnvironment", space_info=space_info)
+    
     def state_transition(self, state, action):
         return state
 
@@ -18,6 +22,33 @@ class TestEnvironment(Environment):
                 return 1.0
 
         return DummyModel()
+    
+    def is_equal_observation(self, observation1, observation2):
+        """Check if two observations are equal."""
+        return observation1 == observation2
+    
+    def is_terminal(self, state):
+        """Check if state is terminal."""
+        return False
+    
+    def reward(self, state, action, next_state):
+        """Return reward for state transition."""
+        return 0.0
+    
+    def initial_state_dist(self):
+        """Return initial state distribution."""
+        from POMDPPlanners.core.distributions import DiscreteDistribution
+        return DiscreteDistribution({0: 1.0})
+    
+    def initial_observation_dist(self):
+        """Return initial observation distribution."""
+        from POMDPPlanners.core.distributions import DiscreteDistribution
+        return DiscreteDistribution({"obs": 1.0})
+    
+    def state_transition_model(self, state, action):
+        """Return state transition model."""
+        from POMDPPlanners.core.distributions import DiscreteDistribution
+        return DiscreteDistribution({state: 1.0})
 
 
 @pytest.fixture
@@ -300,7 +331,7 @@ def test_sample_child_node_no_children():
         action_node.sample_child_node()
 
 
-def test_get_belief_node_child(test_belief):
+def test_get_belief_node_child(test_belief, test_env):
     """Test the get_belief_node_child method of ActionNode.
     
     Purpose: Validates get belief node child
@@ -320,21 +351,21 @@ def test_get_belief_node_child(test_belief):
     belief3 = BeliefNode(test_belief, observation="obs3", parent=action_node, children=())
     
     # Test getting existing observations
-    result1 = action_node.get_belief_node_child("obs1")
+    result1 = action_node.get_belief_node_child("obs1", test_env)
     assert result1 == belief1
     
-    result2 = action_node.get_belief_node_child("obs2")
+    result2 = action_node.get_belief_node_child("obs2", test_env)
     assert result2 == belief2
     
-    result3 = action_node.get_belief_node_child("obs3")
+    result3 = action_node.get_belief_node_child("obs3", test_env)
     assert result3 == belief3
     
     # Test getting non-existing observation
-    result_none = action_node.get_belief_node_child("non_existent_obs")
+    result_none = action_node.get_belief_node_child("non_existent_obs", test_env)
     assert result_none is None
 
 
-def test_get_belief_node_child_no_children(test_belief):
+def test_get_belief_node_child_no_children(test_belief, test_env):
     """Test get_belief_node_child with no children.
     
     Purpose: Validates get belief node child no children
@@ -348,11 +379,11 @@ def test_get_belief_node_child_no_children(test_belief):
     action_node = ActionNode("test_action", children=())
     
     # Should return None for any observation
-    result = action_node.get_belief_node_child("any_observation")
+    result = action_node.get_belief_node_child("any_observation", test_env)
     assert result is None
 
 
-def test_get_belief_node_child_duplicate_observations(test_belief):
+def test_get_belief_node_child_duplicate_observations(test_belief, test_env):
     """Test get_belief_node_child with duplicate observations (should return first match).
     
     Purpose: Validates get belief node child duplicate observations
@@ -370,11 +401,11 @@ def test_get_belief_node_child_duplicate_observations(test_belief):
     belief2 = BeliefNode(test_belief, observation="same_obs", parent=action_node, children=())
     
     # Should return the first child with matching observation
-    result = action_node.get_belief_node_child("same_obs")
+    result = action_node.get_belief_node_child("same_obs", test_env)
     assert result == belief1
 
 
-def test_get_belief_node_child_none_observation(test_belief):
+def test_get_belief_node_child_none_observation(test_belief, test_env):
     """Test get_belief_node_child with None observation.
     
     Purpose: Validates get belief node child none observation
@@ -392,9 +423,9 @@ def test_get_belief_node_child_none_observation(test_belief):
     belief_obs = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
     
     # Test getting None observation
-    result = action_node.get_belief_node_child(None)
+    result = action_node.get_belief_node_child(None, test_env)
     assert result == belief_none
     
     # Test getting regular observation
-    result_obs = action_node.get_belief_node_child("obs1")
+    result_obs = action_node.get_belief_node_child("obs1", test_env)
     assert result_obs == belief_obs
