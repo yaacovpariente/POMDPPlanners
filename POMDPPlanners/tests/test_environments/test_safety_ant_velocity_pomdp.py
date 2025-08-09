@@ -581,23 +581,13 @@ def test_state_transition_model(pomdp):
 
 
 def test_observation_model(pomdp):
-    """Test initial state distribution.
+    """Test observation model functionality.
     
-    Purpose: Validates initial state distribution
+    Purpose: Validates observation model generates observations from environment states
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
-    """Test observation model.
-    
-    Purpose: Validates observation model
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SafeAntVelocityPOMDP environment and sample state-action pairs
+    When: Observation model samples observations
+    Then: Valid observations are returned with correct dimensionality
     
     Test type: unit
     """

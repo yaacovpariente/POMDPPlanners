@@ -149,11 +149,11 @@ def test_array_equality(base_environment: MockEnvironment,
 def test_different_environment_class(base_environment: MockEnvironment):
     """Test equality comparison with a different environment class.
     
-    Purpose: Validates different environment class
+    Purpose: Validates environment equality returns False when comparing different environment classes
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MockEnvironment and DifferentEnvironment with same parameters
+    When: Equality comparison is performed between different environment types
+    Then: Environments are correctly identified as not equal
     
     Test type: unit
     """
@@ -266,11 +266,11 @@ class TestEnvironmentConfigId:
     def test_different_environment_class(self, base_environment: MockEnvironment):
         """Test that different environment class results in different config_id.
     
-    Purpose: Validates different environment class
+    Purpose: Validates config_id generation produces different IDs for different environment classes
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MockEnvironment and DifferentEnvironment with same parameters
+    When: config_id is generated for both environment instances
+    Then: Different environment classes produce different config_id values
     
     Test type: unit
     """

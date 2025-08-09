@@ -362,16 +362,8 @@ class TestTigerPOMDPMetrics:
                 policy_run_data=PolicyRunData(info_variables=[])
             ))
         
-        """Test metrics for an agent that always opens the wrong door.
-    
-    Purpose: Validates compute metrics failing agent
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
+        # Compute metrics for the perfect agent
+        metrics = tiger_pomdp.compute_metrics(histories)
         
         # Should have 100% success rate
         success_metric = next(m for m in metrics if m.name == "success_rate")
@@ -422,16 +414,8 @@ class TestTigerPOMDPMetrics:
                 policy_run_data=PolicyRunData(info_variables=[])
             ))
         
-        """Test metrics for an agent with mixed performance.
-    
-    Purpose: Validates compute metrics mixed performance
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: performance
-    """
+        # Compute metrics for the failing agent
+        metrics = tiger_pomdp.compute_metrics(histories)
         
         # Should have 0% success rate
         success_metric = next(m for m in metrics if m.name == "success_rate")
@@ -482,16 +466,8 @@ class TestTigerPOMDPMetrics:
                 policy_run_data=PolicyRunData(info_variables=[])
             ))
         
-        """Test metrics with empty history list.
-    
-    Purpose: Validates compute metrics empty histories
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
+        # Compute metrics for the mixed performance agent
+        metrics = tiger_pomdp.compute_metrics(histories)
         
         # Should have 50% success rate
         success_metric = next(m for m in metrics if m.name == "success_rate")

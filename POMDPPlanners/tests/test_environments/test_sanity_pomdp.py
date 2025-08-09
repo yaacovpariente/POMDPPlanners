@@ -25,13 +25,13 @@ class TestSanityPOMDPInitialization:
     """Test suite for SanityPOMDP initialization."""
     
     def test_initialization(self, sanity_pomdp):
-        """Test basic initialization.
+        """Test SanityPOMDP environment initialization with default parameters.
     
-    Purpose: Validates proper initialization of 
+    Purpose: Validates SanityPOMDP environment initializes correctly with default discount factor and debug settings
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: SanityPOMDP constructed with default parameters (discount_factor=0.95, debug=False)
+    When: Environment instance is created
+    Then: Discount factor, name, space types, and debug mode are correctly set
     
     Test type: unit
     """
@@ -235,13 +235,13 @@ class TestSanityStateTransitionModel:
     """Test suite for SanityStateTransitionModel."""
     
     def test_initialization(self):
-        """Test model initialization.
+        """Test SanityStateTransitionModel initialization with specific state-action pair.
     
-    Purpose: Validates proper initialization of 
+    Purpose: Validates SanityStateTransitionModel initializes correctly with specified state and action parameters
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: State transition model created with state=0 and action=1 parameters
+    When: SanityStateTransitionModel instance is constructed
+    Then: Model stores correct state and action values for deterministic transitions
     
     Test type: unit
     """
@@ -252,11 +252,11 @@ class TestSanityStateTransitionModel:
     def test_sample_action_0(self):
         """Test sampling with action 0 (should always lead to state 0).
     
-    Purpose: Validates sampling behavior for  action 0
+    Purpose: Validates state transition sampling with action 0 produces deterministic state 0 transitions
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: SanityStateTransitionModel configured with initial state=0 and action=0
+    When: Sample method is called for 10 samples
+    Then: All samples return state 0 (deterministic transition for action 0)
     
     Test type: unit
     """
@@ -268,11 +268,11 @@ class TestSanityStateTransitionModel:
     def test_sample_action_1(self):
         """Test sampling with action 1 (should always lead to state 1).
     
-    Purpose: Validates sampling behavior for  action 1
+    Purpose: Validates state transition sampling with action 1 produces deterministic state 1 transitions
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: SanityStateTransitionModel configured with initial state=0 and action=1
+    When: Sample method is called for 10 samples
+    Then: All samples return state 1 (deterministic transition for action 1)
     
     Test type: unit
     """
@@ -307,11 +307,11 @@ class TestSanityStateTransitionModel:
     def test_probability_action_0(self):
         """Test probability calculation for action 0.
     
-    Purpose: Validates probability action 0
+    Purpose: Validates state transition probabilities for action 0 (deterministically leads to state 0)
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SanityStateTransitionModel with action=0 and test values [0,1,0,1] 
+    When: Probability method is called with the test values
+    Then: Returns [1.0,0.0,1.0,0.0] probabilities (1.0 for state 0, 0.0 for state 1)
     
     Test type: unit
     """
@@ -324,11 +324,11 @@ class TestSanityStateTransitionModel:
     def test_probability_action_1(self):
         """Test probability calculation for action 1.
     
-    Purpose: Validates probability action 1
+    Purpose: Validates state transition probabilities for action 1 (deterministically leads to state 1)
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SanityStateTransitionModel with action=1 and test values [0,1,0,1]
+    When: Probability method is called with the test values  
+    Then: Returns [0.0,1.0,0.0,1.0] probabilities (0.0 for state 0, 1.0 for state 1)
     
     Test type: unit
     """
@@ -343,13 +343,13 @@ class TestSanityObservationModel:
     """Test suite for SanityObservationModel."""
     
     def test_initialization(self):
-        """Test model initialization.
+        """Test SanityObservationModel initialization with specific state-action pair.
     
-    Purpose: Validates proper initialization of 
+    Purpose: Validates SanityObservationModel initializes correctly with next_state and action parameters
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: Observation model created with next_state=1 and action=0 parameters
+    When: SanityObservationModel instance is constructed  
+    Then: Model stores correct next_state and action values for deterministic observations
     
     Test type: unit
     """
@@ -360,11 +360,11 @@ class TestSanityObservationModel:
     def test_sample_state_0(self):
         """Test sampling with state 0 (should always observe 0).
     
-    Purpose: Validates sampling behavior for  state 0
+    Purpose: Validates observation sampling from state 0 produces deterministic observation 0
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: SanityObservationModel configured with next_state=0 and action=0
+    When: Sample method is called for 10 samples
+    Then: All samples return observation 0 (deterministic observation for state 0)
     
     Test type: unit
     """
@@ -376,11 +376,11 @@ class TestSanityObservationModel:
     def test_sample_state_1(self):
         """Test sampling with state 1 (should always observe 1).
     
-    Purpose: Validates sampling behavior for  state 1
+    Purpose: Validates observation sampling from state 1 produces deterministic observation 1
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: SanityObservationModel configured with next_state=1 and action=0
+    When: Sample method is called for 10 samples
+    Then: All samples return observation 1 (deterministic observation for state 1)
     
     Test type: unit
     """
@@ -415,11 +415,11 @@ class TestSanityObservationModel:
     def test_probability_state_0(self):
         """Test probability calculation for state 0.
     
-    Purpose: Validates probability state 0
+    Purpose: Validates observation probabilities for state 0 (deterministically observes observation 0)
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SanityObservationModel with next_state=0 and test values [0,1,0,1]
+    When: Probability method is called with the test values
+    Then: Returns [1.0,0.0,1.0,0.0] probabilities (1.0 for obs 0, 0.0 for obs 1)
     
     Test type: unit
     """
@@ -432,11 +432,11 @@ class TestSanityObservationModel:
     def test_probability_state_1(self):
         """Test probability calculation for state 1.
     
-    Purpose: Validates probability state 1
+    Purpose: Validates observation probabilities for state 1 (deterministically observes observation 1)
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SanityObservationModel with next_state=1 and test values [0,1,0,1]
+    When: Probability method is called with the test values
+    Then: Returns [0.0,1.0,0.0,1.0] probabilities (0.0 for obs 0, 1.0 for obs 1)
     
     Test type: unit
     """
@@ -453,11 +453,11 @@ class TestSanityInitialStateDist:
     def test_sample(self):
         """Test that initial state distribution always returns state 0.
     
-    Purpose: Validates sampling behavior for 
+    Purpose: Validates initial state distribution sampling produces deterministic state 0 samples
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: SanityInitialStateDist configured for deterministic initial state
+    When: Sample method is called for 10 samples
+    Then: All samples return state 0 (deterministic initial state distribution)
     
     Test type: unit
     """
@@ -469,11 +469,11 @@ class TestSanityInitialStateDist:
     def test_probability(self):
         """Test probability calculation for initial state distribution.
     
-    Purpose: Validates probability
+    Purpose: Validates initial state distribution probabilities (1.0 for state 0, 0.0 for state 1)
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SanityInitialStateDist and test values [0,1,0,1]
+    When: Probability method is called with the test values
+    Then: Returns [1.0,0.0,1.0,0.0] probabilities reflecting deterministic state 0 distribution
     
     Test type: unit
     """
@@ -490,11 +490,11 @@ class TestSanityInitialObservationDist:
     def test_sample(self):
         """Test that initial observation distribution always returns observation 0.
     
-    Purpose: Validates sampling behavior for 
+    Purpose: Validates initial observation distribution sampling produces deterministic observation 0 samples
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: SanityInitialObservationDist configured for deterministic initial observation
+    When: Sample method is called for 10 samples
+    Then: All samples return observation 0 (deterministic initial observation distribution)
     
     Test type: unit
     """
@@ -506,11 +506,11 @@ class TestSanityInitialObservationDist:
     def test_probability(self):
         """Test probability calculation for initial observation distribution.
     
-    Purpose: Validates probability
+    Purpose: Validates initial observation distribution probabilities (1.0 for obs 0, 0.0 for obs 1)
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SanityInitialObservationDist and test values [0,1,0,1]
+    When: Probability method is called with the test values
+    Then: Returns [1.0,0.0,1.0,0.0] probabilities reflecting deterministic observation 0 distribution
     
     Test type: unit
     """
@@ -629,11 +629,11 @@ class TestSanityPOMDPSampleNextStep:
     def test_sample_next_step_action_0(self, sanity_pomdp):
         """Test sample_next_step with action 0.
     
-    Purpose: Validates sampling behavior for  next step action 0
+    Purpose: Validates environment step sampling with action 0 produces deterministic transition to state 0
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: SanityPOMDP environment and initial state=0, action=0
+    When: sample_next_step method is called
+    Then: Returns next_state=0, observation=0, reward=1.0 (deterministic action 0 outcome)
     
     Test type: unit
     """
@@ -645,11 +645,11 @@ class TestSanityPOMDPSampleNextStep:
     def test_sample_next_step_action_1(self, sanity_pomdp):
         """Test sample_next_step with action 1.
     
-    Purpose: Validates sampling behavior for  next step action 1
+    Purpose: Validates environment step sampling with action 1 produces deterministic transition to state 1
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: SanityPOMDP environment and initial state=0, action=1
+    When: sample_next_step method is called
+    Then: Returns next_state=1, observation=1, reward=0.0 (deterministic action 1 outcome)
     
     Test type: unit
     """
