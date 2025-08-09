@@ -40,9 +40,9 @@ class ActionNode(BaseNode):
         weights = child_visit_counts / sum(child_visit_counts)
         return np.random.choice(self.children, p=weights)
 
-    def get_belief_node_child(self, observation: Any) -> Union['BeliefNode', None]:
+    def get_belief_node_child(self, observation: Any, environment: Environment) -> Union['BeliefNode', None]:
         for child in self.children:
-            if child.observation == observation:
+            if environment.is_equal_observation(child.observation, observation):
                 return child
 
         return None
