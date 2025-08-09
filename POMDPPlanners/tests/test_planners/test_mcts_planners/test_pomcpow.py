@@ -529,6 +529,7 @@ def test_progressive_widening_parameters(planner, belief):
     
     # Test that progressive widening respects k_o and alpha_o parameters
     action_node = ActionNode(action=0, parent=belief_node)
+    action_node.visit_count = 1  # Set visit count to enable meaningful progressive widening calculation
     """Test that belief nodes maintain proper belief structure for states and weights.
     
     Purpose: Validates belief node data structure
@@ -674,16 +675,6 @@ def test_q_value_updates(planner, belief):
     # Create an action node
     action_node = ActionNode(action=0, parent=belief_node)
     initial_q_value = action_node.q_value
-    """Test that visit counts are consistent throughout the tree.
-    
-    Purpose: Validates visit count consistency
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
     
     # Run simulation
     planner._simulate_path(belief_node=belief_node, depth=0)
@@ -691,7 +682,7 @@ def test_q_value_updates(planner, belief):
     # Check that some action node's Q-value was updated
     action_updated = False
     for child in belief_node.children:
-        if isinstance(child, ActionNode) and child.visit_count > initial_visit_count:
+        if isinstance(child, ActionNode) and child.visit_count > 0:
             action_updated = True
             break
     

@@ -223,7 +223,7 @@ def test_pomcp_dpw_initialization_both_termination_criteria_raises_error():
     assert "mutually exclusive" in str(exc_info.value).lower() or "both" in str(exc_info.value).lower()
 
 
-def test_pomcp_dpw_action_selection_returns_valid_action_from_sampler():
+def test_pomcp_dpw_action_selection_returns_valid_action_from_sampler(planner, belief):
     """
     Purpose: Validates POMCP_DPW selects valid actions from configured action sampler
     
@@ -246,7 +246,7 @@ def test_pomcp_dpw_action_selection_returns_valid_action_from_sampler():
     assert hasattr(policy_run_data, 'info_variables')  # Contains MCTS tree statistics
 
 
-def test_pomcp_dpw_progressive_widening_adds_new_action_to_unvisited_node():
+def test_pomcp_dpw_progressive_widening_adds_new_action_to_unvisited_node(belief, planner):
     """
     Purpose: Verifies action progressive widening adds new actions to unvisited belief nodes
     
