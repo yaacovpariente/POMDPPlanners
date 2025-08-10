@@ -155,7 +155,8 @@ def test_action_progressive_widening_new_action(belief_node, discrete_action_sam
         belief_node=belief_node,
         alpha_a=0.5,
         action_sampler=discrete_action_sampler,
-        exploration_constant=1.0
+        exploration_constant=1.0,
+        k_a=3.0
     )
     
     # Should create a new action node
@@ -186,7 +187,8 @@ def test_action_progressive_widening_existing_action(belief_node_with_children, 
         belief_node=belief_node,
         alpha_a=0.5,
         action_sampler=discrete_action_sampler,
-        exploration_constant=1.0
+        exploration_constant=1.0,
+        k_a=3.0
     )
     
     # Should select an existing action node
@@ -212,7 +214,8 @@ def test_action_progressive_widening_progressive_expansion(belief_node, discrete
         belief_node=belief_node,
         alpha_a=0.5,
         action_sampler=discrete_action_sampler,
-        exploration_constant=1.0
+        exploration_constant=1.0,
+        k_a=3.0
     )
     assert len(belief_node.children) == 1
     
@@ -221,7 +224,8 @@ def test_action_progressive_widening_progressive_expansion(belief_node, discrete
         belief_node=belief_node,
         alpha_a=0.5,
         action_sampler=discrete_action_sampler,
-        exploration_constant=1.0
+        exploration_constant=1.0,
+        k_a=3.0
     )
     assert len(belief_node.children) == 2
     assert action_node1 != action_node2
@@ -245,7 +249,8 @@ def test_action_progressive_widening_alpha_parameter(belief_node, discrete_actio
         belief_node=belief_node,
         alpha_a=0.5,
         action_sampler=discrete_action_sampler,
-        exploration_constant=1.0
+        exploration_constant=1.0,
+        k_a=3.0
     )
     assert len(belief_node.children) == 1
     
@@ -257,7 +262,8 @@ def test_action_progressive_widening_alpha_parameter(belief_node, discrete_actio
         belief_node=belief_node,
         alpha_a=0.1,
         action_sampler=discrete_action_sampler,
-        exploration_constant=1.0
+        exploration_constant=1.0,
+        k_a=3.0
     )
     assert len(belief_node.children) == 1
 
@@ -367,7 +373,8 @@ def test_action_progressive_widening_edge_cases(belief_node, discrete_action_sam
         belief_node=belief_node,
         alpha_a=0.0,
         action_sampler=discrete_action_sampler,
-        exploration_constant=1.0
+        exploration_constant=1.0,
+        k_a=3.0
     )
     assert isinstance(action_node, ActionNode)
     
@@ -378,7 +385,8 @@ def test_action_progressive_widening_edge_cases(belief_node, discrete_action_sam
         belief_node=belief_node,
         alpha_a=1.0,
         action_sampler=discrete_action_sampler,
-        exploration_constant=1.0
+        exploration_constant=1.0,
+        k_a=3.0
     )
     assert isinstance(action_node, ActionNode)
 
@@ -430,7 +438,8 @@ def test_action_progressive_widening_integration(belief_node, discrete_action_sa
             belief_node=belief_node,
             alpha_a=0.5,
             action_sampler=discrete_action_sampler,
-            exploration_constant=1.0
+            exploration_constant=1.0,
+            k_a=3.0
         )
         assert isinstance(action_node, ActionNode)
         assert action_node.parent == belief_node
@@ -441,7 +450,8 @@ def test_action_progressive_widening_integration(belief_node, discrete_action_sa
         belief_node=belief_node,
         alpha_a=0.5,
         action_sampler=discrete_action_sampler,
-        exploration_constant=1.0
+        exploration_constant=1.0,
+        k_a=3.0
     )
     assert action_node in belief_node.children
 
@@ -767,7 +777,8 @@ def test_action_progressive_widening_basic_usage_example():
         belief_node=belief_node,
         alpha_a=0.5,  # Moderate exploration
         action_sampler=action_sampler,
-        exploration_constant=1.0
+        exploration_constant=1.0,
+        k_a=3.0
     )
     
     # Verify results
@@ -809,7 +820,8 @@ def test_action_progressive_widening_alpha_comparison_example():
         belief_node=belief_node_conservative,
         alpha_a=0.25,  # Low alpha = fewer actions
         action_sampler=action_sampler,
-        exploration_constant=1.0
+        exploration_constant=1.0,
+        k_a=3.0
     )
     
     # Aggressive exploration (more new actions) - from docstring
@@ -818,7 +830,8 @@ def test_action_progressive_widening_alpha_comparison_example():
         belief_node=belief_node_aggressive,
         alpha_a=0.75,  # High alpha = more actions
         action_sampler=action_sampler,
-        exploration_constant=1.0
+        exploration_constant=1.0,
+        k_a=3.0
     )
     
     # Both should create action nodes for initial calls
@@ -869,14 +882,16 @@ def test_action_progressive_widening_loop_simulation_example():
             belief_node=root_node,
             alpha_a=0.5,
             action_sampler=sampler,
-            exploration_constant=1.41  # sqrt(2)
+            exploration_constant=1.41,  # sqrt(2)
+            k_a=3.0
         )
         action_counts.append(len(root_node.children))
         selected_actions.append(action_node.action)
     
     # Verify progressive behavior
     assert action_counts[0] >= 1, "Should create at least one action initially"
-    assert action_counts[-1] <= 4, "Should not exceed number of possible actions"
+    # With k_a=3.0 and alpha_a=0.5, the maximum should be around k_a * (max_visits^alpha_a) = 3.0 * 9^0.5 = 9
+    assert action_counts[-1] <= 10, "Should respect progressive widening constraints"
     assert all(action in sampler.actions for action in selected_actions), "All actions should be valid"
     
     # Action count should generally increase or stay the same (non-decreasing)

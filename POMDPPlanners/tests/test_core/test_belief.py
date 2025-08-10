@@ -2226,9 +2226,13 @@ def test_unweighted_particle_belief_state_update_sample_with_extreme_cases():
             if np.array_equal(particle, sample2):
                 found_sample = True
                 break
-        elif particle is sample2 or (not isinstance(particle, np.ndarray) and particle == sample2):
+        elif particle is sample2:
             found_sample = True
             break
+        elif not isinstance(particle, np.ndarray) and not isinstance(sample2, np.ndarray):
+            if particle == sample2:
+                found_sample = True
+                break
     assert found_sample, f"Sample {sample2} not found in particles {mixed_particles}"
 
 
