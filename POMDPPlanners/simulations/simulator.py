@@ -133,11 +133,7 @@ class BaseSimulator(ABC):
             output_dir=cache_dir_path
         )
         
-        # Setup MLFlow tracking if cache directory is provided
-        if cache_dir_path is not None:
-            self._setup_mlflow_tracking()
-            
-        # Create task manager
+        # Create task manager first (this may clear cache if clear_cache_on_start is True)
         self.task_manager = self._create_task_manager(
             task_manager_type=task_manager_type,
             n_jobs=n_jobs,
@@ -145,14 +141,29 @@ class BaseSimulator(ABC):
             cache_dir=cache_dir,
             clear_cache_on_start=clear_cache_on_start
         )
+        
+        # Setup MLFlow tracking AFTER task manager to avoid cache clearing issues
+        if cache_dir_path is not None:
+            self._setup_mlflow_tracking()
     
     def _setup_mlflow_tracking(self) -> None:
         """Configure MLFlow tracking."""
         if self.cache_dir_path is None:
             self.cache_dir_path = Path.cwd()
+        
+        # Ensure cache directory exists
+        self.cache_dir_path.mkdir(parents=True, exist_ok=True)
+        
+        # Create mlruns directory and set tracking URI to it
         mlruns_path = self.cache_dir_path / "mlruns"
         mlruns_path.mkdir(parents=True, exist_ok=True)
-        tracking_uri = mlruns_path
+        
+        # Create .trash directory to avoid MLflow errors
+        trash_path = mlruns_path / ".trash"
+        trash_path.mkdir(parents=True, exist_ok=True)
+        
+        # Set tracking URI to mlruns directory
+        tracking_uri = f"file://{mlruns_path.absolute()}"
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment(self.experiment_name)
     
@@ -371,7 +382,18 @@ class BaseSimulator(ABC):
                     mlflow.log_artifact(str(item), "policy_comparison_plots")
 
             # Create visualizations for each environment and log them directly
-            def create_and_log_env_viz(env_name: str, policy_results_dict: Dict[str, list]) -> None:
+            def create_and_log_env_viz(
+                env_name: str, 
+                policy_results_dict: Dict[str, list], 
+                tracking_uri: str, 
+                experiment_name: str, 
+                run_id: str
+            ) -> None:
+                # Set up MLflow context in the worker process
+                import mlflow
+                mlflow.set_tracking_uri(tracking_uri)
+                mlflow.set_experiment(experiment_name)
+                
                 environment = next(params.environment for params in environment_run_params if params.environment.name == env_name)
                 policies = [p for params in environment_run_params for p in params.policies if p.name in policy_results_dict]
                 with tempfile.TemporaryDirectory() as temp_env_dir_str:
@@ -385,15 +407,28 @@ class BaseSimulator(ABC):
                         cache_visualizations=cache_visualizations
                     )
                     # Log the contents of this environment's directory directly under env_name
-                    for item in temp_env_dir.iterdir():
-                        if item.is_dir():
-                            mlflow.log_artifact(str(item), env_name)
-                        else:
-                            mlflow.log_artifact(str(item), env_name)
+                    # Use explicit run_id to avoid context issues
+                    with mlflow.start_run(run_id=run_id):
+                        for item in temp_env_dir.iterdir():
+                            if item.is_dir():
+                                mlflow.log_artifact(str(item), env_name)
+                            else:
+                                mlflow.log_artifact(str(item), env_name)
             
-            # Run visualizations in parallel
+            # Get current MLflow context for parallel workers
+            current_tracking_uri = mlflow.get_tracking_uri()
+            current_experiment_name = self.experiment_name
+            current_run_id = mlflow.active_run().info.run_id
+            
+            # Run visualizations in parallel with MLflow context
             Parallel(n_jobs=n_jobs)(
-                delayed(create_and_log_env_viz)(env_name, policy_results_dict)
+                delayed(create_and_log_env_viz)(
+                    env_name, 
+                    policy_results_dict,
+                    current_tracking_uri,
+                    current_experiment_name,
+                    current_run_id
+                )
                 for env_name, policy_results_dict in results.items()
             )
 
@@ -464,7 +499,7 @@ class BaseSimulator(ABC):
                 result = results[env.name][policy.name]
                 if len(result) != num_episodes:
                     self.logger.warning(
-                        f"Policy {policy.name} in environment {env.name} has {len(results)} results, "
+                        f"Policy {policy.name} in environment {env.name} has {len(result)} results, "
                         f"expected {num_episodes}"
                     )
         

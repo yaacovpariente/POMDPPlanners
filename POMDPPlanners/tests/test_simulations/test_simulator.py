@@ -133,9 +133,9 @@ def test_pomdp_simulator_parallel_execution_completes_multiple_policy_episodes(s
         assert history.actual_num_steps == expected_steps
         assert isinstance(history.reach_terminal_state, bool)
         
-        # Verify history contains valid step data (state, action, reward, done)
+        # Verify history contains valid step data (state, action, next_state, observation, reward, belief)
         for step_idx, step_data in enumerate(history.history):
-            assert len(step_data) == 4, f"Episode {episode_idx}, step {step_idx} has invalid data format"
+            assert len(step_data) == 6, f"Episode {episode_idx}, step {step_idx} has invalid data format"
 
 
 def test_pomdp_simulator_comparison_generates_statistics_dataframe(simulator):
@@ -968,4 +968,215 @@ def test_simulator_error_handling_invalid_cache_dir():
     except (OSError, ValueError, Exception):
         # Some form of error handling is expected
         pass
+
+
+def test_simulator_writes_files_to_output_directory(temp_cache_dir):
+    """Test that simulator writes expected files and directories to output directory during simulation.
+    
+    Purpose: Validates simulator writes files and directories to configured output directory during execution
+    
+    Given: POMDPSimulator with temporary cache directory, TigerPOMDP environment, and POMCP policy
+    When: Complete simulation comparison is executed with profiling and visualizations enabled
+    Then: Output directory contains MLflow data, profiling results, policy directories, and visualization files
+    
+    Test type: integration
+    """
+    # ARRANGE: Setup simulator with output directory and enable all file writing features
+    simulator = POMDPSimulator(
+        cache_dir_path=temp_cache_dir,
+        experiment_name="FileWriteTest",
+        debug=True,
+        enable_profiling=True,  # Enable profiling to test profiling_results.txt
+        profiling_output_limit=10
+    )
+    
+    # Setup environment and policy for simulation
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=5
+    )
+    initial_belief = get_initial_belief(environment, n_particles=10)
+    
+    env_run_params = [
+        EnvironmentRunParams(
+            environment=environment,
+            belief=initial_belief,
+            policies=[policy],
+            num_episodes=3,  # Small number for fast test
+            num_steps=5
+        )
+    ]
+    
+    # ACT: Execute complete simulation with file writing enabled
+    with simulator:
+        results, statistics_df = simulator.compare_multiple_environments_policies(
+            environment_run_params=env_run_params,
+            alpha=0.1,
+            confidence_interval_level=0.95,
+            n_jobs=1,
+            cache_visualizations=True  # Enable visualization caching
+        )
+    
+    # ASSERT: Verify expected files and directories are created in output directory
+    
+    # 1. Verify MLflow directory and basic structure exists
+    mlruns_dir = temp_cache_dir / "mlruns"
+    assert mlruns_dir.exists(), f"MLflow runs directory not found at {mlruns_dir}"
+    assert mlruns_dir.is_dir(), "MLflow runs path should be a directory"
+    
+    # 2. Verify profiling results file is created (when profiling enabled)
+    profiling_file = temp_cache_dir / "profiling_results.txt"
+    assert profiling_file.exists(), f"Profiling results file not found at {profiling_file}"
+    assert profiling_file.is_file(), "Profiling results should be a file"
+    assert profiling_file.stat().st_size > 0, "Profiling results file should not be empty"
+    
+    # 3. Verify MLflow experiment artifacts are logged (check for experiment directories)
+    # MLflow creates numbered experiment directories
+    experiment_dirs = [d for d in mlruns_dir.iterdir() if d.is_dir() and d.name.isdigit()]
+    assert len(experiment_dirs) >= 1, f"No MLflow experiment directories found in {mlruns_dir}"
+    
+    # Find run directories within experiment directories 
+    run_dirs = []
+    for exp_dir in experiment_dirs:
+        run_dirs.extend([d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32])  # MLflow run IDs are 32 chars
+    
+    assert len(run_dirs) >= 1, f"No MLflow run directories found in experiment directories"
+    
+    # 4. Verify artifacts directory exists in at least one run
+    artifacts_found = False
+    for run_dir in run_dirs:
+        artifacts_dir = run_dir / "artifacts"
+        if artifacts_dir.exists() and artifacts_dir.is_dir():
+            artifacts_found = True
+            
+            # Check for policy comparison plots
+            policy_plots_dir = artifacts_dir / "policy_comparison_plots"
+            if policy_plots_dir.exists():
+                plot_files = list(policy_plots_dir.glob("*.png"))
+                if plot_files:
+                    assert len(plot_files) > 0, "Expected at least one policy comparison plot file"
+            
+            # Check for environment-specific artifacts
+            env_artifact_dir = artifacts_dir / environment.name
+            if env_artifact_dir.exists():
+                # Look for policy directories
+                policy_dir = env_artifact_dir / policy.name
+                if policy_dir.exists():
+                    plots_dir = policy_dir / "plots"
+                    if plots_dir.exists():
+                        histogram_files = list(plots_dir.glob("*.png"))
+                        if histogram_files:
+                            assert len(histogram_files) > 0, "Expected histogram plot files in policy directory"
+            break
+    
+    assert artifacts_found, "No MLflow artifacts directory found in any run directory"
+    
+    # 5. Verify simulation completed successfully and returned expected results
+    assert isinstance(results, dict), "Results should be a dictionary"
+    assert environment.name in results, f"Results should contain environment {environment.name}"
+    assert policy.name in results[environment.name], f"Results should contain policy {policy.name}"
+    assert len(results[environment.name][policy.name]) == 3, "Expected 3 episodes in results"
+    
+    assert isinstance(statistics_df, pd.DataFrame), "Statistics should be a DataFrame"
+    assert not statistics_df.empty, "Statistics DataFrame should not be empty"
+    assert 'environment' in statistics_df.columns, "Statistics should contain environment column"
+    assert 'policy' in statistics_df.columns, "Statistics should contain policy column"
+
+
+def test_simulator_mlflow_directory_structure_is_correct(temp_cache_dir):
+    """Test that simulator creates exactly one mlruns directory with exactly one experiment.
+    
+    Purpose: Validates MLflow directory structure has single mlruns directory and single experiment
+    
+    Given: POMDPSimulator with temporary cache directory and specific experiment name
+    When: Simulation is executed with MLflow tracking enabled
+    Then: Output directory contains exactly one mlruns directory with exactly one experiment directory
+    
+    Test type: integration
+    """
+    # ARRANGE: Setup simulator with specific experiment name
+    experiment_name = "MLflowStructureTest"
+    simulator = POMDPSimulator(
+        cache_dir_path=temp_cache_dir,
+        experiment_name=experiment_name,
+        debug=True
+    )
+    
+    # Setup minimal simulation to trigger MLflow usage
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=environment,
+        discount_factor=0.95,
+        depth=2,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=2
+    )
+    initial_belief = get_initial_belief(environment, n_particles=5)
+    
+    env_run_params = [
+        EnvironmentRunParams(
+            environment=environment,
+            belief=initial_belief,
+            policies=[policy],
+            num_episodes=2,  # Changed from 1 to 2 for confidence interval calculation
+            num_steps=2
+        )
+    ]
+    
+    # ACT: Execute simulation to create MLflow structure
+    with simulator:
+        results, statistics_df = simulator.compare_multiple_environments_policies(
+            environment_run_params=env_run_params,
+            alpha=0.1,
+            confidence_interval_level=0.95,
+            n_jobs=1,
+            cache_visualizations=False  # Disable to speed up test
+        )
+    
+    # ASSERT: Verify exactly one mlruns directory exists in output directory
+    
+    # 1. Check that exactly one mlruns directory exists at the top level
+    mlruns_dirs = [item for item in temp_cache_dir.iterdir() if item.is_dir() and item.name == "mlruns"]
+    assert len(mlruns_dirs) == 1, f"Expected exactly 1 mlruns directory, found {len(mlruns_dirs)}: {[d.name for d in mlruns_dirs]}"
+    
+    mlruns_dir = mlruns_dirs[0]
+    
+    # 2. Verify no nested mlruns directories inside the main mlruns directory
+    nested_mlruns = []
+    for item in mlruns_dir.rglob("mlruns"):
+        if item != mlruns_dir:  # Don't count the main mlruns directory itself
+            nested_mlruns.append(item)
+    
+    assert len(nested_mlruns) == 0, f"Found nested mlruns directories: {nested_mlruns}"
+    
+    # 3. Verify exactly one experiment directory exists inside mlruns
+    experiment_dirs = [item for item in mlruns_dir.iterdir() if item.is_dir() and item.name.isdigit()]
+    assert len(experiment_dirs) == 1, f"Expected exactly 1 experiment directory, found {len(experiment_dirs)}: {[d.name for d in experiment_dirs]}"
+    
+    experiment_dir = experiment_dirs[0]
+    
+    # 4. Verify the experiment directory contains the expected structure
+    # Should have: meta.yaml and at least one run directory
+    meta_file = experiment_dir / "meta.yaml"
+    assert meta_file.exists(), f"Expected meta.yaml file not found in experiment directory: {experiment_dir}"
+    
+    # 5. Verify at least one run directory exists (32-character hex names)
+    run_dirs = [item for item in experiment_dir.iterdir() if item.is_dir() and len(item.name) == 32]
+    assert len(run_dirs) >= 1, f"Expected at least 1 run directory, found {len(run_dirs)} in {experiment_dir}"
+    
+    # 6. Verify simulation completed successfully
+    assert isinstance(results, dict), "Results should be a dictionary"
+    assert environment.name in results, f"Results should contain environment {environment.name}"
+    assert policy.name in results[environment.name], f"Results should contain policy {policy.name}"
+    assert len(results[environment.name][policy.name]) == 2, "Expected 2 episodes in results"
+    
+    # 7. Verify statistics DataFrame is properly created
+    assert isinstance(statistics_df, pd.DataFrame), "Statistics should be a DataFrame"
+    assert not statistics_df.empty, "Statistics DataFrame should not be empty"
 
