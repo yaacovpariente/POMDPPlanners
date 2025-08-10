@@ -9,6 +9,7 @@ from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
 from POMDPPlanners.core.environment import SpaceType
+from POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils import validate_tree_structure_with_progressive_widening
 
 
 class MockActionSampler(ActionSampler):
@@ -267,7 +268,8 @@ def test_pomcp_dpw_progressive_widening_adds_new_action_to_unvisited_node(belief
         belief_node=belief_node,
         alpha_a=planner.alpha_a,
         action_sampler=planner.action_sampler,
-        exploration_constant=planner.exploration_constant
+        exploration_constant=planner.exploration_constant,
+        k_a=planner.k_a
     )
     
     # ASSERT: Verify new action node created and properly linked
@@ -296,7 +298,8 @@ def test_action_progressive_widening_existing_action(planner, belief, action_sam
         belief_node=belief_node,
         alpha_a=planner.alpha_a,
         action_sampler=planner.action_sampler,
-        exploration_constant=planner.exploration_constant
+        exploration_constant=planner.exploration_constant,
+        k_a=planner.k_a
     )
     assert isinstance(action_node, ActionNode)
     assert action_node in belief_node.children
@@ -742,6 +745,114 @@ def test_continuous_observations_with_numpy_arrays():
     # Verify policy run data is populated
     assert hasattr(policy_run_data, 'info_variables')
     assert isinstance(policy_run_data.info_variables, (list, dict))
+
+
+def test_basic_tree_structure(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
+    """
+    Purpose: Validates basic tree structure properties for POMCP_DPW with minimal simulation count
+    
+    Given: POMCP_DPW planner with progressive widening parameters and single simulation
+    When: Tree construction is performed using _learn_tree method with n_simulations=1
+    Then: All tree nodes have correct basic properties and parent-child relationships are valid
+    
+    Test type: unit
+    """
+    # ARRANGE: Setup POMCP_DPW planner with single simulation for basic structure testing
+    n_simulations = 1
+    planner = POMCP_DPW(
+        environment=environment,
+        discount_factor=discount_factor,
+        depth=depth,
+        exploration_constant=exploration_constant,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        n_simulations=n_simulations,
+        action_sampler=action_sampler,
+        name="TestPOMCP_DPW_TreeStructure"
+    )
+    
+    n_particles = 100
+    belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
+    
+    # ACT: Build minimal tree using _learn_tree method
+    root_belief_node = planner._learn_tree(belief=belief)
+    
+    # ASSERT: Verify basic tree structure properties for all nodes
+    for node in PostOrderIter(root_belief_node):
+        if isinstance(node, BeliefNode):
+            # BeliefNode basic validations
+            assert node.visit_count == 1, "BeliefNode visit count must be 1 with single simulation"
+            assert isinstance(node.v_value, (int, float)), "BeliefNode must have numeric v_value"
+            
+            # Root vs non-root belief node properties
+            if node.depth > 0:
+                assert node.observation is not None, "Non-root BeliefNode must have observation"
+                assert node.parent is not None, "Non-root BeliefNode must have parent"
+                assert isinstance(node.parent, ActionNode), "BeliefNode parent must be ActionNode"
+            else:
+                assert node.observation is None, "Root BeliefNode must have no observation"
+                assert node.parent is None, "Root BeliefNode must have no parent"
+                
+        elif isinstance(node, ActionNode):
+            # ActionNode basic validations
+            assert node.visit_count == 1, "ActionNode visit count must be 1 with single simulation"
+            assert isinstance(node.q_value, (int, float)), "ActionNode must have numeric q_value"
+            assert node.parent is not None, "ActionNode must have parent"
+            assert isinstance(node.parent, BeliefNode), "ActionNode parent must be BeliefNode"
+            assert node.action is not None, "ActionNode must have action"
+        else:
+            raise ValueError(f"Unknown node type: {type(node)}")
+
+
+def test_pomcp_dpw_tree_structure_construction(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
+    """
+    Purpose: Validates complete tree structure construction and node integrity for POMCP_DPW with progressive widening
+    
+    Given: POMCP_DPW planner with progressive widening parameters and TigerPOMDP environment  
+    When: Tree construction is performed using _learn_tree method with sufficient simulations
+    Then: All tree nodes have correct values, progressive widening constraints are respected, and tree structure is valid
+    
+    Test type: unit
+    """
+    # ARRANGE: Setup POMCP_DPW planner with sufficient simulations to build meaningful tree
+    n_simulations = 200
+    planner = POMCP_DPW(
+        environment=environment,
+        discount_factor=discount_factor,
+        depth=depth,
+        exploration_constant=exploration_constant,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        n_simulations=n_simulations,
+        action_sampler=action_sampler,
+        name="TestPOMCP_DPW_TreeStructure"
+    )
+    
+    n_particles = 100
+    belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
+    
+    # ACT: Build complete tree using _learn_tree method
+    root_belief_node = planner._learn_tree(belief=belief)
+    
+    # ASSERT: Use shared validation function with POMCP_DPW-specific belief type
+    from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
+    validate_tree_structure_with_progressive_widening(
+        root_belief_node=root_belief_node,
+        planner=planner,
+        n_simulations=n_simulations,
+        depth=depth,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        action_sampler=action_sampler,
+        expected_belief_type=UnweightedParticleBeliefStateUpdate,  # POMCP_DPW uses unweighted particles
+        planner_type="POMCP_DPW"  # Maintain original POMCP_DPW logic
+    )
 
 
 def test_numpy_array_observation_comparison():

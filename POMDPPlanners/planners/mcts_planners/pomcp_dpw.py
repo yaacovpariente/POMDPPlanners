@@ -246,28 +246,30 @@ class POMCP_DPW(PathSimulationPolicy):
             belief_node=belief_node,
             alpha_a=self.alpha_a,
             action_sampler=self.action_sampler,
-            exploration_constant=self.exploration_constant
+            exploration_constant=self.exploration_constant,
+            k_a=self.k_a
         )
 
-        next_state = self.environment.state_transition_model(state=state, action=action_node.action).sample()[0]
-        reward = self.environment.reward(state=next_state, action=action_node.action)
-        
         if len(action_node.children) <= self.k_o * action_node.visit_count ** self.alpha_o:
+            next_state = self.environment.state_transition_model(state=state, action=action_node.action).sample()[0]
+            reward = self.environment.reward(state=state, action=action_node.action)
             next_observation = self.environment.observation_model(next_state=next_state, action=action_node.action).sample()[0]
+
             next_belief_node = action_node.get_belief_node_child(observation=next_observation, environment=self.environment)
             if next_belief_node is None:
                 next_belief_node = BeliefNode(belief=UnweightedParticleBeliefStateUpdate(), observation=next_observation, parent=action_node)
             
-            next_belief_node.visit_count += 1
+            next_belief_node.belief.inplace_update(action=None, observation=None, pomdp=self.environment, state=next_state)
+
+            if next_belief_node.visit_count == 0:
+                next_belief_node.visit_count += 1
+                total = reward + self.discount_factor * random_rollout_action_sampler(state=next_state, depth=depth + 1, action_sampler=self.action_sampler, environment=self.environment, discount_factor=self.discount_factor)
+            else:
+                total = reward + self.discount_factor * self._simulate_state_path(state=next_state, belief_node=next_belief_node, depth=depth + 1)
         else:
             next_belief_node = action_node.sample_child_node()
-        
-        next_belief_node.belief.inplace_update(action=None, observation=None, pomdp=self.environment, state=next_state)
-    
-        if next_belief_node.is_leaf:
-            total = reward + self.discount_factor * random_rollout_action_sampler(state=next_state, depth=depth + 1, action_sampler=self.action_sampler, environment=self.environment, discount_factor=self.discount_factor)
-        else:
             next_state = next_belief_node.belief.sample()
+            reward = self.environment.reward(state=next_state, action=action_node.action)
             total = reward + self.discount_factor * self._simulate_state_path(state=next_state, belief_node=next_belief_node, depth=depth + 1)
 
         belief_node.visit_count += 1
