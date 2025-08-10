@@ -36,7 +36,8 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
         - min_actions_visit_count: Minimum visits to any action
         - max_actions_visit_count: Maximum visits to any action  
         - actions_visit_count_entropy: Shannon entropy of action visit distribution
-        
+        - n_actions_from_root: Number of actions from the root node
+        - root_visit_count: Number of visits to the root node
     Raises:
         TypeError: If tree is not a BeliefNode instance
         
@@ -193,7 +194,8 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
         ]
     
     visit_counts = np.array([node.visit_count for node in tree.children])
-    
+    n_actions_from_root = len(visit_counts)
+    root_visit_count = tree.visit_count
     # Calculate entropy of visit counts
     total_visits = np.sum(visit_counts)
     if total_visits > 0:
@@ -214,5 +216,13 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
         PolicyInfoVariable(
             name="actions_visit_count_entropy",
             value=entropy_value,
+        ),
+        PolicyInfoVariable(
+            name="n_actions_from_root",
+            value=n_actions_from_root,
+        ),
+        PolicyInfoVariable(
+            name="root_visit_count",
+            value=root_visit_count,
         ),
     ]    

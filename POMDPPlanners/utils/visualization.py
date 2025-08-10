@@ -305,9 +305,15 @@ def plot_policies_comparison_on_environment(
                 plt.figure(figsize=(16, 12))
                 x = np.arange(len(policy_names))
                 width = 0.6
-                yerr = (np.array(upper_bounds) - np.array(lower_bounds)) / 2
-                if sum(yerr) == 0:
-                    yerr = np.full(len(policy_names), 1e-10)
+                
+                # Create 2D array for yerr: [lower_errors, upper_errors]
+                yerr = np.vstack([
+                    np.array(metric_values) - np.array(lower_bounds),  # Lower errors
+                    np.array(upper_bounds) - np.array(metric_values)   # Upper errors
+                ])
+                
+                if np.all(yerr == 0):
+                    yerr = np.full((2, len(policy_names)), 1e-10)
 
                 bars = plt.bar(
                     x,
@@ -331,7 +337,7 @@ def plot_policies_comparison_on_environment(
                 # Add value labels on top of bars
                 for i, (bar, value) in enumerate(zip(bars, metric_values)):
                     height = bar.get_height()
-                    plt.text(bar.get_x() + bar.get_width()/2., height + yerr[i] + 0.01,
+                    plt.text(bar.get_x() + bar.get_width()/2., height + yerr[1][i] + 0.01,
                              f'{value:.3f}', ha='center', va='bottom', fontsize=28, fontweight='bold',
                              bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.8))
 
