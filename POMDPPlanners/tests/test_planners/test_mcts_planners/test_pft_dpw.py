@@ -100,7 +100,8 @@ def test_action_progressive_widening(planner, initial_belief):
         belief_node=belief_node,
         alpha_a=planner.alpha_a,
         action_sampler=planner.action_sampler,
-        exploration_constant=planner.exploration_constant
+        exploration_constant=planner.exploration_constant,
+        k_a=planner.k_a
     )
     assert len(belief_node.children) == 1
     
@@ -109,7 +110,8 @@ def test_action_progressive_widening(planner, initial_belief):
         belief_node=belief_node,
         alpha_a=planner.alpha_a,
         action_sampler=planner.action_sampler,
-        exploration_constant=planner.exploration_constant
+        exploration_constant=planner.exploration_constant,
+        k_a=planner.k_a
     )
     assert len(belief_node.children) == 2
 

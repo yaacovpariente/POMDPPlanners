@@ -232,7 +232,8 @@ class PFT_DPW(PathSimulationPolicy):
             belief_node=belief_node,
             alpha_a=self.alpha_a,
             action_sampler=self.action_sampler,
-            exploration_constant=self.exploration_constant
+            exploration_constant=self.exploration_constant,
+            k_a=self.k_a
         )
         
         return_sample = self._simulate_return(
