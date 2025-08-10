@@ -385,4 +385,86 @@ def test_joblib_task_manager_logging_with_multiple_tasks(cache_db, environment, 
         assert len(results) == 2
         assert len(successful_ids) == 2
         
-        # Note: We don't check directory structure as it may change 
+        # Note: We don't check directory structure as it may change
+
+
+class FailingEpisodeSimulationTask(EpisodeSimulationTask):
+    """Mock task that always fails for testing failed task caching behavior."""
+    
+    def run(self):
+        """Always raise an exception to simulate task failure."""
+        raise RuntimeError("Simulated task failure for testing")
+
+
+def test_joblib_task_manager_failed_tasks_not_cached(cache_db, environment, policy):
+    """Test that JoblibTaskManager does not cache results from failed tasks.
+    
+    Purpose: Validates that failed tasks are not cached and subsequent runs retry execution
+    
+    Given: JoblibTaskManager with cache and a task that always fails
+    When: The failing task is run multiple times
+    Then: Each run attempts to execute the task (not cached) and fails consistently
+    
+    Test type: unit
+    """
+    with JoblibTaskManager(cache_db=cache_db) as task_manager:
+        # Create a task that always fails
+        belief = create_test_belief()
+        failing_task = FailingEpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=999,
+            seed=42,
+            console_output=False
+        )
+        task_identifier = "failing_episode"
+        
+        # First run - should fail with exception
+        with pytest.raises(RuntimeError, match="Simulated task failure for testing"):
+            task_manager.run_tasks([failing_task], [task_identifier])
+        
+        # Second run - should also fail (not cached), proving failed tasks aren't cached
+        with pytest.raises(RuntimeError, match="Simulated task failure for testing"):
+            task_manager.run_tasks([failing_task], [task_identifier])
+        
+        # The fact that both runs raise exceptions (rather than the second returning cached results)
+        # proves that failed tasks are not cached by the task manager
+
+
+def test_dask_task_manager_failed_tasks_not_cached(environment, policy):
+    """Test that DaskTaskManager does not cache results from failed tasks.
+    
+    Purpose: Validates that failed tasks are not cached and subsequent runs retry execution for Dask
+    
+    Given: DaskTaskManager with cache and a task that always fails
+    When: The failing task is run multiple times  
+    Then: Each run attempts to execute the task (not cached) and fails consistently
+    
+    Test type: unit
+    """
+    with DaskTaskManager() as task_manager:
+        # Create a task that always fails
+        belief = create_test_belief()
+        failing_task = FailingEpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=999,
+            seed=42,
+            console_output=False
+        )
+        task_identifier = "failing_dask_episode"
+        
+        # First run - should fail with exception
+        with pytest.raises(RuntimeError, match="Simulated task failure for testing"):
+            task_manager.run_tasks([failing_task], [task_identifier])
+        
+        # Second run - should also fail (not cached), proving failed tasks aren't cached
+        with pytest.raises(RuntimeError, match="Simulated task failure for testing"):
+            task_manager.run_tasks([failing_task], [task_identifier])
+        
+        # The fact that both runs raise exceptions (rather than the second returning cached results)
+        # proves that failed tasks are not cached by the Dask task manager 
