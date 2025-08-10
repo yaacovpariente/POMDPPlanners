@@ -82,13 +82,12 @@ class PathSimulationPolicy(Policy):
     def _learn_tree(self, belief: Belief) -> BeliefNode:
         tree = BeliefNode(belief=belief)
         
-        if self.n_simulations is None:
-            raise ValueError("n_simulations must not be None")
-        
         if self.n_simulations is not None:
             self._construct_tree_using_n_simulations(belief_node=tree)
-        else:
+        elif self.time_out_in_seconds is not None:
             self._construct_tree_using_timeout(belief_node=tree)
+        else:
+            raise ValueError("Either n_simulations or time_out_in_seconds must be provided")
         
         return tree
     
