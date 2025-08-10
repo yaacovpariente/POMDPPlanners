@@ -187,10 +187,7 @@ def test_plot_statistics_comparison_multiple_envs_policies():
 
         # Set up MLFlow tracking
         tracking_uri = f"file://{mlruns_dir.absolute().as_posix()}"
-        mlflow.set_tracking_uri(tracking_uri)
-        mlflow.set_experiment("test_visualization_multiple")
-
-        with mlflow.start_run():
+        with mlflow_run_context("test_visualization_multiple", tracking_uri):
             # Execute
             plot_metrics_comparison(
                 statistics=mock_statistics,

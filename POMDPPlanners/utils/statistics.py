@@ -529,6 +529,9 @@ def cvar_estimator_from_dist(values: np.ndarray, weights: np.ndarray, alpha: flo
     if not np.isclose(np.sum(weights), 1.0):
         raise ValueError("Weights must sum to 1")
         
+    if len(values) == 1:
+        return values[0]
+
     # Sort values and weights
     sort_idx = np.argsort(values)
     sorted_values = values[sort_idx]
