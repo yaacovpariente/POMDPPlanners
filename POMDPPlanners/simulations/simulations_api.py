@@ -250,11 +250,12 @@ class SimulationsAPI:
         ]
         self.logger.info(f"Created debug configurations with {len(environment_run_params_debug)} environments")
         
-        # Run debug simulation
+        # Run debug simulation with separate experiment name to avoid conflicts
+        debug_experiment_name = f"{experiment_name}_debug_run"
         self.logger.info("Starting debug simulation run")
         simulator_debug = POMDPSimulator(
             cache_dir_path=cache_dir_path,
-            experiment_name=experiment_name,
+            experiment_name=debug_experiment_name,
             debug=True,
             task_manager_type=TaskManagerType.JOBLIB,
             n_jobs=n_jobs,
