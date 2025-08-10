@@ -488,15 +488,15 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
     def get_actions(self) -> List[Any]:
         return self.actions
 
-    def state_transition_model(self, state: str, action: Any) -> Distribution:
+    def state_transition_model(self, state: np.ndarray, action: Any) -> Distribution:
         action_vector = self.action_to_vector[action]
         return super().state_transition_model(state, action_vector)
 
-    def observation_model(self, next_state: str, action: Any) -> Distribution:
+    def observation_model(self, next_state: np.ndarray, action: Any) -> Distribution:
         action_vector = self.action_to_vector[action]
         return super().observation_model(next_state, action_vector)
 
-    def reward(self, state: str, action: Any) -> float:
+    def reward(self, state: np.ndarray, action: Any) -> float:
         action_vector = self.action_to_vector[action]
         return super().reward(state, action_vector)
 
