@@ -160,7 +160,7 @@ class SimulationsAPI:
         self.logger.info(f"Starting simulation run with {len(environment_run_params)} environment configurations")
         self.logger.debug(f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}")
         
-        simulator = POMDPSimulator(
+        with POMDPSimulator(
             cache_dir_path=cache_dir_path,
             experiment_name=experiment_name,
             debug=debug,
@@ -169,18 +169,17 @@ class SimulationsAPI:
             clear_cache_on_start=clear_cache_on_start,
             enable_profiling=enable_profiling,
             profiling_output_limit=profiling_output_limit,
-        )
-        
-        self.logger.info("Running simulation comparison")
-        results = simulator.compare_multiple_environments_policies(
-            environment_run_params=environment_run_params,
-            alpha=alpha,
-            confidence_interval_level=confidence_interval_level,
-            n_jobs=n_jobs,
-            cache_visualizations=True,
-        )
-        self.logger.info("Simulation run completed")
-        return results
+        ) as simulator:
+            self.logger.info("Running simulation comparison")
+            results = simulator.compare_multiple_environments_policies(
+                environment_run_params=environment_run_params,
+                alpha=alpha,
+                confidence_interval_level=confidence_interval_level,
+                n_jobs=n_jobs,
+                cache_visualizations=True,
+            )
+            self.logger.info("Simulation run completed")
+            return results
 
     def run_multiple_environments_and_policies_remote_run(
         self,
@@ -199,7 +198,7 @@ class SimulationsAPI:
         self.logger.info(f"Starting simulation run with {len(environment_run_params)} environment configurations")
         self.logger.debug(f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}")
         
-        simulator = POMDPSimulator(
+        with POMDPSimulator(
             cache_dir_path=cache_dir_path,
             experiment_name=experiment_name,
             debug=debug,
@@ -209,18 +208,17 @@ class SimulationsAPI:
             clear_cache_on_start=clear_cache_on_start,
             enable_profiling=enable_profiling,
             profiling_output_limit=profiling_output_limit,
-        )
-        
-        self.logger.info("Running simulation comparison")
-        results = simulator.compare_multiple_environments_policies(
-            environment_run_params=environment_run_params,
-            alpha=alpha,
-            confidence_interval_level=confidence_interval_level,
-            n_jobs=n_jobs,
-            cache_visualizations=True,
-        )
-        self.logger.info("Simulation run completed")
-        return results
+        ) as simulator:
+            self.logger.info("Running simulation comparison")
+            results = simulator.compare_multiple_environments_policies(
+                environment_run_params=environment_run_params,
+                alpha=alpha,
+                confidence_interval_level=confidence_interval_level,
+                n_jobs=n_jobs,
+                cache_visualizations=True,
+            )
+            self.logger.info("Simulation run completed")
+            return results
 
     def run_multiple_environments_and_policies_local_run_with_initial_debug_run(
         self,
@@ -253,7 +251,7 @@ class SimulationsAPI:
         # Run debug simulation with separate experiment name to avoid conflicts
         debug_experiment_name = f"{experiment_name}_debug_run"
         self.logger.info("Starting debug simulation run")
-        simulator_debug = POMDPSimulator(
+        with POMDPSimulator(
             cache_dir_path=cache_dir_path,
             experiment_name=debug_experiment_name,
             debug=True,
@@ -262,20 +260,19 @@ class SimulationsAPI:
             clear_cache_on_start=clear_cache_on_start,
             enable_profiling=enable_profiling,
             profiling_output_limit=profiling_output_limit,
-        )
-        
-        simulator_debug.compare_multiple_environments_policies(
-            environment_run_params=environment_run_params_debug,
-            alpha=alpha,
-            confidence_interval_level=confidence_interval_level,
-            n_jobs=n_jobs,
-            cache_visualizations=True,
-        )
+        ) as simulator_debug:
+            simulator_debug.compare_multiple_environments_policies(
+                environment_run_params=environment_run_params_debug,
+                alpha=alpha,
+                confidence_interval_level=confidence_interval_level,
+                n_jobs=n_jobs,
+                cache_visualizations=True,
+            )
         self.logger.info("Debug simulation run completed")
         
         # Run main simulation
         self.logger.info("Starting main simulation run")
-        simulator = POMDPSimulator(
+        with POMDPSimulator(
             cache_dir_path=cache_dir_path,
             experiment_name=experiment_name,
             debug=False,
@@ -284,14 +281,13 @@ class SimulationsAPI:
             clear_cache_on_start=clear_cache_on_start,
             enable_profiling=enable_profiling,
             profiling_output_limit=profiling_output_limit,
-        )
-        
-        results = simulator.compare_multiple_environments_policies(
-            environment_run_params=environment_run_params,
-            alpha=alpha,
-            confidence_interval_level=confidence_interval_level,
-            n_jobs=n_jobs,
-            cache_visualizations=True,
-        )
+        ) as simulator:
+            results = simulator.compare_multiple_environments_policies(
+                environment_run_params=environment_run_params,
+                alpha=alpha,
+                confidence_interval_level=confidence_interval_level,
+                n_jobs=n_jobs,
+                cache_visualizations=True,
+            )
         self.logger.info("Main simulation run completed!")
         return results

@@ -217,6 +217,16 @@ class BaseSimulator(ABC):
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
+        # Ensure MLflow runs are properly ended
+        try:
+            import mlflow
+            if mlflow.active_run() is not None:
+                mlflow.end_run()
+        except Exception:
+            # Ignore any errors during MLflow cleanup
+            pass
+        
+        # Clean up task manager
         if hasattr(self, 'task_manager'):
             self.task_manager.__exit__(exc_type, exc_val, exc_tb)
     
@@ -278,6 +288,21 @@ class BaseSimulator(ABC):
                 ps = pstats.Stats(self.profiler, stream=f).sort_stats('cumulative')
                 ps.print_stats(self.profiling_output_limit)  # Show all functions, no restriction
             self.logger.info(f"Detailed profiling results saved to: {profiling_file}")
+    
+    def cleanup_mlflow_runs(self) -> None:
+        """Clean up any active MLflow runs.
+        
+        This method ensures that any active MLflow runs are properly ended.
+        It's useful for cleanup in tests or when the simulator is used outside
+        of a context manager.
+        """
+        try:
+            import mlflow
+            if mlflow.active_run() is not None:
+                mlflow.end_run()
+        except Exception:
+            # Ignore any errors during MLflow cleanup
+            pass
     
     def _compare_multiple_environments_policies(
         self,
@@ -406,22 +431,17 @@ class BaseSimulator(ABC):
                         results_dir=temp_env_dir,
                         cache_visualizations=cache_visualizations
                     )
-                    # Log the contents of this environment's directory directly under env_name
-                    # Use explicit run_id to avoid context issues
-                    with mlflow.start_run(run_id=run_id):
-                        for item in temp_env_dir.iterdir():
-                            if item.is_dir():
-                                mlflow.log_artifact(str(item), env_name)
-                            else:
-                                mlflow.log_artifact(str(item), env_name)
+                    # Instead of creating nested runs in parallel workers, return the directory path
+                    # The parent process will handle logging artifacts
+                    return str(temp_env_dir)
             
             # Get current MLflow context for parallel workers
             current_tracking_uri = mlflow.get_tracking_uri()
             current_experiment_name = self.experiment_name
             current_run_id = mlflow.active_run().info.run_id
             
-            # Run visualizations in parallel with MLflow context
-            Parallel(n_jobs=n_jobs)(
+            # Run visualizations in parallel and collect directory paths
+            visualization_dirs = Parallel(n_jobs=n_jobs)(
                 delayed(create_and_log_env_viz)(
                     env_name, 
                     policy_results_dict,
@@ -431,6 +451,16 @@ class BaseSimulator(ABC):
                 )
                 for env_name, policy_results_dict in results.items()
             )
+            
+            # Log artifacts from the parent process to avoid nested run issues
+            for env_name, temp_dir_path in zip(results.keys(), visualization_dirs):
+                if temp_dir_path and Path(temp_dir_path).exists():
+                    temp_dir = Path(temp_dir_path)
+                    for item in temp_dir.iterdir():
+                        if item.is_dir():
+                            mlflow.log_artifact(str(item), env_name)
+                        else:
+                            mlflow.log_artifact(str(item), env_name)
 
         return results, merged_df
     
