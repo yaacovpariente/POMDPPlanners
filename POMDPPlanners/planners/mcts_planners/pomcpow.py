@@ -246,7 +246,8 @@ class POMCPOW(PathSimulationPolicy):
             belief_node=belief_node,
             alpha_a=self.alpha_a,
             action_sampler=self.action_sampler,
-            exploration_constant=self.exploration_constant
+            exploration_constant=self.exploration_constant,
+            k_a=self.k_a
         )
 
         next_state, next_observation, reward = self.environment.sample_next_step(state=state, action=action_node.action)
@@ -255,14 +256,13 @@ class POMCPOW(PathSimulationPolicy):
             next_belief_node = action_node.get_belief_node_child(observation=next_observation, environment=self.environment)
             if next_belief_node is None:
                 next_belief_node = BeliefNode(belief=WeightedParticleBeliefStateUpdate(), observation=next_observation, parent=action_node)
-            
-            next_belief_node.visit_count += 1
         else:
             next_belief_node = action_node.sample_child_node()
         
         next_belief_node.belief.inplace_update(action=action_node.action, observation=next_observation, pomdp=self.environment, state=next_state)
     
-        if next_belief_node.is_leaf:
+        if next_belief_node.visit_count == 0:
+            next_belief_node.visit_count += 1
             total = reward + self.discount_factor * random_rollout_action_sampler(state=next_state, depth=depth + 1, action_sampler=self.action_sampler, environment=self.environment, discount_factor=self.discount_factor)
         else:
             next_state = next_belief_node.belief.sample()

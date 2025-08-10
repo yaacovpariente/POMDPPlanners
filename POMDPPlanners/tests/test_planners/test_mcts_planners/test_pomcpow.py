@@ -6,9 +6,10 @@ from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.core.belief import WeightedParticleBelief, WeightedParticleBeliefStateUpdate, get_initial_belief
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
 from POMDPPlanners.core.environment import SpaceType
+from POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils import validate_tree_structure_with_progressive_widening
 
 
 class MockActionSampler(ActionSampler):
@@ -108,7 +109,7 @@ def belief(environment, n_particles):
 def test_initialization_with_n_simulations(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
     """Test initialization with n simulations.
     
-    Purpose: Validates proper initialization of  with n simulations
+    Purpose: Validates proper initialization of POMCPOW with n simulations
     
     Given: Constructor parameters and initial conditions
     When: Object is initialized
@@ -145,7 +146,7 @@ def test_initialization_with_n_simulations(environment, discount_factor, depth, 
 def test_initialization_with_timeout(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
     """Test initialization with timeout.
     
-    Purpose: Validates proper initialization of  with timeout
+    Purpose: Validates proper initialization of POMCPOW with timeout
     
     Given: Constructor parameters and initial conditions
     When: Object is initialized
@@ -177,7 +178,7 @@ def test_initialization_with_timeout(environment, discount_factor, depth, explor
 def test_invalid_initialization(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
     """Test invalid initialization.
     
-    Purpose: Validates proper initialization of invalid 
+    Purpose: Validates proper initialization of invalid POMCPOW
     
     Given: Constructor parameters and initial conditions
     When: Object is initialized
@@ -238,7 +239,8 @@ def test_action_progressive_widening_new_action(planner, belief):
         belief_node=belief_node,
         alpha_a=planner.alpha_a,
         action_sampler=planner.action_sampler,
-        exploration_constant=planner.exploration_constant
+        exploration_constant=planner.exploration_constant,
+        k_a=planner.k_a
     )
     assert isinstance(action_node, ActionNode)
     assert action_node.parent == belief_node
@@ -272,7 +274,8 @@ def test_action_progressive_widening_existing_action(planner, belief, action_sam
         belief_node=belief_node,
         alpha_a=planner.alpha_a,
         action_sampler=planner.action_sampler,
-        exploration_constant=planner.exploration_constant
+        exploration_constant=planner.exploration_constant,
+        k_a=planner.k_a
     )
     assert isinstance(action_node, ActionNode)
     assert action_node in belief_node.children
@@ -400,16 +403,6 @@ def test_rollout_max_depth(planner):
 
 
 def test_simulate_path(planner, belief):
-    """Test simulate state path terminal state.
-    
-    Purpose: Validates simulate state path terminal state
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
     """Test simulate path.
     
     Purpose: Validates simulate path
@@ -429,6 +422,16 @@ def test_simulate_path(planner, belief):
 
 
 def test_simulate_state_path_terminal_state(planner, belief):
+    """Test simulate state path terminal state.
+    
+    Purpose: Validates simulate state path terminal state
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = BeliefNode(belief=belief, observation=None)
     depth = 0
     
@@ -446,16 +449,6 @@ def test_simulate_state_path_terminal_state(planner, belief):
 
 
 def test_simulate_state_path_max_depth(planner, belief):
-    """Test get space info.
-    
-    Purpose: Validates get space info
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
     """Test simulate state path max depth.
     
     Purpose: Validates simulate state path max depth
@@ -475,6 +468,24 @@ def test_simulate_state_path_max_depth(planner, belief):
 
 
 def test_get_space_info(planner):
+    """Test get space info.
+    
+    Purpose: Validates get space info
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
+    space_info = planner.get_space_info()
+    assert hasattr(space_info, 'action_space')
+    assert hasattr(space_info, 'observation_space')
+    assert space_info.action_space == SpaceType.MIXED
+    assert space_info.observation_space == SpaceType.MIXED
+
+
+def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles):
     """Test integration with tiger pomdp.
     
     Purpose: Validates integration with tiger pomdp
@@ -485,14 +496,6 @@ def test_get_space_info(planner):
     
     Test type: integration
     """
-    space_info = planner.get_space_info()
-    assert hasattr(space_info, 'action_space')
-    assert hasattr(space_info, 'observation_space')
-    assert space_info.action_space == SpaceType.MIXED
-    assert space_info.observation_space == SpaceType.MIXED
-
-
-def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles):
     current_belief = belief
     for _ in range(3):
         action, policy_run_data = planner.action(current_belief)
@@ -530,16 +533,6 @@ def test_progressive_widening_parameters(planner, belief):
     # Test that progressive widening respects k_o and alpha_o parameters
     action_node = ActionNode(action=0, parent=belief_node)
     action_node.visit_count = 1  # Set visit count to enable meaningful progressive widening calculation
-    """Test that belief nodes maintain proper belief structure for states and weights.
-    
-    Purpose: Validates belief node data structure
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
     
     # Create mock observation
     observation = "tiger_growl_left"
@@ -555,12 +548,9 @@ def test_progressive_widening_parameters(planner, belief):
 
 
 def test_belief_node_data_structure(planner, belief):
-    """Test that belief nodes maintain proper belief structure for states and weights."""
-    belief_node = BeliefNode(belief=belief, observation=None)
+    """Test that belief nodes maintain proper belief structure for states and weights.
     
-    """Test POMCPOW with SanityPOMDP to verify correct action selection.
-    
-    Purpose: Validates sanity pomdp action selection
+    Purpose: Validates belief node data structure
     
     Given: Test setup conditions
     When: Test operation is performed
@@ -568,6 +558,9 @@ def test_belief_node_data_structure(planner, belief):
     
     Test type: unit
     """
+    belief_node = BeliefNode(belief=belief, observation=None)
+    
+    # Simulate one path to set up the data structure
     planner._simulate_path(belief_node=belief_node, depth=0)
     
     # Check that children have proper belief structure
@@ -583,7 +576,16 @@ def test_belief_node_data_structure(planner, belief):
 
 
 def test_sanity_pomdp_action_selection():
-    """Test POMCPOW with SanityPOMDP to verify correct action selection."""
+    """Test POMCPOW with SanityPOMDP to verify correct action selection.
+    
+    Purpose: Validates sanity pomdp action selection
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     environment = SanityPOMDP()
     action_sampler = MockActionSampler([0, 1])
     
@@ -610,16 +612,7 @@ def test_sanity_pomdp_action_selection():
     # Run multiple trials to ensure consistent behavior
     n_trials = 10
     action_0_count = 0
-    """Test that the tree structure is properly constructed.
     
-    Purpose: Validates tree structure after construction
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
     for _ in range(n_trials):
         action, policy_run_data = planner.action(belief)
         assert isinstance(action, list)
@@ -634,19 +627,40 @@ def test_sanity_pomdp_action_selection():
         f"POMCPOW selected action 0 only {action_0_count}/{n_trials} times, expected at least {0.7 * n_trials}"
 
 
-def test_tree_structure_after_construction(planner, belief):
-    """Test that the tree structure is properly constructed."""
-    belief_node = BeliefNode(belief=belief, observation=None)
+def test_tree_structure_after_construction(planner, belief, n_simulations, depth, k_o, k_a, alpha_o, alpha_a, action_sampler):
+    """Test that the tree structure is properly constructed.
     
-    # Run several simulations to build the tree
-    for _ in range(50):
-        planner._simulate_path(belief_node=belief_node, depth=0)
+    Purpose: Validates tree structure after construction
     
-    # Verify tree structure
-    assert len(belief_node.children) > 0
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
+    
+    root_belief_node = planner._learn_tree(belief=belief)
+    
+    from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
+    validate_tree_structure_with_progressive_widening(
+        root_belief_node=root_belief_node,
+        planner=planner,
+        n_simulations=n_simulations,
+        depth=depth,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        action_sampler=action_sampler,
+        expected_belief_type=WeightedParticleBeliefStateUpdate,  # POMCP_DPW uses unweighted particles
+        planner_type="POMCPOW"  # Maintain original POMCP_DPW logic
+    )
+
+
+def test_q_value_updates(planner, belief):
     """Test that Q-values are properly updated during simulation.
     
-    Purpose: Validates update functionality for q value s
+    Purpose: Validates update functionality for q values
     
     Given: Initial object state and update parameters
     When: Update operation is performed
@@ -654,22 +668,6 @@ def test_tree_structure_after_construction(planner, belief):
     
     Test type: unit
     """
-    
-    # Check that action nodes have proper structure
-    for action_node in belief_node.children:
-        assert action_node.parent == belief_node
-        assert action_node.visit_count > 0
-        assert action_node.q_value is not None
-        
-        # Check belief node children of action nodes
-        for belief_child in action_node.children:
-            assert isinstance(belief_child, BeliefNode)
-            assert belief_child.parent == action_node
-            assert hasattr(belief_child, 'data')
-
-
-def test_q_value_updates(planner, belief):
-    """Test that Q-values are properly updated during simulation."""
     belief_node = BeliefNode(belief=belief, observation=None)
     
     # Create an action node
@@ -690,7 +688,16 @@ def test_q_value_updates(planner, belief):
 
 
 def test_visit_count_consistency(planner, belief):
-    """Test that visit counts are consistent throughout the tree."""
+    """Test that visit counts are consistent throughout the tree.
+    
+    Purpose: Validates visit count consistency
+    
+    Given: Test setup conditions
+    When: Test operation is performed
+    Then: Expected behavior is verified
+    
+    Test type: unit
+    """
     belief_node = BeliefNode(belief=belief, observation=None)
     
     # Run several simulations
@@ -704,3 +711,52 @@ def test_visit_count_consistency(planner, belief):
     # Check that action node visit counts sum correctly
     total_action_visits = sum(child.visit_count for child in belief_node.children if isinstance(child, ActionNode))
     assert total_action_visits <= belief_node.visit_count  # Allow for some variance due to tree structure
+
+
+def test_pomcpow_tree_structure_construction(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
+    """
+    Purpose: Validates complete tree structure construction and node integrity for POMCPOW with progressive widening
+    
+    Given: POMCPOW planner with progressive widening parameters and TigerPOMDP environment  
+    When: Tree construction is performed using _learn_tree method with sufficient simulations
+    Then: All tree nodes have correct values, progressive widening constraints are respected, and tree structure is valid
+    
+    Test type: unit
+    """
+    # ARRANGE: Setup POMCPOW planner with sufficient simulations to build meaningful tree
+    n_simulations = 200
+    planner = POMCPOW(
+        environment=environment,
+        discount_factor=discount_factor,
+        depth=depth,
+        exploration_constant=exploration_constant,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        n_simulations=n_simulations,
+        action_sampler=action_sampler,
+        name="TestPOMCPOW_TreeStructure"
+    )
+    
+    n_particles = 100
+    belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
+    
+    # ACT: Build complete tree using _learn_tree method
+    root_belief_node = planner._learn_tree(belief=belief)
+    
+    # ASSERT: Use shared validation function with POMCPOW-specific belief type
+    from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
+    validate_tree_structure_with_progressive_widening(
+        root_belief_node=root_belief_node,
+        planner=planner,
+        n_simulations=n_simulations,
+        depth=depth,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        action_sampler=action_sampler,
+        expected_belief_type=WeightedParticleBeliefStateUpdate,  # POMCPOW uses weighted particles
+        planner_type="POMCPOW"  # Allow more flexible visit count validation for POMCPOW
+    )
