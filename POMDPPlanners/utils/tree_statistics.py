@@ -225,4 +225,8 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
             name="root_visit_count",
             value=root_visit_count,
         ),
+        PolicyInfoVariable(
+            name="tree_max_depth",
+            value=tree.height - 1,
+        ),
     ]    
