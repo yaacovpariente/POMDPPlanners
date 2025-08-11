@@ -549,6 +549,7 @@ def plot_policy_returns(
     dir_path: Path,
     n_samples: int = 1000,
     n_jobs: int = -1,
+    logger: logging.Logger = None,
 ) -> None:
     """
     Simulate and plot returns for multiple agent paths.
@@ -559,6 +560,7 @@ def plot_policy_returns(
         dir_path: Directory path to save the plot
         n_samples: Number of simulations to run for each path
         n_jobs: Number of parallel jobs to run (-1 for all cores)
+        logger: Logger instance for logging warnings and info messages
         
     Raises:
         ValueError: If any of the input parameters are invalid
@@ -575,6 +577,8 @@ def plot_policy_returns(
         raise TypeError("n_samples must be an integer")
     if not isinstance(n_jobs, int):
         raise TypeError("n_jobs must be an integer")
+    if logger is not None and not isinstance(logger, logging.Logger):
+        raise TypeError("logger must be a logging.Logger instance or None")
         
     if not agent_paths:
         raise ValueError("agent_paths cannot be empty")
@@ -602,6 +606,28 @@ def plot_policy_returns(
     
     # Create directory if it doesn't exist
     dir_path.mkdir(parents=True, exist_ok=True)
+    
+    # Test environment reward function with first path to catch issues early
+    if agent_paths:
+        test_state = agent_paths[0].state_sequence[0]
+        test_action = agent_paths[0].action_sequence[0]
+        try:
+            test_reward = env.reward(test_state, test_action)
+            if not np.isfinite(test_reward):
+                if logger:
+                    logger.warning(f"Environment reward function returned invalid value: {test_reward}")
+                else:
+                    print(f"Warning: Environment reward function returned invalid value: {test_reward}")
+            elif abs(test_reward) > 1e6:
+                if logger:
+                    logger.warning(f"Environment reward function returned extreme value: {test_reward}")
+                else:
+                    print(f"Warning: Environment reward function returned extreme value: {test_reward}")
+        except Exception as e:
+            if logger:
+                logger.warning(f"Environment reward function failed: {e}")
+            else:
+                print(f"Warning: Environment reward function failed: {e}")
         
     def simulate_sequence(agent_path: AgentPath):
         total_reward = 0
@@ -613,8 +639,38 @@ def plot_policy_returns(
             belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
             
             # Use belief_expectation_cost to compute the reward
-            total_reward += -belief_expectation_cost(belief=belief, action=agent_path.action_sequence[i], env=env)
+            step_reward = -belief_expectation_cost(belief=belief, action=agent_path.action_sequence[i], env=env)
+            
+            # Validate step reward to prevent extreme values
+            if not np.isfinite(step_reward):
+                if logger:
+                    logger.warning(f"Invalid step reward {step_reward} at step {i} for path {agent_path.name}")
+                else:
+                    print(f"Warning: Invalid step reward {step_reward} at step {i} for path {agent_path.name}")
+                step_reward = 0.0  # Default to 0 for invalid rewards
+            elif abs(step_reward) > 1e6:
+                if logger:
+                    logger.warning(f"Extreme step reward {step_reward} at step {i} for path {agent_path.name}")
+                else:
+                    print(f"Warning: Extreme step reward {step_reward} at step {i} for path {agent_path.name}")
+                step_reward = np.clip(step_reward, -1e6, 1e6)  # Clip extreme values
+                
+            total_reward += step_reward
         
+        # Final validation of total reward
+        if not np.isfinite(total_reward):
+            if logger:
+                logger.warning(f"Invalid total reward {total_reward} for path {agent_path.name}")
+            else:
+                print(f"Warning: Invalid total reward {total_reward} for path {agent_path.name}")
+            total_reward = 0.0
+        elif abs(total_reward) > 1e6:
+            if logger:
+                logger.warning(f"Extreme total reward {total_reward} for path {agent_path.name}")
+            else:
+                print(f"Warning: Extreme total reward {total_reward} for path {agent_path.name}")
+            total_reward = np.clip(total_reward, -1e6, 1e6)
+            
         return total_reward
 
     def run_simulation(path_idx):
@@ -631,13 +687,59 @@ def plot_policy_returns(
     # Create the plot
     plt.figure(figsize=(10, 6))
     colors = ['blue', 'red', 'green', 'purple', 'orange', 'brown', 'pink', 'gray', 'olive', 'cyan']
-    for i, (returns, agent_path) in enumerate(zip(all_returns, agent_paths)):
-        sns.histplot(data=returns, label=agent_path.name, alpha=0.5, color=colors[i % len(colors)])
     
-    plt.xlabel('Total Reward')
-    plt.ylabel('Count')
-    plt.title('Comparison of Returns for Different Agent Paths')
-    plt.legend()
+    valid_paths_plotted = 0
+    for i, (returns, agent_path) in enumerate(zip(all_returns, agent_paths)):
+        # Filter out invalid values and convert to numpy array
+        returns_array = np.array(returns)
+        
+        # Remove NaN and inf values
+        valid_mask = np.isfinite(returns_array)
+        if not np.any(valid_mask):
+            if logger:
+                logger.warning(f"All returns for {agent_path.name} are invalid (NaN/inf). Skipping this path.")
+            else:
+                print(f"Warning: All returns for {agent_path.name} are invalid (NaN/inf). Skipping this path.")
+            continue
+            
+        valid_returns = returns_array[valid_mask]
+        
+        # Check for reasonable bounds to prevent extreme bin calculations
+        if len(valid_returns) > 0:
+            min_val = np.min(valid_returns)
+            max_val = np.max(valid_returns)
+            
+            # If the range is extremely large or small, skip plotting
+            if max_val - min_val > 1e6 or (max_val - min_val < 1e-10 and max_val - min_val > 0):
+                if logger:
+                    logger.warning(f"Returns for {agent_path.name} have extreme range [{min_val}, {max_val}]. Skipping this path.")
+                else:
+                    print(f"Warning: Returns for {agent_path.name} have extreme range [{min_val}, {max_val}]. Skipping this path.")
+                continue
+                
+            # Use explicit bins to prevent automatic bin calculation issues
+            try:
+                sns.histplot(data=valid_returns, label=agent_path.name, alpha=0.5, color=colors[i % len(colors)], bins=50)
+                valid_paths_plotted += 1
+            except Exception as e:
+                if logger:
+                    logger.warning(f"Failed to plot histogram for {agent_path.name}: {e}. Skipping this path.")
+                else:
+                    print(f"Warning: Failed to plot histogram for {agent_path.name}: {e}. Skipping this path.")
+                continue
+    
+    # Check if we have any valid paths to plot
+    if valid_paths_plotted == 0:
+        plt.text(0.5, 0.5, 'No valid data to plot', ha='center', va='center', transform=plt.gca().transAxes)
+        if logger:
+            logger.warning("No valid data could be plotted. Check the simulation results for issues.")
+        else:
+            print("Warning: No valid data could be plotted. Check the simulation results for issues.")
+    else:
+        plt.xlabel('Total Reward')
+        plt.ylabel('Count')
+        plt.title('Comparison of Returns for Different Agent Paths')
+        plt.legend()
     
     # Save the plot
     output_path = dir_path / "policy_returns_comparison.png"

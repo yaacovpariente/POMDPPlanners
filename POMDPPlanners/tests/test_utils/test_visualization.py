@@ -7,6 +7,7 @@ import shutil
 import mlflow
 import os
 import time
+import logging
 from contextlib import contextmanager
 
 from POMDPPlanners.utils.visualization import plot_metrics_comparison, plot_policy_returns, AgentPath
@@ -17,6 +18,10 @@ from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.core.simulation import MetricValue
+
+# Set up logger for tests
+test_logger = logging.getLogger(__name__)
+test_logger.setLevel(logging.WARNING)
 
 
 @contextmanager
@@ -292,7 +297,8 @@ def test_plot_policy_returns_tiger_pomdp(temp_cache_dir):
         env=env,
         agent_paths=agent_paths,
         dir_path=temp_cache_dir,
-        n_samples=5  # Reduced from 10 to 5
+        n_samples=5,  # Reduced from 10 to 5
+        logger=test_logger
     )
     
     # Verify plot was created
@@ -363,7 +369,8 @@ def test_plot_policy_returns_discrete_light_dark_pomdp(temp_cache_dir):
         env=env,
         agent_paths=agent_paths,
         dir_path=temp_cache_dir,
-        n_samples=5  # Reduced from 100 to speed up test
+        n_samples=5,  # Reduced from 100 to speed up test
+        logger=test_logger
     )
     assert time.time() - start_time < 30, "Plot generation took too long"
     
@@ -436,7 +443,8 @@ def test_plot_policy_returns_continuous_light_dark_pomdp(temp_cache_dir):
         env=env,
         agent_paths=agent_paths,
         dir_path=temp_cache_dir,
-        n_samples=5  # Already at 5, which is good for testing
+        n_samples=5,  # Already at 5, which is good for testing
+        logger=test_logger
     )
     assert time.time() - start_time < 30, "Plot generation took too long"
     
@@ -465,7 +473,8 @@ def test_plot_policy_returns_empty_paths(temp_cache_dir):
             env=env,
             agent_paths=[],
             dir_path=temp_cache_dir,
-            n_samples=100
+            n_samples=100,
+            logger=test_logger
         )
 
 
@@ -497,5 +506,6 @@ def test_plot_policy_returns_invalid_n_samples(temp_cache_dir):
             env=env,
             agent_paths=agent_paths,
             dir_path=temp_cache_dir,
-            n_samples=0
+            n_samples=0,
+            logger=test_logger
         )

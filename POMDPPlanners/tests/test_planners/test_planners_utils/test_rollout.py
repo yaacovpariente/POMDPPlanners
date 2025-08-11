@@ -419,7 +419,7 @@ def test_basic_tiger_rollout_usage_example():
     
     Given: A Tiger POMDP environment and TigerActionSampler with initial state "tiger_left"
     When: A rollout is performed using the docstring example code
-    Then: The rollout returns a float value within reasonable bounds (-500 to 50) for Tiger POMDP
+    Then: The rollout returns a float value within reasonable bounds for Tiger POMDP
     
     Test type: example
     """
@@ -450,7 +450,16 @@ def test_basic_tiger_rollout_usage_example():
     
     # Verify results
     assert isinstance(rollout_value, float), "Rollout should return float value"
-    assert -500 <= rollout_value <= 50, "Tiger rollout value should be in reasonable range"
+    
+    # Calculate theoretical bounds for Tiger POMDP with max_depth=10 and discount_factor=0.95
+    # Worst case: all actions are "listen" (-1 each) for 10 steps
+    # Best case: open correct door early (+10) then mostly listen
+    # Realistic worst case: open wrong doors multiple times (-100 each) + some listening
+    # With discount factor 0.95, cumulative rewards can go much lower than -500
+    theoretical_min = -1000  # Conservative lower bound for worst-case scenarios
+    theoretical_max = 100    # Conservative upper bound for best-case scenarios
+    
+    assert theoretical_min <= rollout_value <= theoretical_max, f"Tiger rollout value {rollout_value} should be in reasonable range [{theoretical_min}, {theoretical_max}]"
 
 
 def test_cartpole_rollout_usage_example():
