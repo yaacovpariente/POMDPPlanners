@@ -40,11 +40,11 @@ def policy(environment):
 def test_episode_simulation_task_creation(environment, policy):
     """Test creation and basic properties of EpisodeSimulationTask.
     
-    Purpose: Validates episode simulation task creation
+    Purpose: Validates that EpisodeSimulationTask can be created with correct attributes and properties
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment, SparsePFT policy, and test belief state
+    When: EpisodeSimulationTask is created with specific parameters (num_steps=2, episode_id=1, seed=42)
+    Then: Task has correct attributes matching input parameters and generates valid cache key
     
     Test type: unit
     """
@@ -76,11 +76,11 @@ def test_episode_simulation_task_creation(environment, policy):
 def test_episode_simulation_task_invalid_steps(environment, policy):
     """Test that EpisodeSimulationTask raises error for invalid num_steps.
     
-    Purpose: Validates episode simulation task invalid steps
+    Purpose: Validates that EpisodeSimulationTask raises ValueError for invalid num_steps parameter
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment, SparsePFT policy, and test belief state
+    When: EpisodeSimulationTask is created with num_steps=-1 (invalid)
+    Then: ValueError is raised with appropriate error message about num_steps being positive
     
     Test type: unit
     """
@@ -100,11 +100,11 @@ def test_episode_simulation_task_invalid_steps(environment, policy):
 def test_episode_simulation_task_equality(environment, policy):
     """Test task equality and hashing.
     
-    Purpose: Validates equality comparison for episode simulation task 
+    Purpose: Validates that EpisodeSimulationTask equality comparison and hashing work correctly
     
-    Given: Objects with same or different configurations
-    When: Equality comparison is performed
-    Then: Objects are correctly identified as equal or unequal
+    Given: Three EpisodeSimulationTask instances: two identical and one with different episode_id
+    When: Equality comparison and hashing are performed between tasks
+    Then: Identical tasks are equal and have same hash, different tasks are unequal with different hashes
     
     Test type: unit
     """
@@ -150,11 +150,11 @@ def test_episode_simulation_task_equality(environment, policy):
 def test_episode_simulation_task_serialization(environment, policy):
     """Test task serialization and deserialization.
     
-    Purpose: Validates episode simulation task serialization
+    Purpose: Validates that EpisodeSimulationTask can be properly serialized and deserialized
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: An EpisodeSimulationTask with specific configuration parameters
+    When: Task is serialized to dictionary and then deserialized back to task object
+    Then: Deserialized task has identical attributes to original task, including environment, policy, and all parameters
     
     Test type: unit
     """
@@ -188,11 +188,11 @@ def test_episode_simulation_task_serialization(environment, policy):
 def test_episode_simulation_task_execution(environment, policy):
     """Test actual task execution with real environment and policy.
     
-    Purpose: Validates episode simulation task execution
+    Purpose: Validates that EpisodeSimulationTask can execute successfully and produce valid results
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: An EpisodeSimulationTask with TigerPOMDP environment and SparsePFT policy
+    When: Task.run() method is executed
+    Then: Returns History object with correct structure, step count, and episode completion status
     
     Test type: unit
     """

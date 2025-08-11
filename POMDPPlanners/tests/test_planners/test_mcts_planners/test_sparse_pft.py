@@ -96,11 +96,11 @@ def test_initialization(planner, environment):
 def test_action_selection(planner, initial_belief):
     """Test that action selection returns a valid action
     
-    Purpose: Validates action selection
+    Purpose: Validates that SparsePFT action selection returns valid TigerPOMDP actions through MCTS with progressive widening
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SparsePFT planner with TigerPOMDP environment, initial belief with 100 particles, belief_child_num=2
+    When: action method executes Sparse Partially Observable Forward Tree search
+    Then: Returns single-element action list containing valid tiger action (listen/open_left/open_right) and PolicyRunData
     
     Test type: unit
     """
@@ -113,11 +113,11 @@ def test_action_selection(planner, initial_belief):
 def test_get_explored_action_node(planner):
     """Test that action node exploration works correctly
     
-    Purpose: Validates get explored action node
+    Purpose: Validates that get_explored_action_node correctly selects action nodes based on UCB1 exploration strategy
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with ActionNode children having different q_values (-1.0 vs 100.0), visit counts, and UCB parameters
+    When: get_explored_action_node applies UCB1 selection formula
+    Then: Selects ActionNode with optimal UCB value balancing exploitation and exploration
     
     Test type: unit
     """
@@ -206,11 +206,11 @@ def test_sample_next_existing_belief(planner):
 def test_generate_belief(planner):
     """Test generating a new belief node
     
-    Purpose: Validates generate belief
+    Purpose: Validates that _generate_belief creates new BeliefNode children with proper observation sampling and cost computation
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SparsePFT planner, BeliefNode and ActionNode with WeightedParticleBelief containing tiger states
+    When: _generate_belief samples new observation and creates belief update
+    Then: Returns new BeliefNode with correct parent, non-null observation, immediate_cost, and reward = -cost
     
     Test type: unit
     """
@@ -243,11 +243,11 @@ def test_generate_belief(planner):
 def test_random_rollout(planner):
     """Test random rollout from a state
     
-    Purpose: Validates random rollout
+    Purpose: Validates that random rollout simulation returns rewards within expected TigerPOMDP bounds for value estimation
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SparsePFT planner with TigerPOMDP environment, initial state "tiger_left", rollout depth=0
+    When: random_rollout performs simulation from given state with random policy
+    Then: Returns float reward within bounds [-500, 50] accounting for tiger environment reward structure
     
     Test type: unit
     """
@@ -313,11 +313,11 @@ def test_update_node_statistics(planner):
 def test_integration_with_tiger_pomdp(planner, initial_belief, environment, n_particles):
     """Test integration with Tiger POMDP environment
     
-    Purpose: Validates integration with tiger pomdp
+    Purpose: Validates that SparsePFT integrates correctly with TigerPOMDP for complete POMDP planning workflow including belief updates
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SparsePFT planner, TigerPOMDP environment, initial belief with 100 particles, 5 planning steps
+    When: Full planning cycle executes including action selection, environment steps, and belief updates
+    Then: Valid tiger actions selected, belief updates preserve particle count, and environment state transitions work correctly
     
     Test type: integration
     """
@@ -366,11 +366,11 @@ def test_integration_with_tiger_pomdp(planner, initial_belief, environment, n_pa
 def test_tree_structure_construction(planner, initial_belief, environment):
     """Test that the tree structure is constructed correctly
     
-    Purpose: Validates tree structure construction
+    Purpose: Validates that SparsePFT builds proper MCTS tree structure with correct belief-action hierarchy and progressive widening
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SparsePFT planner with belief_child_num=2, depth=3, TigerPOMDP environment, initial belief
+    When: _learn_tree constructs MCTS tree with belief and action nodes
+    Then: Tree has correct structure (root BeliefNode, action children, belief grandchildren), visit counts, progressive widening limits, and depth=2*depth+1
     
     Test type: unit
     """
@@ -423,11 +423,11 @@ def test_tree_structure_construction(planner, initial_belief, environment):
 def test_sanity_pomdp_action_selection():
     """Test that SparsePFT correctly identifies the better action in SanityPOMDP
     
-    Purpose: Validates sanity pomdp action selection
+    Purpose: Validates that SparsePFT handles SanityPOMDP environment with deterministic reward structure and finds optimal actions
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SanityPOMDP environment with clear optimal actions, SparsePFT with 1000 simulations and belief_child_num=3
+    When: MCTS tree search explores action space with sufficient simulations
+    Then: Selected action is valid for SanityPOMDP environment and planning completes successfully
     
     Test type: unit
     """
@@ -471,11 +471,11 @@ def test_sanity_pomdp_action_selection():
 def test_sanity_pomdp_belief_children():
     """Test that SparsePFT generates appropriate belief children for SanityPOMDP
     
-    Purpose: Validates sanity pomdp belief children
+    Purpose: Validates that SparsePFT generates proper belief children for SanityPOMDP environment with binary observations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SanityPOMDP environment with binary observations [0,1], SparsePFT with belief_child_num=3, initial belief with 100 particles
+    When: _generate_belief creates belief children for action=0 (better action)
+    Then: Generated BeliefNode has correct parent, WeightedParticleBelief with 100 particles, binary observation, and non-null immediate cost
     
     Test type: unit
     """

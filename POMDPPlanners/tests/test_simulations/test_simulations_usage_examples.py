@@ -15,11 +15,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def test_run_episode_usage_example():
     """Test the run_episode usage example from the function docstring.
     
-    Purpose: Validates run episode usage example
+    Purpose: Validates that run_episode function works correctly with TigerPOMDP and POMCP policy configuration
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, POMCP policy with reduced parameters, initial belief with 100 particles, and 5 episode steps
+    When: run_episode is executed with these parameters
+    Then: Returns History object with expected attributes (history, discount_factor, actual_num_steps, timing data, terminal state flag)
     
     Test type: example
     """
@@ -85,11 +85,11 @@ def test_run_episode_usage_example():
 def test_pomdp_simulator_usage_example():
     """Test the POMDPSimulator usage example (simplified version).
     
-    Purpose: Validates pomdp simulator usage example
+    Purpose: Validates that POMDPSimulator correctly compares multiple policies on TigerPOMDP environment
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, POMCP and StandardSparseSampling policies, 3 episodes with 5 steps each, JOBLIB task manager
+    When: POMDPSimulator.compare_multiple_environments_policies is called
+    Then: Returns structured results dict with policy histories and statistics DataFrame with environment, policy, and average_return columns
     
     Test type: example
     """
@@ -201,11 +201,11 @@ def test_pomdp_simulator_usage_example():
 def test_simulations_api_usage_example():
     """Test the SimulationsAPI usage example (simplified version).
     
-    Purpose: Validates simulations api usage example
+    Purpose: Validates that SimulationsAPI correctly executes multi-policy comparison with confidence intervals
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SimulationsAPI instance, TigerPOMDP with POMCP and SparseSampling policies, 3 episodes with 5 steps, alpha=0.05 and 95% confidence
+    When: run_multiple_environments_and_policies_local_run is executed
+    Then: Returns tuple of (results_dict, stats_df) with policy-specific histories and confidence interval statistics
     
     Test type: example
     """
@@ -308,11 +308,11 @@ def test_simulations_api_usage_example():
 def test_simulation_statistics_usage_example():
     """Test the compute_statistics_environment_policy_pair usage example.
     
-    Purpose: Validates simulation statistics usage example
+    Purpose: Validates that compute_statistics_environment_policy_pair generates comprehensive metrics with confidence intervals
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, POMCP policy, 3 episode histories with 5 steps each, alpha=0.05 and 95% confidence level
+    When: compute_statistics_environment_policy_pair processes the histories
+    Then: Returns list of MetricValue objects including average_return, return_cvar, and average_action_time with confidence bounds
     
     Test type: example
     """
@@ -403,11 +403,11 @@ def test_simulation_statistics_usage_example():
 def test_metrics_dict_to_dataframe_usage_example():
     """Test the metrics_dict_to_dataframe usage example.
     
-    Purpose: Validates metrics dict to dataframe usage example
+    Purpose: Validates that metrics_dict_to_dataframe correctly converts nested policy metrics into comparative DataFrame format
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP with POMCP and SparseSampling policies, 2 episodes each with 3 steps, computed metrics for both policies
+    When: metrics_dict_to_dataframe processes the nested metrics dictionary
+    Then: Returns DataFrame with environment, policy columns and confidence interval columns for policy comparison analysis
     
     Test type: example
     """

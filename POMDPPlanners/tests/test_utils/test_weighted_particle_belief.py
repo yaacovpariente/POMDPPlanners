@@ -10,11 +10,11 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 def test_initialization():
     """Test proper initialization of WeightedParticleBeliefDiscreteLightDark
     
-    Purpose: Validates proper initialization of 
+    Purpose: Validates proper initialization of WeightedParticleBeliefDiscreteLightDark with particle weights and reinvigoration parameters
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: 10 particles at origin [0,0], uniform log weights, resampling=False, ess_factor=0.5, reinvigoration_fraction=0.2
+    When: WeightedParticleBeliefDiscreteLightDark is instantiated
+    Then: Correct particles/weights lengths, reinvigoration_fraction=0.2, actions=[up,down,right,left], action_to_vector mappings
     
     Test type: unit
     """
@@ -42,11 +42,11 @@ def test_initialization():
 def test_reinvigoration():
     """Test reinvigoration functionality
     
-    Purpose: Validates reinvigoration
+    Purpose: Validates that reinvigorate method correctly updates particle belief with new particles based on action and observation
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: WeightedParticleBeliefDiscreteLightDark with 10 particles, ContinuousLightDarkPOMDP environment, action="up", observation=[0,1]
+    When: reinvigorate method is called with these parameters
+    Then: Returns new belief with same particle count and at least reinvigoration_fraction*n_particles new particles added
     
     Test type: unit
     """
@@ -83,11 +83,11 @@ def test_reinvigoration():
 def test_invalid_initialization():
     """Test initialization with invalid parameters
     
-    Purpose: Validates proper initialization of invalid 
+    Purpose: Validates that WeightedParticleBeliefDiscreteLightDark raises appropriate errors for invalid constructor parameters
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: Mismatched particles (5) and weights (10) arrays, or invalid reinvigoration_fraction (1.5) outside [0,1] range
+    When: WeightedParticleBeliefDiscreteLightDark constructor is called with invalid parameters
+    Then: ValueError is raised indicating parameter validation failure
     
     Test type: unit
     """
@@ -111,11 +111,11 @@ def test_invalid_initialization():
 def test_action_to_vector_mapping():
     """Test action to vector mapping
     
-    Purpose: Validates action to vector mapping
+    Purpose: Validates that action_to_vector dictionary correctly maps discrete actions to 2D movement vectors
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: WeightedParticleBeliefDiscreteLightDark with single particle and non-zero log weight
+    When: action_to_vector mappings are accessed for valid and invalid actions
+    Then: Correct vectors returned (up=[0,1], down=[0,-1], right=[1,0], left=[-1,0]) and KeyError for invalid actions
     
     Test type: unit
     """
@@ -144,11 +144,11 @@ def test_action_to_vector_mapping():
 def test_full_coverage_initialization():
     """Test proper initialization of WeightedParticleBeliefDiscreteLightDarkFullCoverage
     
-    Purpose: Validates proper initialization of full coverage 
+    Purpose: Validates proper initialization of WeightedParticleBeliefDiscreteLightDarkFullCoverage with full coverage reinvigoration parameters
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: 10 particles at origin, uniform log weights, ess_factor=0.5, reinvigoration_fraction=0.05
+    When: WeightedParticleBeliefDiscreteLightDarkFullCoverage is instantiated
+    Then: Correct attributes set including reinvigoration_particles_weights_sum=0.05, resampling=False, action mappings
     
     Test type: unit
     """
@@ -176,11 +176,11 @@ def test_full_coverage_initialization():
 def test_full_coverage_reinvigoration():
     """Test reinvigoration functionality of WeightedParticleBeliefDiscreteLightDarkFullCoverage
     
-    Purpose: Validates full coverage reinvigoration
+    Purpose: Validates that full coverage reinvigoration adds systematic state coverage particles based on all possible actions
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: WeightedParticleBeliefDiscreteLightDarkFullCoverage with 10 particles, action="up", observation=[0,1]
+    When: reinvigorate method executes full coverage strategy
+    Then: Last n_states particles match expected states (observation + action_vectors for each action, plus observation itself)
     
     Test type: unit
     """
@@ -247,11 +247,11 @@ def test_full_coverage_invalid_initialization():
 def test_full_coverage_resampling():
     """Test that resampling is performed during reinvigoration when ESS is below threshold
     
-    Purpose: Validates full coverage resampling
+    Purpose: Validates that full coverage reinvigoration triggers resampling when Effective Sample Size falls below threshold due to degenerate weights
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: WeightedParticleBeliefDiscreteLightDarkFullCoverage with degenerate weights (one particle has all weight), ess_factor=0.5
+    When: reinvigorate is called with ESS below threshold
+    Then: Resampling occurs improving ESS above threshold while maintaining expected state particles in correct positions
     
     Test type: unit
     """
@@ -331,11 +331,11 @@ def test_continuous_full_coverage_initialization():
 def test_continuous_full_coverage_reinvigoration():
     """Test reinvigoration functionality of WeightedParticleBeliefContinuousLightDarkFullCoverage
     
-    Purpose: Validates continuous full coverage reinvigoration
+    Purpose: Validates that continuous full coverage reinvigoration generates particles within environment bounds using covariance matrix sampling
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: WeightedParticleBeliefContinuousLightDarkFullCoverage with 10 particles, covariance matrix, action="up", observation=[0,1]
+    When: reinvigorate method samples new particles using continuous distributions
+    Then: Reinvigorated particles are within environment bounds [0, grid_size], have correct 2D shape, and particle count preserved
     
     Test type: unit
     """
@@ -413,11 +413,11 @@ def test_continuous_full_coverage_invalid_initialization():
 def test_continuous_full_coverage_resampling():
     """Test that resampling is performed during reinvigoration when ESS is below threshold
     
-    Purpose: Validates continuous full coverage resampling
+    Purpose: Validates that continuous full coverage reinvigoration performs resampling when ESS drops below threshold while maintaining particle bounds
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: WeightedParticleBeliefContinuousLightDarkFullCoverage with degenerate weights, covariance matrix, ess_factor=0.5
+    When: reinvigorate is called with ESS below threshold triggering resampling
+    Then: ESS improves above threshold and reinvigorated particles remain within environment bounds [0, grid_size] with correct shapes
     
     Test type: unit
     """
@@ -465,11 +465,11 @@ def test_continuous_full_coverage_resampling():
 def test_continuous_full_coverage_gmm_sampling():
     """Test that GMM sampling produces expected distribution of particles
     
-    Purpose: Validates continuous full coverage gmm sampling
+    Purpose: Validates that continuous full coverage uses Gaussian Mixture Model sampling to cluster reinvigorated particles around expected action centers
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: WeightedParticleBeliefContinuousLightDarkFullCoverage with 1000 particles, reinvigoration_fraction=0.2, tight covariance matrix, center observation [5,5]
+    When: reinvigoration with action="up" generates GMM-sampled particles
+    Then: Reinvigorated particles cluster around expected centers (observation + action_vectors) with >10% within 2 std deviations of each center
     
     Test type: unit
     """

@@ -55,11 +55,11 @@ def test_initialization(planner, tiger_pomdp):
 def test_action_selection(planner, initial_belief):
     """Test that action selection returns a valid action
     
-    Purpose: Validates action selection
+    Purpose: Validates that StandardSparseSamplingDiscreteActionsPlanner returns valid TigerPOMDP actions through sparse sampling
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: StandardSparseSamplingDiscreteActionsPlanner with branching_factor=2, depth=2, TigerPOMDP environment, uniform initial belief
+    When: action method performs sparse sampling tree construction and action selection
+    Then: Returns list with single valid tiger action, PolicyRunData with no info_variables (as expected)
     
     Test type: unit
     """
@@ -74,11 +74,11 @@ def test_action_selection(planner, initial_belief):
 def test_belief_tree_construction(planner, initial_belief):
     """Test that the belief tree is constructed correctly
     
-    Purpose: Validates belief tree construction
+    Purpose: Validates that sparse sampling belief tree construction creates proper structure with correct depth and branching
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with uniform initial belief, StandardSparseSamplingPlanner with depth=2
+    When: _build_tree constructs sparse sampling tree from root node at current_depth=0
+    Then: Tree has correct root belief, no parent, >0 children, height=2*depth+1=5 for alternating belief-action levels
     
     Test type: unit
     """
@@ -98,11 +98,11 @@ def test_belief_tree_construction(planner, initial_belief):
 def test_node_statistics(planner, initial_belief):
     """Test that node statistics are updated correctly
     
-    Purpose: Validates node statistics
+    Purpose: Validates that sparse sampling node statistics are properly initialized and computed for all node types
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with uniform initial belief, sparse sampling tree built with branching_factor=2, depth=2
+    When: _build_tree creates tree structure and computes statistics for all nodes
+    Then: Leaf nodes have immediate_cost/q_value/visit_count, ActionNodes have visit_count/q_value, BeliefNodes have v_value/visit_count
     
     Test type: unit
     """
@@ -130,11 +130,11 @@ def test_node_statistics(planner, initial_belief):
 def test_leaf_node_statistics(planner, initial_belief):
     """Test that leaf node statistics are calculated correctly
     
-    Purpose: Validates leaf node statistics
+    Purpose: Validates that sparse sampling leaf node statistics are computed correctly using rollout estimation
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: StandardSparseSamplingPlanner with uniform initial belief, learned belief tree with depth=2
+    When: _learn_belief_tree constructs full tree and computes leaf node statistics
+    Then: All leaf nodes are ActionNodes with visit_count=1 and q_value=immediate_cost (rollout result)
     
     Test type: unit
     """
@@ -150,11 +150,11 @@ def test_leaf_node_statistics(planner, initial_belief):
 def test_non_leaf_action_node_statistics(planner, initial_belief):
     """Test that non-leaf action node statistics are calculated correctly using fixed expected values
     
-    Purpose: Validates non leaf action node statistics
+    Purpose: Validates that non-leaf ActionNode statistics are computed using immediate cost plus discounted future value
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: ActionNode with immediate_cost=1.0, two BeliefNode children with v_values [2.0, 4.0], discount_factor=0.95
+    When: _update_non_leaf_action_node_statistics computes q_value from children
+    Then: q_value = 1.0 + 0.95 * mean([2.0, 4.0]) = 3.85, visit_count > 0
     
     Test type: unit
     """
@@ -191,11 +191,11 @@ def test_non_leaf_action_node_statistics(planner, initial_belief):
 def test_belief_node_statistics(planner, initial_belief):
     """Test that belief node statistics are calculated correctly using fixed expected values
     
-    Purpose: Validates belief node statistics
+    Purpose: Validates that BeliefNode statistics are computed using minimum q_value and sum of visit counts from children
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with two ActionNode children having q_values [3.0, 5.0] and visit_counts [2, 3]
+    When: _update_belief_node_statistics computes v_value and visit_count from children
+    Then: v_value = min([3.0, 5.0]) = 3.0, visit_count = sum([2, 3]) = 5
     
     Test type: unit
     """
@@ -227,11 +227,11 @@ def test_belief_node_statistics(planner, initial_belief):
 def test_invalid_branching_factor():
     """Test that invalid branching factor raises an error
     
-    Purpose: Validates invalid branching factor
+    Purpose: Validates that StandardSparseSamplingPlanner rejects invalid branching_factor parameters
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, invalid branching_factor=0, valid depth=1
+    When: StandardSparseSamplingDiscreteActionsPlanner constructor is called with branching_factor=0
+    Then: ValueError is raised for non-positive branching factor parameter
     
     Test type: unit
     """
@@ -247,11 +247,11 @@ def test_invalid_branching_factor():
 def test_invalid_depth():
     """Test that invalid depth raises an error
     
-    Purpose: Validates invalid depth
+    Purpose: Validates that StandardSparseSamplingPlanner rejects invalid depth parameters
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, valid branching_factor=2, invalid depth=0
+    When: StandardSparseSamplingDiscreteActionsPlanner constructor is called with depth=0
+    Then: ValueError is raised for non-positive depth parameter
     
     Test type: unit
     """
@@ -267,11 +267,11 @@ def test_invalid_depth():
 def test_sanity_pomdp_action_selection():
     """Test that the sparse sampling planner correctly identifies the better action in SanityPOMDP
     
-    Purpose: Validates sanity pomdp action selection
+    Purpose: Validates that StandardSparseSamplingPlanner identifies optimal actions in SanityPOMDP with deterministic reward structure
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SanityPOMDP environment with clear optimal action, sparse sampling planner with branching_factor=4, depth=3, 100 particles
+    When: Multiple trials of action selection using sparse sampling tree search
+    Then: Action 0 (better action) selected ≥70% of trials, demonstrating systematic planning advantage over random selection
     
     Test type: unit
     """

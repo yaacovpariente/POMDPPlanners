@@ -206,11 +206,11 @@ def test_pomdp_simulator_comparison_generates_statistics_dataframe(simulator):
 def test_parallel_execution_maintains_statistical_properties(simulator):
     """Test that parallel execution maintains statistical properties.
     
-    Purpose: Validates parallel execution maintains statistical properties
+    Purpose: Validates that parallel execution with different job counts produces equivalent results
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment with POMCP policy configured for 4 episodes of 3 steps
+    When: Parallel simulation is run with n_jobs=1 vs n_jobs=2
+    Then: Both executions produce equivalent results with same episode counts, step counts, and terminal state flags
     
     Test type: unit
     """
@@ -272,11 +272,11 @@ def test_parallel_execution_maintains_statistical_properties(simulator):
 def test_invalid_jobs_parameter(simulator):
     """Test that invalid number of jobs raises appropriate error.
     
-    Purpose: Validates invalid jobs parameter
+    Purpose: Validates that simulator raises ValueError when given invalid n_jobs parameter
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment with POMCP policy configured for 4 episodes of 3 steps
+    When: Parallel simulation is attempted with n_jobs=0 (invalid)
+    Then: ValueError is raised as expected for invalid job count
     
     Test type: unit
     """
@@ -314,11 +314,11 @@ def test_invalid_jobs_parameter(simulator):
 def test_organize_simulation_results_basic(simulator):
     """Test basic organization of simulation results with a single environment and policy.
     
-    Purpose: Validates organize simulation results basic
+    Purpose: Validates that _organize_simulation_results correctly organizes single environment-policy results
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment with POMCP policy and 2 test histories with 3 steps each
+    When: _organize_simulation_results is called with the test data
+    Then: Returns properly structured dictionary with environment and policy names, containing all histories
     
     Test type: unit
     """
@@ -374,11 +374,11 @@ def test_organize_simulation_results_basic(simulator):
 def test_organize_simulation_results_multiple(simulator):
     """Test organization of simulation results with multiple environments and policies.
     
-    Purpose: Validates organize simulation results multiple
+    Purpose: Validates that _organize_simulation_results correctly organizes multiple environment-policy combinations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Two TigerPOMDP environments with different names and two POMCP policies with different names
+    When: _organize_simulation_results is called with 2 histories for each environment-policy pair
+    Then: Returns dictionary with 2 environments, each containing their respective policies and histories
     
     Test type: integration
     """
@@ -469,11 +469,11 @@ def test_organize_simulation_results_multiple(simulator):
 def test_organize_simulation_results_edge_cases(simulator):
     """Test edge cases for organizing simulation results.
     
-    Purpose: Validates organize simulation results edge cases
+    Purpose: Validates that _organize_simulation_results handles edge cases gracefully
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment with POMCP policy
+    When: _organize_simulation_results is called with empty histories and single history
+    Then: Returns proper structure for both cases: empty results for empty histories, single result for single history
     
     Test type: unit
     """
@@ -531,11 +531,11 @@ def test_organize_simulation_results_edge_cases(simulator):
 def test_organize_simulation_results_matches_configurations(simulator):
     """Test that histories are correctly matched to their environment-policy configurations.
     
-    Purpose: Validates organize simulation results matches configurations
+    Purpose: Validates that _organize_simulation_results correctly matches histories to their environment-policy configurations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Two TigerPOMDP environments and two POMCP policies with different configurations (depth, exploration_constant, n_simulations)
+    When: _organize_simulation_results is called with histories containing matching configuration data
+    Then: Histories are correctly organized with policy_run_data matching their respective policy configurations
     
     Test type: configuration
     """
@@ -672,11 +672,11 @@ def test_pomdp_simulator_mlflow_tracking_configures_experiment_directory(temp_ca
 def test_context_manager_functionality(temp_cache_dir):
     """Test that POMDPSimulator works as a context manager.
     
-    Purpose: Validates context manager functionality
+    Purpose: Validates that POMDPSimulator can be used as a context manager with proper setup and teardown
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A temporary cache directory for testing
+    When: POMDPSimulator is used as a context manager with 'with' statement
+    Then: Simulator is properly initialized within context and remains accessible after context exit
     
     Test type: unit
     """
@@ -696,11 +696,11 @@ def test_context_manager_functionality(temp_cache_dir):
 def test_profiling_enabled_initialization(temp_cache_dir):
     """Test simulator initialization with profiling enabled.
     
-    Purpose: Validates proper initialization of profiling enabled 
+    Purpose: Validates that POMDPSimulator initializes correctly with profiling parameters enabled
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: Constructor parameters including enable_profiling=True and profiling_output_limit=25
+    When: POMDPSimulator is initialized with profiling configuration
+    Then: Simulator has correct profiling attributes: enable_profiling=True, profiling_output_limit=25, and profiler=None initially
     
     Test type: unit
     """
@@ -720,11 +720,11 @@ def test_profiling_enabled_initialization(temp_cache_dir):
 def test_task_manager_types(temp_cache_dir):
     """Test creation of different task manager types.
     
-    Purpose: Validates task manager types
+    Purpose: Validates that POMDPSimulator can create different types of task managers correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A temporary cache directory and different task manager configurations
+    When: POMDPSimulator is initialized with JOBLIB and DASK task manager types
+    Then: Both simulators have task managers properly initialized with correct n_jobs configuration
     
     Test type: unit
     """
@@ -755,11 +755,11 @@ def test_task_manager_types(temp_cache_dir):
 def test_create_policy_configurations_df(simulator):
     """Test policy configuration DataFrame creation.
     
-    Purpose: Validates create policy configurations df
+    Purpose: Validates that _create_policy_configurations_df creates proper DataFrame with policy configuration data
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment with POMCP policy configured with specific parameters
+    When: _create_policy_configurations_df is called with environment-belief-policy tuples
+    Then: Returns DataFrame with correct columns and values matching the policy configuration (depth=3, exploration_constant=1.0, n_simulations=2)
     
     Test type: configuration
     """
@@ -810,11 +810,11 @@ def test_create_policy_configurations_df(simulator):
 def test_validate_parallel_simulation_inputs(simulator):
     """Test input validation for parallel simulations.
     
-    Purpose: Validates validate parallel simulation inputs
+    Purpose: Validates that _validate_parallel_simulation_inputs properly validates input parameters
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Valid environment run parameters and invalid parameters (n_jobs=0, empty environment_run_params)
+    When: _validate_parallel_simulation_inputs is called with valid and invalid inputs
+    Then: Valid inputs pass validation, invalid n_jobs raises ValueError, and empty parameters raise ValueError
     
     Test type: unit
     """
@@ -854,11 +854,11 @@ def test_validate_parallel_simulation_inputs(simulator):
 def test_create_simulation_tasks(simulator):
     """Test simulation task creation.
     
-    Purpose: Validates create simulation tasks
+    Purpose: Validates that _create_simulation_tasks creates proper EpisodeSimulationTask objects
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment with POMCP policy configured for 2 episodes
+    When: _create_simulation_tasks is called with environment run parameters
+    Then: Returns 2 tasks and 2 task identifiers, with each task being EpisodeSimulationTask with correct environment and policy
     
     Test type: unit
     """
@@ -909,11 +909,11 @@ def test_create_simulation_tasks(simulator):
 def test_simulator_handles_empty_results_gracefully(simulator):
     """Test that simulator handles empty simulation results without crashing.
     
-    Purpose: Validates simulator handles empty results gracefully
+    Purpose: Validates that _organize_simulation_results handles empty results gracefully
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment with POMCP policy and empty results list
+    When: _organize_simulation_results is called with empty results and 0 episodes
+    Then: Returns proper structure with empty history list for the policy, demonstrating graceful handling
     
     Test type: unit
     """
@@ -946,11 +946,11 @@ def test_simulator_handles_empty_results_gracefully(simulator):
 def test_simulator_error_handling_invalid_cache_dir():
     """Test simulator error handling with invalid cache directory.
     
-    Purpose: Validates error handling for simulator  handling invalid cache dir
+    Purpose: Validates that POMDPSimulator handles invalid cache directory paths gracefully
     
-    Given: Invalid inputs or error conditions
-    When: Operation is attempted
-    Then: Appropriate exception is raised
+    Given: An invalid cache directory path (file path instead of directory)
+    When: POMDPSimulator initialization is attempted with invalid path
+    Then: Either initializes successfully or raises appropriate exception, demonstrating error handling
     
     Test type: unit
     """

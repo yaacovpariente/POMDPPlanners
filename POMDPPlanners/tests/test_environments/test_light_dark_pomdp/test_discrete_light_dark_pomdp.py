@@ -32,11 +32,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_same_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with same discount factor are equal.
     
-    Purpose: Validates same discount factor
+    Purpose: Validates that DiscreteLightDarkPOMDP environments with identical parameters are equal and exhibit symmetry
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Two DiscreteLightDarkPOMDP environments with same parameters (discount=0.95, errors=0.05, grid=11x11, etc.)
+    When: Equality comparison is performed between identical environment configurations
+    Then: Both directions return True (env1 == env2 and env2 == env1) confirming symmetric equality
     
     Test type: unit
     """
@@ -57,11 +57,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_different_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different discount factors are not equal.
     
-    Purpose: Validates different discount factor
+    Purpose: Validates that DiscreteLightDarkPOMDP environments with different discount factors are correctly identified as unequal
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Base DiscreteLightDarkPOMDP with discount=0.95 and another with discount=0.8, otherwise identical parameters
+    When: Equality comparison is performed between environments with different discount factors
+    Then: Both directions return False (env1 != env2 and env2 != env1) confirming inequality detection
     
     Test type: unit
     """
@@ -82,11 +82,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_different_transition_error(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different transition error probabilities are not equal.
     
-    Purpose: Validates error handling for different transition 
+    Purpose: Validates that DiscreteLightDarkPOMDP environments with different transition error probabilities are correctly identified as unequal
     
-    Given: Invalid inputs or error conditions
-    When: Operation is attempted
-    Then: Appropriate exception is raised
+    Given: Base DiscreteLightDarkPOMDP with transition_error_prob=0.05 and another with transition_error_prob=0.1
+    When: Equality comparison is performed between environments with different transition error rates
+    Then: Environments are correctly identified as not equal due to different stochastic transition parameters
     
     Test type: unit
     """
@@ -106,11 +106,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_different_observation_error(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different observation error probabilities are not equal.
     
-    Purpose: Validates error handling for different observation 
+    Purpose: Validates that DiscreteLightDarkPOMDP environments with different observation error probabilities are correctly identified as unequal
     
-    Given: Invalid inputs or error conditions
-    When: Operation is attempted
-    Then: Appropriate exception is raised
+    Given: Base DiscreteLightDarkPOMDP with observation_error_prob=0.05 and another with observation_error_prob=0.1
+    When: Equality comparison is performed between environments with different observation noise levels
+    Then: Environments are correctly identified as not equal due to different partial observability parameters
     
     Test type: unit
     """
@@ -130,11 +130,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_different_beacons(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different beacon positions are not equal.
     
-    Purpose: Validates different beacons
+    Purpose: Validates that DiscreteLightDarkPOMDP environments with different beacon configurations are correctly identified as unequal
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Base DiscreteLightDarkPOMDP with default beacon positions and another with custom beacon array [[1,1,1,6,6,6,11,11,11],[1,6,11,1,6,11,1,6,11]]
+    When: Equality comparison is performed between environments with different light sources
+    Then: Environments are correctly identified as not equal due to different beacon position configurations
     
     Test type: unit
     """
@@ -155,11 +155,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_different_obstacles(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different obstacle positions are not equal.
     
-    Purpose: Validates different obstacles
+    Purpose: Validates that DiscreteLightDarkPOMDP environments with different obstacle configurations are correctly identified as unequal
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Base DiscreteLightDarkPOMDP with default obstacle positions and another with custom obstacle array [[4,8],[6,6]]
+    When: Equality comparison is performed between environments with different obstacle layouts
+    Then: Environments are correctly identified as not equal due to different obstacle position configurations
     
     Test type: unit
     """
@@ -180,11 +180,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_different_goal_state(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different goal states are not equal.
     
-    Purpose: Validates different goal state
+    Purpose: Validates that DiscreteLightDarkPOMDP environments with different goal positions are correctly identified as unequal
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Base DiscreteLightDarkPOMDP with default goal_state=[10,5] and another with goal_state=[9,4]
+    When: Equality comparison is performed between environments with different target positions
+    Then: Environments are correctly identified as not equal due to different goal state configurations
     
     Test type: unit
     """
@@ -205,11 +205,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_different_start_state(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different start states are not equal.
     
-    Purpose: Validates different start state
+    Purpose: Validates that DiscreteLightDarkPOMDP environments with different starting positions are correctly identified as unequal
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Base DiscreteLightDarkPOMDP with default start_state=[0,5] and another with start_state=[1,4]
+    When: Equality comparison is performed between environments with different initial positions
+    Then: Environments are correctly identified as not equal due to different starting state configurations
     
     Test type: unit
     """
@@ -230,11 +230,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_different_rewards(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different rewards are not equal.
     
-    Purpose: Validates different rewards
+    Purpose: Validates that DiscreteLightDarkPOMDP environments with different reward structures are correctly identified as unequal
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Base DiscreteLightDarkPOMDP with obstacle_reward=-10.0, goal_reward=10.0, fuel_cost=2.0 vs another with -20.0, 20.0, 3.0
+    When: Equality comparison is performed between environments with different reward parameters
+    Then: Environments are correctly identified as not equal due to different reward structure configurations
     
     Test type: unit
     """
@@ -254,11 +254,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_different_grid_size(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different grid sizes are not equal.
     
-    Purpose: Validates different grid size
+    Purpose: Validates that DiscreteLightDarkPOMDP environments with different grid dimensions are correctly identified as unequal
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Base DiscreteLightDarkPOMDP with grid_size=11 (11x11 grid) and another with grid_size=15 (15x15 grid)
+    When: Equality comparison is performed between environments with different world dimensions
+    Then: Environments are correctly identified as not equal due to different grid size configurations
     
     Test type: unit
     """
@@ -278,11 +278,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_different_beacon_radius(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different beacon radii are not equal.
     
-    Purpose: Validates different beacon radius
+    Purpose: Validates that DiscreteLightDarkPOMDP environments with different beacon influence radii are correctly identified as unequal
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Base DiscreteLightDarkPOMDP with default beacon_radius=1.0 and another with beacon_radius=2.0
+    When: Equality comparison is performed between environments with different beacon detection ranges
+    Then: Environments are correctly identified as not equal due to different beacon radius configurations
     
     Test type: unit
     """
@@ -303,11 +303,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_different_stochastic_reward(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different stochastic reward settings are not equal.
     
-    Purpose: Validates different stochastic reward
+    Purpose: Validates that DiscreteLightDarkPOMDP environments with different reward stochasticity settings are correctly identified as unequal
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Base DiscreteLightDarkPOMDP with is_stochastic_reward=True and another with is_stochastic_reward=False
+    When: Equality comparison is performed between environments with different reward determinism settings
+    Then: Environments are correctly identified as not equal due to different stochastic reward configurations
     
     Test type: unit
     """
@@ -327,11 +327,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_comparison_with_non_environment(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test comparison with non-Environment objects.
     
-    Purpose: Validates comparison with non environment
+    Purpose: Validates that DiscreteLightDarkPOMDP equality returns False when compared with non-Environment objects
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteLightDarkPOMDP environment and non-Environment objects (string, integer, None)
+    When: Equality comparison is performed between environment and non-environment types
+    Then: All comparisons return False for incompatible object types
     
     Test type: unit
     """
@@ -342,11 +342,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_missing_attributes(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test equality when attributes are missing.
     
-    Purpose: Validates missing attributes
+    Purpose: Validates that DiscreteLightDarkPOMDP equality returns False when comparing with objects missing critical attributes
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Complete DiscreteLightDarkPOMDP and identical environments with missing attributes (beacons, obstacles)
+    When: Equality comparison is performed with environments missing critical configuration attributes
+    Then: All comparisons return False when attributes are missing from comparison objects
     
     Test type: unit
     """
@@ -381,11 +381,11 @@ class TestDiscreteLightDarkPOMDPEquality:
     def test_deep_copy_equality(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that a deep copy of DiscreteLightDarkPOMDP is equal to original.
     
-    Purpose: Validates equality comparison for deep copy 
+    Purpose: Validates that DiscreteLightDarkPOMDP equality works correctly with deep copied objects and exhibits symmetry
     
-    Given: Objects with same or different configurations
-    When: Equality comparison is performed
-    Then: Objects are correctly identified as equal or unequal
+    Given: Original DiscreteLightDarkPOMDP environment and its deep copy using copy.deepcopy
+    When: Equality comparison is performed between original and deep copied environment
+    Then: Both directions return True (original == copy and copy == original) confirming deep copy equality
     
     Test type: unit
     """
@@ -401,11 +401,11 @@ class TestDiscreteLightDarkPOMDPConfigId:
     def test_config_id_consistency(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that config_id is consistent for identical environments.
     
-    Purpose: Validates config_id behavior for  consistency
+    Purpose: Validates that DiscreteLightDarkPOMDP config_id generation produces consistent hashes for identical configurations
     
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    Given: Two DiscreteLightDarkPOMDP environments with identical parameters (discount=0.95, errors=0.05, grid=11x11, etc.)
+    When: config_id is generated for both environment instances
+    Then: Both environments produce the same config_id hash value
     
     Test type: configuration
     """
@@ -425,11 +425,11 @@ class TestDiscreteLightDarkPOMDPConfigId:
     def test_config_id_different_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that config_id changes with different discount factor.
     
-    Purpose: Validates config_id behavior for  different discount factor
+    Purpose: Validates that DiscreteLightDarkPOMDP config_id generation produces different hashes for different discount factors
     
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    Given: Base DiscreteLightDarkPOMDP with discount=0.95 and another with discount=0.8, otherwise identical
+    When: config_id is generated for both environment instances with different discount factors
+    Then: Different discount factors produce different config_id hash values
     
     Test type: configuration
     """
@@ -449,11 +449,11 @@ class TestDiscreteLightDarkPOMDPConfigId:
     def test_config_id_different_parameters(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that config_id changes with different parameters.
     
-    Purpose: Validates config_id behavior for  different parameters
+    Purpose: Validates that DiscreteLightDarkPOMDP config_id generation produces different hashes for different environment parameters
     
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    Given: Base environment and multiple variations with different parameters (transition_error=0.1, observation_error=0.1, beacon positions)
+    When: config_id is generated for each parameter variation
+    Then: All parameter differences produce different config_id hash values
     
     Test type: configuration
     """
@@ -503,11 +503,11 @@ class TestDiscreteLightDarkPOMDPConfigId:
     def test_config_id_format(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that config_id is a valid SHA-256 hash.
     
-    Purpose: Validates config_id behavior for  format
+    Purpose: Validates that DiscreteLightDarkPOMDP config_id follows proper SHA-256 hash format specification
     
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    Given: DiscreteLightDarkPOMDP environment instance with configuration parameters
+    When: config_id property generates hash value from environment configuration
+    Then: Returns string with 64 characters, all valid hexadecimal digits (0-9, a-f)
     
     Test type: configuration
     """
@@ -519,11 +519,11 @@ class TestDiscreteLightDarkPOMDPConfigId:
     def test_config_id_deterministic(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that config_id is deterministic (same input always produces same output).
     
-    Purpose: Validates config_id behavior for  deterministic
+    Purpose: Validates that DiscreteLightDarkPOMDP config_id property returns consistent values across multiple accesses
     
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    Given: Single DiscreteLightDarkPOMDP environment instance with fixed configuration parameters
+    When: config_id property is accessed multiple times on the same instance
+    Then: All accesses return identical config_id hash values (deterministic behavior)
     
     Test type: configuration
     """
@@ -648,11 +648,11 @@ def test_initialization():
 def test_state_transition_model():
     """Test state transition model
     
-    Purpose: Validates state transition model
+    Purpose: Validates that DiscreteLightDarkPOMDP state transition model correctly handles stochastic movement with error probabilities
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteLightDarkPOMDP with transition_error_prob=0.1, state=[5,5], action="up"
+    When: state_transition_model generates transition distribution with intended and unintended movements
+    Then: Returns DiscreteDistribution with 90% probability for "up" and 10%/3 for other directions, correct state values
     
     Test type: unit
     """
@@ -684,11 +684,11 @@ def test_state_transition_model():
 def test_observation_model():
     """Test observation model
     
-    Purpose: Validates observation model
+    Purpose: Validates that DiscreteLightDarkPOMDP observation model correctly handles partial observability with error probabilities
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteLightDarkPOMDP with observation_error_prob=0.1, state=[5,5], action="up"
+    When: observation_model generates observation distribution with true and noisy observations
+    Then: Returns ObservationModel with highest probability (>0.5) for correct state observation
     
     Test type: unit
     """
@@ -711,11 +711,11 @@ def test_observation_model():
 def test_reward_function():
     """Test reward function
     
-    Purpose: Validates reward function
+    Purpose: Validates that DiscreteLightDarkPOMDP reward function correctly calculates goal rewards, obstacle penalties, and fuel costs
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteLightDarkPOMDP with obstacle_hit_probability=1.0, various state-action combinations
+    When: Reward is calculated for goal-reaching, obstacle-hitting, and normal movement scenarios
+    Then: Returns correct rewards: goal_reward-fuel_cost, obstacle penalty with distance cost, normal movement with distance cost
     
     Test type: unit
     """
@@ -740,11 +740,11 @@ def test_reward_function():
 def test_is_terminal():
     """Test terminal state detection
     
-    Purpose: Validates is terminal
+    Purpose: Validates that DiscreteLightDarkPOMDP correctly identifies terminal states including goal, obstacles, and boundary violations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteLightDarkPOMDP with goal state, obstacle positions, grid boundaries, and normal states
+    When: is_terminal checks various state positions for termination conditions
+    Then: Returns True for goal state, obstacle states, out-of-bounds states, False for normal navigation states
     
     Test type: unit
     """
@@ -767,11 +767,11 @@ def test_is_terminal():
 def test_initial_distributions():
     """Test initial state and observation distributions
     
-    Purpose: Validates initial distributions
+    Purpose: Validates that DiscreteLightDarkPOMDP provides correct initial state and observation distributions for episode initialization
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteLightDarkPOMDP with default start_state=[0,5] and initial observation setup
+    When: initial_state_dist and initial_observation_dist generate starting distributions
+    Then: State distribution has probability 1.0 for start_state, observation distribution has probability 1.0 for initial value
     
     Test type: unit
     """
@@ -793,11 +793,11 @@ def test_initial_distributions():
 def test_get_actions():
     """Test action list retrieval
     
-    Purpose: Validates get actions
+    Purpose: Validates that DiscreteLightDarkPOMDP provides correct set of available navigation actions
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteLightDarkPOMDP environment with discrete action space
+    When: get_actions retrieves the complete set of available actions
+    Then: Returns action set {"up", "down", "right", "left"} for 4-directional grid navigation
     
     Test type: unit
     """
@@ -809,11 +809,11 @@ def test_get_actions():
 def test_visualize_path(tmp_path):
     """Test path visualization
     
-    Purpose: Validates visualize path
+    Purpose: Validates that DiscreteLightDarkPOMDP visualization creates animated GIF files showing agent path and belief evolution
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteLightDarkPOMDP, path=[0,5]→[1,5]→[2,5]→[3,5], belief path with distributions, actions=["right","right","right"]
+    When: visualize_path creates animation with agent trajectory and belief visualization
+    Then: Creates GIF file at specified cache_path location with path animation
     
     Test type: unit
     """
@@ -840,11 +840,11 @@ def test_visualize_path(tmp_path):
 def test_compute_metrics():
     """Test computation of metrics for different simulation histories
     
-    Purpose: Validates compute metrics
+    Purpose: Validates that DiscreteLightDarkPOMDP computes performance metrics from simulation histories including success and failure rates
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Three simulation histories - 2 reaching goal, 1 hitting obstacle, with proper StepData and belief sequences
+    When: compute_metrics analyzes the simulation histories for performance statistics
+    Then: Returns goal_reaching_rate=2/3 and obstacle_hit_rate=1/3 with confidence bounds
     
     Test type: unit
     """

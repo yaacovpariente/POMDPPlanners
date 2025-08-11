@@ -204,13 +204,13 @@ def test_invalid_initialization(environment, discount_factor, depth, exploration
 
 
 def test_action_selection(planner, belief):
-    """Test action selection.
+    """Test action selection from belief tree.
     
-    Purpose: Validates action selection
+    Purpose: Validates that POMCPOW planner correctly selects actions from belief tree
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner with configured environment and belief with initial state distribution
+    When: action method is called with belief
+    Then: Returns valid action list with single action from environment's action space
     
     Test type: unit
     """
@@ -221,13 +221,13 @@ def test_action_selection(planner, belief):
 
 
 def test_action_progressive_widening_new_action(planner, belief):
-    """Test action progressive widening new action.
+    """Test action progressive widening for new action nodes.
     
-    Purpose: Validates action progressive widening new action
+    Purpose: Validates that action progressive widening correctly creates new action nodes when threshold is met
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with visit_count=0 and POMCPOW planner with progressive widening parameters
+    When: action_progressive_widening is called
+    Then: Creates new ActionNode with correct parent relationship and action from action sampler
     
     Test type: unit
     """
@@ -249,13 +249,13 @@ def test_action_progressive_widening_new_action(planner, belief):
 
 
 def test_action_progressive_widening_existing_action(planner, belief, action_sampler):
-    """Test action progressive widening existing action.
+    """Test action progressive widening for existing action nodes.
     
-    Purpose: Validates action progressive widening existing action
+    Purpose: Validates that action progressive widening correctly selects from existing action nodes when threshold is met
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with existing ActionNode children and visit_count=50
+    When: action_progressive_widening is called
+    Then: Returns existing ActionNode from children, confirming progressive widening threshold behavior
     
     Test type: unit
     """
@@ -282,13 +282,13 @@ def test_action_progressive_widening_existing_action(planner, belief, action_sam
 
 
 def test_explored_action_node_ucb_selection(planner, belief):
-    """Test explored action node ucb selection.
+    """Test UCB-based action selection from explored action nodes.
     
-    Purpose: Validates explored action node ucb selection
+    Purpose: Validates that UCB selection correctly chooses actions based on Q-values and visit counts
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with visit_count=30 and ActionNode children with different Q-values [0.1, 0.5, 0.3]
+    When: UCB selection is performed
+    Then: Returns ActionNode with highest UCB value, balancing exploration and exploitation
     
     Test type: unit
     """
@@ -315,13 +315,13 @@ def test_explored_action_node_ucb_selection(planner, belief):
 
 
 def test_rollout(planner):
-    """Test rollout.
+    """Test rollout simulation from belief tree.
     
-    Purpose: Validates rollout
+    Purpose: Validates that rollout function correctly simulates random policy from belief state
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner with configured environment and belief
+    When: random_rollout_action_sampler is called with initial state and depth
+    Then: Returns float reward value, confirming successful rollout simulation
     
     Test type: unit
     """
@@ -341,13 +341,13 @@ def test_rollout(planner):
 
 
 def test_rollout_terminal_state(planner):
-    """Test rollout terminal state.
+    """Test rollout behavior when encountering terminal state.
     
-    Purpose: Validates rollout terminal state
+    Purpose: Validates that rollout function correctly handles terminal states by returning zero reward
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner with environment modified to always return terminal=True for any state
+    When: random_rollout_action_sampler is called with terminal state
+    Then: Function returns 0.0 reward, confirming proper terminal state handling
     
     Test type: unit
     """
@@ -374,13 +374,13 @@ def test_rollout_terminal_state(planner):
 
 
 def test_rollout_max_depth(planner):
-    """Test rollout max depth.
+    """Test rollout behavior when reaching maximum depth.
     
-    Purpose: Validates rollout max depth
+    Purpose: Validates that rollout function correctly handles maximum depth limit
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner with depth=2 and environment that never reaches terminal state
+    When: random_rollout_action_sampler is called starting from depth 0
+    Then: Function returns cumulative discounted reward after exactly 2 steps, confirming depth limit enforcement
     
     Test type: unit
     """
@@ -403,13 +403,13 @@ def test_rollout_max_depth(planner):
 
 
 def test_simulate_path(planner, belief):
-    """Test simulate path.
+    """Test path simulation through belief tree.
     
-    Purpose: Validates simulate path
+    Purpose: Validates that simulate_path correctly traverses belief tree and updates node statistics
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner and belief with initial state distribution
+    When: simulate_path is called starting from belief root
+    Then: Function returns float value, belief tree is expanded, and node visit counts and Q-values are updated
     
     Test type: unit
     """
@@ -422,13 +422,13 @@ def test_simulate_path(planner, belief):
 
 
 def test_simulate_state_path_terminal_state(planner, belief):
-    """Test simulate state path terminal state.
+    """Test state path simulation with terminal state.
     
-    Purpose: Validates simulate state path terminal state
+    Purpose: Validates that simulate_state_path correctly handles terminal states during simulation
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner, belief, and environment modified to return terminal=True for any state
+    When: simulate_state_path is called
+    Then: Function returns 0.0 reward immediately upon encountering terminal state
     
     Test type: unit
     """
@@ -449,13 +449,13 @@ def test_simulate_state_path_terminal_state(planner, belief):
 
 
 def test_simulate_state_path_max_depth(planner, belief):
-    """Test simulate state path max depth.
+    """Test state path simulation with maximum depth limit.
     
-    Purpose: Validates simulate state path max depth
+    Purpose: Validates that simulate_state_path correctly enforces maximum depth limit
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner with depth=2, belief, and environment that never reaches terminal state
+    When: simulate_state_path is called
+    Then: Function returns cumulative discounted reward after exactly 2 steps, confirming depth limit enforcement
     
     Test type: unit
     """
@@ -468,13 +468,13 @@ def test_simulate_state_path_max_depth(planner, belief):
 
 
 def test_get_space_info(planner):
-    """Test get space info.
+    """Test space information retrieval.
     
-    Purpose: Validates get space info
+    Purpose: Validates that planner correctly provides space information for action and observation spaces
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner with configured environment
+    When: get_space_info method is called
+    Then: Returns SpaceInfo object with correct action_space and observation_space values matching environment configuration
     
     Test type: unit
     """
@@ -486,13 +486,13 @@ def test_get_space_info(planner):
 
 
 def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles):
-    """Test integration with tiger pomdp.
+    """Test POMCPOW integration with TigerPOMDP environment.
     
-    Purpose: Validates integration with tiger pomdp
+    Purpose: Validates that POMCPOW planner works correctly with real POMDP environment
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner, TigerPOMDP environment, and belief with n_particles particles
+    When: Action selection is performed multiple times
+    Then: Planner returns valid actions from environment's action space, confirming proper integration
     
     Test type: integration
     """
@@ -517,13 +517,13 @@ def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles)
 
 
 def test_progressive_widening_parameters(planner, belief):
-    """Test progressive widening parameters.
+    """Test progressive widening parameter effects on tree expansion.
     
-    Purpose: Validates progressive widening parameters
+    Purpose: Validates that progressive widening parameters correctly control tree expansion behavior
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner with k_o=2, k_a=2, alpha_o=0.5, alpha_a=0.5 parameters
+    When: Multiple simulations are performed
+    Then: Tree expansion follows progressive widening rules: new actions added when visit count reaches k_a * N^alpha_a, new observations when visit count reaches k_o * N^alpha_o
     
     Test type: unit
     """
@@ -548,13 +548,13 @@ def test_progressive_widening_parameters(planner, belief):
 
 
 def test_belief_node_data_structure(planner, belief):
-    """Test that belief nodes maintain proper belief structure for states and weights.
+    """Test belief node data structure and statistics.
     
-    Purpose: Validates belief node data structure
+    Purpose: Validates that belief nodes correctly maintain visit counts, Q-values, and child node references
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner and belief with initial state distribution
+    When: Multiple simulations are performed and belief tree is expanded
+    Then: Belief nodes have correct visit counts, Q-values are updated, and child nodes are properly linked
     
     Test type: unit
     """
@@ -576,15 +576,15 @@ def test_belief_node_data_structure(planner, belief):
 
 
 def test_sanity_pomdp_action_selection():
-    """Test POMCPOW with SanityPOMDP to verify correct action selection.
+    """Test POMCPOW action selection with SanityPOMDP environment.
     
-    Purpose: Validates sanity pomdp action selection
+    Purpose: Validates that POMCPOW planner works correctly with deterministic SanityPOMDP environment
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner configured with SanityPOMDP environment and belief
+    When: Action selection is performed
+    Then: Planner returns valid actions from SanityPOMDP action space [0, 1], confirming proper environment integration
     
-    Test type: unit
+    Test type: integration
     """
     environment = SanityPOMDP()
     action_sampler = MockActionSampler([0, 1])
@@ -628,13 +628,13 @@ def test_sanity_pomdp_action_selection():
 
 
 def test_tree_structure_after_construction(planner, belief, n_simulations, depth, k_o, k_a, alpha_o, alpha_a, action_sampler):
-    """Test that the tree structure is properly constructed.
+    """Test belief tree structure after construction.
     
-    Purpose: Validates tree structure after construction
+    Purpose: Validates that belief tree is properly constructed with correct node hierarchy and progressive widening
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner with specific progressive widening parameters and belief
+    When: n_simulations simulations are performed
+    Then: Belief tree has correct structure: root belief node, action nodes with progressive widening, observation nodes with progressive widening, and proper parent-child relationships
     
     Test type: unit
     """
@@ -658,13 +658,13 @@ def test_tree_structure_after_construction(planner, belief, n_simulations, depth
 
 
 def test_q_value_updates(planner, belief):
-    """Test that Q-values are properly updated during simulation.
+    """Test Q-value updates during simulation.
     
-    Purpose: Validates update functionality for q values
+    Purpose: Validates that Q-values are correctly updated based on simulation results
     
-    Given: Initial object state and update parameters
-    When: Update operation is performed
-    Then: Object state is correctly modified
+    Given: POMCPOW planner and belief with initial state distribution
+    When: Multiple simulations are performed
+    Then: Q-values for action nodes are updated with correct statistics (sum of rewards, visit counts) and reflect expected value estimates
     
     Test type: unit
     """
@@ -688,13 +688,13 @@ def test_q_value_updates(planner, belief):
 
 
 def test_visit_count_consistency(planner, belief):
-    """Test that visit counts are consistent throughout the tree.
+    """Test visit count consistency across belief tree.
     
-    Purpose: Validates visit count consistency
+    Purpose: Validates that visit counts are consistently maintained and updated throughout the belief tree
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCPOW planner and belief with initial state distribution
+    When: Multiple simulations are performed
+    Then: Visit counts are properly incremented for visited nodes, and total visits at root equals number of simulations performed
     
     Test type: unit
     """
@@ -714,12 +714,13 @@ def test_visit_count_consistency(planner, belief):
 
 
 def test_pomcpow_tree_structure_construction(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
-    """
-    Purpose: Validates complete tree structure construction and node integrity for POMCPOW with progressive widening
+    """Test POMCPOW tree structure construction with different parameters.
     
-    Given: POMCPOW planner with progressive widening parameters and TigerPOMDP environment  
-    When: Tree construction is performed using _learn_tree method with sufficient simulations
-    Then: All tree nodes have correct values, progressive widening constraints are respected, and tree structure is valid
+    Purpose: Validates that POMCPOW planner constructs belief trees correctly with various parameter configurations
+    
+    Given: POMCPOW planner with different progressive widening parameters and belief
+    When: Tree construction is performed
+    Then: Belief tree has correct structure with proper node hierarchy, progressive widening behavior, and parameter-dependent expansion patterns
     
     Test type: unit
     """

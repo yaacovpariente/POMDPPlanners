@@ -7,11 +7,11 @@ from POMDPPlanners.utils.logger import get_logger
 def test_logger_console_output_true(capsys):
     """Test logger console output true.
     
-    Purpose: Validates logger console output true
+    Purpose: Validates that logger correctly outputs messages to console when console_output=True
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Logger configured with debug=True and console_output=True
+    When: Info message is logged
+    Then: Message appears in captured stdout or stderr output
     
     Test type: unit
     """
@@ -24,11 +24,11 @@ def test_logger_console_output_true(capsys):
 def test_logger_console_output_false(capsys):
     """Test logger console output false.
     
-    Purpose: Validates logger console output false
+    Purpose: Validates that logger does not output messages to console when console_output=False
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Logger configured with debug=True and console_output=False
+    When: Info message is logged
+    Then: Message does not appear in captured stdout or stderr output
     
     Test type: unit
     """
@@ -42,11 +42,11 @@ def test_logger_console_output_false(capsys):
 def test_logger_file_output(tmp_path):
     """Test logger file output.
     
-    Purpose: Validates logger file output
+    Purpose: Validates that logger correctly writes messages to log files when output_dir is specified
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Logger configured with debug=True, output_dir=tmp_path, and console_output=False
+    When: Info message is logged
+    Then: Log file is created in logs subdirectory containing the test message
     
     Test type: unit
     """
@@ -64,11 +64,11 @@ def test_logger_file_output(tmp_path):
 def test_logger_no_duplicate_handlers(tmp_path):
     """Test logger no duplicate handlers.
     
-    Purpose: Validates logger no duplicate handlers
+    Purpose: Validates that repeated get_logger calls do not create duplicate handlers causing message duplication
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Logger called twice with identical parameters (debug=True, output_dir=tmp_path, console_output=True)
+    When: Messages are logged after each get_logger call
+    Then: Each message appears exactly once in the log file without duplication
     
     Test type: unit
     """

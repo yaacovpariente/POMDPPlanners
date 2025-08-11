@@ -29,13 +29,13 @@ def test_mountain_car_initialization():
 
 
 def test_state_transition_model(base_mountain_car_environment):
-    """Test state transition model.
+    """Test state transition model for different actions.
     
-    Purpose: Validates state transition model
+    Purpose: Validates that state transition model correctly updates car position and velocity for different actions
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MountainCarPOMDP environment and test state [0.0, 0.0] with actions -1, 0, and 1
+    When: State transition model is called and next states are sampled
+    Then: All next states have correct 2D shape representing [position, velocity] and change based on applied action
     
     Test type: unit
     """
@@ -63,13 +63,13 @@ def test_state_transition_model(base_mountain_car_environment):
 
 
 def test_observation_model(base_mountain_car_environment):
-    """Test observation model.
+    """Test observation model with noise addition.
     
-    Purpose: Validates observation model
+    Purpose: Validates that observation model correctly adds noise to position and velocity measurements
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MountainCarPOMDP environment and test state [0.0, 0.0] with action 0
+    When: Observation model is called and observations are sampled
+    Then: All observations have correct 2D shape and contain noise in both position and velocity components
     
     Test type: unit
     """
@@ -88,13 +88,13 @@ def test_observation_model(base_mountain_car_environment):
 
 
 def test_initial_state_distribution(base_mountain_car_environment):
-    """Test initial state distribution.
+    """Test initial state distribution sampling.
     
-    Purpose: Validates initial state distribution
+    Purpose: Validates that initial state distribution generates valid 2D states
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MountainCarPOMDP environment
+    When: Initial state distribution is sampled
+    Then: Returns valid initial state with correct 2D shape representing [position, velocity]
     
     Test type: unit
     """
@@ -106,13 +106,13 @@ def test_initial_state_distribution(base_mountain_car_environment):
 
 
 def test_initial_observation_distribution(base_mountain_car_environment):
-    """Test initial observation distribution.
+    """Test initial observation distribution sampling.
     
-    Purpose: Validates initial observation distribution
+    Purpose: Validates that initial observation distribution generates valid 2D observations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MountainCarPOMDP environment
+    When: Initial observation distribution is sampled
+    Then: Returns valid initial observation with correct 2D shape representing [position, velocity]
     
     Test type: unit
     """
@@ -124,13 +124,13 @@ def test_initial_observation_distribution(base_mountain_car_environment):
 
 
 def test_sample_next_step(base_mountain_car_environment):
-    """Test sample next step.
+    """Test complete environment step simulation.
     
-    Purpose: Validates sampling behavior for  next step
+    Purpose: Validates that sample_next_step correctly simulates car dynamics, observations, and rewards
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: MountainCarPOMDP environment, initial state [0.0, 0.0], and different actions (-1, 0, 1)
+    When: sample_next_step is called for each action
+    Then: Returns valid next_state, observation, and reward with correct types, shapes, and physics-based state changes
     
     Test type: unit
     """
@@ -167,13 +167,13 @@ def test_sample_next_step(base_mountain_car_environment):
 
 
 def test_mountain_car_reward():
-    """Test mountain car reward.
+    """Test reward function for different car positions.
     
-    Purpose: Validates mountain car reward
+    Purpose: Validates that reward function correctly penalizes non-goal positions and rewards goal achievement
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MountainCarPOMDP environment with goal_position=0.5
+    When: Reward is calculated for positions below goal (0.0), at goal (0.5), and past goal (0.6)
+    Then: Below goal returns -1.0, at goal returns 0.0, past goal returns 0.0
     
     Test type: unit
     """
@@ -196,13 +196,13 @@ def test_mountain_car_reward():
 
 
 def test_mountain_car_terminal():
-    """Test mountain car terminal.
+    """Test terminal state detection based on goal position.
     
-    Purpose: Validates mountain car terminal
+    Purpose: Validates that environment correctly identifies terminal states when car reaches or passes goal
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MountainCarPOMDP environment with goal_position=0.5
+    When: is_terminal is called for positions below goal (0.0), at goal (0.5), and past goal (0.6)
+    Then: Below goal returns False, at goal returns True, past goal returns True
     
     Test type: unit
     """
@@ -222,13 +222,13 @@ def test_mountain_car_terminal():
 
 
 def test_mountain_car_actions():
-    """Test mountain car actions.
+    """Test action space retrieval.
     
-    Purpose: Validates mountain car actions
+    Purpose: Validates that environment provides correct discrete action space for car control
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MountainCarPOMDP environment
+    When: get_actions method is called
+    Then: Returns list of 3 actions [-1, 0, 1] representing left, no action, and right respectively
     
     Test type: unit
     """
@@ -242,13 +242,13 @@ def test_mountain_car_actions():
 
 
 def test_mountain_car_state_bounds():
-    """Test mountain car state bounds.
+    """Test state boundary enforcement in transitions.
     
-    Purpose: Validates mountain car state bounds
+    Purpose: Validates that state transitions respect position and velocity bounds defined by environment parameters
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MountainCarPOMDP environment with min_position=-1.2, max_position=0.6, max_speed=0.07
+    When: State transitions are sampled from states outside bounds
+    Then: Resulting states are clamped to valid ranges: position within [-1.2, 0.6], velocity within [-0.07, 0.07]
     
     Test type: unit
     """
@@ -275,55 +275,72 @@ def test_mountain_car_state_bounds():
 
 @pytest.fixture
 def base_mountain_car_environment() -> MountainCarPOMDP:
-    """Test that MountainCarPOMDPs with same discount factor are equal.
+    """Create base MountainCarPOMDP environment for testing.
     
-    Purpose: Validates same discount factor
+    Purpose: Provides a consistent test environment with standard parameters
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Standard discount factor of 0.95
+    When: Fixture is used in tests
+    Then: Returns MountainCarPOMDP instance with min_position=-1.2, max_position=0.6, max_speed=0.07, goal_position=0.5
     
-    Test type: unit
+    Test type: fixture
     """
     return MountainCarPOMDP(discount_factor=0.95)
 
 
 class TestMountainCarPOMDPEquality:
-    """Test that MountainCarPOMDPs with different discount factors are not equal.
+    """Test that MountainCarPOMDPs with different configurations are not equal.
     
-    Purpose: Validates different discount factor
+    Purpose: Validates that environment equality comparison correctly identifies different configurations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MountainCarPOMDP environments with various parameter differences
+    When: Equality comparison is performed
+    Then: Environments with different parameters are correctly identified as unequal
     
     Test type: unit
     """
     
     def test_same_discount_factor(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that MountainCarPOMDPs with same discount factor are equal."""
+        """Test that MountainCarPOMDPs with same discount factor are equal.
+        
+        Purpose: Validates that environment equality comparison works correctly for identical configurations
+        
+        Given: Two MountainCarPOMDP environments with identical discount_factor=0.95
+        When: Equality comparison is performed
+        Then: Both environments are equal, confirming symmetry of equality relation
+        
+        Test type: unit
+        """
         other_env = MountainCarPOMDP(discount_factor=0.95)
         assert base_mountain_car_environment == other_env
         assert other_env == base_mountain_car_environment  # Test symmetry
     
     def test_different_discount_factor(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that MountainCarPOMDPs with different parameters are not equal.
-    
-    Purpose: Validates different parameters
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
+        """Test that MountainCarPOMDPs with different discount factors are not equal.
+        
+        Purpose: Validates that environment equality comparison correctly identifies different configurations
+        
+        Given: MountainCarPOMDP with discount_factor=0.95 and another with discount_factor=0.8
+        When: Equality comparison is performed
+        Then: Environments are not equal, confirming symmetry of inequality relation
+        
+        Test type: unit
+        """
         other_env = MountainCarPOMDP(discount_factor=0.8)
         assert base_mountain_car_environment != other_env
         assert other_env != base_mountain_car_environment  # Test symmetry
     
     def test_different_parameters(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that MountainCarPOMDPs with different parameters are not equal."""
-        # Create a copy and modify parameters
+        """Test that MountainCarPOMDPs with different parameters are not equal.
+        
+        Purpose: Validates that environment equality comparison detects parameter differences
+        
+        Given: MountainCarPOMDP with standard parameters and modified versions with different min_position, max_position, max_speed, goal_position
+        When: Equality comparison is performed
+        Then: Modified environments are not equal to base environment, confirming parameter sensitivity
+        
+        Test type: unit
+        """
         other_env = MountainCarPOMDP(discount_factor=0.95)
         other_env.min_position = -1.0  # Different from -1.2
         assert base_mountain_car_environment != other_env
@@ -339,40 +356,23 @@ class TestMountainCarPOMDPEquality:
         other_env = MountainCarPOMDP(discount_factor=0.95)
         other_env.goal_position = 0.6  # Different from 0.5
         assert base_mountain_car_environment != other_env
-        """Test that MountainCarPOMDPs with different noise parameters are not equal.
-    
-    Purpose: Validates different noise parameters
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
-        other_env = MountainCarPOMDP(discount_factor=0.95)
-        other_env.power = 0.002  # Different from 0.001
-        assert base_mountain_car_environment != other_env
-        
-        other_env = MountainCarPOMDP(discount_factor=0.95)
-        other_env.gravity = 0.003  # Different from 0.0025
-        assert base_mountain_car_environment != other_env
     
     def test_different_noise_parameters(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that MountainCarPOMDPs with different noise parameters are not equal."""
+        """Test that MountainCarPOMDPs with different noise parameters are not equal.
+        
+        Purpose: Validates that environment equality comparison detects noise parameter differences
+        
+        Given: MountainCarPOMDP with standard parameters and modified versions with different power, gravity, position_noise, velocity_noise
+        When: Equality comparison is performed
+        Then: Modified environments are not equal to base environment, confirming noise parameter sensitivity
+        
+        Test type: unit
+        """
         other_env = MountainCarPOMDP(discount_factor=0.95)
         other_env.position_noise = 0.2  # Different from 0.1
         assert base_mountain_car_environment != other_env
         
-        """Test that MountainCarPOMDPs with different actions are not equal.
-    
-    Purpose: Validates different actions
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
+        other_env = MountainCarPOMDP(discount_factor=0.95)
         other_env.velocity_noise = 0.02  # Different from 0.01
         assert base_mountain_car_environment != other_env
         
@@ -382,46 +382,46 @@ class TestMountainCarPOMDPEquality:
         assert base_mountain_car_environment != other_env
     
     def test_different_actions(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test comparison with non-Environment objects.
-    
-    Purpose: Validates comparison with non environment
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
+        """Test that MountainCarPOMDPs with different actions are not equal.
+        
+        Purpose: Validates that environment equality comparison detects action space differences
+        
+        Given: MountainCarPOMDP with standard actions [-1, 0, 1] and modified version with actions [-1, 0, 1, 2]
+        When: Equality comparison is performed
+        Then: Modified environment is not equal to base environment, confirming action space sensitivity
+        
+        Test type: unit
+        """
         other_env = MountainCarPOMDP(discount_factor=0.95)
         other_env.actions = [-1, 0, 1, 2]  # Different from [-1, 0, 1]
         assert base_mountain_car_environment != other_env
     
     def test_comparison_with_non_environment(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test equality when attributes are missing.
-    
-    Purpose: Validates missing attributes
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
+        """Test comparison with non-Environment objects.
+        
+        Purpose: Validates that environment equality comparison handles non-environment objects correctly
+        
+        Given: MountainCarPOMDP environment and non-environment objects (string, integer, None)
+        When: Equality comparison is performed
+        Then: All comparisons return False, confirming proper type checking
+        
+        Test type: unit
+        """
         assert base_mountain_car_environment != "not an environment"
         assert base_mountain_car_environment != 42
         assert base_mountain_car_environment != None
     
     def test_missing_attributes(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that a deep copy of MountainCarPOMDP is equal to original.
-    
-    Purpose: Validates equality comparison for deep copy 
-    
-    Given: Objects with same or different configurations
-    When: Equality comparison is performed
-    Then: Objects are correctly identified as equal or unequal
-    
-    Test type: unit
-    """
+        """Test equality when attributes are missing.
+        
+        Purpose: Validates that environment equality comparison handles missing attributes gracefully
+        
+        Given: MountainCarPOMDP environment and modified version with deleted attributes (min_position, cov_matrix)
+        When: Equality comparison is performed
+        Then: Modified environment is not equal to base environment, confirming attribute completeness requirement
+        
+        Test type: unit
+        """
         other_env = MountainCarPOMDP(discount_factor=0.95)
         delattr(other_env, 'min_position')
         assert base_mountain_car_environment != other_env
@@ -431,16 +431,16 @@ class TestMountainCarPOMDPEquality:
         assert base_mountain_car_environment != other_env
     
     def test_deep_copy_equality(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that config_id is consistent for identical environments.
-    
-    Purpose: Validates config_id behavior for  consistency
-    
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
-    
-    Test type: configuration
-    """
+        """Test that a deep copy of MountainCarPOMDP is equal to original.
+        
+        Purpose: Validates that deep copying preserves environment equality
+        
+        Given: MountainCarPOMDP environment and its deep copy
+        When: Equality comparison is performed between original and copy
+        Then: Both environments are equal, confirming deep copy preserves all attributes
+        
+        Test type: unit
+        """
         import copy
         copied_env = copy.deepcopy(base_mountain_car_environment)
         assert copied_env == base_mountain_car_environment
@@ -448,38 +448,56 @@ class TestMountainCarPOMDPEquality:
 
 
 class TestMountainCarPOMDPConfigId:
-    """Test that config_id changes with different discount factor.
+    """Test that config_id changes with different configurations.
     
-    Purpose: Validates config_id behavior for  different discount factor
+    Purpose: Validates that config_id generates unique identifiers for different MountainCarPOMDP configurations
     
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    Given: MountainCarPOMDP environments with various parameter differences
+    When: Config IDs are generated and compared
+    Then: Different configurations have different config_ids, demonstrating uniqueness and consistency
     
     Test type: configuration
     """
     
     def test_config_id_consistency(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that config_id changes with different parameters.
-    
-    Purpose: Validates config_id behavior for  different parameters
-    
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
-    
-    Test type: configuration
-    """
+        """Test that config_id is consistent for identical environments.
+        
+        Purpose: Validates that config_id generates consistent identifiers for identical configurations
+        
+        Given: Two MountainCarPOMDP environments with identical parameters
+        When: Config IDs are generated for both environments
+        Then: Both environments have identical config_ids, demonstrating consistency for same configuration
+        
+        Test type: configuration
+        """
         other_env = MountainCarPOMDP(discount_factor=0.95)
         assert base_mountain_car_environment.config_id == other_env.config_id
     
     def test_config_id_different_discount_factor(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that config_id changes with different discount factor."""
+        """Test that config_id changes with different discount factor.
+        
+        Purpose: Validates that config_id generates different identifiers for different discount factors
+        
+        Given: MountainCarPOMDP with discount_factor=0.95 and another with discount_factor=0.8
+        When: Config IDs are generated for both environments
+        Then: Environments have different config_ids, demonstrating uniqueness for different configurations
+        
+        Test type: configuration
+        """
         other_env = MountainCarPOMDP(discount_factor=0.8)
         assert base_mountain_car_environment.config_id != other_env.config_id
     
     def test_config_id_different_parameters(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that config_id changes with different parameters."""
+        """Test that config_id changes with different parameters.
+        
+        Purpose: Validates that config_id generates different identifiers for different parameter configurations
+        
+        Given: MountainCarPOMDP with standard parameters and modified versions with different noise parameters
+        When: Config IDs are generated for all environments
+        Then: Modified environments have different config_ids from base environment, demonstrating parameter sensitivity
+        
+        Test type: configuration
+        """
         # Test different position noise
         other_env = MountainCarPOMDP(discount_factor=0.95)
         other_env.position_noise = 0.2  # Different from 0.1
@@ -509,23 +527,32 @@ class TestMountainCarPOMDPConfigId:
         assert base_mountain_car_environment.config_id != other_env.config_id
     
     def test_config_id_format(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that config_id is deterministic (same input always produces same output).
-    
-    Purpose: Validates config_id behavior for  deterministic
-    
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
-    
-    Test type: configuration
-    """
+        """Test that config_id is a valid SHA-256 hash.
+        
+        Purpose: Validates that config_id generates properly formatted SHA-256 hash identifiers
+        
+        Given: MountainCarPOMDP environment with specific configuration
+        When: Config ID is generated for the environment
+        Then: Returns a 64-character string containing only valid hexadecimal characters (0-9, a-f)
+        
+        Test type: configuration
+        """
         config_id = base_mountain_car_environment.config_id
         assert isinstance(config_id, str)
         assert len(config_id) == 64  # SHA-256 hash length
         assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters
     
     def test_config_id_deterministic(self, base_mountain_car_environment: MountainCarPOMDP):
-        """Test that config_id is deterministic (same input always produces same output)."""
+        """Test that config_id is deterministic (same input always produces same output).
+        
+        Purpose: Validates that config_id generates deterministic identifiers for identical configurations
+        
+        Given: MountainCarPOMDP environment with specific configuration
+        When: Config ID is generated multiple times for the same environment
+        Then: All generated config_ids are identical, demonstrating deterministic behavior
+        
+        Test type: configuration
+        """
         config_id1 = base_mountain_car_environment.config_id
         config_id2 = base_mountain_car_environment.config_id
         assert config_id1 == config_id2

@@ -158,13 +158,13 @@ class TestPolicyLogger:
         assert len(policy.logger.handlers) == 2  # Console and file handlers
 
     def test_logger_output(self, base_environment, temp_log_dir, caplog):
-        """Test that logger produces expected output.
+        """Test that logger produces expected output for different logging levels and debug modes.
     
-    Purpose: Validates logger output
+    Purpose: Validates that policy logger correctly filters and outputs messages based on logging level and debug configuration
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MockPolicy instances with different debug settings and log file configurations
+    When: Logger methods are called with different severity levels (debug, info, warning, error)
+    Then: Messages appear in console and log files according to the configured logging level (INFO filters debug, DEBUG shows all)
     
     Test type: unit
     """

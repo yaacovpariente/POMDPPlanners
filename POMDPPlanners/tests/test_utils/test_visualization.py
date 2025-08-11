@@ -21,7 +21,18 @@ from POMDPPlanners.core.simulation import MetricValue
 
 @contextmanager
 def mlflow_run_context(experiment_name: str, tracking_uri: str):
-    """Context manager for MLFlow runs with proper cleanup."""
+    """Context manager for MLFlow runs with proper cleanup.
+    
+    Creates and manages MLFlow experiment runs ensuring proper resource cleanup
+    even if exceptions occur during visualization testing.
+    
+    Args:
+        experiment_name: Name of MLFlow experiment to create/use
+        tracking_uri: File-based URI for MLFlow tracking storage
+        
+    Yields:
+        mlflow.ActiveRun: Active MLFlow run context for logging artifacts
+    """
     try:
         mlflow.set_tracking_uri(tracking_uri)
         mlflow.set_experiment(experiment_name)
@@ -34,7 +45,18 @@ def mlflow_run_context(experiment_name: str, tracking_uri: str):
 
 @pytest.fixture
 def temp_cache_dir():
-    """Create a temporary directory for MLFlow cache with proper cleanup."""
+    """Create a temporary directory for visualization testing with proper cleanup.
+    
+    Creates a unique temporary directory for each test to store generated plots
+    and MLFlow artifacts, ensuring test isolation and automatic cleanup.
+    
+    Yields:
+        Path: Temporary directory path for storing test artifacts
+        
+    Note:
+        Uses force cleanup with garbage collection to handle any remaining
+        file handles that may prevent directory removal on some systems.
+    """
     temp_dir = Path(tempfile.gettempdir())
     unique_dir = temp_dir / f"test_{uuid.uuid4().hex}"
     unique_dir.mkdir(parents=True, exist_ok=True)
@@ -59,13 +81,13 @@ def temp_cache_dir():
 
 
 def test_plot_statistics_comparison():
-    """Test plot statistics comparison.
+    """Test that plot_metrics_comparison generates expected visualization files for single environment-policy pair.
     
-    Purpose: Validates plot statistics comparison
+    Purpose: Validates that metrics comparison plotting creates all expected plot files with proper MLflow integration
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, StandardSparseSampling policy, and mock MetricValue statistics for average_return, return_cvar, and average_action_time
+    When: plot_metrics_comparison is called with single environment and policy
+    Then: All expected plot files are created in the plots directory within specified time limit
     
     Test type: unit
     """
@@ -128,13 +150,13 @@ def test_plot_statistics_comparison():
 
 
 def test_plot_statistics_comparison_multiple_envs_policies():
-    """Test plot statistics comparison multiple envs policies.
+    """Test that plot_metrics_comparison handles multiple environment-policy combinations correctly.
     
-    Purpose: Validates plot statistics comparison multiple envs policies
+    Purpose: Validates that metrics comparison plotting works with multiple environments and policies producing comparative visualizations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Two TigerPOMDP environments with different discount factors, two StandardSparseSampling policies with different parameters, and corresponding mock statistics
+    When: plot_metrics_comparison is called with multiple environments and policies
+    Then: Comparison plots are generated showing metrics across different environment-policy configurations
     
     Test type: integration
     """
@@ -208,13 +230,13 @@ def test_plot_statistics_comparison_multiple_envs_policies():
 
 
 def test_plot_statistics_comparison_empty_statistics(temp_cache_dir):
-    """Test plot statistics comparison empty statistics.
+    """Test that plot_metrics_comparison properly handles empty statistics input.
     
-    Purpose: Validates plot statistics comparison empty statistics
+    Purpose: Validates proper error handling when no statistics data is provided to the plotting function
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, StandardSparseSampling policy, and empty statistics list
+    When: plot_metrics_comparison is called with empty statistics
+    Then: Exception is raised indicating invalid input rather than silent failure
     
     Test type: unit
     """
@@ -235,13 +257,13 @@ def test_plot_statistics_comparison_empty_statistics(temp_cache_dir):
 
 
 def test_plot_policy_returns_tiger_pomdp(temp_cache_dir):
-    """Test plotting policy returns for Tiger POMDP with timeout.
+    """Test that plot_policy_returns generates return comparison visualization for Tiger POMDP environment.
     
-    Purpose: Validates plot policy returns tiger pomdp
+    Purpose: Validates that policy return plotting creates visualization comparing different agent paths in Tiger POMDP
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment and AgentPath objects with different action strategies (Listen First vs Direct Open)
+    When: plot_policy_returns is called with agent paths and minimal sampling parameters
+    Then: Policy returns comparison plot is generated within time limit and saved to expected file location
     
     Test type: unit
     """
@@ -279,13 +301,13 @@ def test_plot_policy_returns_tiger_pomdp(temp_cache_dir):
 
 
 def test_plot_policy_returns_discrete_light_dark_pomdp(temp_cache_dir):
-    """Test plotting policy returns for Discrete Light Dark POMDP with timeout.
+    """Test that plot_policy_returns generates return comparison visualization for Discrete Light Dark POMDP environment.
     
-    Purpose: Validates plot policy returns discrete light dark pomdp
+    Purpose: Validates that policy return plotting works with discrete light-dark navigation environment using different path strategies
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteLightDarkPOMDP environment with obstacles and beacons, and AgentPath objects representing direct vs upper navigation paths
+    When: plot_policy_returns is called with navigation-specific agent paths and reduced sampling for test performance
+    Then: Policy returns comparison plot is generated within time limit showing performance differences between navigation strategies
     
     Test type: unit
     """
@@ -351,13 +373,13 @@ def test_plot_policy_returns_discrete_light_dark_pomdp(temp_cache_dir):
 
 
 def test_plot_policy_returns_continuous_light_dark_pomdp(temp_cache_dir):
-    """Test plotting policy returns for Continuous Light Dark POMDP with timeout.
+    """Test that plot_policy_returns generates return comparison visualization for Continuous Light Dark POMDP environment.
     
-    Purpose: Validates plot policy returns continuous light dark pomdp
+    Purpose: Validates that policy return plotting works with continuous light-dark navigation environment using discrete actions
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: ContinuousLightDarkPOMDPDiscreteActions environment with Gaussian noise models, obstacles, and AgentPath objects for direct vs upper navigation
+    When: plot_policy_returns is called with continuous state space agent paths and optimized sampling parameters
+    Then: Policy returns comparison plot is generated within time limit demonstrating performance across continuous state transitions
     
     Test type: unit
     """
@@ -424,13 +446,13 @@ def test_plot_policy_returns_continuous_light_dark_pomdp(temp_cache_dir):
 
 
 def test_plot_policy_returns_empty_paths(temp_cache_dir):
-    """Test plotting policy returns with empty paths.
+    """Test that plot_policy_returns properly handles empty agent paths input.
     
-    Purpose: Validates plot policy returns empty paths
+    Purpose: Validates proper error handling when no agent paths are provided to the policy returns plotting function
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment and empty agent_paths list
+    When: plot_policy_returns is called with empty agent paths
+    Then: ValueError is raised with descriptive message rather than silent failure or runtime error
     
     Test type: unit
     """
@@ -448,13 +470,13 @@ def test_plot_policy_returns_empty_paths(temp_cache_dir):
 
 
 def test_plot_policy_returns_invalid_n_samples(temp_cache_dir):
-    """Test plotting policy returns with invalid n_samples.
+    """Test that plot_policy_returns properly validates n_samples parameter.
     
-    Purpose: Validates sampling behavior for plot policy returns invalid n s
+    Purpose: Validates proper error handling when invalid n_samples parameter is provided to ensure meaningful sample sizes
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: TigerPOMDP environment, valid AgentPath, and invalid n_samples value (0 or negative)
+    When: plot_policy_returns is called with n_samples=0
+    Then: ValueError is raised with descriptive message indicating n_samples must be positive
     
     Test type: unit
     """

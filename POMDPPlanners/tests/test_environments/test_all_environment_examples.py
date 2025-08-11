@@ -12,11 +12,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def test_sanity_pomdp_main_example():
     """Test the main SanityPOMDP class example.
     
-    Purpose: Validates sanity pomdp main example
+    Purpose: Validates that SanityPOMDP environment can be created and basic functionality works correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A SanityPOMDP environment with discount_factor=0.95
+    When: Environment actions, state transitions, rewards, and observations are tested
+    Then: Returns correct actions [0,1], deterministic transitions, rewards (1.0 for good state, 1.0 for bad state), and perfect observability
     
     Test type: example
     """
@@ -54,11 +54,11 @@ def test_sanity_pomdp_main_example():
 def test_tiger_pomdp_main_example():
     """Test the main TigerPOMDP class example.
     
-    Purpose: Validates tiger pomdp main example
+    Purpose: Validates that TigerPOMDP environment can be created and basic functionality works correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment with discount_factor=0.95
+    When: Initial state distribution, actions, rewards, and terminal conditions are tested
+    Then: Returns valid states (tiger_left/tiger_right), actions (listen/open_left/open_right), correct reward for listen (-1.0), and non-terminal states
     
     Test type: example
     """
@@ -101,11 +101,11 @@ def test_tiger_pomdp_main_example():
 def test_cartpole_pomdp_main_example():
     """Test the main CartPolePOMDP class example.
     
-    Purpose: Validates cartpole pomdp main example
+    Purpose: Validates that CartPolePOMDP environment can be created and basic functionality works correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A CartPolePOMDP environment with discount_factor=0.99 and noise covariance matrix
+    When: Initial state sampling, action application, reward calculation, and terminal state detection are tested
+    Then: Returns 4D numpy array state, valid actions (0 or 1), float reward, and boolean terminal state flag
     
     Test type: example
     """
@@ -149,11 +149,11 @@ def test_cartpole_pomdp_main_example():
 def test_mountain_car_pomdp_main_example():
     """Test the main MountainCarPOMDP class example.
     
-    Purpose: Validates mountain car pomdp main example
+    Purpose: Validates that MountainCarPOMDP environment can be created and basic functionality works correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A MountainCarPOMDP environment with discount_factor=0.99
+    When: Initial state sampling, action selection, reward calculation, and goal state detection are tested
+    Then: Returns 2D numpy array state [position, velocity], valid actions [-1,0,1], float reward, and boolean goal state flag
     
     Test type: example
     """
@@ -195,11 +195,11 @@ def test_mountain_car_pomdp_main_example():
 def test_push_pomdp_main_example():
     """Test the main PushPOMDP class example.
     
-    Purpose: Validates push pomdp main example
+    Purpose: Validates that PushPOMDP environment can be created and basic functionality works correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A PushPOMDP environment with grid_size=10, push_threshold=1.0, friction_coefficient=0.3, observation_noise=0.1
+    When: Initial state sampling, action selection, reward calculation, and target state detection are tested
+    Then: Returns 6D numpy array state, directional actions ["up","down","right","left"], float reward, and boolean target state flag
     
     Test type: example
     """
@@ -247,11 +247,11 @@ def test_push_pomdp_main_example():
 def test_safety_ant_velocity_pomdp_main_example():
     """Test the main SafeAntVelocityPOMDP class example.
     
-    Purpose: Validates safety ant velocity pomdp main example
+    Purpose: Validates that SafeAntVelocityPOMDP environment can be created and basic functionality works correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A SafeAntVelocityPOMDP environment with safe_velocity_threshold=2.0, safety_violation_penalty=-100.0, movement_reward_scale=1.0
+    When: Initial state sampling, action selection, reward calculation, and safety constraint checking are tested
+    Then: Returns 4D numpy array state [x,y,vx,vy], valid actions [0,1,2,3], float reward, and boolean safety flag based on velocity threshold
     
     Test type: example
     """
@@ -302,11 +302,11 @@ def test_safety_ant_velocity_pomdp_main_example():
 def test_continuous_light_dark_pomdp_main_example():
     """Test the main ContinuousLightDarkPOMDP class example.
     
-    Purpose: Validates continuous light dark pomdp main example
+    Purpose: Validates that ContinuousLightDarkPOMDP environment can be created and basic functionality works correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A ContinuousLightDarkPOMDP environment with goal_state=[10,5], start_state=[0,5], reward_model_type=STANDARD
+    When: Initial state sampling, continuous action application, reward calculation, and goal state detection are tested
+    Then: Returns 2D numpy array state, 2D numpy array action, float reward, and boolean goal state flag
     
     Test type: example
     """
@@ -354,11 +354,11 @@ def test_continuous_light_dark_pomdp_main_example():
 def test_continuous_light_dark_pomdp_discrete_actions_example():
     """Test the ContinuousLightDarkPOMDPDiscreteActions class example.
     
-    Purpose: Validates continuous light dark pomdp discrete actions example
+    Purpose: Validates that ContinuousLightDarkPOMDPDiscreteActions environment can be created and basic functionality works correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A ContinuousLightDarkPOMDPDiscreteActions environment with goal_state=[10,5], start_state=[0,5]
+    When: Action space verification, discrete action selection, and reward calculation are tested
+    Then: Returns directional actions ["up","down","right","left"], 2D numpy array state, and float reward
     
     Test type: example
     """
@@ -401,11 +401,11 @@ def test_continuous_light_dark_pomdp_discrete_actions_example():
 def test_all_planners_usage_examples():
     """Test usage examples from all planner classes.
     
-    Purpose: Validates all planners usage examples
+    Purpose: Validates that all major planner classes can be created and used correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, CartPolePOMDP environment, and various planner configurations
+    When: POMCP, SparseSampling, and PFT-DPW planners are created and actions are selected
+    Then: All planners return valid actions from their respective action spaces and have proper run_data attributes
     
     Test type: example
     """
@@ -486,11 +486,11 @@ def test_all_planners_usage_examples():
 def test_all_supporting_class_examples():
     """Test all supporting class examples with comprehensive validation.
     
-    Purpose: Validates all supporting class examples
+    Purpose: Validates that all supporting classes (transition models, observation models, distributions) work correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Various environment supporting classes including SanityPOMDP, TigerPOMDP, CartPolePOMDP, MountainCarPOMDP, PushPOMDP, SafeAntVelocityPOMDP, and LightDarkPOMDP
+    When: Transition models, observation models, and initial distributions are created and tested
+    Then: All models return correct samples, probabilities, and distributions according to their specifications
     
     Test type: example
     """
@@ -652,11 +652,11 @@ def test_all_supporting_class_examples():
 def test_all_simulations_class_examples():
     """Test usage examples from simulations classes.
     
-    Purpose: Validates all simulations class examples
+    Purpose: Validates that all simulation-related classes can be used correctly for running episodes and computing statistics
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SanityPOMDP environment, POMCP planner, and simulation infrastructure
+    When: Episode running, SimulationsAPI creation, and statistics computation are tested
+    Then: Episode runs successfully, API is created with proper methods, and statistics are computed correctly
     
     Test type: example
     """

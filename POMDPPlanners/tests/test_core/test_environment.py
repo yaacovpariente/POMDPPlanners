@@ -163,11 +163,11 @@ def test_different_environment_class(base_environment: MockEnvironment):
 def test_non_environment_comparison(base_environment: MockEnvironment):
     """Test equality comparison with non-Environment objects.
     
-    Purpose: Validates non environment comparison
+    Purpose: Validates that Environment equality returns False when compared with non-Environment objects
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MockEnvironment instance and non-Environment objects (string, integer, None)
+    When: Equality comparison is performed between Environment and non-Environment types
+    Then: All comparisons return False for non-Environment objects
     
     Test type: unit
     """
@@ -178,11 +178,11 @@ def test_non_environment_comparison(base_environment: MockEnvironment):
 def test_missing_attribute(base_environment: MockEnvironment):
     """Test equality comparison when an attribute is missing.
     
-    Purpose: Validates missing attribute
+    Purpose: Validates that Environment equality returns False when attributes are missing from comparison object
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Two MockEnvironments with same configuration, one missing the test_array attribute
+    When: Equality comparison is performed between complete and incomplete environment
+    Then: Environments are correctly identified as not equal due to missing attribute
     
     Test type: unit
     """
@@ -199,11 +199,11 @@ def test_attribute_presence(base_environment: MockEnvironment,
                           attr_value: object):
     """Test that attributes are present and have correct values.
     
-    Purpose: Validates attribute presence
+    Purpose: Validates that Environment instances have required attributes with correct values for equality comparison
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MockEnvironment with discount_factor=0.9 and test_array=[1,2,3], parameterized attribute names and values
+    When: Attribute presence and values are checked using hasattr and getattr
+    Then: All specified attributes exist and have correct values (with special handling for numpy arrays)
     
     Test type: unit
     """
@@ -224,11 +224,11 @@ class TestEnvironmentConfigId:
     def test_same_config_same_id(self, base_environment: MockEnvironment):
         """Test that environments with same configuration have same config_id.
     
-    Purpose: Validates same config same id
+    Purpose: Validates that Environment instances with identical configurations generate identical config_id values
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Two MockEnvironments with same discount_factor=0.9 and default test_array=[1,2,3]
+    When: config_id is generated for both environment instances
+    Then: Both environments produce the same config_id hash value
     
     Test type: configuration
     """
@@ -238,11 +238,11 @@ class TestEnvironmentConfigId:
     def test_different_discount_factor(self, base_environment: MockEnvironment):
         """Test that different discount factor results in different config_id.
     
-    Purpose: Validates different discount factor
+    Purpose: Validates that Environment instances with different discount factors generate different config_id values
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Base MockEnvironment with discount_factor=0.9 and another with discount_factor=0.8
+    When: config_id is generated for both environment instances
+    Then: Different discount factors produce different config_id hash values
     
     Test type: unit
     """
@@ -252,11 +252,11 @@ class TestEnvironmentConfigId:
     def test_different_array(self, base_environment: MockEnvironment):
         """Test that different numpy array results in different config_id.
     
-    Purpose: Validates different array
+    Purpose: Validates that Environment instances with different numpy arrays generate different config_id values
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Base MockEnvironment with test_array=[1,2,3] and another with test_array=[4,5,6]
+    When: config_id is generated for both environment instances with different arrays
+    Then: Different numpy arrays produce different config_id hash values
     
     Test type: unit
     """
@@ -280,11 +280,11 @@ class TestEnvironmentConfigId:
     def test_config_id_consistency(self, base_environment: MockEnvironment):
         """Test that config_id remains consistent across multiple calls.
     
-    Purpose: Validates config_id behavior for  consistency
+    Purpose: Validates that Environment config_id property returns consistent values across multiple accesses
     
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    Given: Single MockEnvironment instance with fixed configuration parameters
+    When: config_id property is accessed multiple times on the same instance
+    Then: All accesses return identical config_id hash values (deterministic behavior)
     
     Test type: configuration
     """
@@ -295,11 +295,11 @@ class TestEnvironmentConfigId:
     def test_tiger_pomdp_config_id(self, base_tiger_environment: TigerPOMDP):
         """Test config_id with TigerPOMDP environment.
     
-    Purpose: Validates config_id behavior for tiger pomdp 
+    Purpose: Validates that TigerPOMDP config_id generation works correctly for real environment implementations
     
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    Given: TigerPOMDP environments with same (discount=0.95) and different (discount=0.8) configurations
+    When: config_id is generated for TigerPOMDP instances with varying parameters
+    Then: Same configurations produce identical IDs, different configurations produce different IDs
     
     Test type: configuration
     """
@@ -314,11 +314,11 @@ class TestEnvironmentConfigId:
     def test_config_id_format(self, base_environment: MockEnvironment):
         """Test that config_id is a valid SHA-256 hash.
     
-    Purpose: Validates config_id behavior for  format
+    Purpose: Validates that Environment config_id follows proper SHA-256 hash format specification
     
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    Given: MockEnvironment instance with configuration parameters
+    When: config_id property generates hash value from environment configuration
+    Then: Returns 64-character string containing only valid hexadecimal characters (0-9, a-f)
     
     Test type: configuration
     """
@@ -346,11 +346,11 @@ class TestEnvironmentLogger:
     def test_logger_without_output_dir(self, base_environment: MockEnvironment):
         """Test that logger works without output directory.
     
-    Purpose: Validates logger without output dir
+    Purpose: Validates that Environment logger initialization works correctly when no output directory is provided
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MockEnvironment created without output_dir parameter (default None)
+    When: Logger attribute is accessed after environment initialization
+    Then: Logger exists with correct name "environment.MockEnvironment" without requiring output directory
     
     Test type: unit
     """
@@ -360,11 +360,11 @@ class TestEnvironmentLogger:
     def test_logger_debug_mode(self, base_environment_with_logging: MockEnvironment):
         """Test that debug mode affects logger level.
     
-    Purpose: Validates logger debug mode
+    Purpose: Validates that Environment logger sets DEBUG level when debug=True parameter is provided
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MockEnvironment created with debug=True and output_dir parameters
+    When: Logger level is checked after environment initialization in debug mode
+    Then: Logger level is set to DEBUG level (≤10) for detailed logging output
     
     Test type: unit
     """
@@ -373,11 +373,11 @@ class TestEnvironmentLogger:
     def test_logger_normal_mode(self, base_environment: MockEnvironment):
         """Test that normal mode sets correct logger level.
     
-    Purpose: Validates logger normal mode
+    Purpose: Validates that Environment logger sets INFO level when debug=False (default) parameter is used
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MockEnvironment created with default debug=False parameter
+    When: Logger level is checked after environment initialization in normal mode
+    Then: Logger level is set to INFO level (20) for standard logging output
     
     Test type: unit
     """
@@ -386,11 +386,11 @@ class TestEnvironmentLogger:
     def test_logger_output_dir(self, tmp_path):
         """Test that logger creates log files in output directory.
     
-    Purpose: Validates logger output dir
+    Purpose: Validates that Environment logger creates log files in specified output directory with proper structure
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MockEnvironment with output_dir=temporary directory path
+    When: Environment is initialized with output directory logging enabled
+    Then: Creates logs subdirectory, generates at least one log file in the directory
     
     Test type: unit
     """

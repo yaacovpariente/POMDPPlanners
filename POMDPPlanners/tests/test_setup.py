@@ -7,11 +7,11 @@ from pathlib import Path
 def test_package_installed():
     """Test that the package is installed and importable.
     
-    Purpose: Validates package installed
+    Purpose: Validates that POMDPPlanners package is properly installed and accessible with correct version
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMDPPlanners package should be installed in the Python environment with version 0.1.0
+    When: Package is imported and version is checked
+    Then: Import succeeds without error and version matches expected 0.1.0
     
     Test type: unit
     """
@@ -24,11 +24,11 @@ def test_package_installed():
 def test_required_packages():
     """Test that all required packages are installed with correct versions.
     
-    Purpose: Validates required packages
+    Purpose: Validates that all dependencies listed in requirements.txt are properly installed with compatible versions
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: requirements.txt file containing package dependencies with version constraints
+    When: Each required package is checked against installed packages using pkg_resources
+    Then: All requirements are satisfied without DistributionNotFound or VersionConflict errors
     
     Test type: unit
     """
@@ -50,11 +50,11 @@ def test_required_packages():
 def test_imports():
     """Test that key package modules can be imported.
     
-    Purpose: Validates imports
+    Purpose: Validates that all main POMDPPlanners modules can be successfully imported without errors
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMDPPlanners package with core, planners, environments, utils, and simulations submodules
+    When: Each main module is imported using importlib.import_module
+    Then: All imports succeed without ImportError exceptions
     
     Test type: unit
     """

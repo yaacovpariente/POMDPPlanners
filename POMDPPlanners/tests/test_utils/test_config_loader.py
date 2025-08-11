@@ -7,11 +7,11 @@ from POMDPPlanners.utils.config_loader import load_config
 def test_load_config_valid_yaml():
     """Test loading a valid YAML configuration.
     
-    Purpose: Validates load config valid yaml
+    Purpose: Validates that load_config correctly parses and returns valid YAML configuration data
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Temporary YAML file with valid nested structure containing environment configuration with name, type, and parameters
+    When: load_config is called with the YAML file path
+    Then: Returns dictionary with correct structure and all values preserved (strings, integers, nested dicts)
     
     Test type: configuration
     """
@@ -46,11 +46,11 @@ def test_load_config_valid_yaml():
 def test_load_config_invalid_yaml():
     """Test loading an invalid YAML configuration.
     
-    Purpose: Validates load config invalid yaml
+    Purpose: Validates that load_config raises YAMLError when given malformed YAML syntax
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Temporary YAML file with invalid syntax (mixing dict and list elements incorrectly)
+    When: load_config attempts to parse the malformed YAML file
+    Then: YAMLError exception is raised indicating parsing failure
     
     Test type: configuration
     """
@@ -79,11 +79,11 @@ def test_load_config_invalid_yaml():
 def test_load_config_nonexistent_file():
     """Test loading a configuration from a nonexistent file.
     
-    Purpose: Validates load config nonexistent file
+    Purpose: Validates that load_config raises FileNotFoundError when file does not exist
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Non-existent YAML file path ("nonexistent_file.yaml")
+    When: load_config is called with the invalid file path
+    Then: FileNotFoundError exception is raised
     
     Test type: configuration
     """
@@ -93,11 +93,11 @@ def test_load_config_nonexistent_file():
 def test_load_config_empty_file():
     """Test loading an empty YAML file.
     
-    Purpose: Validates load config empty file
+    Purpose: Validates that load_config returns None when processing empty YAML files
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Empty temporary YAML file with no content
+    When: load_config processes the empty file
+    Then: Returns None indicating no configuration data present
     
     Test type: configuration
     """
@@ -117,11 +117,11 @@ def test_load_config_empty_file():
 def test_load_config_complex_yaml():
     """Test loading a complex YAML configuration with nested structures.
     
-    Purpose: Validates load config complex yaml
+    Purpose: Validates that load_config correctly handles complex YAML with deeply nested dictionaries, lists, and mixed data types
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Complex YAML file with environment config (nested dict with lists), policies array, and various data types (strings, booleans, integers, floats)
+    When: load_config processes the complex nested structure
+    Then: All nested structures are preserved with correct types including lists [1,2,3], nested dicts, boolean true, and policy arrays
     
     Test type: configuration
     """

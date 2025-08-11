@@ -13,11 +13,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def test_pomcp_usage_example():
     """Test the POMCP usage example from the class docstring.
     
-    Purpose: Validates pomcp usage example
+    Purpose: Validates that POMCP planner correctly works with TigerPOMDP environment and returns valid actions
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment with discount_factor=0.95, POMCP planner with depth=5, n_simulations=10, and initial belief with 100 particles
+    When: POMCP planner.action() is called with initial belief
+    Then: Returns single action from valid action space ["listen", "open_left", "open_right"] and run_data with info_variables
     
     Test type: example
     """
@@ -61,11 +61,11 @@ def test_pomcp_usage_example():
 def test_pft_dpw_usage_example():
     """Test the PFT-DPW usage example with a custom action sampler.
     
-    Purpose: Validates pft dpw usage example
+    Purpose: Validates that PFT-DPW planner works correctly with CartPole environment and custom action sampler
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: CartPolePOMDP environment with noise_cov, PFT-DPW planner with depth=3, n_simulations=5, custom CartPoleActionSampler, and initial belief with 50 particles
+    When: PFT-DPW planner.action() is called with initial belief
+    Then: Returns single action from valid action space [0, 1] and run_data with info_variables, confirming custom action sampler integration
     
     Test type: example
     """
@@ -122,11 +122,11 @@ def test_pft_dpw_usage_example():
 def test_sparse_sampling_usage_example():
     """Test the StandardSparseSamplingDiscreteActionsPlanner usage example.
     
-    Purpose: Validates sparse sampling usage example
+    Purpose: Validates that Sparse Sampling planner correctly works with TigerPOMDP environment
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment with discount_factor=0.95, StandardSparseSamplingDiscreteActionsPlanner with branching_factor=3, depth=3, and initial belief with 100 particles
+    When: Sparse sampling planner.action() is called with initial belief
+    Then: Returns single action from valid action space ["listen", "open_left", "open_right"] and run_data with info_variables, confirming sparse sampling completion
     
     Test type: example
     """
@@ -168,11 +168,11 @@ def test_sparse_sampling_usage_example():
 def test_sparse_pft_usage_example():
     """Test the Sparse-PFT usage example from the class docstring.
     
-    Purpose: Validates sparse pft usage example
+    Purpose: Validates that Sparse-PFT planner correctly works with TigerPOMDP environment and controlled branching
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment with discount_factor=0.95, SparsePFT planner with depth=5, belief_child_num=3, n_simulations=10, and initial belief with 50 particles
+    When: Sparse-PFT planner.action() is called with initial belief
+    Then: Returns single action from valid action space ["listen", "open_left", "open_right"] and run_data with info_variables, confirming tree metrics collection
     
     Test type: example
     """
@@ -221,11 +221,11 @@ def test_sparse_pft_usage_example():
 def test_discrete_action_sequences_planner_example():
     """Test the DiscreteActionSequencesPlanner if it exists.
     
-    Purpose: Validates discrete action sequences planner example
+    Purpose: Validates that DiscreteActionSequencesPlanner correctly works with TigerPOMDP environment and short sequences
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment with discount_factor=0.95, DiscreteActionSequencesPlanner with sequence_length=2, and initial belief with 100 particles
+    When: Discrete action sequences planner.action() is called with initial belief
+    Then: Returns single action from valid action space ["listen", "open_left", "open_right"], confirming planner functionality
     
     Test type: example
     """
@@ -269,11 +269,11 @@ def test_discrete_action_sequences_planner_example():
 def test_space_info_consistency():
     """Test that all planners report consistent space info.
     
-    Purpose: Validates space info consistency
+    Purpose: Validates that different planner types correctly report consistent space information for discrete and continuous environments
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP (discrete), CartPolePOMDP (continuous), POMCP, StandardSparseSamplingDiscreteActionsPlanner, PFT_DPW planners with SimpleActionSampler
+    When: get_space_info() is called on each planner
+    Then: Discrete planners report SpaceType.DISCRETE, continuous planners report SpaceType.CONTINUOUS, confirming space type consistency across planner implementations
     
     Test type: unit
     """

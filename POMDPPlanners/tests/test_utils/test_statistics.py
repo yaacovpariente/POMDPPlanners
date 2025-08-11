@@ -9,11 +9,11 @@ from POMDPPlanners.utils.statistics import cvar_estimator
 def test_cvar_estimator_negative_values():
     """Test CVaR calculation with negative values.
     
-    Purpose: Validates cvar estimator negative values
+    Purpose: Validates that cvar_estimator correctly handles negative values and returns expected tail statistics
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Array with negative and positive values [-5.0, -3.0, -1.0, 0.0, 2.0] and alpha=0.8 (80th percentile)
+    When: cvar_estimator processes the mixed-sign values array
+    Then: Returns mean of highest 20% values (tail average) approximately -0.5
     
     Test type: unit
     """
@@ -27,11 +27,11 @@ def test_cvar_estimator_negative_values():
 def test_cvar_estimator_alpha_boundaries():
     """Test CVaR calculation at alpha boundaries.
     
-    Purpose: Validates cvar estimator alpha boundaries
+    Purpose: Validates that cvar_estimator handles extreme alpha values (0.0 and 1.0) correctly returning min and max values
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Ordered values array [1.0, 2.0, 3.0, 4.0, 5.0] with alpha boundary values 0.0 and 1.0
+    When: cvar_estimator is called with alpha=1.0 (maximum) and alpha=0.0 (minimum)
+    Then: Returns 5.0 for alpha=1.0 (maximum value) and 1.0 for alpha=0.0 (minimum value)
     
     Test type: unit
     """
@@ -49,11 +49,11 @@ def test_cvar_estimator_alpha_boundaries():
 def test_cvar_estimator_identical_values():
     """Test CVaR calculation with identical values.
     
-    Purpose: Validates cvar estimator identical values
+    Purpose: Validates that cvar_estimator handles constant arrays correctly without variance issues
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Array of identical values [10.0, 10.0, 10.0, 10.0] and alpha=0.9
+    When: cvar_estimator processes the constant array
+    Then: Returns the constant value 10.0 regardless of alpha percentile
     
     Test type: unit
     """
@@ -66,11 +66,11 @@ def test_cvar_estimator_identical_values():
 def test_cvar_estimator_invalid_input():
     """Test CVaR estimator with invalid inputs.
     
-    Purpose: Validates cvar estimator invalid input
+    Purpose: Validates that cvar_estimator raises appropriate ValueError exceptions for invalid alpha values and empty arrays
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Valid values array [1.0, 2.0, 3.0], invalid alpha values (-0.1, 1.1), and empty array
+    When: cvar_estimator is called with out-of-range alpha or empty input
+    Then: ValueError is raised for alpha < 0, alpha > 1, and empty array inputs
     
     Test type: unit
     """
@@ -90,11 +90,11 @@ def test_cvar_estimator_invalid_input():
 def test_cvar_estimator_known_distribution():
     """Test CVaR calculation with a known distribution.
     
-    Purpose: Validates cvar estimator known distribution
+    Purpose: Validates that cvar_estimator produces theoretically correct results for uniform distribution U[0,1]
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Uniform distribution samples from U[0,1] with 1000 points and alpha=0.9
+    When: cvar_estimator calculates CVaR of the uniform distribution
+    Then: Result approximates theoretical CVaR = (1 + (1-alpha))/2 = 0.55 within 1% tolerance
     
     Test type: unit
     """
@@ -112,11 +112,11 @@ def test_cvar_estimator_known_distribution():
 def test_cvar_estimator_mixed_cases():
     """Test CVaR calculation with mixed cases and different alphas.
     
-    Purpose: Validates cvar estimator mixed cases
+    Purpose: Validates that cvar_estimator correctly handles various array patterns and alpha values with precise mathematical expectations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Multiple test arrays with known distributions and different alpha percentiles (0.2, 1.0, 0.15)
+    When: cvar_estimator processes each case with specific alpha values
+    Then: Returns mathematically correct tail averages (5.0 for single tail, 7.5 for mixed tail, weighted average for fractional cases)
     
     Test type: unit
     """
@@ -139,11 +139,11 @@ def test_cvar_estimator_mixed_cases():
 def test_cvar_estimator_single_element():
     """Test CVaR calculation with a single-element array.
     
-    Purpose: Validates cvar estimator single element
+    Purpose: Validates that cvar_estimator handles edge case of single-element arrays correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Single-element array [1.0] and alpha=0.5 (median)
+    When: cvar_estimator processes the minimal array
+    Then: Returns the single value 1.0 as the only possible CVaR result
     
     Test type: unit
     """
@@ -155,11 +155,11 @@ def test_cvar_estimator_single_element():
 def test_cvar_estimator_from_dist():
     """Test CVaR calculation from discrete probability distribution.
     
-    Purpose: Validates cvar estimator from dist
+    Purpose: Validates that cvar_estimator_from_dist correctly computes CVaR using weighted discrete distributions with various edge cases
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Multiple discrete distributions with values and weights including single value, weighted distributions, duplicates, and edge cases
+    When: cvar_estimator_from_dist processes each weighted distribution with alpha=0.2
+    Then: Returns correct weighted tail averages (1.0 for single, 2.5 for weighted cases) and raises ValueError for invalid inputs
     
     Test type: unit
     """

@@ -39,11 +39,11 @@ def test_push_pomdp_initialization():
 def test_state_transition():
     """Test state transition.
     
-    Purpose: Validates state transition
+    Purpose: Validates that PushStateTransition correctly moves robot and pushes object when within threshold distance
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Robot at position [5,5] next to object at [6,5], action="right", push_threshold=2.0, grid_size=10
+    When: PushStateTransition samples next state after robot moves right
+    Then: Robot x-position increases, object x-position increases due to push, target unchanged, all positions within bounds
     
     Test type: unit
     """
@@ -83,11 +83,11 @@ def test_state_transition():
 def test_state_transition_no_push():
     """Test state transition no push.
     
-    Purpose: Validates state transition no push
+    Purpose: Validates that PushStateTransition moves robot without affecting object when distance exceeds push threshold
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Robot at position [1,1] far from object at [8,8], action="right", push_threshold=1.0
+    When: PushStateTransition samples next state for distant robot-object pair
+    Then: Robot x-position increases but object position remains unchanged due to distance > push_threshold
     
     Test type: unit
     """
@@ -117,11 +117,11 @@ def test_state_transition_no_push():
 def test_observation_model():
     """Test observation model.
     
-    Purpose: Validates observation model
+    Purpose: Validates that PushObservation adds noise to object position while keeping robot and target positions exact
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: State with robot [5,5], object [4,5], target [9,9], observation_noise=0.1
+    When: PushObservation samples observation with noise applied
+    Then: Robot position exact, object position has noise (not equal to true position), target position exact, correct dimensions
     
     Test type: unit
     """
@@ -155,11 +155,11 @@ def test_observation_model():
 def test_reward_function():
     """Test reward function.
     
-    Purpose: Validates reward function
+    Purpose: Validates that PushPOMDP reward function returns higher rewards for objects closer to target position
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Three states with object at different distances from target [9,9]: far [5,5], near [8.5,8.5], at target [9,9]
+    When: Reward is calculated for each state with action="right"
+    Then: Negative reward for far object, higher reward for near object, positive reward for object at target
     
     Test type: unit
     """
@@ -183,11 +183,11 @@ def test_reward_function():
 def test_terminal_state():
     """Test terminal state.
     
-    Purpose: Validates terminal state
+    Purpose: Validates that PushPOMDP correctly identifies terminal states when object reaches target vicinity
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Two states: object far from target [5,5] vs [9,9] and object near target [8.8,8.8] vs [9,9]
+    When: is_terminal method evaluates proximity to target position
+    Then: Far state returns False (non-terminal), near state returns True (terminal) based on distance threshold
     
     Test type: unit
     """
@@ -204,11 +204,11 @@ def test_terminal_state():
 def test_initial_state_distribution():
     """Test initial state distribution.
     
-    Purpose: Validates initial state distribution
+    Purpose: Validates that PushPOMDP initial state distribution generates valid states with minimum distance constraint
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: PushPOMDP environment with grid_size=10, minimum distance=2.0 from target
+    When: initial_state_dist samples multiple initial states
+    Then: All states have 6D shape, positions within [0,grid_size), object-target distance >= 2.0
     
     Test type: unit
     """
@@ -235,11 +235,11 @@ def test_initial_state_distribution():
 def test_get_actions():
     """Test get actions.
     
-    Purpose: Validates get actions
+    Purpose: Validates that PushPOMDP provides correct set of directional movement actions
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: PushPOMDP environment with default configuration
+    When: get_actions method is called to retrieve available actions
+    Then: Returns 4 directional actions: ["up", "down", "right", "left"]
     
     Test type: unit
     """
@@ -255,11 +255,11 @@ def test_get_actions():
 def test_is_equal_observation():
     """Test is equal observation.
     
-    Purpose: Validates is equal observation
+    Purpose: Validates that PushPOMDP correctly compares observation arrays for equality
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Two identical observation arrays [1,1,2,2,9,9] and one different array [1,1,2.1,2,9,9]
+    When: is_equal_observation compares observation arrays element-wise
+    Then: Identical arrays return True, different arrays return False
     
     Test type: unit
     """

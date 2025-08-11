@@ -131,11 +131,11 @@ def test_history_equality():
 def test_history_serialization():
     """Test History serialization and deserialization.
     
-    Purpose: Validates history serialization
+    Purpose: Validates that History objects can be serialized to dictionaries and deserialized back to equivalent objects
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: History object with StepData, timing attributes, and configuration parameters
+    When: to_dict() and from_dict() methods are used for serialization and deserialization
+    Then: Serialized dictionary contains all key fields and deserialized History equals original object
     
     Test type: unit
     """
@@ -210,11 +210,11 @@ class TestTaskManagerExternalDB(TaskManagerExternalDB):
 def test_task_manager_external_db():
     """Test TaskManagerExternalDB with successful and failed tasks.
     
-    Purpose: Validates task manager external db
+    Purpose: Validates that TaskManagerExternalDB correctly handles mixed success/failure scenarios and caching behavior
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MockDatabase, TestTaskManagerExternalDB, and 4 MockSimulationTasks (3 successful, 1 failed) with identifiers
+    When: run_tasks is called with mixed success/failure tasks
+    Then: Only successful tasks (3) are returned and cached, failed tasks are excluded, subsequent runs use cache
     
     Test type: unit
     """
@@ -257,11 +257,11 @@ def test_task_manager_external_db():
 def test_task_manager_external_db_all_failed():
     """Test TaskManagerExternalDB when all tasks fail.
     
-    Purpose: Validates task manager external db all failed
+    Purpose: Validates that TaskManagerExternalDB correctly handles edge case where all tasks fail
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MockDatabase, TestTaskManagerExternalDB, and 2 MockSimulationTasks that both fail (should_succeed=False)
+    When: run_tasks is called with all failing tasks
+    Then: Empty results and successful_ids lists are returned (no tasks succeed or get cached)
     
     Test type: unit
     """
@@ -285,11 +285,11 @@ def test_task_manager_external_db_all_failed():
 def test_task_manager_external_db_all_cached():
     """Test TaskManagerExternalDB when all tasks are cached.
     
-    Purpose: Validates task manager external db all cached
+    Purpose: Validates that TaskManagerExternalDB correctly retrieves all results from cache when tasks are pre-cached
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: MockDatabase with pre-cached results, TestTaskManagerExternalDB, and 2 MockSimulationTasks with cached entries
+    When: run_tasks is called with tasks that have pre-existing cache entries
+    Then: All cached results (2) are returned with correct identifiers without re-executing tasks
     
     Test type: unit
     """

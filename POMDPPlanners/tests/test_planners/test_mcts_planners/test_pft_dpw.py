@@ -49,11 +49,11 @@ def initial_belief(environment):
 def test_initialization(planner):
     """Test that the planner initializes correctly with valid parameters.
     
-    Purpose: Validates proper initialization of 
+    Purpose: Validates proper initialization of PFT_DPW planner with all configuration parameters
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: PFT_DPW constructor with depth=5, progressive widening parameters (k_a=1.0, alpha_a=0.5, k_o=1.0, alpha_o=0.5), and sampling settings
+    When: Planner object is initialized with these parameters
+    Then: All attributes are correctly set and accessible (depth, k_a, alpha_a, k_o, alpha_o, exploration_constant)
     
     Test type: unit
     """
@@ -85,11 +85,11 @@ def test_action_sampler(action_sampler):
 def test_action_progressive_widening(planner, initial_belief):
     """Test that action progressive widening creates new action nodes when needed.
     
-    Purpose: Validates action progressive widening
+    Purpose: Validates that progressive widening correctly expands action nodes in belief tree according to DPW algorithm
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with initial belief and PFT_DPW planner with progressive widening parameters (alpha_a=0.5, k_a=1.0)
+    When: action_progressive_widening is called multiple times on the same belief node
+    Then: New action nodes are progressively added to belief node children (1 after first call, 2 after second call)
     
     Test type: unit
     """
@@ -118,11 +118,11 @@ def test_action_progressive_widening(planner, initial_belief):
 def test_simulate_path(planner, initial_belief, environment):
     """Test that path simulation updates node statistics correctly.
     
-    Purpose: Validates simulate path
+    Purpose: Validates that simulate path method correctly updates tree node statistics during MCTS simulation
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with initial belief, PFT_DPW planner, and ContinuousLightDarkPOMDP environment with grid_size and reward bounds
+    When: _simulate_path is called with depth=0 to run a single simulation step
+    Then: Node visit count increases, node is no longer leaf, and return value is within expected reward range (-grid_size*sqrt(2)-10 to 10)
     
     Test type: unit
     """

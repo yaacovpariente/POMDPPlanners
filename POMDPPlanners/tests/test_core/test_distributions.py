@@ -57,13 +57,13 @@ def test_discrete_distribution_sample():
 
 
 def test_discrete_distribution_probability():
-    """Test discrete distribution probability.
+    """Test that DiscreteDistribution correctly calculates probabilities for single and multiple values.
     
-    Purpose: Validates discrete distribution probability
+    Purpose: Validates that discrete distribution probability method returns correct probability values for known distribution
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteDistribution with values [1, 2, 3] and probabilities [0.2, 0.5, 0.3]
+    When: probability method is called with single values, multiple values, and values not in the distribution
+    Then: Correct probabilities are returned (0.5 for value 2, 0.0 for values not in distribution)
     
     Test type: unit
     """
@@ -143,13 +143,13 @@ def test_numpy2d_distribution_sample():
 
 
 def test_numpy2d_distribution_probability():
-    """Test numpy2d distribution probability.
+    """Test that Numpy2DDistribution correctly calculates probabilities for multi-dimensional arrays.
     
-    Purpose: Validates numpy2d distribution probability
+    Purpose: Validates that numpy2d distribution probability method returns correct probability values for 2D array distribution
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Numpy2DDistribution with 2D values [[1,2,3],[4,5,6]] and probabilities [0.2, 0.5, 0.3]
+    When: probability method is called with single arrays, multiple arrays, and arrays not in the distribution
+    Then: Correct probabilities are returned (0.5 for [2,5], 0.0 for arrays not in distribution)
     
     Test type: unit
     """

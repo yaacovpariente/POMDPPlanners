@@ -13,11 +13,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def test_pomcp_comprehensive_usage_example():
     """Test the comprehensive POMCP usage example from the class docstring.
     
-    Purpose: Validates pomcp comprehensive usage example
+    Purpose: Validates that POMCP comprehensive usage example from docstring executes correctly with TigerPOMDP environment
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, POMCP planner with 10 simulations, depth=5, initial belief with 50 particles
+    When: POMCP action method performs MCTS tree search from initial belief
+    Then: Returns valid tiger action, PolicyRunData with tree statistics, and example completes without errors
     
     Test type: example
     """
@@ -61,11 +61,11 @@ def test_pomcp_comprehensive_usage_example():
 def test_pft_dpw_cartpole_usage_example():
     """Test the CartPole usage example from PFT_DPW class docstring.
     
-    Purpose: Validates pft dpw cartpole usage example
+    Purpose: Validates that PFT_DPW CartPole usage example from docstring executes correctly with progressive widening
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: CartPolePOMDP environment, custom CartPoleActionSampler, PFT_DPW with DPW parameters (k_a=2.0, alpha_a=0.5), 5 simulations
+    When: PFT_DPW action method performs MCTS with double progressive widening
+    Then: Returns valid CartPole action [0,1], PolicyRunData with planning metrics, example completes successfully
     
     Test type: example
     """
@@ -126,11 +126,11 @@ def test_pft_dpw_cartpole_usage_example():
 def test_pft_dpw_navigation_usage_example():
     """Test the 2D navigation usage example from PFT_DPW class docstring.
     
-    Purpose: Validates pft dpw navigation usage example
+    Purpose: Validates that NavigationActionSampler from PFT_DPW docstring generates proper 2D velocity vectors within speed constraints
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: NavigationActionSampler with max_velocity=2.0 for 2D navigation tasks
+    When: ActionSampler samples multiple 2D velocity actions with random angles and speeds
+    Then: All actions are 2D numpy arrays, speeds <= max_velocity, actions show appropriate randomness
     
     Test type: example
     """
@@ -185,11 +185,11 @@ def test_pft_dpw_navigation_usage_example():
 def test_action_sampler_usage_example():
     """Test the ActionSampler usage example from the class docstring.
     
-    Purpose: Validates sampling behavior for action r usage example
+    Purpose: Validates that ContinuousControlSampler from ActionSampler docstring generates uniform samples within specified bounds
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: ContinuousControlSampler with action_bounds=(-2.0, 2.0) and action_dim=4 for continuous control
+    When: ActionSampler samples multiple 4D continuous actions uniformly from bounds
+    Then: All actions are 4D numpy arrays, values within [-2.0, 2.0], consistent dimensionality across samples
     
     Test type: example
     """
@@ -239,11 +239,11 @@ def test_action_sampler_usage_example():
 def test_path_simulation_policy_custom_mcts_example():
     """Test the custom MCTS implementation from PathSimulationPolicy docstring.
     
-    Purpose: Validates path simulation policy custom mcts example
+    Purpose: Validates that CustomMCTS implementation from PathSimulationPolicy docstring performs UCB1-based tree search correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Custom MCTS class extending PathSimulationPolicy, TigerPOMDP environment, UCB1 exploration=1.41, 5 simulations
+    When: CustomMCTS executes _simulate_path with UCB1 action selection and random rollouts
+    Then: Returns valid tiger action, PolicyRunData with tree metrics, custom MCTS implementation works correctly
     
     Test type: example
     """
@@ -366,11 +366,11 @@ def test_path_simulation_policy_custom_mcts_example():
 def test_sparse_pft_tiger_usage_example():
     """Test the Tiger POMDP usage example from SparsePFT class docstring.
     
-    Purpose: Validates sparse pft tiger usage example
+    Purpose: Validates that SparsePFT Tiger usage example from docstring executes with controlled branching parameters
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, SparsePFT with belief_child_num=3, enhanced exploration beta_ucb=2.0, 8 simulations
+    When: SparsePFT action method performs sparse tree search with controlled observation node branching
+    Then: Returns valid tiger action, PolicyRunData with tree statistics, example provides access to collected metrics
     
     Test type: example
     """
@@ -425,11 +425,11 @@ def test_sparse_pft_tiger_usage_example():
 def test_sparse_pft_parameter_comparison_example():
     """Test the parameter comparison example from SparsePFT class docstring.
     
-    Purpose: Validates sparse pft parameter comparison example
+    Purpose: Validates that SparsePFT parameter comparison from docstring demonstrates conservative vs aggressive planning strategies
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Two SparsePFT configurations - conservative (low exploration, fewer children) vs aggressive (high exploration, more children)
+    When: Both planners execute action selection on same TigerPOMDP initial belief
+    Then: Both return valid tiger actions and policy data, demonstrating different exploration strategies work correctly
     
     Test type: example
     """
@@ -498,11 +498,11 @@ def test_sparse_pft_parameter_comparison_example():
 def test_pomcpow_comprehensive_usage_example():
     """Test the comprehensive POMCPOW usage example from the class docstring.
     
-    Purpose: Validates pomcpow comprehensive usage example
+    Purpose: Validates that POMCPOW comprehensive usage example from docstring executes with double progressive widening correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, DiscreteActionSampler, POMCPOW with DPW parameters (k_o=3.0, k_a=3.0, alpha=0.5), 10 simulations
+    When: POMCPOW action method performs MCTS with progressive widening on actions and observations
+    Then: Returns valid tiger action, PolicyRunData with tree metrics, progressive widening strategy works correctly
     
     Test type: example
     """
@@ -570,11 +570,11 @@ def test_pomcpow_comprehensive_usage_example():
 def test_mcts_algorithms_integration():
     """Test that all MCTS algorithms work together and can be compared.
     
-    Purpose: Validates mcts algorithms integration
+    Purpose: Validates that all MCTS algorithms (POMCP, SparsePFT, PFT_DPW, POMCPOW) integrate correctly with same environment
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, all four MCTS planners with consistent configurations, initial belief with 30 particles
+    When: All planners execute action selection on same belief state and report space information
+    Then: All return valid tiger actions, collect tree metrics, report correct action space types, and algorithms are comparable
     
     Test type: integration
     """

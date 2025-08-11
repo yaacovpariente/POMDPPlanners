@@ -11,13 +11,13 @@ def tiger_pomdp():
 
 
 def test_initialization(tiger_pomdp):
-    """Test initialization.
+    """Test TigerPOMDP environment initialization and basic attributes.
     
-    Purpose: Validates proper initialization of 
+    Purpose: Validates that TigerPOMDP initializes correctly with expected states, actions, and observations
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: A TigerPOMDP environment with discount_factor=0.95
+    When: Environment instance is created
+    Then: Environment has correct attributes: discount_factor=0.95, states (tiger_left, tiger_right), actions (listen, open_left, open_right), observations (hear_left, hear_right, hear_nothing)
     
     Test type: unit
     """
@@ -28,13 +28,13 @@ def test_initialization(tiger_pomdp):
 
 
 def test_get_actions(tiger_pomdp):
-    """Test get actions.
+    """Test action space retrieval.
     
-    Purpose: Validates get actions
+    Purpose: Validates that TigerPOMDP get_actions method returns the correct action space
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment with default configuration
+    When: get_actions method is called
+    Then: Returns list of 3 actions: listen, open_left, open_right, representing all available actions in the Tiger environment
     
     Test type: unit
     """
@@ -44,13 +44,13 @@ def test_get_actions(tiger_pomdp):
 
 
 def test_initial_state_distribution(tiger_pomdp):
-    """Test initial state distribution.
+    """Test initial state distribution sampling.
     
-    Purpose: Validates initial state distribution
+    Purpose: Validates that TigerPOMDP initial state distribution works correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment
+    When: Initial state distribution is sampled 100 times
+    Then: All samples are valid states (tiger_left or tiger_right) and both states appear, demonstrating proper distribution
     
     Test type: unit
     """
@@ -62,13 +62,13 @@ def test_initial_state_distribution(tiger_pomdp):
 
 
 def test_initial_observation_distribution(tiger_pomdp):
-    """Test initial observation distribution.
+    """Test initial observation distribution sampling.
     
-    Purpose: Validates initial observation distribution
+    Purpose: Validates that TigerPOMDP initial observation distribution works correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment
+    When: Initial observation distribution is sampled 10 times
+    Then: All samples return "hear_nothing", confirming that initial observations are always "hear_nothing"
     
     Test type: unit
     """
@@ -78,13 +78,13 @@ def test_initial_observation_distribution(tiger_pomdp):
 
 
 def test_state_transition_listen(tiger_pomdp):
-    """Test state transition listen.
+    """Test state transition for listen action.
     
-    Purpose: Validates state transition listen
+    Purpose: Validates that TigerPOMDP listen action doesn't change the state
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)
+    When: State transition model is created for listen action and next state is sampled
+    Then: All samples return the same state as the input state, confirming that listening doesn't change the tiger's position
     
     Test type: unit
     """
@@ -96,13 +96,13 @@ def test_state_transition_listen(tiger_pomdp):
 
 
 def test_state_transition_open_door(tiger_pomdp):
-    """Test state transition open door.
+    """Test state transition for open door actions.
     
-    Purpose: Validates state transition open door
+    Purpose: Validates that TigerPOMDP open door actions randomly place tiger behind either door
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment starting from tiger_left state and both open actions (open_left, open_right)
+    When: State transition model is created for open actions and next states are sampled 100 times
+    Then: All samples are valid states and both states appear, demonstrating random placement after opening doors
     
     Test type: unit
     """
@@ -115,13 +115,13 @@ def test_state_transition_open_door(tiger_pomdp):
 
 
 def test_observation_model_listen(tiger_pomdp):
-    """Test observation model listen.
+    """Test observation model for listen action.
     
-    Purpose: Validates observation model listen
+    Purpose: Validates that TigerPOMDP listen action provides mostly correct observations with some noise
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)
+    When: Observation model is created for listen action and observations are sampled 100 times
+    Then: Most observations are correct (hear_left for tiger_left, hear_right for tiger_right) with approximately 85% accuracy
     
     Test type: unit
     """
@@ -138,13 +138,13 @@ def test_observation_model_listen(tiger_pomdp):
 
 
 def test_observation_model_open_door(tiger_pomdp):
-    """Test observation model open door.
+    """Test observation model for open door actions.
     
-    Purpose: Validates observation model open door
+    Purpose: Validates that TigerPOMDP open door actions always provide "hear_nothing" observations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment and both states (tiger_left, tiger_right) with both open actions (open_left, open_right)
+    When: Observation model is created for open actions and observations are sampled 10 times
+    Then: All samples return "hear_nothing", confirming that opening doors provides no auditory information
     
     Test type: unit
     """
@@ -157,23 +157,13 @@ def test_observation_model_open_door(tiger_pomdp):
 
 
 def test_reward_func_listen(tiger_pomdp):
-    """Test reward func open door.
+    """Test reward function for listen action.
     
-    Purpose: Validates reward func open door
+    Purpose: Validates that TigerPOMDP listen action always provides -1.0 reward
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
-    """Test reward func listen.
-    
-    Purpose: Validates reward func listen
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)
+    When: Reward function is called with listen action for each state
+    Then: All calls return -1.0, confirming that listening always incurs a small penalty
     
     Test type: unit
     """
@@ -183,13 +173,13 @@ def test_reward_func_listen(tiger_pomdp):
 
 
 def test_reward_func_open_door(tiger_pomdp):
-    """Test is terminal.
+    """Test reward function for open door actions.
     
-    Purpose: Validates is terminal
+    Purpose: Validates that TigerPOMDP open door actions provide correct rewards based on tiger location
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)
+    When: Reward function is called with open actions for each state
+    Then: Returns -100.0 for opening door with tiger, 10.0 for opening door with treasure, demonstrating correct reward structure
     
     Test type: unit
     """
@@ -203,114 +193,133 @@ def test_reward_func_open_door(tiger_pomdp):
 
 
 def test_is_terminal(tiger_pomdp):
+    """Test terminal state detection.
+    
+    Purpose: Validates that TigerPOMDP correctly identifies terminal states
+    
+    Given: A TigerPOMDP environment and all possible states
+    When: is_terminal method is called for each state
+    Then: All states return False, confirming that TigerPOMDP currently has no terminal states
+    
+    Test type: unit
+    """
     # Currently always returns False
     for state in tiger_pomdp.states:
         assert not tiger_pomdp.is_terminal(state)
 
 
 class TestTigerPOMDPConfigId:
-    """Test that config_id changes with different discount factor.
+    """Test suite for TigerPOMDP config_id functionality.
     
-    Purpose: Validates config_id behavior for  different discount factor
+    Purpose: Validates that TigerPOMDP config_id generates proper identifiers and changes with configuration differences
     
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    Given: Various TigerPOMDP configurations with different parameters
+    When: Config IDs are generated and compared
+    Then: Config IDs behave correctly: consistent for same config, different for different configs, proper format, and deterministic
     
     Test type: configuration
     """
     
     def test_config_id_consistency(self, tiger_pomdp: TigerPOMDP):
-        """Test that config_id changes with different states.
-    
-    Purpose: Validates config_id behavior for  different states
-    
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
-    
-    Test type: configuration
-    """
+        """Test that config_id is consistent for identical configurations.
+        
+        Purpose: Validates that TigerPOMDP config_id generates consistent identifiers for identical configurations
+        
+        Given: Two TigerPOMDP environments with identical discount_factor=0.95
+        When: Config IDs are generated for both environments
+        Then: Both environments have identical config_ids, demonstrating consistency for same configuration
+        
+        Test type: configuration
+        """
         other_env = TigerPOMDP(discount_factor=0.95)
         assert tiger_pomdp.config_id == other_env.config_id
     
     def test_config_id_different_discount_factor(self, tiger_pomdp: TigerPOMDP):
-        """Test that config_id changes with different actions.
-    
-    Purpose: Validates config_id behavior for  different actions
-    
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
-    
-    Test type: configuration
-    """
+        """Test that config_id changes with different discount factors.
+        
+        Purpose: Validates that TigerPOMDP config_id generates different identifiers for different discount factors
+        
+        Given: Two TigerPOMDP environments with different discount factors (0.95 vs 0.8)
+        When: Config IDs are generated for both environments
+        Then: Environments have different config_ids, demonstrating uniqueness for different configurations
+        
+        Test type: configuration
+        """
         other_env = TigerPOMDP(discount_factor=0.8)
         assert tiger_pomdp.config_id != other_env.config_id
     
     def test_config_id_different_states(self, tiger_pomdp: TigerPOMDP):
-        """Test that config_id changes with different observations.
-    
-    Purpose: Validates config_id behavior for  different observations
-    
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
-    
-    Test type: configuration
-    """
+        """Test that config_id changes with different states.
+        
+        Purpose: Validates that TigerPOMDP config_id generates different identifiers for different state configurations
+        
+        Given: Two TigerPOMDP environments with different states (2 states vs 3 states including tiger_middle)
+        When: Config IDs are generated for both environments
+        Then: Environments have different config_ids, demonstrating uniqueness for different state configurations
+        
+        Test type: configuration
+        """
         other_env = TigerPOMDP(discount_factor=0.95)
         other_env.states = ["tiger_left", "tiger_right", "tiger_middle"]  # Different states
         assert tiger_pomdp.config_id != other_env.config_id
     
     def test_config_id_different_actions(self, tiger_pomdp: TigerPOMDP):
-        """Test that config_id is a valid SHA-256 hash.
-    
-    Purpose: Validates config_id behavior for  format
-    
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
-    
-    Test type: configuration
-    """
+        """Test that config_id changes with different actions.
+        
+        Purpose: Validates that TigerPOMDP config_id generates different identifiers for different action configurations
+        
+        Given: Two TigerPOMDP environments with different actions (3 actions vs 4 actions including wait)
+        When: Config IDs are generated for both environments
+        Then: Environments have different config_ids, demonstrating uniqueness for different action configurations
+        
+        Test type: configuration
+        """
         other_env = TigerPOMDP(discount_factor=0.95)
         other_env.actions = ["listen", "open_left", "open_right", "wait"]  # Different actions
         assert tiger_pomdp.config_id != other_env.config_id
     
     def test_config_id_different_observations(self, tiger_pomdp: TigerPOMDP):
-        """Test that config_id changes with different observations."""
+        """Test that config_id changes with different observations.
+        
+        Purpose: Validates that TigerPOMDP config_id generates different identifiers for different observation configurations
+        
+        Given: Two TigerPOMDP environments with different observations (3 observations vs 4 observations including hear_both)
+        When: Config IDs are generated for both environments
+        Then: Environments have different config_ids, demonstrating uniqueness for different observation configurations
+        
+        Test type: configuration
+        """
         other_env = TigerPOMDP(discount_factor=0.95)
         other_env.observations = ["hear_left", "hear_right", "hear_nothing", "hear_both"]  # Different observations
         assert tiger_pomdp.config_id != other_env.config_id
     
     def test_config_id_format(self, tiger_pomdp: TigerPOMDP):
-        """Test that config_id is deterministic (same input always produces same output).
-    
-    Purpose: Validates config_id behavior for  deterministic
-    
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
-    
-    Test type: configuration
-    """
+        """Test that config_id is a valid SHA-256 hash.
+        
+        Purpose: Validates that TigerPOMDP config_id generates properly formatted SHA-256 hash identifiers
+        
+        Given: A TigerPOMDP environment with specific configuration
+        When: Config ID is generated for the environment
+        Then: Returns a 64-character string containing only valid hexadecimal characters (0-9, a-f)
+        
+        Test type: configuration
+        """
         config_id = tiger_pomdp.config_id
         assert isinstance(config_id, str)
         assert len(config_id) == 64  # SHA-256 hash length
         assert all(c in '0123456789abcdef' for c in config_id)  # Valid hex characters
     
     def test_config_id_deterministic(self, tiger_pomdp: TigerPOMDP):
-        """Test metrics for a perfect agent that always opens the correct door.
-    
-    Purpose: Validates compute metrics perfect agent
-    
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
-    
-    Test type: unit
-    """
+        """Test that config_id is deterministic (same input always produces same output).
+        
+        Purpose: Validates that TigerPOMDP config_id generates deterministic identifiers for identical configurations
+        
+        Given: A TigerPOMDP environment with specific configuration
+        When: Config ID is generated multiple times for the same environment
+        Then: All generated config_ids are identical, demonstrating deterministic behavior
+        
+        Test type: unit
+        """
         config_id1 = tiger_pomdp.config_id
         config_id2 = tiger_pomdp.config_id
         assert config_id1 == config_id2
@@ -320,7 +329,16 @@ class TestTigerPOMDPMetrics:
     """Test suite for TigerPOMDP compute_metrics functionality."""
     
     def test_compute_metrics_perfect_agent(self, tiger_pomdp: TigerPOMDP):
-        """Test metrics for a perfect agent that always opens the correct door."""
+        """Test metrics for a perfect agent that always opens the correct door.
+        
+        Purpose: Validates that TigerPOMDP compute_metrics correctly calculates success rate and average listens for perfect performance
+        
+        Given: A TigerPOMDP environment and 10 perfect agent histories (listen 3 times then open correct door)
+        When: compute_metrics is called with the perfect agent histories
+        Then: Returns 100% success rate and average of 3.0 listens, confirming perfect agent metrics
+        
+        Test type: unit
+        """
         from POMDPPlanners.core.simulation import History, StepData
         
         # Create histories where agent always opens correct door
@@ -374,7 +392,16 @@ class TestTigerPOMDPMetrics:
         assert listens_metric.value == 3.0
     
     def test_compute_metrics_failing_agent(self, tiger_pomdp: TigerPOMDP):
-        """Test metrics for an agent that always opens the wrong door."""
+        """Test metrics for an agent that always opens the wrong door.
+        
+        Purpose: Validates that TigerPOMDP compute_metrics correctly calculates success rate and average listens for failing performance
+        
+        Given: A TigerPOMDP environment and 10 failing agent histories (listen 2 times then open wrong door)
+        When: compute_metrics is called with the failing agent histories
+        Then: Returns 0% success rate and average of 2.0 listens, confirming failing agent metrics
+        
+        Test type: unit
+        """
         from POMDPPlanners.core.simulation import History, StepData
         
         # Create histories where agent always opens wrong door
@@ -426,7 +453,16 @@ class TestTigerPOMDPMetrics:
         assert listens_metric.value == 2.0
     
     def test_compute_metrics_mixed_performance(self, tiger_pomdp: TigerPOMDP):
-        """Test metrics for an agent with mixed performance."""
+        """Test metrics for an agent with mixed performance.
+        
+        Purpose: Validates that TigerPOMDP compute_metrics correctly calculates success rate and average listens for mixed performance
+        
+        Given: A TigerPOMDP environment and 10 mixed performance histories (varying listens, alternating correct/incorrect actions)
+        When: compute_metrics is called with the mixed performance histories
+        Then: Returns 50% success rate and average of 1.9 listens, confirming mixed performance metrics
+        
+        Test type: unit
+        """
         from POMDPPlanners.core.simulation import History, StepData
         
         # Create histories with mixed success/failure
@@ -478,7 +514,16 @@ class TestTigerPOMDPMetrics:
         assert listens_metric.value == 1.9
     
     def test_compute_metrics_empty_histories(self, tiger_pomdp: TigerPOMDP):
-        """Test metrics with empty history list."""
+        """Test metrics with empty history list.
+        
+        Purpose: Validates that TigerPOMDP compute_metrics handles empty history lists correctly
+        
+        Given: A TigerPOMDP environment and empty history list []
+        When: compute_metrics is called with empty histories
+        Then: Returns 0% success rate and 0 listens, confirming proper handling of empty input
+        
+        Test type: unit
+        """
         metrics = tiger_pomdp.compute_metrics([])
         
         # Should have 0% success rate

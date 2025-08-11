@@ -141,11 +141,11 @@ def test_invalid_initialization(environment, discount_factor, depth, exploration
 def test_action_selection(planner, belief, environment):
     """Test action selection.
     
-    Purpose: Validates action selection
+    Purpose: Validates that POMCP action selection returns valid TigerPOMDP actions through MCTS search
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCP planner with TigerPOMDP environment, WeightedParticleBelief with 100 particles, 100 simulations
+    When: action method performs MCTS search and selects best action
+    Then: Returns list with single valid tiger action (listen/open_left/open_right) and proper PolicyRunData
     
     Test type: unit
     """
@@ -158,11 +158,11 @@ def test_action_selection(planner, belief, environment):
 def test_search_behavior_with_initial_belief(planner, belief, environment):
     """Test search behavior with initial belief.
     
-    Purpose: Validates search behavior with initial belief
+    Purpose: Validates that POMCP search behavior produces consistent action selection using initial belief state
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCP planner with initial TigerPOMDP belief state containing 100 particles
+    When: action method executes MCTS search from initial belief
+    Then: Returns consistent single-element action list with valid tiger actions
     
     Test type: unit
     """
@@ -176,11 +176,11 @@ def test_search_behavior_with_initial_belief(planner, belief, environment):
 def test_random_rollout(planner):
     """Test random rollout.
     
-    Purpose: Validates random rollout
+    Purpose: Validates that random rollout simulation returns finite reward values for MCTS value estimation
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCP planner with TigerPOMDP environment, initial state "tiger_left", rollout depth=0
+    When: random_rollout performs simulation from given state
+    Then: Returns finite float value representing estimated future reward
     
     Test type: unit
     """
@@ -192,11 +192,11 @@ def test_random_rollout(planner):
 def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles):
     """Test integration with tiger pomdp.
     
-    Purpose: Validates integration with tiger pomdp
+    Purpose: Validates that POMCP integrates correctly with TigerPOMDP environment for complete POMDP planning workflow
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCP planner, TigerPOMDP with discount_factor=0.95, initial belief with 100 particles
+    When: Full MCTS planning cycle executes including action selection and belief updates
+    Then: Valid tiger actions selected, belief updates work correctly, and environment state transitions function properly
     
     Test type: integration
     """
@@ -223,11 +223,11 @@ def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles)
 def test_construct_tree_using_timeout(environment, discount_factor, depth, exploration_constant):
     """Test construct tree using timeout.
     
-    Purpose: Validates construct tree using timeout
+    Purpose: Validates that POMCP tree construction terminates correctly when timeout constraint is reached
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCP planner with 1-second timeout instead of fixed simulation count, TigerPOMDP environment
+    When: MCTS tree construction runs until timeout expires
+    Then: Tree construction completes within timeout, action is selected, and tree structure is valid
     
     Test type: unit
     """
@@ -259,11 +259,11 @@ def test_construct_tree_using_timeout(environment, discount_factor, depth, explo
 def test_construct_tree_using_n_simulations(environment, discount_factor, depth, exploration_constant):
     """Test construct tree using n simulations.
     
-    Purpose: Validates construct tree using n simulations
+    Purpose: Validates that POMCP tree construction completes exactly the specified number of MCTS simulations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCP planner with n_simulations=50, TigerPOMDP environment, initial belief
+    When: MCTS tree construction executes exactly 50 simulations
+    Then: Tree construction completes, action is selected, and simulation count is respected
     
     Test type: unit
     """
@@ -297,11 +297,11 @@ def test_construct_tree_using_n_simulations(environment, discount_factor, depth,
 def test_tree_structure_construction(environment, discount_factor, depth, exploration_constant):
     """Test tree structure construction.
     
-    Purpose: Validates tree structure construction
+    Purpose: Validates that POMCP builds proper tree structure with BeliefNode and ActionNode hierarchy during MCTS
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCP planner with 100 simulations, TigerPOMDP environment, initial belief
+    When: MCTS tree construction creates belief-action tree structure
+    Then: Tree has root BeliefNode, action children, belief grandchildren, and proper parent-child relationships
     
     Test type: unit
     """
@@ -352,11 +352,11 @@ def test_tree_structure_construction(environment, discount_factor, depth, explor
 def test_sanity_pomdp_action_selection():
     """Test sanity pomdp action selection.
     
-    Purpose: Validates sanity pomdp action selection
+    Purpose: Validates that POMCP correctly handles SanityPOMDP environment with deterministic optimal action selection
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SanityPOMDP environment with known optimal actions, POMCP planner with 50 simulations
+    When: MCTS search determines action selection in deterministic environment
+    Then: Selected action is valid for SanityPOMDP and planning completes without errors
     
     Test type: unit
     """

@@ -15,11 +15,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 def test_unit_circle_action_sampler_basic_usage():
     """Test the basic usage example from UnitCircleActionSampler docstring.
     
-    Purpose: Validates sampling behavior for unit circle action r basic usage
+    Purpose: Validates that UnitCircleActionSampler generates 2D unit circle actions within magnitude limits for continuous navigation
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: ContinuousLightDarkPOMDP environment, UnitCircleActionSampler with max_action_magnitude=2.0, PFT_DPW planner integration
+    When: ActionSampler generates multiple 2D actions and integrates with PFT_DPW for planning
+    Then: All actions are 2D numpy arrays with magnitude ≤2.0, planner integration successful with valid action output
     
     Test type: example
     """
@@ -83,11 +83,11 @@ def test_unit_circle_action_sampler_basic_usage():
 def test_unit_circle_action_sampler_magnitude_comparison():
     """Test the magnitude comparison example from UnitCircleActionSampler docstring.
     
-    Purpose: Validates sampling behavior for unit circle action r magnitude comparison
+    Purpose: Validates that UnitCircleActionSampler supports different movement strategies through configurable magnitude limits
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: Conservative sampler (max_magnitude=0.5) vs aggressive sampler (max_magnitude=2.0), 20 samples each
+    When: Both samplers generate action distributions with different magnitude constraints
+    Then: Conservative actions ≤0.5, aggressive actions ≤2.0, aggressive max > conservative max, demonstrating different movement strategies
     
     Test type: unit
     """
@@ -135,11 +135,11 @@ def test_unit_circle_action_sampler_magnitude_comparison():
 def test_config_loader_basic_usage():
     """Test the basic usage example from load_config docstring.
     
-    Purpose: Validates config loader basic usage
+    Purpose: Validates that load_config correctly parses YAML configuration files with environment, planners, and simulation sections
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Temporary YAML config with TigerPOMDP environment, two planners (POMCP, PFT_DPW), and simulation parameters
+    When: load_config parses the YAML file structure
+    Then: Returns dict with correct sections, environment name=TigerPOMDP, 2 planners, episodes_per_run=100
     
     Test type: example
     """
@@ -217,11 +217,11 @@ def test_config_loader_basic_usage():
 def test_config_loader_environment_integration():
     """Test environment integration example from load_config docstring.
     
-    Purpose: Validates config loader environment integration
+    Purpose: Validates that load_config enables seamless environment and planner creation from configuration files
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: YAML config with TigerPOMDP environment (discount=0.95) and POMCP planner settings
+    When: Config is loaded and used to create actual TigerPOMDP and POMCP instances
+    Then: Environment created with correct discount factor, planner created with correct name, integration successful
     
     Test type: integration
     """
@@ -296,11 +296,11 @@ def test_config_loader_environment_integration():
 def test_logger_basic_usage():
     """Test the basic logger usage example from get_logger docstring.
     
-    Purpose: Validates logger basic usage
+    Purpose: Validates that get_logger creates functional loggers with correct names, levels, and handler setup
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Logger name="POMCP_Tiger", level=logging.INFO
+    When: get_logger creates logger instance with specified parameters
+    Then: Logger has correct name, INFO level or lower, at least one handler, callable methods (info/warning/error)
     
     Test type: example
     """
@@ -340,11 +340,11 @@ def test_logger_basic_usage():
 def test_logger_file_logging():
     """Test file logging example from get_logger docstring.
     
-    Purpose: Validates logger file logging
+    Purpose: Validates that get_logger supports file-based logging for experiment tracking with proper directory structure
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Logger name="TigerExperiment", output_dir=temporary experiment directory, console_output=False
+    When: Logger setup creates logs directory and writes experiment tracking messages
+    Then: Logs directory created, log file created with non-zero size, experiment messages successfully written
     
     Test type: unit
     """
@@ -399,11 +399,11 @@ def test_logger_file_logging():
 def test_cvar_estimator_basic_usage():
     """Test the basic CVaR usage example from cvar_estimator docstring.
     
-    Purpose: Validates cvar estimator basic usage
+    Purpose: Validates that cvar_estimator calculates risk metrics for algorithm performance analysis using tail risk measures
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Algorithm returns array [12.5, 8.3, 15.7, -2.1, 9.8, 13.2, 6.4, 11.0, -1.5, 14.3], alpha values 0.9 and 0.95
+    When: cvar_estimator computes mean return, CVaR(90%), and CVaR(95%) for risk analysis
+    Then: All values are numeric, CVaR ≥ corresponding quantile, risk metrics calculated correctly for worst-case scenarios
     
     Test type: example
     """
@@ -445,11 +445,11 @@ def test_cvar_estimator_basic_usage():
 def test_cvar_estimator_algorithm_comparison():
     """Test algorithm comparison example from cvar_estimator docstring.
     
-    Purpose: Validates cvar estimator algorithm comparison
+    Purpose: Validates that cvar_estimator enables risk-adjusted performance comparison between POMDP planning algorithms
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCP returns and PFT_DPW returns from experimental data, alpha=0.9 for tail risk analysis
+    When: cvar_estimator computes mean and CVaR(90%) for both algorithms to compare risk-adjusted performance
+    Then: All metrics are numeric, enabling comparative analysis of algorithm performance considering worst-case scenarios
     
     Test type: unit
     """
@@ -490,11 +490,11 @@ def test_cvar_estimator_algorithm_comparison():
 def test_confidence_interval_basic_usage():
     """Test the basic confidence interval usage example.
     
-    Purpose: Validates confidence interval basic usage
+    Purpose: Validates that confidence_interval calculates statistical confidence bounds for algorithm performance comparison
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCP and PFT_DPW reward data from multiple runs, confidence=0.95 for statistical analysis
+    When: confidence_interval computes 95% confidence bounds for both algorithm reward distributions
+    Then: CI tuples with lower≤upper bounds, CI contains mean, enables statistical significance testing between algorithms
     
     Test type: example
     """
@@ -549,11 +549,11 @@ def test_confidence_interval_basic_usage():
 def test_confidence_interval_multi_algorithm():
     """Test multi-algorithm confidence interval example.
     
-    Purpose: Validates confidence interval multi algorithm
+    Purpose: Validates that confidence_interval supports comprehensive statistical analysis across multiple POMDP planning algorithms
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Performance data for 4 algorithms (POMCP, PFT_DPW, SparsePFT, OpenLoop) with confidence=0.95
+    When: confidence_interval computes statistical bounds for comparative study analysis
+    Then: All algorithms have valid CIs containing means, positive CI widths, enabling systematic performance comparison
     
     Test type: unit
     """
@@ -607,11 +607,11 @@ def test_confidence_interval_multi_algorithm():
 def test_tree_statistics_basic_usage():
     """Test the basic tree statistics usage example.
     
-    Purpose: Validates tree statistics basic usage
+    Purpose: Validates that tree statistics extraction provides MCTS exploration analysis metrics from planner run data
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCP planner with TigerPOMDP environment, 20 simulations, depth=5, initial belief with 50 particles
+    When: POMCP executes planning and tree statistics are extracted from PolicyRunData
+    Then: Metrics include min/max actions visit counts and entropy, all values are numeric and non-NaN
     
     Test type: example
     """
@@ -668,11 +668,11 @@ def test_tree_statistics_basic_usage():
 def test_tree_statistics_algorithm_comparison():
     """Test algorithm comparison example from tree statistics.
     
-    Purpose: Validates tree statistics algorithm comparison
+    Purpose: Validates that tree statistics enable comparative analysis of MCTS exploration patterns between different algorithms
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: POMCP and SparsePFT planners with TigerPOMDP environment, 15 simulations each, initial belief with 30 particles
+    When: Both algorithms execute planning and tree exploration statistics are compared
+    Then: Both provide min/max visit counts and entropy metrics, enabling analysis of exploration strategies and visit distribution patterns
     
     Test type: unit
     """

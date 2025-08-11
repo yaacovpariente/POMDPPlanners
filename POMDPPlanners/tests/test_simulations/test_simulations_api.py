@@ -70,11 +70,11 @@ class TestSimulationsAPI:
     def test_init(self):
         """Test SimulationsAPI initialization.
     
-    Purpose: Validates init
+    Purpose: Validates that SimulationsAPI can be instantiated without errors
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: No parameters required for SimulationsAPI constructor
+    When: SimulationsAPI instance is created
+    Then: Object is properly initialized as SimulationsAPI instance
     
     Test type: unit
     """
@@ -88,11 +88,11 @@ class TestSimulationsAPI:
     ):
         """Test successful execution of run_multiple_environments_and_policies_local_run.
     
-    Purpose: Validates run multiple environments and policies local run success
+    Purpose: Validates that local simulation execution completes successfully and returns expected results structure
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, SparsePFT policy, 2 episodes, 10 steps, alpha=0.1, confidence_interval_level=0.95, single job execution
+    When: run_multiple_environments_and_policies_local_run is executed with valid parameters
+    Then: Returns dict with environment-policy results (2 episodes) and stats DataFrame with environment, policy, success_rate, average_listens columns
     
     Test type: integration
     """
@@ -157,11 +157,11 @@ class TestSimulationsAPI:
     ):
         """Test run_multiple_environments_and_policies_local_run with invalid parameters.
     
-    Purpose: Validates run multiple environments and policies local run invalid params
+    Purpose: Validates that invalid parameter values raise appropriate ValueError exceptions with descriptive messages
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SimulationsAPI instance and sample environment parameters with invalid alpha (-0.1), confidence_interval_level (1.5), and n_jobs (0) values
+    When: run_multiple_environments_and_policies_local_run is called with each invalid parameter
+    Then: ValueError is raised with appropriate error messages for alpha, confidence_interval_level, and n_jobs validation
     
     Test type: integration
     """

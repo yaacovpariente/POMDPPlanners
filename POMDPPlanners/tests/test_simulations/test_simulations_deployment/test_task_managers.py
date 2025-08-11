@@ -71,11 +71,11 @@ def cache_db(temp_cache_dir):
 def test_dask_task_manager_initialization():
     """Test DaskTaskManager initialization and cleanup (no cache_db).
     
-    Purpose: Validates proper initialization of dask task manager 
+    Purpose: Validates that DaskTaskManager initializes correctly with proper client and cache setup
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: DaskTaskManager constructor with default parameters
+    When: DaskTaskManager is initialized as a context manager
+    Then: Task manager has valid client and cache objects, with cache not registered by default
     
     Test type: unit
     """
@@ -87,11 +87,11 @@ def test_dask_task_manager_initialization():
 def test_dask_task_manager_with_cache_clear():
     """Test DaskTaskManager initialization with cache clearing (no cache_db).
     
-    Purpose: Validates dask task manager with cache clear
+    Purpose: Validates that DaskTaskManager can initialize with cache clearing enabled
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DaskTaskManager constructor with clear_cache_on_start=True parameter
+    When: DaskTaskManager is initialized as a context manager
+    Then: Task manager has valid client and cache objects, with cache not registered when cleared
     
     Test type: unit
     """
@@ -103,11 +103,11 @@ def test_dask_task_manager_with_cache_clear():
 def test_dask_task_manager_run_tasks(environment, policy):
     """Test running tasks with DaskTaskManager (no cache_db).
     
-    Purpose: Validates dask task manager run tasks
+    Purpose: Validates that DaskTaskManager can successfully run multiple EpisodeSimulationTask instances
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment, SparsePFT policy, and 2 EpisodeSimulationTask instances
+    When: DaskTaskManager.run_tasks() is called with the task list and identifiers
+    Then: Returns 2 successful results and 2 successful IDs, with each result being a valid History object
     
     Test type: unit
     """
@@ -141,11 +141,11 @@ def test_dask_task_manager_run_tasks(environment, policy):
 def test_dask_task_manager_task_status(environment, policy):
     """Test getting task status with DaskTaskManager (no cache_db).
     
-    Purpose: Validates dask task manager task status
+    Purpose: Validates that DaskTaskManager can submit tasks and retrieve their status information
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A TigerPOMDP environment, SparsePFT policy, and EpisodeSimulationTask
+    When: Task is submitted via submit_tasks() and status is retrieved via get_task_status()
+    Then: Returns status dictionary with task cache key and valid status values (pending, running, or finished)
     
     Test type: unit
     """
@@ -172,11 +172,11 @@ def test_dask_task_manager_task_status(environment, policy):
 def test_joblib_task_manager_initialization(cache_db):
     """Test JoblibTaskManager initialization.
     
-    Purpose: Validates proper initialization of joblib task manager 
+    Purpose: Validates that JoblibTaskManager initializes correctly with cache database and default parameters
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: A cache database fixture and JoblibTaskManager constructor
+    When: JoblibTaskManager is initialized as a context manager with cache_db
+    Then: Task manager has correct default attributes: n_jobs=-1 (all cores), verbose=0, and valid memory object
     
     Test type: unit
     """
@@ -188,11 +188,11 @@ def test_joblib_task_manager_initialization(cache_db):
 def test_joblib_task_manager_with_cache_clear(cache_db):
     """Test JoblibTaskManager initialization with cache clearing.
     
-    Purpose: Validates joblib task manager with cache clear
+    Purpose: Validates that JoblibTaskManager can initialize with cache clearing enabled
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A cache database fixture and JoblibTaskManager constructor with clear_cache_on_start=True
+    When: JoblibTaskManager is initialized as a context manager
+    Then: Task manager has valid memory object and cache is empty after clearing (0 items)
     
     Test type: unit
     """
@@ -204,11 +204,11 @@ def test_joblib_task_manager_with_cache_clear(cache_db):
 def test_joblib_task_manager_run_tasks(cache_db, environment, policy):
     """Test running tasks with JoblibTaskManager.
     
-    Purpose: Validates joblib task manager run tasks
+    Purpose: Validates that JoblibTaskManager can successfully run multiple EpisodeSimulationTask instances with caching
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A cache database, TigerPOMDP environment, SparsePFT policy, and 2 EpisodeSimulationTask instances
+    When: JoblibTaskManager.run_tasks() is called with the task list and identifiers
+    Then: Returns 2 successful results and 2 successful IDs, with each result being a valid History object
     
     Test type: unit
     """
@@ -244,11 +244,11 @@ def test_joblib_task_manager_run_tasks(cache_db, environment, policy):
 def test_joblib_task_manager_cache(cache_db, environment, policy):
     """Test caching behavior of JoblibTaskManager.
     
-    Purpose: Validates joblib task manager cache
+    Purpose: Validates that JoblibTaskManager properly caches task results and reuses them on subsequent runs
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A cache database, TigerPOMDP environment, SparsePFT policy, and EpisodeSimulationTask
+    When: Same task is run twice with identical parameters
+    Then: Second run retrieves result from cache instead of re-executing, demonstrating caching effectiveness
     
     Test type: unit
     """
@@ -302,11 +302,11 @@ def test_joblib_task_manager_cache(cache_db, environment, policy):
 def test_joblib_task_manager_logging(cache_db, environment, policy, temp_cache_dir):
     """Test that JoblibTaskManager writes logs properly.
     
-    Purpose: Validates joblib task manager logging
+    Purpose: Validates that JoblibTaskManager can write logs to specified directory with debug logging enabled
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A cache database, TigerPOMDP environment, SparsePFT policy, EpisodeSimulationTask, and log directory
+    When: JoblibTaskManager runs task with logger_debug=True and cache_dir configured
+    Then: Task executes successfully and generates logs in the specified directory
     
     Test type: unit
     """
@@ -345,11 +345,11 @@ def test_joblib_task_manager_logging(cache_db, environment, policy, temp_cache_d
 def test_joblib_task_manager_logging_with_multiple_tasks(cache_db, environment, policy, temp_cache_dir):
     """Test that JoblibTaskManager logs progress updates for multiple tasks.
     
-    Purpose: Validates joblib task manager logging with multiple tasks
+    Purpose: Validates that JoblibTaskManager can log progress updates when running multiple tasks
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A cache database, TigerPOMDP environment, SparsePFT policy, and 2 EpisodeSimulationTask instances
+    When: JoblibTaskManager runs multiple tasks with logger_debug=True and cache_dir configured
+    Then: All tasks execute successfully and progress logging is generated for multiple task execution
     
     Test type: integration
     """

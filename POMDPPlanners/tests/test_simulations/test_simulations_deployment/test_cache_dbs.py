@@ -92,11 +92,11 @@ def test_disk_cache_db_initialization(temp_cache_dir):
 def test_disk_cache_db_operations(temp_cache_dir, environment, policy):
     """Test basic cache operations (set, get, is_key_in_cache).
     
-    Purpose: Validates disk cache db operations
+    Purpose: Validates that DiskCacheDB correctly implements core cache operations including storage, retrieval, and key existence checking
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiskCacheDB with temporary cache directory, EpisodeSimulationTask with TigerPOMDP environment and SparsePFT policy
+    When: Task is executed and result cached using set(), then retrieved using get() and is_key_in_cache()
+    Then: Cache correctly stores History object, retrieval returns equivalent History with matching discount_factor and step counts, key existence checks work correctly
     
     Test type: unit
     """
@@ -137,11 +137,11 @@ def test_disk_cache_db_operations(temp_cache_dir, environment, policy):
 def test_disk_cache_db_store_and_retrieve(cache_db, environment, policy):
     """Test storing and retrieving tasks from disk cache.
     
-    Purpose: Validates disk cache db store and retrieve
+    Purpose: Validates that DiskCacheDB can store task results with config IDs and retrieve identical History objects
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiskCacheDB instance, EpisodeSimulationTask, and mock History with specific timing and result attributes
+    When: History is stored using task config ID and then retrieved from cache
+    Then: Retrieved History object matches original exactly including discount_factor, timing attributes, and terminal state flag
     
     Test type: unit
     """
@@ -185,11 +185,11 @@ def test_disk_cache_db_store_and_retrieve(cache_db, environment, policy):
 def test_disk_cache_db_clear(cache_db, environment, policy):
     """Test clearing the disk cache.
     
-    Purpose: Validates disk cache db clear
+    Purpose: Validates that DiskCacheDB clear operation removes all cached entries and makes them inaccessible
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiskCacheDB with cached History object stored using task config ID
+    When: clear() method is called on the cache database
+    Then: Previously cached key is no longer found in cache (is_key_in_cache returns False)
     
     Test type: unit
     """

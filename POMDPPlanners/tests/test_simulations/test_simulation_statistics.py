@@ -59,11 +59,11 @@ def get_metric_value(metrics: List[MetricValue], name: str) -> MetricValue:
 def test_compute_statistics_basic():
     """Test compute statistics basic.
     
-    Purpose: Validates compute statistics basic
+    Purpose: Validates that compute_statistics_environment_policy_pair generates comprehensive metrics with confidence intervals for multiple histories
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, 3 histories with different reward sequences, alpha=0.1, confidence_interval_level=0.95
+    When: compute_statistics_environment_policy_pair processes the histories
+    Then: Returns list of MetricValue objects with name, value, lower_confidence_bound, upper_confidence_bound, and policy info variables (test_var=1.0, test_var2=2.0)
     
     Test type: unit
     """
@@ -110,11 +110,11 @@ def test_compute_statistics_basic():
 def test_compute_statistics_single_history():
     """Test compute statistics single history.
     
-    Purpose: Validates compute statistics single history
+    Purpose: Validates that compute_statistics_environment_policy_pair handles minimal dataset with duplicate histories for confidence interval computation
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, 2 identical histories with rewards [1.0, 2.0, 3.0], alpha=0.1, confidence_interval_level=0.95
+    When: compute_statistics_environment_policy_pair processes the duplicate histories
+    Then: Returns valid metrics with all required attributes and policy info variables (test_var=1.0) with consistent confidence bounds
     
     Test type: unit
     """
@@ -151,11 +151,11 @@ def test_compute_statistics_single_history():
 def test_compute_statistics_negative_rewards():
     """Test compute statistics negative rewards.
     
-    Purpose: Validates compute statistics negative rewards
+    Purpose: Validates that compute_statistics_environment_policy_pair correctly handles negative reward scenarios typical in POMDP environments
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, 3 histories with negative reward sequences ([-1,-2,-3], [-2,-3,-4], [-3,-4,-5]), alpha=0.1, confidence_interval_level=0.95
+    When: compute_statistics_environment_policy_pair processes the negative reward histories
+    Then: Returns valid metrics with negative values properly handled and policy info variables (test_var=1.0) correctly computed
     
     Test type: unit
     """
@@ -193,11 +193,11 @@ def test_compute_statistics_negative_rewards():
 def test_compute_statistics_zero_rewards():
     """Test compute statistics zero rewards.
     
-    Purpose: Validates compute statistics zero rewards
+    Purpose: Validates that compute_statistics_environment_policy_pair handles edge case of zero rewards without division errors or invalid statistics
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, 3 histories with all zero rewards [0.0, 0.0, 0.0], alpha=0.1, confidence_interval_level=0.95
+    When: compute_statistics_environment_policy_pair processes the zero reward histories
+    Then: Returns valid metrics with zero values and meaningful confidence intervals, policy info variables (test_var=1.0) correctly computed
     
     Test type: unit
     """
@@ -235,11 +235,11 @@ def test_compute_statistics_zero_rewards():
 def test_compute_statistics_environment_policy_pair():
     """Test compute statistics environment policy pair.
     
-    Purpose: Validates compute statistics environment policy pair
+    Purpose: Validates that compute_statistics_environment_policy_pair works end-to-end with realistic TigerPOMDP scenarios including multi-step episodes
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TigerPOMDP environment, 2 histories with listen-open action sequences yielding -1 + 10*discount rewards, policy info variables (test_var=1.0, test_var2=2.0)
+    When: compute_statistics_environment_policy_pair processes complete episode histories with alpha=0.1, confidence_interval_level=0.95
+    Then: Returns comprehensive metrics with all standard attributes and correctly extracted policy info variable values
     
     Test type: unit
     """
@@ -349,11 +349,11 @@ def test_compute_statistics_environment_policy_pair():
 def test_compute_statistics_environments_policies_comparison():
     """Test compute statistics environments policies comparison.
     
-    Purpose: Validates compute statistics environments policies comparison
+    Purpose: Validates that compute_statistics_environments_policies_comparison correctly processes multiple environment-policy combinations into comparative DataFrame format
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Two TigerPOMDP environments (discount_factor 0.95 vs 0.99), separate policies, histories dict with Policy1 and Policy2, alpha=0.1, confidence_interval_level=0.95
+    When: compute_statistics_environments_policies_comparison processes the multi-environment policy comparison
+    Then: Returns DataFrame with 2 rows, environment/policy columns, standard metrics (average_return, return_cvar), and policy info variable columns with confidence intervals
     
     Test type: unit
     """

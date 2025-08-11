@@ -64,11 +64,11 @@ def test_belief():
 def test_env():
     """Test env.
     
-    Purpose: Validates env
+    Purpose: Provides TestEnvironment fixture for tree node testing with POMDP interface
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: TestEnvironment implementation with discrete spaces, dummy models, and deterministic transitions
+    When: Fixture is used in tree structure tests
+    Then: Returns TestEnvironment instance with proper POMDP interface methods for belief updates
     
     Test type: unit
     """
@@ -117,11 +117,11 @@ def test_action_node_initialization_creates_mcts_tree_node():
 def test_belief_node_initialization(test_belief):
     """Test belief node initialization.
     
-    Purpose: Validates proper initialization of belief node 
+    Purpose: Validates that BeliefNode initializes correctly with belief state and default MCTS values
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: WeightedParticleBelief with particles [1,2] and weights [0.6,0.4], optional parent and data parameters
+    When: BeliefNode instances are created with basic and parent-child configurations
+    Then: Nodes have correct belief reference, default v_value=0.0, visit_count=0, confidence bounds=0.0, and proper tree relationships
     
     Test type: unit
     """
@@ -146,11 +146,11 @@ def test_belief_node_initialization(test_belief):
 def test_tree_structure(test_belief):
     """Test tree structure.
     
-    Purpose: Validates tree structure
+    Purpose: Validates that MCTS tree structure correctly maintains parent-child relationships between BeliefNode and ActionNode
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Root BeliefNode and multiple ActionNodes (action1, action2) with child BeliefNodes
+    When: Tree hierarchy is constructed with proper parent-child assignments
+    Then: Root has correct children tuple, ActionNodes have proper parents, and BeliefNodes maintain correct action parent references
     
     Test type: unit
     """
@@ -172,11 +172,11 @@ def test_tree_structure(test_belief):
 def test_get_optimal_action(test_belief):
     """Test get optimal action.
     
-    Purpose: Validates get optimal action
+    Purpose: Validates that get_optimal_action_cost_setting correctly selects action with lowest cost (highest negative q_value)
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with 3 ActionNode children having different q_values (0.5, 0.8, 0.3)
+    When: get_optimal_action_cost_setting evaluates the action choices
+    Then: Returns action3 with lowest cost (0.3) for cost-minimization MCTS setting
     
     Test type: unit
     """
@@ -200,11 +200,11 @@ def test_get_optimal_action(test_belief):
 def test_node_properties(test_belief):
     """Test node properties.
     
-    Purpose: Validates node properties
+    Purpose: Validates that ActionNode and BeliefNode properties can be updated correctly during MCTS simulation
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: ActionNode and BeliefNode instances with initial default values
+    When: MCTS properties are updated (q_value, visit_count, v_value, confidence bounds)
+    Then: All property updates persist correctly with expected values maintained
     
     Test type: unit
     """
@@ -334,11 +334,11 @@ def test_sample_child_node_no_children():
 def test_get_belief_node_child(test_belief, test_env):
     """Test the get_belief_node_child method of ActionNode.
     
-    Purpose: Validates get belief node child
+    Purpose: Validates that get_belief_node_child correctly retrieves BeliefNode children based on observation matching
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: ActionNode with 3 BeliefNode children having different observations (obs1, obs2, obs3)
+    When: get_belief_node_child is called with existing and non-existing observation identifiers
+    Then: Returns correct BeliefNode for existing observations and None for non-existent observations
     
     Test type: unit
     """
@@ -368,11 +368,11 @@ def test_get_belief_node_child(test_belief, test_env):
 def test_get_belief_node_child_no_children(test_belief, test_env):
     """Test get_belief_node_child with no children.
     
-    Purpose: Validates get belief node child no children
+    Purpose: Validates that get_belief_node_child handles edge case of ActionNode with no children gracefully
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: ActionNode with empty children tuple
+    When: get_belief_node_child is called with any observation identifier
+    Then: Returns None indicating no matching child found
     
     Test type: unit
     """
@@ -386,11 +386,11 @@ def test_get_belief_node_child_no_children(test_belief, test_env):
 def test_get_belief_node_child_duplicate_observations(test_belief, test_env):
     """Test get_belief_node_child with duplicate observations (should return first match).
     
-    Purpose: Validates get belief node child duplicate observations
+    Purpose: Validates that get_belief_node_child returns first matching BeliefNode when multiple children have identical observations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: ActionNode with 2 BeliefNode children both having observation "same_obs"
+    When: get_belief_node_child searches for "same_obs"
+    Then: Returns first child (belief1) with matching observation due to first-match search behavior
     
     Test type: unit
     """
@@ -408,11 +408,11 @@ def test_get_belief_node_child_duplicate_observations(test_belief, test_env):
 def test_get_belief_node_child_none_observation(test_belief, test_env):
     """Test get_belief_node_child with None observation.
     
-    Purpose: Validates get belief node child none observation
+    Purpose: Validates that get_belief_node_child correctly handles None observations using proper equality comparison
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: ActionNode with BeliefNode children having None and string observations
+    When: get_belief_node_child searches for None observation and string observation
+    Then: Returns correct BeliefNode for None observation match and string observation match respectively
     
     Test type: unit
     """

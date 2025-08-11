@@ -52,13 +52,13 @@ def test_safe_velocity_pomdp_initialization():
     assert env.actions == [0, 1, 2, 3]
 
 def test_state_transition():
-    """Test state transition.
+    """Test state transition model with force application.
     
-    Purpose: Validates state transition
+    Purpose: Validates that state transitions correctly update position and velocity when force is applied
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A SafeAntVelocityStateTransition model with state [0.0, 0.0, 1.0, 1.0] and maximum force action 3
+    When: State transition is sampled
+    Then: Next state has correct 4D shape, position changes due to velocity, and velocity changes due to applied force
     
     Test type: unit
     """
@@ -91,13 +91,13 @@ def test_state_transition():
     assert not np.array_equal(next_state[2:], state[2:])
 
 def test_state_transition_no_force():
-    """Test state transition no force.
+    """Test state transition model without force application.
     
-    Purpose: Validates state transition no force
+    Purpose: Validates that state transitions correctly handle damping when no force is applied
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A SafeAntVelocityStateTransition model with state [0.0, 0.0, 1.0, 1.0] and no-force action 0
+    When: State transition is sampled
+    Then: Velocity decreases due to damping effects while maintaining correct state dimensions
     
     Test type: unit
     """
@@ -124,13 +124,13 @@ def test_state_transition_no_force():
     assert np.linalg.norm(next_state[2:]) < np.linalg.norm(state[2:])
 
 def test_observation_model():
-    """Test observation model.
+    """Test observation model with noise addition.
     
-    Purpose: Validates observation model
+    Purpose: Validates that observation model correctly adds noise to position and velocity measurements
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A SafeAntVelocityObservation model with state [0.0, 0.0, 1.0, 1.0] and noise parameters
+    When: Observation is sampled
+    Then: Observation has correct 4D shape and contains noise in both position and velocity components
     
     Test type: unit
     """
@@ -159,13 +159,13 @@ def test_observation_model():
     assert not np.array_equal(observation[2:], state[2:])
 
 def test_reward_function():
-    """Test reward function.
+    """Test reward function for safe and unsafe velocity states.
     
-    Purpose: Validates reward function
+    Purpose: Validates that reward function correctly penalizes safety violations and rewards safe movement
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SafeAntVelocityPOMDP environment with safe_velocity_threshold=2.0 and safety_violation_penalty=-100.0
+    When: Reward is calculated for safe velocity state [0.0, 0.0, 1.0, 1.0] and unsafe velocity state [0.0, 0.0, 2.0, 2.0]
+    Then: Safe state receives positive reward, unsafe state receives negative penalty
     
     Test type: unit
     """
@@ -187,13 +187,13 @@ def test_reward_function():
     assert reward_unsafe < 0  # Negative reward due to safety violation
 
 def test_terminal_state():
-    """Test terminal state.
+    """Test terminal state detection based on velocity threshold.
     
-    Purpose: Validates terminal state
+    Purpose: Validates that environment correctly identifies terminal states when velocity exceeds safety threshold
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SafeAntVelocityPOMDP environment with safe_velocity_threshold=2.0
+    When: is_terminal is called for safe velocity state [0.0, 0.0, 1.0, 1.0] and unsafe velocity state [0.0, 0.0, 3.0, 3.0]
+    Then: Safe state returns False, unsafe state returns True indicating terminal condition
     
     Test type: unit
     """
@@ -211,13 +211,13 @@ def test_terminal_state():
     assert env.is_terminal(state_unsafe)
 
 def test_initial_state_distribution():
-    """Test initial state distribution.
+    """Test initial state distribution sampling and bounds.
     
-    Purpose: Validates initial state distribution
+    Purpose: Validates that initial state distribution generates valid states within expected bounds
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SafeAntVelocityPOMDP environment with default parameters
+    When: Initial state distribution is sampled multiple times
+    Then: All samples have 4D shape, position components are within [-1, 1] bounds, and velocity components are zero
     
     Test type: unit
     """
@@ -239,13 +239,13 @@ def test_initial_state_distribution():
         assert np.allclose(state[2:], 0)
 
 def test_get_actions():
-    """Test get actions.
+    """Test action space retrieval.
     
-    Purpose: Validates get actions
+    Purpose: Validates that environment provides correct discrete action space
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SafeAntVelocityPOMDP environment with default configuration
+    When: get_actions method is called
+    Then: Returns list of 4 actions [0, 1, 2, 3] representing different force levels from no force to maximum force
     
     Test type: unit
     """
@@ -257,13 +257,13 @@ def test_get_actions():
     assert 3 in actions  # Maximum force
 
 def test_is_equal_observation():
-    """Test is equal observation.
+    """Test observation equality comparison.
     
-    Purpose: Validates is equal observation
+    Purpose: Validates that observation equality comparison works correctly for identical and different observations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SafeAntVelocityPOMDP environment and observation pairs
+    When: is_equal_observation is called for identical observations [0.0, 0.0, 1.0, 1.0] and different observations [0.1, 0.0, 1.0, 1.0]
+    Then: Returns True for identical observations, False for different observations
     
     Test type: unit
     """
@@ -279,13 +279,13 @@ def test_is_equal_observation():
     assert not env.is_equal_observation(obs1, obs3)
 
 def test_sample_next_step():
-    """Test sample next step.
+    """Test complete environment step simulation.
     
-    Purpose: Validates sampling behavior for  next step
+    Purpose: Validates that sample_next_step correctly simulates state transitions, observations, and rewards
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: SafeAntVelocityPOMDP environment, initial state [0.0, 0.0, 1.0, 1.0], and action 2 (medium force)
+    When: sample_next_step is called
+    Then: Returns valid next_state, observation, and reward with correct types, shapes, and state changes due to force application
     
     Test type: unit
     """
@@ -314,13 +314,13 @@ def test_sample_next_step():
     assert np.isclose(reward, expected_reward, rtol=1e-10)
 
 def test_compute_metrics():
-    """Test compute metrics.
+    """Test safety metrics computation from simulation histories.
     
-    Purpose: Validates compute metrics
+    Purpose: Validates that environment correctly computes safety violation rates and critical violation rates from episode histories
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SafeAntVelocityPOMDP environment and test histories with different velocity scenarios (safe, mixed safety violations, critical violations)
+    When: compute_metrics is called with the histories
+    Then: Returns correct safety_violation_rate and critical_violation_rate metrics with proper confidence intervals
     
     Test type: unit
     """
@@ -444,13 +444,13 @@ def test_compute_metrics():
     assert metrics_dict["critical_violation_rate"].upper_confidence_bound >= metrics_dict["critical_violation_rate"].value
 
 def test_environment_equality():
-    """Test environment equality.
+    """Test environment equality comparison.
     
-    Purpose: Validates equality comparison for environment 
+    Purpose: Validates that environment equality comparison works correctly for identical and different configurations
     
-    Given: Objects with same or different configurations
+    Given: Two SafeAntVelocityPOMDP environments with identical parameters and one with different discount factor
     When: Equality comparison is performed
-    Then: Objects are correctly identified as equal or unequal
+    Then: Identical environments are equal, environments with different parameters are not equal
     
     Test type: unit
     """
@@ -499,13 +499,13 @@ def test_environment_equality():
     assert env1 != env3
 
 def test_config_id():
-    """Test config id.
+    """Test configuration ID generation and consistency.
     
-    Purpose: Validates config_id behavior for 
+    Purpose: Validates that config_id generates consistent identifiers for identical environments and different identifiers for different configurations
     
-    Given: Belief objects with specific configurations
-    When: Config IDs are generated or compared
-    Then: Config IDs behave as expected (deterministic, unique, etc.)
+    Given: SafeAntVelocityPOMDP environments with same and different parameters
+    When: Config IDs are generated and compared
+    Then: Identical environments have same config_id, different environments have different config_ids
     
     Test type: configuration
     """
@@ -554,13 +554,13 @@ def test_config_id():
     assert env1.config_id != env3.config_id
 
 def test_state_transition_model(pomdp):
-    """Test state transition model.
+    """Test state transition model creation and sampling.
     
-    Purpose: Validates state transition model
+    Purpose: Validates that environment correctly creates state transition models for different actions
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: SafeAntVelocityPOMDP environment and test states with actions 0 and 1
+    When: state_transition_model is called and next states are sampled
+    Then: Returns valid state transition models that produce correctly shaped next states
     
     Test type: unit
     """
@@ -581,13 +581,13 @@ def test_state_transition_model(pomdp):
 
 
 def test_observation_model(pomdp):
-    """Test observation model functionality.
+    """Test observation model creation and sampling.
     
-    Purpose: Validates observation model generates observations from environment states
+    Purpose: Validates that environment correctly creates observation models that generate noisy observations
     
-    Given: SafeAntVelocityPOMDP environment and sample state-action pairs
-    When: Observation model samples observations
-    Then: Valid observations are returned with correct dimensionality
+    Given: SafeAntVelocityPOMDP environment and test state [0.0, 0.0, 0.0, 0.0] with action 0
+    When: observation_model is called and observation is sampled
+    Then: Returns valid observation model that produces correctly shaped observations
     
     Test type: unit
     """
@@ -601,6 +601,16 @@ def test_observation_model(pomdp):
 
 
 def test_initial_state_distribution(pomdp):
+    """Test initial state distribution creation and sampling.
+    
+    Purpose: Validates that environment correctly creates initial state distribution
+    
+    Given: SafeAntVelocityPOMDP environment
+    When: initial_state_dist is called and state is sampled
+    Then: Returns valid initial state distribution that produces correctly shaped states
+    
+    Test type: unit
+    """
     # Test initial state distribution
     dist = pomdp.initial_state_dist()
     state = dist.sample()[0]

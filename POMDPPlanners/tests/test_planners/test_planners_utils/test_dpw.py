@@ -87,11 +87,11 @@ def belief_node_with_children(belief_node):
 def test_action_sampler_abstract_class():
     """Test that ActionSampler is an abstract base class.
     
-    Purpose: Validates sampling behavior for action r abstract class
+    Purpose: Validates that ActionSampler cannot be instantiated directly as it is an abstract base class
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: ActionSampler abstract base class with abstract sample method
+    When: Direct instantiation of ActionSampler is attempted
+    Then: TypeError is raised preventing direct instantiation of abstract class
     
     Test type: unit
     """
@@ -103,11 +103,11 @@ def test_action_sampler_abstract_class():
 def test_concrete_action_sampler_implementation(discrete_action_sampler):
     """Test that concrete ActionSampler implementation works correctly.
     
-    Purpose: Validates sampling behavior for concrete action r implementation
+    Purpose: Validates that TestActionSampler concrete implementation correctly samples from discrete action space
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: TestActionSampler with actions=[0,1,2], multiple sampling operations
+    When: sample method is called repeatedly to test distribution
+    Then: All sampled actions are from the valid action set [0,1,2]
     
     Test type: unit
     """
@@ -123,11 +123,11 @@ def test_concrete_action_sampler_implementation(discrete_action_sampler):
 def test_continuous_action_sampler(continuous_action_sampler):
     """Test continuous action sampler.
     
-    Purpose: Validates sampling behavior for continuous action r
+    Purpose: Validates that TestContinuousActionSampler correctly samples continuous action vectors within bounds
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: TestContinuousActionSampler with bounds=(-1.0,1.0), action_dim=2
+    When: sample method generates continuous action vector
+    Then: Returns 2D numpy array with all values within [-1.0, 1.0] bounds
     
     Test type: unit
     """
@@ -140,11 +140,11 @@ def test_continuous_action_sampler(continuous_action_sampler):
 def test_action_progressive_widening_new_action(belief_node, discrete_action_sampler):
     """Test action progressive widening when a new action should be created.
     
-    Purpose: Validates action progressive widening new action
+    Purpose: Validates that action_progressive_widening creates new ActionNode when progressive widening criteria are met
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Leaf BeliefNode with visit_count=0, TestActionSampler, progressive widening parameters (alpha_a=0.5, k_a=3.0)
+    When: action_progressive_widening determines new action should be created and sampled
+    Then: Creates new ActionNode with valid action from sampler, proper parent-child relationship, belief_node gains 1 child
     
     Test type: unit
     """
@@ -169,11 +169,11 @@ def test_action_progressive_widening_new_action(belief_node, discrete_action_sam
 def test_action_progressive_widening_existing_action(belief_node_with_children, discrete_action_sampler):
     """Test action progressive widening when an existing action should be selected.
     
-    Purpose: Validates action progressive widening existing action
+    Purpose: Validates that action_progressive_widening selects existing ActionNode using UCB1 when widening criteria not met
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with 3 existing ActionNode children, visit_count=4 where floor(4^0.5)=2, floor(3^0.5)=1
+    When: action_progressive_widening determines existing action should be selected via UCB1 exploration
+    Then: Returns one of existing ActionNode children from belief_node without creating new nodes
     
     Test type: unit
     """
@@ -199,11 +199,11 @@ def test_action_progressive_widening_existing_action(belief_node_with_children, 
 def test_action_progressive_widening_progressive_expansion(belief_node, discrete_action_sampler):
     """Test that action progressive widening expands the action space progressively.
     
-    Purpose: Validates action progressive widening progressive expansion
+    Purpose: Validates that action_progressive_widening progressively expands action space by creating multiple distinct actions
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with visit_count=0, TestActionSampler, progressive widening parameters for expansion
+    When: action_progressive_widening is called multiple times to test progressive behavior
+    Then: Creates distinct ActionNodes with each call, expanding belief_node children from 1 to 2 nodes
     
     Test type: unit
     """
@@ -234,11 +234,11 @@ def test_action_progressive_widening_progressive_expansion(belief_node, discrete
 def test_action_progressive_widening_alpha_parameter(belief_node, discrete_action_sampler):
     """Test that alpha parameter affects progressive widening behavior.
     
-    Purpose: Validates action progressive widening alpha parameter
+    Purpose: Validates that alpha_a parameter controls the rate of action expansion in progressive widening strategy
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with visit_count=1, different alpha values (0.5 vs 0.1) for comparison
+    When: action_progressive_widening uses different alpha parameters to determine expansion rate
+    Then: Both alpha values create action nodes but demonstrate different expansion behaviors based on floor(n^alpha) calculations
     
     Test type: unit
     """
@@ -271,11 +271,11 @@ def test_action_progressive_widening_alpha_parameter(belief_node, discrete_actio
 def test_ucb1_exploration(belief_node_with_children):
     """Test UCB1 exploration for selecting existing actions.
     
-    Purpose: Validates ucb1 exploration
+    Purpose: Validates that ucb1_exploration correctly selects ActionNode using Upper Confidence Bound formula
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with 3 ActionNode children having different q_values and visit_counts, exploration_constant=1.0
+    When: ucb1_exploration calculates UCB1 values and selects action with highest confidence bound
+    Then: Returns valid ActionNode from existing children balancing exploitation and exploration
     
     Test type: unit
     """
@@ -294,11 +294,11 @@ def test_ucb1_exploration(belief_node_with_children):
 def test_ucb1_exploration_exploration_vs_exploitation(belief_node_with_children):
     """Test that UCB1 balances exploration and exploitation.
     
-    Purpose: Validates ucb1 exploration exploration vs exploitation
+    Purpose: Validates that ucb1_exploration balances exploration and exploitation through different exploration constants
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with ActionNode children, different exploration_constant values (0.1 vs 2.0)
+    When: ucb1_exploration uses low exploration (favor exploitation) vs high exploration (favor exploration)
+    Then: Both return valid ActionNodes from children, demonstrating UCB1 balance between exploration and exploitation
     
     Test type: unit
     """
@@ -325,11 +325,11 @@ def test_ucb1_exploration_exploration_vs_exploitation(belief_node_with_children)
 def test_ucb1_exploration_mathematical_correctness(belief_node_with_children):
     """Test that UCB1 calculation is mathematically correct.
     
-    Purpose: Validates ucb1 exploration mathematical correctness
+    Purpose: Validates that ucb1_exploration implements mathematically correct UCB1 formula: Q(a) + c*sqrt(ln(N)/n(a))
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with children having known q_values and visit_counts, exploration_constant=1.0
+    When: Manual UCB1 calculation is compared with function result
+    Then: Function selects ActionNode matching highest manually calculated UCB1 value
     
     Test type: unit
     """
@@ -359,11 +359,11 @@ def test_ucb1_exploration_mathematical_correctness(belief_node_with_children):
 def test_action_progressive_widening_edge_cases(belief_node, discrete_action_sampler):
     """Test edge cases for action progressive widening.
     
-    Purpose: Validates action progressive widening edge cases
+    Purpose: Validates that action_progressive_widening handles edge case alpha parameters correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with visit_count=1, extreme alpha_a values (0.0 and 1.0)
+    When: action_progressive_widening processes edge case alpha parameters
+    Then: Creates valid ActionNodes for both extreme alpha values without errors
     
     Test type: unit
     """
@@ -394,11 +394,11 @@ def test_action_progressive_widening_edge_cases(belief_node, discrete_action_sam
 def test_ucb1_exploration_edge_cases(belief_node_with_children):
     """Test edge cases for UCB1 exploration.
     
-    Purpose: Validates ucb1 exploration edge cases
+    Purpose: Validates that ucb1_exploration handles extreme exploration constant values correctly
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode with ActionNode children, extreme exploration_constant values (0.0 and 100.0)
+    When: ucb1_exploration processes pure exploitation (c=0) and extreme exploration (c=100)
+    Then: Returns valid ActionNodes for both extreme exploration constants without errors
     
     Test type: unit
     """
@@ -422,11 +422,11 @@ def test_ucb1_exploration_edge_cases(belief_node_with_children):
 def test_action_progressive_widening_integration(belief_node, discrete_action_sampler):
     """Test integration of action progressive widening with UCB1 exploration.
     
-    Purpose: Validates action progressive widening integration
+    Purpose: Validates that action_progressive_widening integrates creation of new actions with UCB1 selection of existing actions
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: BeliefNode starting with visit_count=0, progressive widening parameters, multiple iterations
+    When: action_progressive_widening creates initial actions then transitions to UCB1 selection
+    Then: First calls create new ActionNodes, later calls with higher visit_count select existing nodes via UCB1
     
     Test type: integration
     """
@@ -459,11 +459,11 @@ def test_action_progressive_widening_integration(belief_node, discrete_action_sa
 def test_action_sampler_with_belief_node_context(discrete_action_sampler, belief_node):
     """Test that action sampler can optionally use belief node context.
     
-    Purpose: Validates sampling behavior for action r with belief node context
+    Purpose: Validates that ActionSampler interface supports optional belief_node parameter for context-aware sampling
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: TestActionSampler with actions=[0,1,2], BeliefNode with belief context
+    When: sample method is called with and without belief_node parameter
+    Then: Both calls return valid actions from action set, demonstrating optional context support
     
     Test type: unit
     """
@@ -482,11 +482,11 @@ def test_action_sampler_with_belief_node_context(discrete_action_sampler, belief
 def test_continuous_control_sampler_usage_example():
     """Test the ContinuousControlSampler usage example from ActionSampler docstring.
     
-    Purpose: Validates sampling behavior for continuous control r usage example
+    Purpose: Validates that ContinuousControlSampler from ActionSampler docstring generates proper continuous control actions
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: ContinuousControlSampler with action_bounds=(-2.0,2.0), action_dim=4 for continuous control
+    When: sample method generates 4D continuous action vector uniformly from bounds
+    Then: Returns 4D numpy array with all values within [-2.0, 2.0] bounds for control applications
     
     Test type: example
     """
@@ -516,11 +516,11 @@ def test_continuous_control_sampler_usage_example():
 def test_weighted_discrete_action_sampler_usage_example():
     """Test the WeightedDiscreteActionSampler usage example from ActionSampler docstring.
     
-    Purpose: Validates sampling behavior for weighted discrete action r usage example
+    Purpose: Validates that WeightedDiscreteActionSampler from ActionSampler docstring correctly samples from weighted discrete distributions
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: WeightedDiscreteActionSampler with actions=["up","down","left","right","stay"], uniform probabilities
+    When: sample method generates multiple samples from weighted discrete distribution
+    Then: All samples are valid actions, probabilities are normalized to sum=1.0
     
     Test type: example
     """
@@ -558,11 +558,11 @@ def test_weighted_discrete_action_sampler_usage_example():
 def test_adaptive_action_sampler_usage_example():
     """Test the AdaptiveActionSampler usage example from ActionSampler docstring.
     
-    Purpose: Validates sampling behavior for adaptive action r usage example
+    Purpose: Validates that AdaptiveActionSampler can switch between random exploration and informed sampling based on belief context
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: An AdaptiveActionSampler with base actions and exploration noise, BeliefNode with varying visit counts
+    When: Sample method is called with no belief node, low visit count belief node, and high visit count belief node with children
+    Then: Returns appropriate actions: random from base actions, random from base actions, and informed action plus noise respectively
     
     Test type: example
     """
@@ -624,11 +624,11 @@ def test_adaptive_action_sampler_usage_example():
 def test_multi_modal_action_sampler_usage_example():
     """Test the MultiModalActionSampler usage example from ActionSampler docstring.
     
-    Purpose: Validates sampling behavior for multi modal action r usage example
+    Purpose: Validates that MultiModalActionSampler can sample from both discrete and continuous action spaces
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: A MultiModalActionSampler with discrete actions and continuous bounds, mode probability of 0.5
+    When: Multiple samples are generated to test both modes
+    Then: Both discrete and continuous actions are sampled, with discrete actions being valid and continuous actions within bounds
     
     Test type: example
     """
@@ -680,11 +680,11 @@ def test_multi_modal_action_sampler_usage_example():
 def test_goal_directed_action_sampler_usage_example():
     """Test the GoalDirectedActionSampler usage example from ActionSampler docstring.
     
-    Purpose: Validates sampling behavior for goal directed action r usage example
+    Purpose: Validates that GoalDirectedActionSampler can generate both random exploration and goal-directed actions
     
-    Given: Configured object with sampling capabilities
-    When: Sample method is called
-    Then: Valid samples are returned according to distribution
+    Given: A GoalDirectedActionSampler with goal position, action magnitude, and goal bias, BeliefNode with position particles
+    When: Sample method is called with no belief node and with belief node containing position information
+    Then: Returns random actions with correct magnitude, and goal-directed actions based on belief state position estimates
     
     Test type: example
     """
@@ -747,11 +747,11 @@ def test_goal_directed_action_sampler_usage_example():
 def test_action_progressive_widening_basic_usage_example():
     """Test the basic action_progressive_widening usage example from function docstring.
     
-    Purpose: Validates action progressive widening basic usage example
+    Purpose: Validates that action_progressive_widening can create new action nodes with proper parent-child relationships
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A BeliefNode with belief state and SimpleActionSampler for continuous actions
+    When: action_progressive_widening is called with moderate exploration parameters
+    Then: Creates new ActionNode with belief node as parent, 2D action array within bounds, and increases belief node children count
     
     Test type: example
     """
@@ -792,11 +792,11 @@ def test_action_progressive_widening_basic_usage_example():
 def test_action_progressive_widening_alpha_comparison_example():
     """Test the alpha_a comparison example from action_progressive_widening docstring.
     
-    Purpose: Validates action progressive widening alpha comparison example
+    Purpose: Validates that different alpha_a values create action nodes with different exploration behaviors
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Two BeliefNodes with belief states and SimpleActionSampler
+    When: action_progressive_widening is called with conservative (alpha=0.25) vs aggressive (alpha=0.75) parameters
+    Then: Both create action nodes as children of their respective belief nodes, demonstrating different exploration strategies
     
     Test type: example
     """
@@ -844,11 +844,11 @@ def test_action_progressive_widening_alpha_comparison_example():
 def test_action_progressive_widening_loop_simulation_example():
     """Test the progressive widening loop simulation example from docstring.
     
-    Purpose: Validates action progressive widening loop simulation example
+    Purpose: Validates that action_progressive_widening progressively expands action space over multiple iterations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A BeliefNode with belief state and DiscreteActionSampler with 4 actions
+    When: action_progressive_widening is called 10 times with increasing visit counts
+    Then: Action count generally increases or stays the same, respecting progressive widening constraints, with all actions being valid
     
     Test type: example
     """
@@ -902,11 +902,11 @@ def test_action_progressive_widening_loop_simulation_example():
 def test_ucb1_exploration_basic_usage_example():
     """Test the basic UCB1 exploration usage example from function docstring.
     
-    Purpose: Validates ucb1 exploration basic usage example
+    Purpose: Validates that ucb1_exploration can select actions from existing children using UCB1 formula
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A BeliefNode with 4 ActionNode children having different q_values and visit counts
+    When: ucb1_exploration is called with exploration constant sqrt(2)
+    Then: Returns one of the existing action nodes from the belief node's children
     
     Test type: example
     """
@@ -949,11 +949,11 @@ def test_ucb1_exploration_basic_usage_example():
 def test_ucb1_exploration_constants_comparison_example():
     """Test the exploration constants comparison example from UCB1 docstring.
     
-    Purpose: Validates ucb1 exploration constants comparison example
+    Purpose: Validates that ucb1_exploration works with different exploration constants for different exploration-exploitation balances
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A BeliefNode with 2 ActionNode children having different q_values and visit counts
+    When: ucb1_exploration is called with low (0.1), high (3.0), and balanced (sqrt(2)) exploration constants
+    Then: All three calls return valid action nodes from the belief node's children, demonstrating different exploration strategies
     
     Test type: example
     """
@@ -1006,11 +1006,11 @@ def test_ucb1_exploration_constants_comparison_example():
 def test_ucb1_exploration_manual_calculation_example():
     """Test the manual UCB1 calculation example from function docstring.
     
-    Purpose: Validates ucb1 exploration manual calculation example
+    Purpose: Validates that ucb1_exploration implements the correct UCB1 formula and matches manual calculations
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: A BeliefNode with 2 ActionNode children having known q_values and visit counts
+    When: Manual UCB1 values are calculated and compared with function selection
+    Then: Function selects the ActionNode with highest manually calculated UCB1 value, and all UCB1 calculations are mathematically correct
     
     Test type: example
     """
@@ -1064,11 +1064,11 @@ def test_ucb1_exploration_manual_calculation_example():
 def test_progressive_widening_parameter_tuning_example():
     """Test the progressive widening parameter tuning example from docstring.
     
-    Purpose: Validates progressive widening parameter tuning example
+    Purpose: Validates that different alpha values produce different action creation patterns in progressive widening
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: Visit counts from 1 to 20 and alpha values [0.25, 0.5, 0.75, 1.0]
+    When: Progressive widening criteria are calculated for each alpha-visit count combination
+    Then: Higher alpha values create more actions, alpha=1.0 creates action at every visit, and all alpha values create at least one action
     
     Test type: example
     """

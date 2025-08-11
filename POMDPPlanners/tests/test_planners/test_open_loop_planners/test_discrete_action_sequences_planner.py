@@ -27,11 +27,11 @@ def planner(tiger_pomdp):
 def test_initialization(tiger_pomdp):
     """Test initialization.
     
-    Purpose: Validates proper initialization of 
+    Purpose: Validates proper initialization of DiscreteActionSequencesPlanner with parameter validation
     
-    Given: Constructor parameters and initial conditions
-    When: Object is initialized
-    Then: Object is properly constructed with expected attributes
+    Given: TigerPOMDP environment and various parameter combinations (valid and invalid depth, n_return_samples, discount_factor)
+    When: DiscreteActionSequencesPlanner is instantiated with these parameters
+    Then: Valid parameters create planner with correct attributes, invalid parameters raise ValueError
     
     Test type: unit
     """
@@ -82,11 +82,11 @@ def test_initialization(tiger_pomdp):
 def test_action_selection(planner, tiger_pomdp):
     """Test action selection.
     
-    Purpose: Validates action selection
+    Purpose: Validates that action selection returns valid TigerPOMDP actions and proper PolicyRunData for different beliefs
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteActionSequencesPlanner and WeightedParticleBelief instances with different probability distributions (equal vs tiger_right-biased)
+    When: action() method is called with each belief
+    Then: Returns valid tiger actions (listen/open_left/open_right) and PolicyRunData with empty info_variables
     
     Test type: unit
     """
@@ -124,11 +124,11 @@ def test_action_selection(planner, tiger_pomdp):
 def test_compute_return(planner, tiger_pomdp):
     """Test compute return.
     
-    Purpose: Validates compute return
+    Purpose: Validates that return estimation produces finite numerical values for various action sequences
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteActionSequencesPlanner, belief with equal tiger probabilities, and action sequences (listen-listen, listen-open_left, open_left-open_right)
+    When: estimate_return() is called for each action sequence
+    Then: Returns finite float values representing expected discounted rewards
     
     Test type: unit
     """
@@ -157,11 +157,11 @@ def test_compute_return(planner, tiger_pomdp):
 def test_search_behavior(planner, tiger_pomdp):
     """Test search behavior.
     
-    Purpose: Validates search behavior
+    Purpose: Validates that search returns action sequences of correct length with valid tiger actions
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteActionSequencesPlanner with depth=2 and belief with equal tiger probabilities
+    When: search() method is called to find optimal action sequence
+    Then: Returns action sequence with length equal to planner depth containing only valid tiger actions
     
     Test type: unit
     """
@@ -183,11 +183,11 @@ def test_search_behavior(planner, tiger_pomdp):
 def test_integration_with_tiger_pomdp(planner, tiger_pomdp):
     """Test integration with tiger pomdp.
     
-    Purpose: Validates integration with tiger pomdp
+    Purpose: Validates that DiscreteActionSequencesPlanner integrates properly with TigerPOMDP environment across different belief states
     
-    Given: Test setup conditions
-    When: Test operation is performed
-    Then: Expected behavior is verified
+    Given: DiscreteActionSequencesPlanner and TigerPOMDP with various belief distributions (equal, left-biased, right-biased)
+    When: Actions are selected and executed in the tiger environment
+    Then: All actions are valid, PolicyRunData is correct, and environment state transitions work properly
     
     Test type: integration
     """
