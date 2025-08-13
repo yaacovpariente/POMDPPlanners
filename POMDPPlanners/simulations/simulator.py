@@ -341,7 +341,10 @@ class BaseSimulator(ABC):
             raise ValueError("cache_visualizations must be a boolean")
 
         # Run main comparison
-        with mlflow.start_run(run_name="environment_policy_comparison"):
+        # Check if there's already an active run and use nested if so
+        active_run = mlflow.active_run()
+        nested = active_run is not None
+        with mlflow.start_run(run_name="environment_policy_comparison", nested=nested):
             # Log input parameters
             mlflow.log_param("alpha", alpha)
             mlflow.log_param("confidence_interval_level", confidence_interval_level)
