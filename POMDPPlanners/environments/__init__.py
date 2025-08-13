@@ -14,6 +14,7 @@ Available Environments:
     SanityPOMDP: Simple test environment for debugging
     DiscreteLightDarkPOMDP: Grid-based light-dark navigation
     ContinuousLightDarkPOMDP: Continuous light-dark navigation problem
+    LaserTagPOMDP: Pursuit-evasion problem with robot tagging opponent
 
 Factory Functions:
     get_environment: Create environment instances by name with parameters
@@ -29,6 +30,7 @@ from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
 
 __all__ = [
     "PushPOMDP",
@@ -39,7 +41,8 @@ __all__ = [
     "TigerPOMDP",
     "SanityPOMDP",
     "CartPolePOMDP",
-    "MountainCarPOMDP"
+    "MountainCarPOMDP",
+    "LaserTagPOMDP"
 ]
 
 # Registry of available environments
@@ -53,6 +56,7 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
     "DiscreteLightDarkPOMDP": DiscreteLightDarkPOMDP,
     "ContinuousLightDarkPOMDP": ContinuousLightDarkPOMDP,
     "ContinuousLightDarkPOMDPDiscreteActions": ContinuousLightDarkPOMDPDiscreteActions,
+    "LaserTagPOMDP": LaserTagPOMDP,
 }
 
 def get_environment(env_type: str, **kwargs) -> Any:
