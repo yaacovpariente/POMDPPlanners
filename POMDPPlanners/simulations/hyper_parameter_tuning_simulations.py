@@ -1,420 +1,753 @@
-# from typing import List, Type, Tuple, Dict, Optional, Union
-# import copy
-# from time import time
-# from pathlib import Path
-# import mlflow
-# import json
-# import os
-# import logging
-# from joblib import Parallel, delayed
-# from multiprocessing import cpu_count
-# import optuna
-# import pandas as pd
-# import numpy as np
-# import tempfile
-# from tqdm import tqdm
-# from typing import Union, List, Tuple, Type
-# from POMDPPlanners.core.environment import Environment
-# from POMDPPlanners.core.policy import Policy
-# from POMDPPlanners.core.belief import Belief, get_initial_belief
-# from POMDPPlanners.core.simulation import (
-#     History,
-#     StepData,
-#     CategoricalHyperParameter,
-#     NumericalHyperParameter,
-#     MetricValue,
-# )
-# from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environment_policy_pair, compute_statistics_environments_policies_comparison
-# from POMDPPlanners.utils.visualization import plot_metrics_comparison, plot_discounted_returns_histogram, plot_environment_policy_pair_comparison, plot_discounted_returns_histogram_multiple_policies
-# from POMDPPlanners.utils.logger import get_logger
+"""Hyperparameter optimization module for POMDP policies.
 
-# logger = get_logger(__name__)
+This module provides tools for optimizing hyperparameters of POMDP policies using
+Optuna optimization framework with MLFlow experiment tracking. It supports both
+single environment-policy optimization and multi-environment comparison studies.
 
-# HyperParameterFeatures = Union[CategoricalHyperParameter, NumericalHyperParameter]
+The module integrates with the POMDPPlanners simulation framework to run parallel
+episodes and compute performance statistics for hyperparameter evaluation.
 
-# class HyperParameterOptimizer:
-#     """A class for optimizing hyperparameters of POMDP policies using Optuna."""
+Key Features:
+    - Advanced optimization algorithms via Optuna (TPE, CMA-ES, etc.)
+    - Parallel episode execution with caching support
+    - Comprehensive MLFlow experiment tracking and visualization
+    - Support for both categorical and numerical hyperparameters
+    - Multi-environment comparison studies
+    - Statistical analysis with confidence intervals
+    - Automatic visualization generation and artifact logging
+
+Classes:
+    HyperParameterOptimizer: Main class for conducting hyperparameter optimization studies
     
-#     def __init__(
-#         self,
-#         cache_dir_path: Path,
-#         experiment_name: str = "POMDP_Parameter_Optimization",
-#         n_jobs: int = 1,
-#         confidence_interval_level: float = 0.95,
-#     ):
-#         """Initialize the hyperparameter optimizer.
+Type Aliases:
+    HyperParameterFeatures: Union type for categorical or numerical hyperparameter definitions
+
+Example:
+    Basic hyperparameter optimization workflow::
+    
+        from pathlib import Path
+        from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import HyperParameterOptimizer
+        from POMDPPlanners.core.simulation import NumericalHyperParameter
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
         
-#         Args:
-#             cache_dir_path: Path to store optimization results and cache
-#             experiment_name: Name of the MLFlow experiment
-#             n_jobs: Number of parallel jobs for simulation
-#             confidence_interval_level: Confidence level for statistics
-#         """
-#         self.cache_dir_path = cache_dir_path
-#         self.experiment_name = experiment_name
-#         self.n_jobs = n_jobs
-#         self.confidence_interval_level = confidence_interval_level
+        # Set up optimization
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=Path("./optimization_results"),
+            experiment_name="POMCP_Tiger_Optimization",
+            n_jobs=4
+        )
         
-#         # Set up MLFlow tracking
-#         self.mlruns_path = cache_dir_path / "mlruns"
-#         self.mlruns_path.mkdir(parents=True, exist_ok=True)
-#         mlflow.set_tracking_uri(str(self.mlruns_path))
-#         mlflow.set_experiment(experiment_name)
-
-#     def run_multiple_episodes(
-#         self,
-#         environment: Environment,
-#         policy: Policy,
-#         initial_belief: Belief,
-#         num_episodes: int,
-#         num_steps: int,
-#         scheduler_address: Optional[str] = None,
-#     ) -> List[History]:
-#         """Run multiple episodes in parallel."""
-#         logger.info(f"Starting {num_episodes} episodes with {num_steps} steps each using {self.n_jobs} jobs")
-#         logger.info(f"Environment: {environment.name}, Policy: {policy.name}")
+        # Define parameter search space
+        param_ranges = [
+            NumericalHyperParameter("exploration_constant", 0.1, 10.0),
+            NumericalHyperParameter("n_simulations", 100, 2000),
+            NumericalHyperParameter("depth", 10, 100)
+        ]
         
-#         assert isinstance(environment, Environment)
-#         assert isinstance(policy, Policy)
-#         assert isinstance(initial_belief, Belief)
-#         if scheduler_address is not None:
-#             assert isinstance(scheduler_address, str)
-
-#         assert num_episodes > 0
-#         assert num_steps > 0
-
-#         # Create a list of arguments for each episode
-#         episode_args = [
-#             (environment, policy, initial_belief, num_steps, i, hash(f"{environment.name}_{policy.name}_{i}") % (2**32), scheduler_address, self.cache_dir_path) 
-#             for i in range(num_episodes)
-#         ]
-
-#         # Run episodes in parallel using joblib with progress bar
-#         logger.info(f"Running episodes in parallel for {environment.name} with {policy.name}")
-#         histories = Parallel(n_jobs=self.n_jobs)(
-#             delayed(self._run_and_cache_episode)(*args) for args in tqdm(
-#                 episode_args,
-#                 total=num_episodes,
-#                 desc=f"Running episodes for {environment.name} with {policy.name}",
-#                 unit="episode"
-#             )
-#         )
-#         logger.info(f"All episodes completed for {environment.name} with {policy.name}")
-
-#         return histories
-
-#     def simulation(
-#         self,
-#         environment: Environment,
-#         policy: Policy,
-#         initial_belief: Belief,
-#         num_episodes: int,
-#         num_steps: int,
-#         alpha: float,
-#         scheduler_address: Optional[str] = None,
-#     ) -> Tuple[List[History], List[MetricValue]]:
-#         """Run a simulation and compute statistics."""
-#         logger.info(f"Starting simulation with {num_episodes} episodes, {num_steps} steps, "
-#                     f"alpha={alpha}, confidence_interval={self.confidence_interval_level}")
+        # Run optimization
+        best_params, best_value, histories = optimizer.optimize_policy_parameters(
+            environment=TigerPOMDP(),
+            policy_class=POMCP,
+            param_ranges=param_ranges,
+            num_episodes=50,
+            num_steps=100,
+            n_particles=100,
+            n_trials=100
+        )
         
-#         assert isinstance(environment, Environment)
-#         assert isinstance(policy, Policy)
-#         assert isinstance(initial_belief, Belief)
-#         assert isinstance(num_episodes, int)
-#         assert isinstance(num_steps, int)
-#         if scheduler_address is not None:
-#             assert isinstance(scheduler_address, str)
+        print(f"Best parameters: {best_params}")
+        print(f"Best performance: {best_value}")
 
-#         assert 1 >= self.confidence_interval_level >= 0
-#         assert num_episodes > 0
-#         assert num_steps > 0
+Note:
+    This module requires Optuna and MLFlow to be installed. The optimization process
+    can be computationally intensive for complex policies and large parameter spaces.
+    Consider using distributed computing capabilities for large-scale studies.
+"""
 
-#         histories = self.run_multiple_episodes(
-#             environment=environment,
-#             policy=policy,
-#             initial_belief=initial_belief,
-#             num_episodes=num_episodes,
-#             num_steps=num_steps,
-#             scheduler_address=scheduler_address,
-#         )
+from typing import List, Type, Tuple, Dict, Optional, Union
+from pathlib import Path
+import mlflow
+import optuna
+import pandas as pd
+import numpy as np
+import tempfile
+from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.belief import Belief, get_initial_belief
+from POMDPPlanners.core.simulation import (
+    History,
+    StepData,
+    CategoricalHyperParameter,
+    NumericalHyperParameter,
+    MetricValue,
+)
+from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environment_policy_pair, compute_statistics_environments_policies_comparison
+from POMDPPlanners.simulations.simulator import POMDPSimulator
+from POMDPPlanners.core.simulation import EnvironmentRunParams
+from POMDPPlanners.simulations.simulations_deployment.task_managers import TaskManagerType
+from POMDPPlanners.utils.visualization import plot_metrics_comparison, plot_discounted_returns_histogram, plot_environment_policy_pair_comparison, plot_discounted_returns_histogram_multiple_policies
+from POMDPPlanners.utils.logger import get_logger
 
-#         logger.info("Computing statistics from simulation results")
-#         statistics = compute_statistics_environment_policy_pair(
-#             env=environment,
-#             histories=histories,
-#             alpha=alpha,
-#             confidence_interval_level=self.confidence_interval_level,
-#         )
-#         logger.info("Statistics computation completed")
+# TODO: change all of the assertions to raised exceptions
 
-#         return histories, statistics
+logger = get_logger(__name__)
 
-#     def optimize_policy_parameters(
-#         self,
-#         environment: Environment,
-#         policy_class: Type[Policy],
-#         param_ranges: List[HyperParameterFeatures],
-#         num_episodes: int,
-#         num_steps: int,
-#         n_particles: int,
-#         parameter_to_optimize: str = "average_return",
-#         direction: str = "maximize",
-#         n_trials: int = 100,
-#     ) -> Tuple[dict, float, List[History]]:
-#         """Optimize policy parameters using Optuna."""
-#         assert isinstance(environment, Environment)
-#         assert isinstance(policy_class, type)
-#         assert issubclass(policy_class, Policy)
-#         assert isinstance(param_ranges, list)
-#         assert all(isinstance(param, (CategoricalHyperParameter, NumericalHyperParameter)) for param in param_ranges)
-#         assert isinstance(num_episodes, int)
-#         assert isinstance(num_steps, int)
-#         assert isinstance(n_particles, int)
-#         assert isinstance(parameter_to_optimize, str)
-#         assert isinstance(n_trials, int)
+HyperParameterFeatures = Union[CategoricalHyperParameter, NumericalHyperParameter]
+"""Type alias for hyperparameter feature definitions.
 
-#         assert num_episodes > 0
-#         assert num_steps > 0
-#         assert n_particles > 0
-#         assert direction in ["maximize", "minimize"]
+Supports both categorical parameters (with discrete choice sets) and numerical 
+parameters (with continuous or integer ranges) for optimization studies.
+"""
 
-#         def evaluation_function(policy: Policy, trial: optuna.Trial) -> float:
-#             initial_belief = get_initial_belief(pomdp=environment, n_particles=n_particles)
-#             histories, statistics = self.simulation(
-#                 environment=environment,
-#                 policy=policy,
-#                 initial_belief=initial_belief,
-#                 num_episodes=num_episodes,
-#                 num_steps=num_steps,
-#                 alpha=0.05,  # Fixed alpha for optimization
-#                 scheduler_address=None,
-#             )
+class HyperParameterOptimizer:
+    """Hyperparameter optimization for POMDP policies using Optuna and MLFlow.
+    
+    This class provides a complete framework for optimizing POMDP policy hyperparameters
+    using Optuna's advanced optimization algorithms with integrated MLFlow experiment
+    tracking. It supports parallel episode execution, statistical analysis, and
+    visualization generation for comprehensive optimization studies.
+    
+    The optimizer integrates with the POMDPSimulator framework to leverage parallel
+    computation and caching capabilities for efficient hyperparameter search across
+    large parameter spaces.
+    
+    Attributes:
+        cache_dir_path: Directory for storing optimization results and cached data
+        experiment_name: Name of the MLFlow experiment for tracking
+        n_jobs: Number of parallel jobs for episode execution
+        confidence_interval_level: Statistical confidence level for metrics
+        mlruns_path: Path to MLFlow experiment tracking database
+        simulator: POMDPSimulator instance for parallel episode execution
+        
+    Example:
+        Basic hyperparameter optimization::
+        
+            from pathlib import Path
+            from POMDPPlanners.core.simulation import NumericalHyperParameter
+            
+            optimizer = HyperParameterOptimizer(
+                cache_dir_path=Path("./optimization_cache"),
+                experiment_name="POMCP_Tuning",
+                n_jobs=4
+            )
+            
+            param_ranges = [
+                NumericalHyperParameter("exploration_constant", 0.1, 10.0),
+                NumericalHyperParameter("n_simulations", 100, 1000)
+            ]
+            
+            best_params, best_value, histories = optimizer.optimize_policy_parameters(
+                environment=env,
+                policy_class=POMCP,
+                param_ranges=param_ranges,
+                num_episodes=50,
+                num_steps=100,
+                n_particles=20,
+                n_trials=20
+            )
+    """
+    
+    def __init__(
+        self,
+        cache_dir_path: Path,
+        experiment_name: str = "POMDP_Parameter_Optimization",
+        n_jobs: int = 1,
+        confidence_interval_level: float = 0.95,
+    ):
+        """Initialize the hyperparameter optimizer.
+        
+        Sets up MLFlow experiment tracking, creates the POMDPSimulator instance
+        for parallel episode execution, and configures optimization parameters.
+        
+        Args:
+            cache_dir_path: Directory path for storing optimization results,
+                MLFlow experiments, and simulation cache. Will be created if
+                it doesn't exist.
+            experiment_name: Name for the MLFlow experiment. Used for organizing
+                optimization runs and tracking results. Defaults to
+                "POMDP_Parameter_Optimization".
+            n_jobs: Number of parallel jobs for episode execution. Higher values
+                can significantly speed up optimization but require more system
+                resources. Defaults to 1 for single-threaded execution.
+            confidence_interval_level: Statistical confidence level for metrics
+                computation (between 0.0 and 1.0). Used for computing confidence
+                intervals in performance statistics. Defaults to 0.95 for 95%
+                confidence intervals.
+                
+        Raises:
+            ValueError: If confidence_interval_level is not between 0.0 and 1.0
+            TypeError: If cache_dir_path is not a Path object
+        """
+        self.cache_dir_path = cache_dir_path
+        self.experiment_name = experiment_name
+        self.n_jobs = n_jobs
+        self.confidence_interval_level = confidence_interval_level
+        
+        # Set up MLFlow tracking
+        self.mlruns_path = cache_dir_path / "mlruns"
+        self.mlruns_path.mkdir(parents=True, exist_ok=True)
+        mlflow.set_tracking_uri(str(self.mlruns_path))
+        mlflow.set_experiment(experiment_name)
+        
+        # Create simulator instance for running episodes
+        self.simulator = POMDPSimulator(
+            cache_dir_path=cache_dir_path,
+            experiment_name=f"{experiment_name}_episodes", 
+            task_manager_type=TaskManagerType.JOBLIB,
+            n_jobs=n_jobs,
+            debug=False  # Keep episode-level logging minimal for optimization
+        )
 
-#             # Store histories as trial user attributes
-#             trial.set_user_attr("histories", histories)
+    def run_multiple_episodes(
+        self,
+        environment: Environment,
+        policy: Policy,
+        initial_belief: Belief,
+        num_episodes: int,
+        num_steps: int,
+        scheduler_address: Optional[str] = None,
+    ) -> List[History]:
+        """Run multiple episodes in parallel using the POMDPSimulator.
+        
+        Executes multiple POMDP episodes in parallel for the given environment-policy
+        pair, leveraging the POMDPSimulator's parallel execution capabilities. This
+        method is used internally during hyperparameter optimization to evaluate
+        candidate parameter configurations efficiently.
+        
+        Args:
+            environment: The POMDP environment to run episodes in
+            policy: The policy to execute during episodes
+            initial_belief: Initial belief state for all episodes
+            num_episodes: Number of episodes to run in parallel
+            num_steps: Maximum number of steps per episode
+            scheduler_address: Optional Dask scheduler address for distributed
+                computation. If None, uses local parallelization.
+                
+        Returns:
+            List of History objects, one for each completed episode, containing
+            the complete trajectory of states, actions, observations, rewards,
+            and beliefs for statistical analysis.
+            
+        Raises:
+            AssertionError: If any input parameter validation fails
+            RuntimeError: If the simulator fails to execute episodes
+            
+        Note:
+            This method uses the POMDPSimulator internally, which provides
+            caching, parallel execution, and comprehensive logging. Episodes
+            are executed with visualization disabled for performance.
+        """
+        logger.info(f"Starting {num_episodes} episodes with {num_steps} steps each using {self.n_jobs} jobs")
+        logger.info(f"Environment: {environment.name}, Policy: {policy.name}")
+        
+        assert isinstance(environment, Environment)
+        assert isinstance(policy, Policy)
+        assert isinstance(initial_belief, Belief)
+        if scheduler_address is not None:
+            assert isinstance(scheduler_address, str)
 
-#             # Get the current value
-#             for metric in statistics:
-#                 if metric.name == parameter_to_optimize:
-#                     return metric.value
+        assert num_episodes > 0
+        assert num_steps > 0
 
-#             raise ValueError(f"Parameter {parameter_to_optimize} not found in statistics")
+        # Create EnvironmentRunParams for the simulator
+        env_run_params = [
+            EnvironmentRunParams(
+                environment=environment,
+                belief=initial_belief,
+                policies=[policy],
+                num_episodes=num_episodes,
+                num_steps=num_steps
+            )
+        ]
 
-#         def objective(trial: optuna.Trial) -> float:
-#             # Create parameters dictionary from hyperparameters
-#             policy_params = {"environment": environment}
+        # Use simulator to run episodes
+        results, _ = self.simulator.compare_multiple_environments_policies(
+            environment_run_params=env_run_params,
+            alpha=0.05,  # Default alpha for intermediate results
+            confidence_interval_level=self.confidence_interval_level,
+            n_jobs=self.n_jobs,
+            cache_visualizations=False  # Skip visualizations during optimization
+        )
+        
+        # Extract histories from results
+        histories = results[environment.name][policy.name]
+        logger.info(f"All episodes completed for {environment.name} with {policy.name}")
 
-#             # Add optimization parameters
-#             for param in param_ranges:
-#                 if isinstance(param, CategoricalHyperParameter):
-#                     policy_params[param.name] = trial.suggest_categorical(
-#                         param.name, param.choices
-#                     )
-#                 elif isinstance(param, NumericalHyperParameter):
-#                     if isinstance(param.low, float):
-#                         policy_params[param.name] = trial.suggest_float(
-#                             param.name, param.low, param.high
-#                         )
-#                     else:
-#                         policy_params[param.name] = trial.suggest_int(
-#                             param.name, param.low, param.high
-#                         )
+        return histories
 
-#             # Create policy instance with suggested parameters
-#             policy = policy_class(**policy_params)
+    def simulation(
+        self,
+        environment: Environment,
+        policy: Policy,
+        initial_belief: Belief,
+        num_episodes: int,
+        num_steps: int,
+        alpha: float,
+        scheduler_address: Optional[str] = None,
+    ) -> Tuple[List[History], List[MetricValue]]:
+        """Run a complete simulation study and compute performance statistics.
+        
+        Executes multiple episodes for a given environment-policy configuration
+        and computes comprehensive performance statistics including confidence
+        intervals, returns, completion rates, and timing metrics.
+        
+        This method combines episode execution with statistical analysis to provide
+        a complete evaluation of a policy's performance, making it suitable for
+        hyperparameter optimization objective function evaluation.
+        
+        Args:
+            environment: The POMDP environment for simulation
+            policy: The policy to evaluate
+            initial_belief: Initial belief state for episodes
+            num_episodes: Number of episodes to run for statistical reliability
+            num_steps: Maximum steps per episode before termination
+            alpha: Significance level for confidence intervals (e.g., 0.05 for 95% CI)
+            scheduler_address: Optional Dask scheduler for distributed execution
+            
+        Returns:
+            Tuple containing:
+                - List of History objects from all executed episodes
+                - List of MetricValue objects with computed performance statistics
+                  including average return, success rates, timing metrics, and
+                  confidence intervals
+                  
+        Raises:
+            AssertionError: If input validation fails
+            ValueError: If alpha is not in valid range (0, 1)
+            RuntimeError: If simulation execution fails
+            
+        Note:
+            Statistics are computed using the configured confidence interval level
+            from initialization. The alpha parameter controls the significance
+            level for hypothesis testing within the statistics computation.
+        """
+        logger.info(f"Starting simulation with {num_episodes} episodes, {num_steps} steps, "
+                    f"alpha={alpha}, confidence_interval={self.confidence_interval_level}")
+        
+        assert isinstance(environment, Environment)
+        assert isinstance(policy, Policy)
+        assert isinstance(initial_belief, Belief)
+        assert isinstance(num_episodes, int)
+        assert isinstance(num_steps, int)
+        if scheduler_address is not None:
+            assert isinstance(scheduler_address, str)
 
-#             # Evaluate policy and return objective value
-#             return evaluation_function(policy, trial)
+        assert 1 >= self.confidence_interval_level >= 0
+        assert num_episodes > 0
+        assert num_steps > 0
 
-#         # Create and run the study
-#         study = optuna.create_study(direction=direction)
-#         study.optimize(objective, n_trials=n_trials)
+        histories = self.run_multiple_episodes(
+            environment=environment,
+            policy=policy,
+            initial_belief=initial_belief,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            scheduler_address=scheduler_address,
+        )
 
-#         # Get best parameters and value
-#         best_params = study.best_params
-#         best_value = study.best_value
+        logger.info("Computing statistics from simulation results")
+        statistics = compute_statistics_environment_policy_pair(
+            env=environment,
+            histories=histories,
+            alpha=alpha,
+            confidence_interval_level=self.confidence_interval_level,
+        )
+        logger.info("Statistics computation completed")
 
-#         # Get histories from the best trial
-#         best_trial = study.best_trial
-#         histories = best_trial.user_attrs["histories"]
+        return histories, statistics
 
-#         return best_params, best_value, histories
+    def optimize_policy_parameters(
+        self,
+        environment: Environment,
+        policy_class: Type[Policy],
+        param_ranges: List[HyperParameterFeatures],
+        num_episodes: int,
+        num_steps: int,
+        n_particles: int,
+        parameter_to_optimize: str = "average_return",
+        direction: str = "maximize",
+        n_trials: int = 100,
+    ) -> Tuple[dict, float, List[History]]:
+        """Optimize hyperparameters for a single environment-policy pair.
+        
+        Conducts hyperparameter optimization using Optuna's advanced algorithms
+        to find the best parameter configuration for a given policy class in
+        the specified environment. The optimization process evaluates candidate
+        parameters by running multiple episodes and optimizing the specified
+        performance metric.
+        
+        This method supports both continuous and discrete parameter spaces,
+        automatically handling parameter type detection and appropriate Optuna
+        suggestion methods. All trials are tracked in MLFlow for analysis.
+        
+        Args:
+            environment: The POMDP environment for optimization
+            policy_class: Policy class to optimize (must be Policy subclass)
+            param_ranges: List of hyperparameter definitions specifying the
+                search space. Each element should be either CategoricalHyperParameter
+                or NumericalHyperParameter defining parameter name and valid range.
+            num_episodes: Number of episodes per trial for statistical reliability.
+                Higher values provide better estimates but increase computation time.
+            num_steps: Maximum steps per episode before forced termination
+            n_particles: Number of belief particles for belief state representation
+            parameter_to_optimize: Name of the performance metric to optimize.
+                Must match a metric name returned by the statistics computation.
+                Common options: "average_return", "success_rate", "average_steps".
+                Defaults to "average_return".
+            direction: Optimization direction, either "maximize" or "minimize".
+                Defaults to "maximize".
+            n_trials: Number of optimization trials to conduct. More trials
+                generally find better solutions but require more computation.
+                Defaults to 100.
+                
+        Returns:
+            Tuple containing:
+                - dict: Best parameter configuration found during optimization
+                - float: Best objective value achieved
+                - List[History]: Episode histories from the best trial for analysis
+                
+        Raises:
+            AssertionError: If input validation fails
+            ValueError: If parameter_to_optimize is not found in computed statistics
+            TypeError: If policy_class is not a Policy subclass
+            
+        Example:
+            Optimize POMCP exploration constant and simulation count::
+            
+                param_ranges = [
+                    NumericalHyperParameter("exploration_constant", 0.1, 10.0),
+                    NumericalHyperParameter("n_simulations", 100, 2000)
+                ]
+                
+                best_params, best_value, histories = optimizer.optimize_policy_parameters(
+                    environment=tiger_env,
+                    policy_class=POMCP,
+                    param_ranges=param_ranges,
+                    num_episodes=30,
+                    num_steps=50,
+                    n_particles=100,
+                    n_trials=50
+                )
+                
+        Note:
+            The optimization process creates policy instances dynamically by
+            passing the environment and suggested parameters to the policy
+            constructor. Ensure the policy class accepts all specified parameters.
+        """
+        assert isinstance(environment, Environment)
+        assert isinstance(policy_class, type)
+        assert issubclass(policy_class, Policy)
+        assert isinstance(param_ranges, list)
+        assert all(isinstance(param, (CategoricalHyperParameter, NumericalHyperParameter)) for param in param_ranges)
+        assert isinstance(num_episodes, int)
+        assert isinstance(num_steps, int)
+        assert isinstance(n_particles, int)
+        assert isinstance(parameter_to_optimize, str)
+        assert isinstance(n_trials, int)
 
-#     def optimize_multiple_environments(
-#         self,
-#         environment_policy_pairs: List[
-#             Tuple[Environment, Tuple[Type[Policy], List[HyperParameterFeatures]]]
-#         ],
-#         num_episodes: int,
-#         num_steps: int,
-#         n_particles: int,
-#         parameter_to_optimize: str = "average_return",
-#         direction: str = "maximize",
-#         n_trials: int = 100,
-#     ) -> Tuple[List[Tuple[dict, float, List[History]]], pd.DataFrame]:
-#         """Optimize policy parameters for multiple environment-policy pairs."""
-#         assert isinstance(environment_policy_pairs, List)
-#         assert all(
-#             isinstance(pair, tuple) and len(pair) == 2 for pair in environment_policy_pairs
-#         )
-#         assert all(isinstance(env, Environment) for env, _ in environment_policy_pairs)
-#         assert all(
-#             isinstance(policy_config, tuple) and len(policy_config) == 2
-#             for _, policy_config in environment_policy_pairs
-#         )
-#         assert all(
-#             isinstance(policy_class, type) and issubclass(policy_class, Policy)
-#             for _, (policy_class, _) in environment_policy_pairs
-#         )
-#         assert all(
-#             isinstance(param_ranges, list)
-#             and all(isinstance(param, (CategoricalHyperParameter, NumericalHyperParameter)) for param in param_ranges)
-#             for _, (_, param_ranges) in environment_policy_pairs
-#         )
+        assert num_episodes > 0
+        assert num_steps > 0
+        assert n_particles > 0
+        assert direction in ["maximize", "minimize"]
 
-#         results = []
-#         planner_statistics = []
-#         aggregated_data = []
+        def evaluation_function(policy: Policy, trial: optuna.Trial) -> float:
+            initial_belief = get_initial_belief(pomdp=environment, n_particles=n_particles)
+            histories, statistics = self.simulation(
+                environment=environment,
+                policy=policy,
+                initial_belief=initial_belief,
+                num_episodes=num_episodes,
+                num_steps=num_steps,
+                alpha=0.05,  # Fixed alpha for optimization
+                scheduler_address=None,
+            )
 
-#         for pair_idx, (environment, (policy_class, param_ranges)) in enumerate(
-#             environment_policy_pairs
-#         ):
-#             # End any active run safely
-#             active_run = mlflow.active_run()
-#             if active_run is not None:
-#                 mlflow.end_run()
+            # Store histories as trial user attributes
+            trial.set_user_attr("histories", histories)
 
-#             # Start a new MLFlow run for each environment-policy combination
-#             with mlflow.start_run(
-#                 run_name=f"{environment.__class__.__name__}_{policy_class.__name__}_{pair_idx}"
-#             ):
-#                 # Log common parameters
-#                 common_params = {
-#                     "environment_type": environment.__class__.__name__,
-#                     "policy_type": policy_class.__name__,
-#                     "num_episodes": num_episodes,
-#                     "num_steps": num_steps,
-#                     "n_particles": n_particles,
-#                     "parameter_to_optimize": parameter_to_optimize,
-#                     "direction": direction,
-#                     "n_trials": n_trials,
-#                     "confidence_interval_level": self.confidence_interval_level,
-#                 }
+            # Get the current value
+            for metric in statistics:
+                if metric.name == parameter_to_optimize:
+                    return metric.value
 
-#                 # Log environment-specific parameters
-#                 env_params = {
-#                     f"env_{key}": value
-#                     for key, value in environment.__dict__.items()
-#                     if isinstance(value, (int, float, str, bool))
-#                 }
+            raise ValueError(f"Parameter {parameter_to_optimize} not found in statistics")
 
-#                 # Log policy-specific parameter ranges
-#                 policy_param_ranges = {}
-#                 for param in param_ranges:
-#                     if isinstance(param, CategoricalHyperParameter):
-#                         policy_param_ranges[f"param_range_{param.name}"] = (
-#                             f"choices: {param.choices}"
-#                         )
-#                     elif isinstance(param, NumericalHyperParameter):
-#                         policy_param_ranges[f"param_range_{param.name}"] = (
-#                             f"{param.low}-{param.high}"
-#                         )
+        def objective(trial: optuna.Trial) -> float:
+            # Create parameters dictionary from hyperparameters
+            policy_params = {"environment": environment}
 
-#                 # Combine all parameters
-#                 all_params = {**common_params, **env_params, **policy_param_ranges}
-#                 mlflow.log_params(all_params)
+            # Add optimization parameters
+            for param in param_ranges:
+                if isinstance(param, CategoricalHyperParameter):
+                    policy_params[param.name] = trial.suggest_categorical(
+                        param.name, param.choices
+                    )
+                elif isinstance(param, NumericalHyperParameter):
+                    if isinstance(param.low, float):
+                        policy_params[param.name] = trial.suggest_float(
+                            param.name, param.low, param.high
+                        )
+                    else:
+                        policy_params[param.name] = trial.suggest_int(
+                            param.name, param.low, param.high
+                        )
 
-#                 # Run optimization
-#                 best_params, best_value, histories = self.optimize_policy_parameters(
-#                     environment=environment,
-#                     policy_class=policy_class,
-#                     param_ranges=param_ranges,
-#                     num_episodes=num_episodes,
-#                     num_steps=num_steps,
-#                     n_particles=n_particles,
-#                     parameter_to_optimize=parameter_to_optimize,
-#                     direction=direction,
-#                     n_trials=n_trials,
-#                 )
+            # Create policy instance with suggested parameters
+            policy = policy_class(**policy_params)
 
-#                 # Get statistics from the best trial
-#                 initial_belief = get_initial_belief(
-#                     pomdp=environment, n_particles=n_particles
-#                 )
-#                 _, statistics = self.simulation(
-#                     environment=environment,
-#                     policy=policy_class(environment=environment, **best_params),
-#                     initial_belief=initial_belief,
-#                     num_episodes=num_episodes,
-#                     num_steps=num_steps,
-#                     alpha=0.05,  # Fixed alpha for evaluation
-#                 )
+            # Evaluate policy and return objective value
+            return evaluation_function(policy, trial)
 
-#                 # Log best parameters and value
-#                 mlflow.log_params({f"best_{k}": v for k, v in best_params.items()})
-#                 mlflow.log_metric("best_value", best_value)
+        # Create and run the study
+        study = optuna.create_study(direction=direction)
+        study.optimize(objective, n_trials=n_trials)
 
-#                 # Save the full results as a JSON artifact
-#                 results_data = {
-#                     "best_parameters": best_params,
-#                     "best_value": best_value,
-#                     "parameters": all_params,
-#                     "param_ranges": [param._asdict() for param in param_ranges],
-#                     "statistics": [metric._asdict() for metric in statistics],
-#                 }
-#                 mlflow.log_dict(results_data, f"optimization_results_pair_{pair_idx}.json")
+        # Get best parameters and value
+        best_params = study.best_params
+        best_value = study.best_value
 
-#                 results.append((best_params, best_value, histories))
-#                 planner_statistics.append(statistics)
+        # Get histories from the best trial
+        best_trial = study.best_trial
+        histories = best_trial.user_attrs["histories"]
 
-#                 # Aggregate data for DataFrame
-#                 run_data = {
-#                     **all_params,
-#                     **{f"best_{k}": v for k, v in best_params.items()},
-#                     "best_value": best_value,
-#                     **{metric.name: metric.value for metric in statistics},
-#                 }
-#                 aggregated_data.append(run_data)
+        return best_params, best_value, histories
 
-#         # Convert aggregated data to DataFrame
-#         df = pd.DataFrame(aggregated_data)
+    def optimize_multiple_environments(
+        self,
+        environment_policy_pairs: List[
+            Tuple[Environment, Tuple[Type[Policy], List[HyperParameterFeatures]]]
+        ],
+        num_episodes: int,
+        num_steps: int,
+        n_particles: int,
+        parameter_to_optimize: str = "average_return",
+        direction: str = "maximize",
+        n_trials: int = 100,
+    ) -> Tuple[List[Tuple[dict, float, List[History]]], pd.DataFrame]:
+        """Conduct hyperparameter optimization across multiple environment-policy pairs.
+        
+        Performs comprehensive hyperparameter optimization studies across multiple
+        environment-policy combinations, enabling comparison of optimal parameters
+        across different domains or policy classes. Each environment-policy pair
+        is optimized independently with full MLFlow tracking and visualization.
+        
+        This method is particularly useful for:
+        - Comparing policy performance across different environments
+        - Finding domain-specific optimal parameters
+        - Conducting comprehensive benchmarking studies
+        - Analysis of hyperparameter sensitivity across domains
+        
+        Results are automatically logged to MLFlow with detailed parameter tracking,
+        performance metrics, and generated comparison visualizations.
+        
+        Args:
+            environment_policy_pairs: List of tuples, each containing an environment
+                and a tuple of (policy_class, param_ranges). The param_ranges define
+                the hyperparameter search space for that specific policy class.
+            num_episodes: Number of episodes per optimization trial. Applied to
+                all environment-policy pairs for consistent statistical reliability.
+            num_steps: Maximum steps per episode across all optimizations
+            n_particles: Number of belief particles for all environment simulations
+            parameter_to_optimize: Performance metric name to optimize across all
+                pairs. Must be consistently available in all environments' statistics.
+                Defaults to "average_return".
+            direction: Optimization direction for all pairs ("maximize" or "minimize").
+                Defaults to "maximize".
+            n_trials: Number of optimization trials per environment-policy pair.
+                Total computation scales linearly with number of pairs.
+                
+        Returns:
+            Tuple containing:
+                - List of optimization results, one per environment-policy pair.
+                  Each result is a tuple of (best_params, best_value, histories).
+                - pandas.DataFrame with aggregated results for analysis, containing
+                  parameter ranges, best parameters, performance metrics, and
+                  environment/policy metadata.
+                  
+        Raises:
+            AssertionError: If input validation fails for any pair
+            ValueError: If parameter_to_optimize is not found in any environment's statistics
+            RuntimeError: If optimization fails for any environment-policy pair
+            
+        Example:
+            Compare POMCP vs PFT-DPW across multiple environments::
+            
+                env_policy_pairs = [
+                    (tiger_env, (POMCP, [
+                        NumericalHyperParameter("exploration_constant", 0.1, 10.0),
+                        NumericalHyperParameter("n_simulations", 100, 1000)
+                    ])),
+                    (tiger_env, (PFT_DPW, [
+                        NumericalHyperParameter("k_a", 0.5, 2.0),
+                        NumericalHyperParameter("alpha_a", 0.3, 0.7)
+                    ])),
+                    (lightdark_env, (POMCP, [
+                        NumericalHyperParameter("exploration_constant", 0.1, 10.0),
+                        NumericalHyperParameter("n_simulations", 100, 1000)
+                    ]))
+                ]
+                
+                results, df = optimizer.optimize_multiple_environments(
+                    env_policy_pairs,
+                    num_episodes=50,
+                    num_steps=100,
+                    n_particles=100,
+                    n_trials=30
+                )
+                
+        Note:
+            Each environment-policy pair creates a separate MLFlow run for
+            independent tracking. Generated visualizations compare performance
+            across all pairs and are saved as MLFlow artifacts.
+        """
+        assert isinstance(environment_policy_pairs, List)
+        assert all(
+            isinstance(pair, tuple) and len(pair) == 2 for pair in environment_policy_pairs
+        )
+        assert all(isinstance(env, Environment) for env, _ in environment_policy_pairs)
+        assert all(
+            isinstance(policy_config, tuple) and len(policy_config) == 2
+            for _, policy_config in environment_policy_pairs
+        )
+        assert all(
+            isinstance(policy_class, type) and issubclass(policy_class, Policy)
+            for _, (policy_class, _) in environment_policy_pairs
+        )
+        assert all(
+            isinstance(param_ranges, list)
+            and all(isinstance(param, (CategoricalHyperParameter, NumericalHyperParameter)) for param in param_ranges)
+            for _, (_, param_ranges) in environment_policy_pairs
+        )
 
-#         # Log DataFrame as table artifact through MLFlow
-#         mlflow.log_table(df, "optimization_results.json")
+        results = []
+        planner_statistics = []
+        aggregated_data = []
 
-#         # Plot statistics comparison
-#         with tempfile.TemporaryDirectory() as temp_dir:
-#             temp_dir_path = Path(temp_dir)
-#             plot_metrics_comparison(
-#                 statistics=planner_statistics,
-#                 environments=[env for env, (policy_class, _) in environment_policy_pairs],
-#                 policies=[policy_class for _, (policy_class, _) in environment_policy_pairs],
-#                 cache_dir_path=temp_dir_path,
-#             )
+        for pair_idx, (environment, (policy_class, param_ranges)) in enumerate(
+            environment_policy_pairs
+        ):
+            # End any active run safely
+            active_run = mlflow.active_run()
+            if active_run is not None:
+                mlflow.end_run()
 
-#             # Log all generated plots as artifacts
-#             for plot_file in temp_dir_path.glob("*.png"):
-#                 mlflow.log_artifact(str(plot_file), "statistics_plots")
+            # Start a new MLFlow run for each environment-policy combination
+            with mlflow.start_run(
+                run_name=f"{environment.__class__.__name__}_{policy_class.__name__}_{pair_idx}"
+            ):
+                # Log common parameters
+                common_params = {
+                    "environment_type": environment.__class__.__name__,
+                    "policy_type": policy_class.__name__,
+                    "num_episodes": num_episodes,
+                    "num_steps": num_steps,
+                    "n_particles": n_particles,
+                    "parameter_to_optimize": parameter_to_optimize,
+                    "direction": direction,
+                    "n_trials": n_trials,
+                    "confidence_interval_level": self.confidence_interval_level,
+                }
 
-#         # End any active run safely before returning
-#         active_run = mlflow.active_run()
-#         if active_run is not None:
-#             mlflow.end_run()
+                # Log environment-specific parameters
+                env_params = {
+                    f"env_{key}": value
+                    for key, value in environment.__dict__.items()
+                    if isinstance(value, (int, float, str, bool))
+                }
 
-#         return results, df
+                # Log policy-specific parameter ranges
+                policy_param_ranges = {}
+                for param in param_ranges:
+                    if isinstance(param, CategoricalHyperParameter):
+                        policy_param_ranges[f"param_range_{param.name}"] = (
+                            f"choices: {param.choices}"
+                        )
+                    elif isinstance(param, NumericalHyperParameter):
+                        policy_param_ranges[f"param_range_{param.name}"] = (
+                            f"{param.low}-{param.high}"
+                        )
 
-#     def _run_and_cache_episode(
-#         self,
-#         environment: Environment,
-#         policy: Policy,
-#         initial_belief: Belief,
-#         num_steps: int,
-#         episode_idx: int,
-#         episode_hash: int,
-#         scheduler_address: Optional[str],
-#         cache_dir_path: Path,
-#     ) -> History:
-#         """Run a single episode and cache the results."""
-#         # TODO: Implement episode caching logic
-#         # This is a placeholder for the actual implementation
-#         raise NotImplementedError("Episode caching not yet implemented")
+                # Combine all parameters
+                all_params = {**common_params, **env_params, **policy_param_ranges}
+                mlflow.log_params(all_params)
+
+                # Run optimization
+                best_params, best_value, histories = self.optimize_policy_parameters(
+                    environment=environment,
+                    policy_class=policy_class,
+                    param_ranges=param_ranges,
+                    num_episodes=num_episodes,
+                    num_steps=num_steps,
+                    n_particles=n_particles,
+                    parameter_to_optimize=parameter_to_optimize,
+                    direction=direction,
+                    n_trials=n_trials,
+                )
+
+                # Get statistics from the best trial
+                initial_belief = get_initial_belief(
+                    pomdp=environment, n_particles=n_particles
+                )
+                _, statistics = self.simulation(
+                    environment=environment,
+                    policy=policy_class(environment=environment, **best_params),
+                    initial_belief=initial_belief,
+                    num_episodes=num_episodes,
+                    num_steps=num_steps,
+                    alpha=0.05,  # Fixed alpha for evaluation
+                )
+
+                # Log best parameters and value
+                mlflow.log_params({f"best_{k}": v for k, v in best_params.items()})
+                mlflow.log_metric("best_value", best_value)
+
+                # Save the full results as a JSON artifact
+                results_data = {
+                    "best_parameters": best_params,
+                    "best_value": best_value,
+                    "parameters": all_params,
+                    "param_ranges": [param._asdict() for param in param_ranges],
+                    "statistics": [metric._asdict() for metric in statistics],
+                }
+                mlflow.log_dict(results_data, f"optimization_results_pair_{pair_idx}.json")
+
+                results.append((best_params, best_value, histories))
+                planner_statistics.append(statistics)
+
+                # Aggregate data for DataFrame
+                run_data = {
+                    **all_params,
+                    **{f"best_{k}": v for k, v in best_params.items()},
+                    "best_value": best_value,
+                    **{metric.name: metric.value for metric in statistics},
+                }
+                aggregated_data.append(run_data)
+
+        # Convert aggregated data to DataFrame
+        df = pd.DataFrame(aggregated_data)
+
+        # Log DataFrame as table artifact through MLFlow
+        mlflow.log_table(df, "optimization_results.json")
+
+        # Plot statistics comparison
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_dir_path = Path(temp_dir)
+            plot_metrics_comparison(
+                statistics=planner_statistics,
+                environments=[env for env, (policy_class, _) in environment_policy_pairs],
+                policies=[policy_class for _, (policy_class, _) in environment_policy_pairs],
+                cache_dir_path=temp_dir_path,
+            )
+
+            # Log all generated plots as artifacts
+            for plot_file in temp_dir_path.glob("*.png"):
+                mlflow.log_artifact(str(plot_file), "statistics_plots")
+
+        # End any active run safely before returning
+        active_run = mlflow.active_run()
+        if active_run is not None:
+            mlflow.end_run()
+
+        return results, df
+
