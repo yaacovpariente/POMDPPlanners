@@ -84,11 +84,11 @@ from POMDPPlanners.core.simulation import (
     NumericalHyperParameter,
     MetricValue,
 )
-from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environment_policy_pair, compute_statistics_environments_policies_comparison
+from POMDPPlanners.simulations.simulation_statistics import compute_statistics_environment_policy_pair
 from POMDPPlanners.simulations.simulator import POMDPSimulator
-from POMDPPlanners.core.simulation import EnvironmentRunParams
+from POMDPPlanners.core.simulation.simulation_configs import EnvironmentRunParams
 from POMDPPlanners.simulations.simulations_deployment.task_managers import TaskManagerType
-from POMDPPlanners.utils.visualization import plot_metrics_comparison, plot_discounted_returns_histogram, plot_environment_policy_pair_comparison, plot_discounted_returns_histogram_multiple_policies
+from POMDPPlanners.utils.visualization import plot_metrics_comparison
 from POMDPPlanners.utils.logger import get_logger
 
 # TODO: change all of the assertions to raised exceptions
