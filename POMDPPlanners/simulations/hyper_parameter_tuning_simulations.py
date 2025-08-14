@@ -556,7 +556,7 @@ class HyperParameterOptimizer:
 
         # Create and run the study
         study = optuna.create_study(direction=direction)
-        study.optimize(objective, n_trials=n_trials)
+        study.optimize(objective, n_trials=n_trials, n_jobs=self.n_jobs)
 
         # Get best parameters and value
         best_params = study.best_params
