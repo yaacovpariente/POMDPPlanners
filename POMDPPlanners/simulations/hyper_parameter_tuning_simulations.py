@@ -50,10 +50,11 @@ Example:
             environment=TigerPOMDP(),
             policy_class=POMCP,
             param_ranges=param_ranges,
-            num_episodes=50,
+            num_episodes=50,          # Final evaluation episodes
             num_steps=100,
             n_particles=100,
-            n_trials=100
+            n_trials=100,
+            num_episodes_tuning=10    # Faster tuning with fewer episodes
         )
         
         print(f"Best parameters: {best_params}")
@@ -141,10 +142,11 @@ class HyperParameterOptimizer:
                 environment=env,
                 policy_class=POMCP,
                 param_ranges=param_ranges,
-                num_episodes=50,
+                num_episodes=50,          # Final evaluation episodes
                 num_steps=100,
                 n_particles=20,
-                n_trials=20
+                n_trials=20,
+                num_episodes_tuning=10    # Faster tuning with fewer episodes
             )
     """
     
@@ -234,9 +236,9 @@ class HyperParameterOptimizer:
             RuntimeError: If the simulator fails to execute episodes
             
         Note:
-            This method uses the POMDPSimulator internally, which provides
-            caching, parallel execution, and comprehensive logging. Episodes
-            are executed with visualization disabled for performance.
+            This method uses the POMDPSimulator's direct parallel execution method
+            to avoid creating additional MLflow experiments during optimization.
+            Episodes are executed with caching and parallel processing support.
         """
         logger.info(f"Starting {num_episodes} episodes with {num_steps} steps each using {self.n_jobs} jobs")
         logger.info(f"Environment: {environment.name}, Policy: {policy.name}")
@@ -261,13 +263,12 @@ class HyperParameterOptimizer:
             )
         ]
 
-        # Use simulator to run episodes
-        results, _ = self.simulator.compare_multiple_environments_policies(
+        # Use simulator's direct parallel execution method to avoid MLflow experiment creation
+        results = self.simulator.simulate_multiple_environments_and_policies_parallel(
             environment_run_params=env_run_params,
             alpha=0.05,  # Default alpha for intermediate results
             confidence_interval_level=self.confidence_interval_level,
             n_jobs=self.n_jobs,
-            cache_visualizations=False  # Skip visualizations during optimization
         )
         
         # Extract histories from results
@@ -368,6 +369,7 @@ class HyperParameterOptimizer:
         parameter_to_optimize: str = "average_return",
         direction: str = "maximize",
         n_trials: int = 100,
+        num_episodes_tuning: Optional[int] = None,
     ) -> Tuple[dict, float, List[History]]:
         """Optimize hyperparameters for a single environment-policy pair.
         
@@ -387,8 +389,10 @@ class HyperParameterOptimizer:
             param_ranges: List of hyperparameter definitions specifying the
                 search space. Each element should be either CategoricalHyperParameter
                 or NumericalHyperParameter defining parameter name and valid range.
-            num_episodes: Number of episodes per trial for statistical reliability.
-                Higher values provide better estimates but increase computation time.
+            num_episodes: Number of episodes for final evaluation of the best 
+                parameters found. Used after optimization is complete to get 
+                accurate performance estimates. Higher values provide more reliable 
+                final evaluation but only affect post-optimization assessment.
             num_steps: Maximum steps per episode before forced termination
             n_particles: Number of belief particles for belief state representation
             parameter_to_optimize: Name of the performance metric to optimize.
@@ -400,6 +404,10 @@ class HyperParameterOptimizer:
             n_trials: Number of optimization trials to conduct. More trials
                 generally find better solutions but require more computation.
                 Defaults to 100.
+            num_episodes_tuning: Number of episodes per trial during hyperparameter
+                tuning. If None, uses num_episodes. Setting this lower than 
+                num_episodes allows faster tuning with less accurate estimates,
+                while final evaluation uses num_episodes for accuracy. Defaults to None.
                 
         Returns:
             Tuple containing:
@@ -424,10 +432,11 @@ class HyperParameterOptimizer:
                     environment=tiger_env,
                     policy_class=POMCP,
                     param_ranges=param_ranges,
-                    num_episodes=30,
+                    num_episodes=30,          # Final evaluation episodes
                     num_steps=50,
                     n_particles=100,
-                    n_trials=50
+                    n_trials=50,
+                    num_episodes_tuning=10    # Faster tuning with fewer episodes
                 )
                 
         Note:
@@ -445,11 +454,22 @@ class HyperParameterOptimizer:
         assert isinstance(n_particles, int)
         assert isinstance(parameter_to_optimize, str)
         assert isinstance(n_trials, int)
+        if num_episodes_tuning is not None:
+            assert isinstance(num_episodes_tuning, int)
+            assert num_episodes_tuning > 0
 
         assert num_episodes > 0
         assert num_steps > 0
         assert n_particles > 0
         assert direction in ["maximize", "minimize"]
+        
+        # Set default tuning episodes if not provided
+        episodes_for_tuning = num_episodes_tuning if num_episodes_tuning is not None else num_episodes
+        
+        logger.info(f"Starting hyperparameter optimization with {episodes_for_tuning} episodes per trial")
+        if episodes_for_tuning < num_episodes:
+            logger.info(f"Final evaluation will use {num_episodes} episodes for accuracy")
+        logger.info(f"Optimizing {parameter_to_optimize} using {n_trials} trials")
 
         def evaluation_function(policy: Policy, trial: optuna.Trial) -> float:
             initial_belief = get_initial_belief(pomdp=environment, n_particles=n_particles)
@@ -457,7 +477,7 @@ class HyperParameterOptimizer:
                 environment=environment,
                 policy=policy,
                 initial_belief=initial_belief,
-                num_episodes=num_episodes,
+                num_episodes=episodes_for_tuning,  # Use tuning episodes count
                 num_steps=num_steps,
                 alpha=0.05,  # Fixed alpha for optimization
                 scheduler_address=None,
@@ -507,9 +527,34 @@ class HyperParameterOptimizer:
         best_params = study.best_params
         best_value = study.best_value
 
-        # Get histories from the best trial
-        best_trial = study.best_trial
-        histories = best_trial.user_attrs["histories"]
+        # If tuning used fewer episodes than requested for evaluation, 
+        # run a final evaluation with the full episode count for accuracy
+        if episodes_for_tuning < num_episodes:
+            logger.info(f"Running final evaluation with {num_episodes} episodes (tuning used {episodes_for_tuning})")
+            # Create policy with best parameters for final evaluation
+            best_policy = policy_class(environment=environment, **best_params)
+            initial_belief = get_initial_belief(pomdp=environment, n_particles=n_particles)
+            
+            # Run final evaluation with full episode count
+            histories, statistics = self.simulation(
+                environment=environment,
+                policy=best_policy,
+                initial_belief=initial_belief,
+                num_episodes=num_episodes,  # Use full episode count for final evaluation
+                num_steps=num_steps,
+                alpha=0.05,
+                scheduler_address=None,
+            )
+            
+            # Update best_value with the more accurate evaluation
+            for metric in statistics:
+                if metric.name == parameter_to_optimize:
+                    best_value = metric.value
+                    break
+        else:
+            # Get histories from the best trial (tuning and evaluation used same episode count)
+            best_trial = study.best_trial
+            histories = best_trial.user_attrs["histories"]
 
         return best_params, best_value, histories
 
@@ -524,6 +569,7 @@ class HyperParameterOptimizer:
         parameter_to_optimize: str = "average_return",
         direction: str = "maximize",
         n_trials: int = 100,
+        num_episodes_tuning: Optional[int] = None,
     ) -> Tuple[List[Tuple[dict, float, List[History]]], pd.DataFrame]:
         """Conduct hyperparameter optimization across multiple environment-policy pairs.
         
@@ -545,8 +591,9 @@ class HyperParameterOptimizer:
             environment_policy_pairs: List of tuples, each containing an environment
                 and a tuple of (policy_class, param_ranges). The param_ranges define
                 the hyperparameter search space for that specific policy class.
-            num_episodes: Number of episodes per optimization trial. Applied to
-                all environment-policy pairs for consistent statistical reliability.
+            num_episodes: Number of episodes for final evaluation of best parameters.
+                Applied to all environment-policy pairs for consistent final assessment.
+                Higher values provide more reliable final performance estimates.
             num_steps: Maximum steps per episode across all optimizations
             n_particles: Number of belief particles for all environment simulations
             parameter_to_optimize: Performance metric name to optimize across all
@@ -556,6 +603,10 @@ class HyperParameterOptimizer:
                 Defaults to "maximize".
             n_trials: Number of optimization trials per environment-policy pair.
                 Total computation scales linearly with number of pairs.
+            num_episodes_tuning: Number of episodes per trial during hyperparameter
+                tuning across all pairs. If None, uses num_episodes. Setting this
+                lower allows faster tuning with final evaluation using num_episodes
+                for accuracy. Defaults to None.
                 
         Returns:
             Tuple containing:
@@ -683,6 +734,7 @@ class HyperParameterOptimizer:
                     parameter_to_optimize=parameter_to_optimize,
                     direction=direction,
                     n_trials=n_trials,
+                    num_episodes_tuning=num_episodes_tuning,
                 )
 
                 # Get statistics from the best trial
