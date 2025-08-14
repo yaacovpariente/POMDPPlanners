@@ -90,9 +90,18 @@ def plot_metrics_comparison(
             continue
 
         # Plot bars
-        yerr = (np.array(upper_bounds) - np.array(lower_bounds)) / 2
-        if sum(yerr) == 0:
-            yerr = 1e-10
+        # Ensure confidence bounds are properly ordered (lower < upper)
+        lower_bounds = np.array(lower_bounds)
+        upper_bounds = np.array(upper_bounds)
+        # Create 2D array for yerr: [lower_errors, upper_errors]
+        # This properly handles asymmetric confidence intervals
+        yerr = np.vstack([
+            np.abs(np.array(means) - lower_bounds),  # Lower errors (absolute value)
+            np.abs(upper_bounds - np.array(means))   # Upper errors (absolute value)
+        ])
+        
+        if np.all(yerr == 0):
+            yerr = np.full((2, len(means)), 1e-10)
             
         plt.bar(
             x[: len(means)],
