@@ -35,7 +35,8 @@ Example:
         optimizer = HyperParameterOptimizer(
             cache_dir_path=Path("./optimization_results"),
             experiment_name="POMCP_Tiger_Optimization",
-            n_jobs=4
+            n_jobs=4,
+            mlflow_tracking_uri=Path("/shared/mlflow_tracking")  # Optional: custom tracking directory
         )
         
         # Define parameter search space
@@ -118,7 +119,8 @@ class HyperParameterOptimizer:
         experiment_name: Name of the MLFlow experiment for tracking
         n_jobs: Number of parallel jobs for episode execution
         confidence_interval_level: Statistical confidence level for metrics
-        mlruns_path: Path to MLFlow experiment tracking database
+        mlflow_tracking_uri: File URI for MLFlow tracking (always local file storage)
+        mlruns_path: Path to MLFlow experiment tracking directory on local filesystem
         simulator: POMDPSimulator instance for parallel episode execution
         
     Example:
@@ -130,7 +132,8 @@ class HyperParameterOptimizer:
             optimizer = HyperParameterOptimizer(
                 cache_dir_path=Path("./optimization_cache"),
                 experiment_name="POMCP_Tuning",
-                n_jobs=4
+                n_jobs=4,
+                mlflow_tracking_uri=Path("/shared/mlflow_tracking")  # Custom local directory
             )
             
             param_ranges = [
@@ -191,6 +194,7 @@ class HyperParameterOptimizer:
         experiment_name: str = "POMDP_Parameter_Optimization",
         n_jobs: int = 1,
         confidence_interval_level: float = 0.95,
+        mlflow_tracking_uri: Optional[Path] = None,
     ):
         """Initialize the hyperparameter optimizer.
         
@@ -211,6 +215,10 @@ class HyperParameterOptimizer:
                 computation (between 0.0 and 1.0). Used for computing confidence
                 intervals in performance statistics. Defaults to 0.95 for 95%
                 confidence intervals.
+            mlflow_tracking_uri: Path to custom MLFlow tracking directory on local machine.
+                If None (default), uses cache_dir_path/mlruns for local file storage.
+                If provided, must be a Path object pointing to the desired MLflow 
+                tracking directory on the local filesystem.
                 
         Raises:
             ValueError: If confidence_interval_level is not between 0.0 and 1.0
@@ -220,11 +228,20 @@ class HyperParameterOptimizer:
         self.experiment_name = experiment_name
         self.n_jobs = n_jobs
         self.confidence_interval_level = confidence_interval_level
+        self.mlflow_tracking_uri = mlflow_tracking_uri
         
         # Set up MLFlow tracking
-        self.mlruns_path = cache_dir_path / "mlruns"
+        if mlflow_tracking_uri is None:
+            # Use local file storage in cache_dir_path/mlruns
+            self.mlruns_path = cache_dir_path / "mlruns"
+        else:
+            # Use user-provided tracking path
+            self.mlruns_path = Path(mlflow_tracking_uri)
+            
+        # Create the mlruns directory and set up MLflow
         self.mlruns_path.mkdir(parents=True, exist_ok=True)
-        mlflow.set_tracking_uri(str(self.mlruns_path))
+        self.mlflow_tracking_uri = f"file://{self.mlruns_path.absolute()}"
+        mlflow.set_tracking_uri(self.mlflow_tracking_uri)
         mlflow.set_experiment(experiment_name)
         
         # Create simulator instance for running episodes

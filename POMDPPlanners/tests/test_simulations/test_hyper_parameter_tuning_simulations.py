@@ -562,3 +562,80 @@ def test_optimize_and_evaluate_usage_example_api(temp_cache_dir):
     assert len(param_ranges) == 2
     assert param_ranges[0].name == "exploration_constant"
     assert param_ranges[1].name == "n_simulations"
+
+
+def test_mlflow_tracking_uri_default(temp_cache_dir):
+    """Test MLflow tracking URI with default local file storage.
+    
+    Purpose: Validates that the default MLflow tracking configuration uses local file storage
+    
+    Given: HyperParameterOptimizer initialized without mlflow_tracking_uri
+    When: The optimizer is created
+    Then: MLflow tracking URI is set to local file storage in cache directory
+    
+    Test type: unit
+    """
+    optimizer = HyperParameterOptimizer(
+        cache_dir_path=temp_cache_dir,
+        experiment_name="test_default_tracking",
+        n_jobs=1,
+    )
+    
+    # Should use local file storage
+    assert optimizer.mlruns_path == temp_cache_dir / "mlruns"
+    assert optimizer.mlruns_path.exists()
+    assert optimizer.mlflow_tracking_uri.startswith("file://")
+    assert str(temp_cache_dir / "mlruns") in optimizer.mlflow_tracking_uri
+
+
+def test_mlflow_tracking_uri_custom_local(temp_cache_dir):
+    """Test MLflow tracking URI with custom local directory.
+    
+    Purpose: Validates that custom local MLflow tracking path is handled correctly
+    
+    Given: HyperParameterOptimizer initialized with custom local Path
+    When: The optimizer is created
+    Then: MLflow tracking uses the custom local directory
+    
+    Test type: unit
+    """
+    custom_mlruns = temp_cache_dir / "custom_mlruns"
+    
+    optimizer = HyperParameterOptimizer(
+        cache_dir_path=temp_cache_dir,
+        experiment_name="test_custom_local_tracking",
+        n_jobs=1,
+        mlflow_tracking_uri=custom_mlruns
+    )
+    
+    # Should use custom path
+    assert optimizer.mlruns_path == custom_mlruns
+    assert optimizer.mlruns_path.exists()  # Should be created
+    assert optimizer.mlflow_tracking_uri == f"file://{custom_mlruns.absolute()}"
+
+
+def test_mlflow_tracking_uri_string_path_conversion(temp_cache_dir):
+    """Test MLflow tracking URI with string path that gets converted to Path.
+    
+    Purpose: Validates that string paths are properly converted to Path objects
+    
+    Given: HyperParameterOptimizer initialized with string path for tracking URI
+    When: The optimizer is created
+    Then: String path is converted to Path and directory is created
+    
+    Test type: unit
+    """
+    custom_str_path = str(temp_cache_dir / "string_path_mlruns")
+    
+    optimizer = HyperParameterOptimizer(
+        cache_dir_path=temp_cache_dir,
+        experiment_name="test_string_path_tracking",
+        n_jobs=1,
+        mlflow_tracking_uri=custom_str_path
+    )
+    
+    # Should convert string to Path and create directory
+    assert isinstance(optimizer.mlruns_path, Path)
+    assert optimizer.mlruns_path == Path(custom_str_path)
+    assert optimizer.mlruns_path.exists()  # Should be created
+    assert optimizer.mlflow_tracking_uri == f"file://{Path(custom_str_path).absolute()}"
