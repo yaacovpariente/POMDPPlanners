@@ -148,6 +148,41 @@ class HyperParameterOptimizer:
                 n_trials=20,
                 num_episodes_tuning=10    # Faster tuning with fewer episodes
             )
+            
+        Combined optimization and evaluation workflow::\
+        
+            # For comprehensive studies with detailed evaluation
+            env_policy_pairs = [
+                (tiger_env, (POMCP, [
+                    NumericalHyperParameter(low=0.1, high=10.0, name="exploration_constant"),
+                    NumericalHyperParameter(low=100, high=1000, name="n_simulations")
+                ])),
+                (lightdark_env, (POMCP, [
+                    NumericalHyperParameter(low=0.1, high=10.0, name="exploration_constant"), 
+                    NumericalHyperParameter(low=100, high=1000, name="n_simulations")
+                ]))
+            ]
+            
+            # Run optimization followed by comprehensive evaluation
+            opt_results, opt_df, eval_results = optimizer.optimize_and_evaluate_multiple_environments(
+                environment_policy_pairs=env_policy_pairs,
+                num_episodes_tuning=10,      # Fast optimization
+                num_episodes_evaluation=100, # Thorough evaluation
+                num_steps=50,
+                n_particles=100,
+                n_trials=20,
+                cache_visualizations=True    # Generate plots and animations
+            )
+            
+            # Access optimization results
+            for i, (best_params, best_value, histories) in enumerate(opt_results):
+                env_name = env_policy_pairs[i][0].name
+                print(f"{env_name} - Best params: {best_params}, Value: {best_value}")
+            
+            # Access comprehensive evaluation results with full simulator capabilities
+            for env_name, policy_results in eval_results.items():
+                for policy_name, policy_histories in policy_results.items():
+                    print(f"{env_name}/{policy_name}: {len(policy_histories)} evaluation episodes")
     """
     
     def __init__(
@@ -802,4 +837,167 @@ class HyperParameterOptimizer:
             mlflow.end_run()
 
         return results, df
+
+    def optimize_and_evaluate_multiple_environments(
+        self,
+        environment_policy_pairs: List[
+            Tuple[Environment, Tuple[Type[Policy], List[HyperParameterFeatures]]]
+        ],
+        num_episodes_tuning: int,
+        num_episodes_evaluation: int,
+        num_steps: int,
+        n_particles: int,
+        parameter_to_optimize: str = "average_return",
+        direction: str = "maximize",
+        n_trials: int = 100,
+        alpha: float = 0.05,
+        confidence_interval_level: Optional[float] = None,
+        cache_visualizations: bool = True,
+    ) -> Tuple[List[Tuple[dict, float, List[History]]], pd.DataFrame, Dict[str, Dict[str, List[History]]]]:
+        """Optimize hyperparameters and then evaluate optimized policies using the full simulator.
+        
+        This method combines hyperparameter optimization with comprehensive policy evaluation.
+        First, it optimizes hyperparameters for each environment-policy pair using a smaller
+        number of episodes for speed. Then, it evaluates the optimized policies using the 
+        full simulator with more episodes for accuracy, generating complete statistics and
+        visualizations.
+        
+        The evaluation phase uses POMDPSimulator to provide comprehensive analysis including:
+        - Detailed statistical metrics with confidence intervals
+        - Policy comparison visualizations and plots
+        - MLFlow experiment tracking with artifacts
+        - Parallel execution for efficient evaluation
+        
+        Args:
+            environment_policy_pairs: List of tuples, each containing an environment
+                and a tuple of (policy_class, param_ranges). The param_ranges define
+                the hyperparameter search space for that specific policy class.
+            num_episodes_tuning: Number of episodes per trial during hyperparameter
+                optimization. Should be relatively small for faster optimization.
+            num_episodes_evaluation: Number of episodes for final evaluation using
+                the full simulator. Should be larger for accurate performance assessment.
+            num_steps: Maximum steps per episode across all optimizations and evaluations
+            n_particles: Number of belief particles for all environment simulations
+            parameter_to_optimize: Performance metric name to optimize across all
+                pairs. Must be consistently available in all environments' statistics.
+                Defaults to "average_return".
+            direction: Optimization direction for all pairs ("maximize" or "minimize").
+                Defaults to "maximize".
+            n_trials: Number of optimization trials per environment-policy pair.
+                Total computation scales linearly with number of pairs.
+            alpha: Significance level for confidence intervals in evaluation phase.
+                Defaults to 0.05 for 5% significance level.
+            confidence_interval_level: Confidence level for metrics computation during
+                evaluation. If None, uses the optimizer's configured level.
+            cache_visualizations: Whether to generate and cache detailed visualizations
+                during evaluation phase. Defaults to True.
+                
+        Returns:
+            Tuple containing:
+                - List of optimization results, one per environment-policy pair.
+                  Each result is a tuple of (best_params, best_value, tuning_histories).
+                - pandas.DataFrame with aggregated optimization results for analysis.
+                - Dictionary with evaluation results mapping environment names to
+                  dictionaries mapping policy names to lists of evaluation histories.
+                  
+        Raises:
+            AssertionError: If input validation fails for any pair
+            ValueError: If parameter_to_optimize is not found in any environment's statistics
+            RuntimeError: If optimization or evaluation fails for any environment-policy pair
+            
+        Example:
+            Optimize and evaluate POMCP across multiple environments::\
+            
+                env_policy_pairs = [
+                    (tiger_env, (POMCP, [
+                        NumericalHyperParameter("exploration_constant", 0.1, 10.0),
+                        NumericalHyperParameter("n_simulations", 100, 1000)
+                    ])),
+                    (lightdark_env, (POMCP, [
+                        NumericalHyperParameter("exploration_constant", 0.1, 10.0),
+                        NumericalHyperParameter("n_simulations", 100, 1000)
+                    ]))
+                ]
+                
+                opt_results, opt_df, eval_results = optimizer.optimize_and_evaluate_multiple_environments(
+                    environment_policy_pairs=env_policy_pairs,
+                    num_episodes_tuning=10,      # Fast optimization
+                    num_episodes_evaluation=100, # Comprehensive evaluation
+                    num_steps=50,
+                    n_particles=100,
+                    n_trials=20,
+                    cache_visualizations=True
+                )
+                
+        Note:
+            This method creates two phases of MLFlow tracking:
+            1. Optimization phase: Individual runs for each environment-policy optimization
+            2. Evaluation phase: Comprehensive comparison using the full simulator
+            The evaluation phase provides detailed visualizations and statistical analysis.
+        """
+        # Validate confidence interval level
+        eval_confidence_level = confidence_interval_level if confidence_interval_level is not None else self.confidence_interval_level
+        
+        assert isinstance(num_episodes_tuning, int) and num_episodes_tuning > 0
+        assert isinstance(num_episodes_evaluation, int) and num_episodes_evaluation > 0
+        assert isinstance(alpha, float) and 0 < alpha < 1
+        assert isinstance(eval_confidence_level, float) and 0 < eval_confidence_level < 1
+        assert isinstance(cache_visualizations, bool)
+        
+        logger.info(f"Starting optimization and evaluation with {len(environment_policy_pairs)} environment-policy pairs")
+        logger.info(f"Optimization: {num_episodes_tuning} episodes per trial, {n_trials} trials each")
+        logger.info(f"Evaluation: {num_episodes_evaluation} episodes per optimized policy")
+        
+        # Phase 1: Hyperparameter Optimization
+        logger.info("Phase 1: Running hyperparameter optimization")
+        optimization_results, optimization_df = self.optimize_multiple_environments(
+            environment_policy_pairs=environment_policy_pairs,
+            num_episodes=num_episodes_evaluation,  # Use evaluation episodes for final accuracy
+            num_steps=num_steps,
+            n_particles=n_particles,
+            parameter_to_optimize=parameter_to_optimize,
+            direction=direction,
+            n_trials=n_trials,
+            num_episodes_tuning=num_episodes_tuning,  # Use tuning episodes for speed
+        )
+        
+        # Phase 2: Comprehensive Evaluation using POMDPSimulator
+        logger.info("Phase 2: Running comprehensive evaluation with optimized parameters")
+        
+        # Create optimized policies with best parameters for evaluation
+        evaluation_env_params = []
+        for pair_idx, (environment, (policy_class, param_ranges)) in enumerate(environment_policy_pairs):
+            # Get the best parameters for this pair
+            best_params, best_value, _ = optimization_results[pair_idx]
+            
+            # Create optimized policy instance
+            optimized_policy = policy_class(environment=environment, **best_params)
+            
+            # Create initial belief
+            initial_belief = get_initial_belief(pomdp=environment, n_particles=n_particles)
+            
+            # Create evaluation parameters
+            env_run_params = EnvironmentRunParams(
+                environment=environment,
+                belief=initial_belief,
+                policies=[optimized_policy],
+                num_episodes=num_episodes_evaluation,
+                num_steps=num_steps
+            )
+            evaluation_env_params.append(env_run_params)
+        
+        # Use the simulator for comprehensive evaluation with visualization and tracking
+        evaluation_results, evaluation_df = self.simulator.compare_multiple_environments_policies(
+            environment_run_params=evaluation_env_params,
+            alpha=alpha,
+            confidence_interval_level=eval_confidence_level,
+            n_jobs=self.n_jobs,
+            cache_visualizations=cache_visualizations,
+        )
+        
+        logger.info("Optimization and evaluation completed successfully")
+        logger.info(f"Optimization results: {len(optimization_results)} pairs optimized")
+        logger.info(f"Evaluation results: {len(evaluation_results)} environments evaluated")
+        
+        return optimization_results, optimization_df, evaluation_results
 
