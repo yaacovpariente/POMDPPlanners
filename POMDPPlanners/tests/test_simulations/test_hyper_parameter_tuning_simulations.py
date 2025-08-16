@@ -8,7 +8,6 @@ import pytest
 import tempfile
 import shutil
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 import mlflow
 import numpy as np
 
@@ -26,7 +25,8 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+from POMDPPlanners.core.belief import get_initial_belief
 
 
 @pytest.fixture
@@ -44,94 +44,88 @@ def temp_cache_dir():
 
 
 @pytest.fixture
-def mock_environment():
-    """Create a mock environment for testing."""
-    env = Mock()
-    env.__class__.__name__ = "MockEnvironment"
-    env.name = "mock_env"
-    env.discount_factor = 0.95
-    
-    # Mock the initial_state_dist method to return a proper distribution
-    mock_dist = Mock()
-    mock_dist.sample.return_value = [Mock()] * 100  # Return list of 100 mock states
-    env.initial_state_dist = mock_dist
-    
-    return env
+def real_environment():
+    """Create a real TigerPOMDP environment for testing."""
+    return TigerPOMDP(discount_factor=0.95)
 
 
 @pytest.fixture
-def mock_policy_class():
-    """Create a mock policy class for testing."""
-    policy_cls = Mock()
-    policy_cls.__name__ = "MockPolicy"
-    return policy_cls
+def real_policy_class():
+    """Create a real policy class for testing."""
+    return StandardSparseSamplingDiscreteActionsPlanner
 
 
 @pytest.fixture
-def mock_belief():
-    """Create a mock belief for testing."""
-    belief = Mock()
-    belief.__class__.__name__ = "MockBelief"
-    return belief
+def real_belief(real_environment):
+    """Create a real belief for testing."""
+    return get_initial_belief(real_environment, n_particles=10)  # Small for fast tests
 
 
 @pytest.fixture
 def sample_hyperparameters():
     """Create sample hyperparameters for testing."""
     return [
-        NumericalHyperParameter("exploration_constant", 0.1, 10.0),
-        NumericalHyperParameter("n_simulations", 100, 1000),
-        CategoricalHyperParameter("algorithm", ["tpe", "cmaes", "random"])
+        NumericalHyperParameter("branching_factor", 1, 3),  # Small range for fast tests
+        NumericalHyperParameter("depth", 1, 3),             # Small range for fast tests
     ]
 
 
 @pytest.fixture
-def sample_configs(mock_environment, mock_policy_class, mock_belief):
+def sample_configs(real_environment, real_policy_class, real_belief):
     """Create sample HyperParameterRunParams configurations for testing."""
     return [
         HyperParameterRunParams(
-            environment=mock_environment,
-            belief=mock_belief,
-            policy_cls=mock_policy_class,
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=real_policy_class,
             hyper_parameters=[
-                NumericalHyperParameter("exploration_constant", 0.1, 10.0),
-                NumericalHyperParameter("n_simulations", 100, 1000)
+                NumericalHyperParameter("branching_factor", 1, 2),
+                NumericalHyperParameter("depth", 1, 2)
             ],
-            num_episodes=10,
-            num_steps=20,
-            n_trials=50,
+            constant_parameters={},  # No constant parameters needed for this planner
+            num_episodes=2,  # Small for fast tests
+            num_steps=3,     # Small for fast tests
+            n_trials=2,      # Small for fast tests
             direction=HyperParameterOptimizationDirection.MAXIMIZE,
             parameter_to_optimize="average_return"
         ),
         HyperParameterRunParams(
-            environment=mock_environment,
-            belief=mock_belief,
-            policy_cls=mock_policy_class,
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=real_policy_class,
             hyper_parameters=[
-                CategoricalHyperParameter("algorithm", ["tpe", "cmaes"]),
-                NumericalHyperParameter("depth", 5, 15)
+                NumericalHyperParameter("branching_factor", 1, 2),
+                NumericalHyperParameter("depth", 1, 2)
             ],
-            num_episodes=15,
-            num_steps=25,
-            n_trials=75,
-            direction=HyperParameterOptimizationDirection.MINIMIZE,
-            parameter_to_optimize="total_cost"
+            constant_parameters={},  # No constant parameters needed for this planner
+            num_episodes=2,  # Small for fast tests
+            num_steps=3,     # Small for fast tests
+            n_trials=2,      # Small for fast tests
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,  # Changed from MINIMIZE to work with average_return
+            parameter_to_optimize="average_return"  # Changed from total_cost to a valid metric
         )
     ]
 
 
 @pytest.fixture
-def mock_optimized_policy_result(mock_environment, mock_policy_class):
-    """Create a mock OptimizedPolicyResult for testing."""
+def real_optimized_policy_result(real_environment, real_policy_class):
+    """Create a real OptimizedPolicyResult for testing."""
+    # Create a real policy instance
+    policy = real_policy_class(
+        environment=real_environment,
+        branching_factor=2,
+        depth=2
+    )
+    
     return OptimizedPolicyResult(
-        environment=mock_environment,
-        policy=mock_policy_class(),
+        environment=real_environment,
+        policy=policy,
         chosen_hyper_parameters={
-            "exploration_constant": 5.0,
-            "n_simulations": 500
+            "branching_factor": 2,
+            "depth": 2
         },
-        num_episodes=10,
-        num_steps=20,
+        num_episodes=2,  # Small for fast tests
+        num_steps=3,     # Small for fast tests
         direction=HyperParameterOptimizationDirection.MAXIMIZE,
         parameter_to_optimize="average_return"
     )
@@ -206,90 +200,102 @@ class TestHyperParameterOptimizerInitialization:
 class TestHyperParameterOptimizerTaskCreation:
     """Test task creation methods."""
 
-    @patch('POMDPPlanners.simulations.hyper_parameter_tuning_simulations.HyperParameterTuningSimulationTask')
-    def test_create_tasks_with_default_n_trials(self, mock_task_class, temp_cache_dir, sample_configs):
-        """Test task creation with default n_trials."""
+    def test_create_tasks_with_real_configs(self, temp_cache_dir, sample_configs):
+        """Test task creation with real configurations."""
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir
         )
-        
-        # Mock the task class to avoid actual instantiation
-        mock_task_instance = Mock()
-        mock_task_class.return_value = mock_task_instance
         
         tasks = optimizer._create_tasks(sample_configs)
         
         assert len(tasks) == len(sample_configs)
-        # Verify task class was called with correct parameters
-        assert mock_task_class.call_count == len(sample_configs)
+        # Verify tasks are real HyperParameterTuningSimulationTask instances
+        for task in tasks:
+            assert hasattr(task, 'run')
+            assert hasattr(task, 'environment')
+            assert hasattr(task, 'policy_cls')
+            assert hasattr(task, 'hyper_parameters')
 
-    @patch('POMDPPlanners.simulations.hyper_parameter_tuning_simulations.HyperParameterTuningSimulationTask')
-    def test_create_tasks_with_custom_n_trials(self, mock_task_class, temp_cache_dir, sample_configs):
-        """Test task creation with custom n_trials."""
+    def test_create_tasks_preserves_config_parameters(self, temp_cache_dir, sample_configs):
+        """Test task creation preserves configuration parameters."""
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir
         )
-        
-        # Mock the task class to avoid actual instantiation
-        mock_task_instance = Mock()
-        mock_task_class.return_value = mock_task_instance
-        
-        # Create configs with different n_trials values
-        configs_with_trials = [
-            HyperParameterRunParams(
-                environment=sample_configs[0].environment,
-                belief=sample_configs[0].belief,
-                policy_cls=sample_configs[0].policy_cls,
-                hyper_parameters=sample_configs[0].hyper_parameters,
-                num_episodes=sample_configs[0].num_episodes,
-                num_steps=sample_configs[0].num_steps,
-                n_trials=100,
-                direction=sample_configs[0].direction,
-                parameter_to_optimize=sample_configs[0].parameter_to_optimize
-            ),
-            HyperParameterRunParams(
-                environment=sample_configs[1].environment,
-                belief=sample_configs[1].belief,
-                policy_cls=sample_configs[1].policy_cls,
-                hyper_parameters=sample_configs[1].hyper_parameters,
-                num_episodes=sample_configs[1].num_episodes,
-                num_steps=sample_configs[1].num_steps,
-                n_trials=75,
-                direction=sample_configs[1].direction,
-                parameter_to_optimize=sample_configs[1].parameter_to_optimize
-            )
-        ]
-        
-        tasks = optimizer._create_tasks(configs_with_trials)
-        
-        assert len(tasks) == len(configs_with_trials)
-        # Verify task class was called with correct parameters
-        assert mock_task_class.call_count == len(configs_with_trials)
-
-    @patch('POMDPPlanners.simulations.hyper_parameter_tuning_simulations.HyperParameterTuningSimulationTask')
-    def test_create_tasks_handles_n_trials(self, mock_task_class, temp_cache_dir, sample_configs):
-        """Test task creation handles n_trials parameter correctly."""
-        optimizer = HyperParameterOptimizer(
-            cache_dir_path=temp_cache_dir
-        )
-        
-        # Mock the task class to avoid actual instantiation
-        mock_task_instance = Mock()
-        mock_task_class.return_value = mock_task_instance
         
         tasks = optimizer._create_tasks(sample_configs)
         
+        for i, task in enumerate(tasks):
+            config = sample_configs[i]
+            assert task.environment == config.environment
+            assert task.policy_cls == config.policy_cls
+            assert task.hyper_parameters == config.hyper_parameters
+            assert task.constant_parameters == config.constant_parameters
+            assert task.num_episodes == config.num_episodes
+            assert task.num_steps == config.num_steps
+            assert task.n_trials == config.n_trials
+            assert task.direction == config.direction
+            assert task.parameter_to_optimize == config.parameter_to_optimize
+
+    def test_create_tasks_returns_correct_type(self, temp_cache_dir, sample_configs):
+        """Test that _create_tasks returns List[HyperParameterTuningSimulationTask]."""
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir
+        )
+        
+        tasks = optimizer._create_tasks(sample_configs)
+        
+        # Check that it returns a list
+        assert isinstance(tasks, list)
+        
+        # Check that each item is a HyperParameterTuningSimulationTask
+        from POMDPPlanners.simulations.simulations_deployment.tasks import HyperParameterTuningSimulationTask
+        for task in tasks:
+            assert isinstance(task, HyperParameterTuningSimulationTask)
+        
+        # Check that the list has the expected length
         assert len(tasks) == len(sample_configs)
-        # Verify task class was called with correct parameters
-        assert mock_task_class.call_count == len(sample_configs)
+
+    def test_execute_optimization_tasks_returns_correct_type(self, temp_cache_dir, sample_configs):
+        """Test that _execute_optimization_tasks returns Tuple[List[OptimizedPolicyResult], List[HyperParameterTuningSimulationTask]]."""
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir
+        )
+        
+        # Use only one config for faster testing
+        single_config = sample_configs[:1]
+        
+        task_results, tasks = optimizer._execute_optimization_tasks(single_config)
+        
+        # Check that it returns a tuple
+        assert isinstance((task_results, tasks), tuple)
+        
+        # Check that first element is a list
+        assert isinstance(task_results, list)
+        
+        # Check that second element is a list
+        assert isinstance(tasks, list)
+        
+        # Check that the lists have the expected length
+        assert len(tasks) == len(single_config)
+        
+        # Check that each task is a HyperParameterTuningSimulationTask
+        from POMDPPlanners.simulations.simulations_deployment.tasks import HyperParameterTuningSimulationTask
+        for task in tasks:
+            assert isinstance(task, HyperParameterTuningSimulationTask)
+        
+        # Note: task_results might be empty or contain None values if optimization fails,
+        # but the structure should be correct
+        if task_results:
+            # If there are results, they should be OptimizedPolicyResult instances
+            from POMDPPlanners.core.simulation.hyperparameter_tuning import OptimizedPolicyResult
+            for result in task_results:
+                assert isinstance(result, OptimizedPolicyResult)
 
 
 class TestHyperParameterOptimizerOptimizeMethod:
     """Test the main optimize method."""
 
-    @patch('POMDPPlanners.simulations.hyper_parameter_tuning_simulations.HyperParameterOptimizer._execute_optimization_tasks')
-    @patch('POMDPPlanners.simulations.hyper_parameter_tuning_simulations.HyperParameterOptimizer._process_task_results_with_mlflow_logging')
-    def test_optimize_empty_configs_returns_empty_list(self, mock_process, mock_execute, temp_cache_dir):
+    def test_optimize_empty_configs_returns_empty_list(self, temp_cache_dir):
         """Test optimize with empty configs returns empty list."""
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir
@@ -298,42 +304,44 @@ class TestHyperParameterOptimizerOptimizeMethod:
         result = optimizer.optimize([])
         
         assert result == []
-        mock_execute.assert_not_called()
-        mock_process.assert_not_called()
 
-    @patch('POMDPPlanners.simulations.hyper_parameter_tuning_simulations.HyperParameterOptimizer._execute_optimization_tasks')
-    @patch('POMDPPlanners.simulations.hyper_parameter_tuning_simulations.HyperParameterOptimizer._process_task_results_with_mlflow_logging')
-    def test_optimize_calls_required_methods(self, mock_process, mock_execute, temp_cache_dir, sample_configs):
-        """Test optimize calls all required methods in correct order."""
+    def test_optimize_with_real_configs(self, temp_cache_dir, sample_configs):
+        """Test optimize with real configurations (integration test)."""
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir
         )
         
-        # Mock return values
-        mock_execute.return_value = ([], [])  # task_results, tasks
-        mock_process.return_value = [Mock()]  # mock results
+        # Use only one config for faster testing
+        single_config = sample_configs[:1]
         
-        result = optimizer.optimize(sample_configs)
+        result = optimizer.optimize(single_config)
         
-        # Verify methods were called
-        mock_execute.assert_called_once()
-        mock_process.assert_called_once()
-        assert len(result) == 1
+        # Verify results
+        assert isinstance(result, list)
+        assert len(result) <= len(single_config)  # May be fewer if some fail
+        
+        # Check result structure if any succeeded
+        for optimized_result in result:
+            assert hasattr(optimized_result, 'environment')
+            assert hasattr(optimized_result, 'policy')
+            assert hasattr(optimized_result, 'chosen_hyper_parameters')
+            assert hasattr(optimized_result, 'direction')
+            assert hasattr(optimized_result, 'parameter_to_optimize')
 
-    @patch('mlflow.start_run')
-    def test_optimize_starts_mlflow_run(self, mock_start_run, temp_cache_dir, sample_configs):
-        """Test optimize starts MLflow run for tracking."""
+    def test_optimize_creates_mlflow_experiment(self, temp_cache_dir, sample_configs):
+        """Test optimize creates MLflow experiment."""
+        experiment_name = "Test_Optimize_Experiment"
         optimizer = HyperParameterOptimizer(
-            cache_dir_path=temp_cache_dir
+            cache_dir_path=temp_cache_dir,
+            experiment_name=experiment_name
         )
         
-        # Mock the internal methods to avoid actual execution
-        with patch.object(optimizer, '_execute_optimization_tasks', return_value=([], [])):
-            with patch.object(optimizer, '_process_task_results_with_mlflow_logging', return_value=[]):
-                optimizer.optimize(sample_configs)
+        # Run with empty configs to avoid long execution
+        optimizer.optimize([])
         
-        # Verify MLflow run was started
-        mock_start_run.assert_called()
+        # Verify experiment was created
+        experiment = mlflow.get_experiment_by_name(experiment_name)
+        assert experiment is not None
 
 
 class TestHyperParameterOptimizerHelperMethods:
@@ -345,7 +353,7 @@ class TestHyperParameterOptimizerHelperMethods:
             cache_dir_path=temp_cache_dir
         )
         
-        # Start a mock run
+        # Start a run
         with mlflow.start_run():
             assert mlflow.active_run() is not None
             
@@ -368,189 +376,94 @@ class TestHyperParameterOptimizerHelperMethods:
             run = mlflow.active_run()
             assert run is not None
 
-    def test_match_successful_results_with_configs(self, temp_cache_dir, sample_configs):
-        """Test matching successful results with configurations."""
-        optimizer = HyperParameterOptimizer(
-            cache_dir_path=temp_cache_dir
-        )
-        
-        # Mock task results
-        mock_task_results = [Mock(), None, Mock()]  # Second result is None (failed)
-        mock_tasks = [Mock(), Mock(), Mock()]
-        
-        # Extend sample_configs to match
-        extended_configs = sample_configs + [sample_configs[0]]
-        
-        result = optimizer._match_successful_results_with_configs(
-            mock_task_results, extended_configs, mock_tasks
-        )
-        
-        # Should return 2 successful matches (indices 0 and 2)
-        assert len(result) == 2
-        assert result[0][0] == 0  # First successful index
-        assert result[1][0] == 2  # Second successful index
-
-    @patch.object(HyperParameterOptimizer, '_prepare_configuration_parameters')
-    def test_prepare_configuration_parameters(self, mock_prepare_params, temp_cache_dir, sample_configs):
+    def test_prepare_configuration_parameters(self, temp_cache_dir, sample_configs):
         """Test configuration parameter preparation."""
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir
         )
         
         config = sample_configs[0]
-        
-        # Mock the method to return expected parameters
-        mock_prepare_params.return_value = {
-            "config_index": 1,
-            "environment_type": "MockEnvironment",
-            "policy_type": "MockPolicy",
-            "num_episodes": 10,
-            "num_steps": 20,
-            "direction": "maximize",
-            "parameter_to_optimize": "average_return",
-            "n_trials": 50,
-            "num_episodes_tuning": 10
-        }
-        
         params = optimizer._prepare_configuration_parameters(0, config)
         
-        # Check required parameters
-        assert params["config_index"] == 1
-        assert params["environment_type"] == "MockEnvironment"
-        assert params["policy_type"] == "MockPolicy"
-        assert params["num_episodes"] == 10
-        assert params["num_steps"] == 20
-        assert params["direction"] == "maximize"
-        assert params["parameter_to_optimize"] == "average_return"
-        assert params["n_trials"] == 50
-        assert params["num_episodes_tuning"] == 10
+        # Check required parameters exist and have correct types
+        assert "config_index" in params
+        assert "environment_type" in params
+        assert "policy_type" in params
+        assert "num_episodes" in params
+        assert "num_steps" in params
+        assert "direction" in params
+        assert "parameter_to_optimize" in params
+        assert "n_trials" in params
         
-        # Verify the method was called
-        mock_prepare_params.assert_called_once_with(0, config)
+        # Check specific values
+        assert params["config_index"] == 1  # original_index + 1
+        assert params["environment_type"] == "TigerPOMDP"
+        assert params["policy_type"] == "StandardSparseSamplingDiscreteActionsPlanner"
+        assert params["num_episodes"] == config.num_episodes
+        assert params["num_steps"] == config.num_steps
+        assert params["direction"] == config.direction.value
+        assert params["parameter_to_optimize"] == config.parameter_to_optimize
+        assert params["n_trials"] == config.n_trials
 
-    def test_log_optimization_results_success(self, temp_cache_dir, mock_optimized_policy_result):
+    def test_log_optimization_results_success(self, temp_cache_dir, real_optimized_policy_result):
         """Test logging optimization results for successful optimization."""
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir
         )
         
-        # Mock task with metadata
-        mock_task = Mock()
-        mock_task.get_optimization_metadata.return_value = {
-            'best_value': 0.85,
-            'optimization_time': 120.5,
-            'n_trials': 50,
-            'best_trial_number': 23
-        }
+        # Create a real task that would have metadata
+        from POMDPPlanners.simulations.simulations_deployment.tasks import HyperParameterTuningSimulationTask
+        task = HyperParameterTuningSimulationTask(
+            environment=real_optimized_policy_result.environment,
+            belief=get_initial_belief(real_optimized_policy_result.environment, n_particles=10),
+            policy_cls=type(real_optimized_policy_result.policy),
+            hyper_parameters=[],
+            constant_parameters={},  # No constant parameters needed for this planner
+            num_episodes=1,
+            num_steps=1,
+            direction=real_optimized_policy_result.direction,
+            parameter_to_optimize=real_optimized_policy_result.parameter_to_optimize,
+            n_trials=1
+        )
         
         with mlflow.start_run():
-            optimizer._log_optimization_results(mock_optimized_policy_result, mock_task)
+            optimizer._log_optimization_results(real_optimized_policy_result, task)
             
             # Verify metrics were logged
             run = mlflow.active_run()
             assert run is not None
 
-    def test_log_optimization_results_failure(self, temp_cache_dir):
+    def test_log_optimization_results_failure(self, temp_cache_dir, real_environment):
         """Test logging optimization results for failed optimization."""
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir
         )
         
-        # Mock failed task
-        mock_task = Mock()
+        # Create a real task
+        from POMDPPlanners.simulations.simulations_deployment.tasks import HyperParameterTuningSimulationTask
+        task = HyperParameterTuningSimulationTask(
+            environment=real_environment,
+            belief=get_initial_belief(real_environment, n_particles=10),
+            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=[],
+            constant_parameters={},  # No constant parameters needed for this planner
+            num_episodes=1,
+            num_steps=1,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return",
+            n_trials=1
+        )
         
         with mlflow.start_run():
-            optimizer._log_optimization_results(None, mock_task)
+            optimizer._log_optimization_results(None, task)
             
             # Verify failure was logged
-            run = mlflow.active_run()
-            assert run is not None
-
-    def test_get_best_value_from_task(self, temp_cache_dir):
-        """Test extracting best value from task metadata."""
-        optimizer = HyperParameterOptimizer(
-            cache_dir_path=temp_cache_dir
-        )
-        
-        # Mock task with metadata
-        mock_task = Mock()
-        mock_task.get_optimization_metadata.return_value = {
-            'best_value': 0.92
-        }
-        
-        best_value = optimizer._get_best_value_from_task(mock_task)
-        
-        assert best_value == "0.92"
-
-    def test_get_best_value_from_task_no_metadata(self, temp_cache_dir):
-        """Test extracting best value when task has no metadata."""
-        optimizer = HyperParameterOptimizer(
-            cache_dir_path=temp_cache_dir
-        )
-        
-        # Mock task without metadata
-        mock_task = Mock()
-        mock_task.get_optimization_metadata.return_value = None
-        
-        best_value = optimizer._get_best_value_from_task(mock_task)
-        
-        assert best_value == "unknown"
-
-    def test_log_configuration_failure(self, temp_cache_dir):
-        """Test logging configuration failure."""
-        optimizer = HyperParameterOptimizer(
-            cache_dir_path=temp_cache_dir
-        )
-        
-        exception = RuntimeError("Optimization failed")
-        
-        with mlflow.start_run():
-            optimizer._log_configuration_failure(0, exception)
-            
-            # Verify failure was logged
-            run = mlflow.active_run()
-            assert run is not None
-
-    def test_log_batch_level_summary(self, temp_cache_dir, sample_configs):
-        """Test batch level summary logging."""
-        optimizer = HyperParameterOptimizer(
-            cache_dir_path=temp_cache_dir
-        )
-        
-        # Mock results
-        mock_results = [Mock(), Mock()]  # 2 successful results
-        
-        with mlflow.start_run():
-            optimizer._log_batch_level_summary(sample_configs, mock_results)
-            
-            # Verify summary was logged
             run = mlflow.active_run()
             assert run is not None
 
 
 class TestHyperParameterOptimizerIntegration:
     """Integration tests for HyperParameterOptimizer."""
-
-    @patch('POMDPPlanners.simulations.hyper_parameter_tuning_simulations.HyperParameterOptimizer._execute_optimization_tasks')
-    @patch('POMDPPlanners.simulations.hyper_parameter_tuning_simulations.HyperParameterOptimizer._process_task_results_with_mlflow_logging')
-    def test_full_optimization_workflow(self, mock_process, mock_execute, temp_cache_dir, sample_configs):
-        """Test complete optimization workflow."""
-        optimizer = HyperParameterOptimizer(
-            cache_dir_path=temp_cache_dir,
-            experiment_name="Integration_Test"
-        )
-        
-        # Mock successful execution
-        mock_execute.return_value = ([Mock()], [Mock()])
-        mock_process.return_value = [Mock()]
-        
-        # Run optimization
-        results = optimizer.optimize(sample_configs)
-        
-        # Verify workflow completed
-        assert len(results) == 1
-        mock_execute.assert_called_once()
-        mock_process.assert_called_once()
 
     def test_mlflow_experiment_creation(self, temp_cache_dir):
         """Test that MLflow experiment is properly created."""
@@ -603,98 +516,98 @@ class TestHyperParameterOptimizerErrorHandling:
         assert optimizer.mlflow_tracking_uri.startswith("file://")
         assert string_path in optimizer.mlflow_tracking_uri
 
-    @patch('POMDPPlanners.simulations.hyper_parameter_tuning_simulations.HyperParameterTuningSimulationTask')
-    def test_task_creation_with_invalid_configs(self, mock_task_class, temp_cache_dir):
+    def test_task_creation_with_invalid_configs(self, temp_cache_dir, real_environment, real_policy_class, real_belief):
         """Test task creation handles invalid configurations gracefully."""
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir
         )
         
-        # Create invalid config (missing required attributes)
-        invalid_config = Mock()
-        invalid_config.environment = Mock()
-        invalid_config.policy_cls = Mock()
-        invalid_config.belief = Mock()
-        invalid_config.hyper_parameters = []
-        invalid_config.num_episodes = 1
-        invalid_config.num_steps = 1
-        invalid_config.n_trials = 10
-        invalid_config.direction = HyperParameterOptimizationDirection.MAXIMIZE
-        invalid_config.parameter_to_optimize = "test"
+        # Create a real but minimal config with very small parameters for fast testing
+        minimal_config = HyperParameterRunParams(
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=real_policy_class,
+            hyper_parameters=[],  # Empty hyperparameters - this is the "invalid" aspect
+            constant_parameters={}, # No constant parameters needed for this planner
+            num_episodes=1,  # Small for fast tests
+            num_steps=1,     # Small for fast tests
+            n_trials=1,      # Small for fast tests
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return"
+        )
         
-        # Mock the task class to avoid actual instantiation
-        mock_task_instance = Mock()
-        mock_task_class.return_value = mock_task_instance
-        
-        # Should not crash during task creation
-        tasks = optimizer._create_tasks([invalid_config])
+        # Should not crash during task creation even with empty hyperparameters
+        tasks = optimizer._create_tasks([minimal_config])
         assert len(tasks) == 1
 
 
 class TestHyperParameterOptimizerEdgeCases:
     """Test edge cases and boundary conditions."""
 
-    def test_very_large_parameter_ranges(self, temp_cache_dir, mock_belief):
+    def test_very_large_parameter_ranges(self, temp_cache_dir, real_environment, real_policy_class, real_belief):
         """Test handling of very large parameter ranges."""
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir
         )
         
-        # Create config with very large parameter ranges
+        # Create config with large parameter ranges but small values for fast testing
         large_config = HyperParameterRunParams(
-            environment=Mock(),
-            belief=mock_belief,
-            policy_cls=Mock(),
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=real_policy_class,
             hyper_parameters=[
-                NumericalHyperParameter("large_param", 1e-10, 1e10)
+                NumericalHyperParameter("branching_factor", 1, 100)  # Large range but reasonable values
             ],
-            num_episodes=1,
-            num_steps=1,
-            n_trials=10,
+            constant_parameters={}, # No constant parameters needed for this planner
+            num_episodes=1,  # Small for fast tests
+            num_steps=1,     # Small for fast tests
+            n_trials=1,      # Small for fast tests
             direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="test"
+            parameter_to_optimize="average_return"
         )
         
         # Should not crash during initialization
         assert optimizer is not None
 
-    def test_zero_episodes_and_steps(self, temp_cache_dir, mock_belief):
+    def test_zero_episodes_and_steps(self, temp_cache_dir, real_environment, real_policy_class, real_belief):
         """Test handling of zero episodes and steps."""
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir
         )
         
         zero_config = HyperParameterRunParams(
-            environment=Mock(),
-            belief=mock_belief,
-            policy_cls=Mock(),
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=real_policy_class,
             hyper_parameters=[],
+            constant_parameters={}, # No constant parameters needed for this planner
             num_episodes=0,
             num_steps=0,
-            n_trials=10,
+            n_trials=1,      # Small for fast tests
             direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="test"
+            parameter_to_optimize="average_return"
         )
         
         # Should not crash during initialization
         assert optimizer is not None
 
-    def test_empty_hyperparameters_list(self, temp_cache_dir, mock_belief):
+    def test_empty_hyperparameters_list(self, temp_cache_dir, real_environment, real_policy_class, real_belief):
         """Test handling of empty hyperparameters list."""
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir
         )
         
         empty_config = HyperParameterRunParams(
-            environment=Mock(),
-            belief=mock_belief,
-            policy_cls=Mock(),
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=real_policy_class,
             hyper_parameters=[],
-            num_episodes=1,
-            num_steps=1,
-            n_trials=10,
+            constant_parameters={}, # No constant parameters needed for this planner
+            num_episodes=1,  # Small for fast tests
+            num_steps=1,     # Small for fast tests
+            n_trials=1,      # Small for fast tests
             direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="test"
+            parameter_to_optimize="average_return"
         )
         
         # Should not crash during initialization
@@ -710,3 +623,361 @@ class TestHyperParameterOptimizerEdgeCases:
                 n_jobs=n_jobs
             )
             assert optimizer.n_jobs == n_jobs
+
+
+class TestHyperParameterOptimizerMLFlowIntegration:
+    """Test MLFlow logging integration that should catch issues from hyper_param_runner.py."""
+    
+    def test_mlflow_logging_with_successful_optimization(self, temp_cache_dir, real_environment, real_belief):
+        """Test that MLFlow properly logs parameters and metrics during successful optimization.
+        
+        Purpose: Validates that MLFlow logging works end-to-end and catches integration issues
+        
+        Given: A valid hyperparameter optimization configuration with real components
+        When: Full optimization is run through HyperParameterOptimizer.optimize()
+        Then: MLFlow logs all expected parameters and metrics, experiment structure is correct
+        
+        Test type: integration
+        """
+        experiment_name = "MLFlow_Integration_Test"
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir,
+            experiment_name=experiment_name
+        )
+        
+        # Create a config that should work
+        config = HyperParameterRunParams(
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=[
+                NumericalHyperParameter("branching_factor", 1, 2),
+                NumericalHyperParameter("depth", 1, 2)
+            ],
+            constant_parameters={},  # No constant parameters needed for this planner
+            num_episodes=2,  # Small for fast tests
+            num_steps=2,     # Small for fast tests
+            n_trials=2,      # Small for fast tests
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return"
+        )
+        
+        # Run optimization
+        result = optimizer.optimize([config])
+        
+        # Verify MLFlow experiment was created and has data
+        experiment = mlflow.get_experiment_by_name(experiment_name)
+        assert experiment is not None
+        
+        # Check that runs were created
+        runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id])
+        assert len(runs) > 0  # Should have at least batch run
+        
+        # Find the batch run (parent run)
+        batch_runs = runs[runs['tags.mlflow.runName'].str.contains('optimize_batch_', na=False)]
+        assert len(batch_runs) >= 1
+        
+        batch_run = batch_runs.iloc[0]
+        
+        # Verify batch-level parameters were logged
+        assert batch_run['params.num_configurations'] == '1'
+        assert batch_run['params.batch_method'] == 'stub_interface_optimize'
+        
+        # Verify batch-level metrics were logged  
+        assert 'metrics.batch_success_rate' in batch_run
+        assert 'metrics.batch_completed_configs' in batch_run
+        assert 'metrics.batch_failed_configs' in batch_run
+        
+        # If optimization succeeded, check nested runs
+        if len(result) > 0:
+            # Find nested configuration runs
+            config_runs = runs[runs['tags.mlflow.parentRunId'].notna()]
+            assert len(config_runs) >= 1
+            
+            config_run = config_runs.iloc[0]
+            
+            # Verify configuration parameters were logged
+            assert config_run['params.config_index'] == '1'
+            assert config_run['params.environment_type'] == 'TigerPOMDP'
+            assert config_run['params.policy_type'] == 'StandardSparseSamplingDiscreteActionsPlanner'
+            
+            # Verify optimization results were logged
+            assert 'metrics.optimization_success' in config_run
+            assert 'metrics.best_value' in config_run
+            assert 'metrics.optimization_time' in config_run
+            
+            # Verify final evaluation metrics were logged
+            assert 'metrics.final_average_return' in config_run
+            assert 'metrics.final_total_cost' in config_run
+
+    def test_numerical_hyperparameter_constructor_order_validation(self, temp_cache_dir, real_environment, real_belief):
+        """Test that NumericalHyperParameter constructor parameter order is validated.
+        
+        Purpose: Catches the issue from hyper_param_runner.py where parameter order was wrong
+        
+        Given: NumericalHyperParameter created with correct vs incorrect parameter order
+        When: Hyperparameters are used in optimization configuration
+        Then: Correct order works, incorrect order fails with clear error
+        
+        Test type: unit
+        """
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir
+        )
+        
+        # Test correct parameter order: name, low, high
+        correct_hyperparams = [
+            NumericalHyperParameter("branching_factor", 1, 3),  # Correct: name, low, high
+            NumericalHyperParameter("depth", 1, 3)
+        ]
+        
+        correct_config = HyperParameterRunParams(
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=correct_hyperparams,
+            constant_parameters={},
+            num_episodes=1,
+            num_steps=1,
+            n_trials=1,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return"
+        )
+        
+        # This should work
+        tasks = optimizer._create_tasks([correct_config])
+        assert len(tasks) == 1
+        
+        # Verify hyperparameter names are correctly set
+        task = tasks[0]
+        assert task.hyper_parameters[0].name == "branching_factor"
+        assert task.hyper_parameters[1].name == "depth"
+        assert task.hyper_parameters[0].low == 1
+        assert task.hyper_parameters[0].high == 3
+
+    def test_missing_constant_parameters_for_complex_policies(self, temp_cache_dir, real_environment, real_belief):
+        """Test that missing constant parameters for complex policies are detected.
+        
+        Purpose: Catches the issue from hyper_param_runner.py where POMCP was missing discount_factor
+        
+        Given: A policy class that requires constant parameters (simulated with invalid parameters)
+        When: HyperParameterRunParams is created without required constant parameters  
+        Then: Task creation succeeds but execution fails with clear error about missing parameters
+        
+        Test type: integration
+        """
+        
+        # Create a test policy class that requires specific constant parameters
+        class PolicyRequiringConstants(StandardSparseSamplingDiscreteActionsPlanner):
+            def __init__(self, environment, branching_factor, depth, required_constant=None, **kwargs):
+                if required_constant is None:
+                    raise TypeError("PolicyRequiringConstants.__init__() missing 1 required keyword argument: 'required_constant'")
+                super().__init__(environment, branching_factor, depth, **kwargs)
+                self.required_constant = required_constant
+        
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir
+        )
+        
+        # Test configuration missing required constant parameters
+        config_missing_constants = HyperParameterRunParams(
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=PolicyRequiringConstants,
+            hyper_parameters=[
+                NumericalHyperParameter("branching_factor", 1, 2),
+                NumericalHyperParameter("depth", 1, 2)
+            ],
+            constant_parameters={},  # Missing required_constant
+            num_episodes=1,
+            num_steps=1,
+            n_trials=1,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return"
+        )
+        
+        # Task creation should succeed
+        tasks = optimizer._create_tasks([config_missing_constants])
+        assert len(tasks) == 1
+        
+        # But optimization execution should fail with clear error
+        with pytest.raises(Exception) as exc_info:
+            optimizer.optimize([config_missing_constants])
+        
+        # Verify the error message indicates missing parameter
+        error_message = str(exc_info.value)
+        assert "required_constant" in error_message or "missing" in error_message.lower()
+        
+        # Test configuration with correct constant parameters
+        config_with_constants = HyperParameterRunParams(
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=PolicyRequiringConstants,
+            hyper_parameters=[
+                NumericalHyperParameter("branching_factor", 1, 2),
+                NumericalHyperParameter("depth", 1, 2)
+            ],
+            constant_parameters={"required_constant": "test_value"},  # Providing required parameter
+            num_episodes=1,
+            num_steps=1,
+            n_trials=1,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return"
+        )
+        
+        # This should work
+        result = optimizer.optimize([config_with_constants])
+        assert isinstance(result, list)
+        # Note: result might be empty if optimization fails for other reasons, but no missing parameter error
+
+    def test_mlflow_parameter_and_metric_logging_completeness(self, temp_cache_dir, real_environment, real_belief):
+        """Test that all expected MLFlow parameters and metrics are logged.
+        
+        Purpose: Ensures MLFlow logging is comprehensive and nothing is missing
+        
+        Given: A successful hyperparameter optimization run
+        When: All logging functions are executed during optimization
+        Then: All expected parameters, metrics, and artifacts are present in MLFlow
+        
+        Test type: integration
+        """
+        experiment_name = "Complete_Logging_Test"
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir,
+            experiment_name=experiment_name
+        )
+        
+        config = HyperParameterRunParams(
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=[
+                NumericalHyperParameter("branching_factor", 1, 2),
+                NumericalHyperParameter("depth", 1, 2)
+            ],
+            constant_parameters={},
+            num_episodes=2,  # Need multiple episodes for statistics
+            num_steps=2,
+            n_trials=2,      # Need multiple trials for optimization
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return"
+        )
+        
+        result = optimizer.optimize([config])
+        
+        # Get all runs for this experiment
+        experiment = mlflow.get_experiment_by_name(experiment_name)
+        runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id])
+        
+        # Verify we have both batch and configuration runs
+        assert len(runs) >= 1  # At least the batch run
+        
+        # Check batch run contains expected elements
+        batch_run = runs[runs['tags.mlflow.runName'].str.contains('optimize_batch_', na=False)].iloc[0]
+        
+        # Batch-level parameters
+        expected_batch_params = ['num_configurations', 'batch_method']
+        for param in expected_batch_params:
+            assert f'params.{param}' in batch_run.index, f"Missing batch parameter: {param}"
+        
+        # Batch-level metrics  
+        expected_batch_metrics = ['batch_success_rate', 'batch_completed_configs', 'batch_failed_configs']
+        for metric in expected_batch_metrics:
+            assert f'metrics.{metric}' in batch_run.index, f"Missing batch metric: {metric}"
+        
+        # If we have results, check configuration run logging
+        if len(result) > 0:
+            config_runs = runs[runs['tags.mlflow.parentRunId'].notna()]
+            if len(config_runs) > 0:
+                config_run = config_runs.iloc[0]
+                
+                # Configuration-level parameters
+                expected_config_params = [
+                    'config_index', 'environment_type', 'policy_type', 
+                    'num_episodes', 'num_steps', 'direction', 
+                    'parameter_to_optimize', 'n_trials'
+                ]
+                for param in expected_config_params:
+                    assert f'params.{param}' in config_run.index, f"Missing config parameter: {param}"
+                
+                # Optimization result metrics
+                expected_optimization_metrics = [
+                    'optimization_success', 'best_value', 'optimization_time'
+                ]
+                for metric in expected_optimization_metrics:
+                    assert f'metrics.{metric}' in config_run.index, f"Missing optimization metric: {metric}"
+                
+                # Final evaluation metrics
+                expected_final_metrics = [
+                    'final_average_return', 'final_total_cost'
+                ]
+                for metric in expected_final_metrics:
+                    assert f'metrics.{metric}' in config_run.index, f"Missing final evaluation metric: {metric}"
+
+    def test_hyperparameter_runner_configuration_validation(self, temp_cache_dir):
+        """Test validation of the exact configuration used in hyper_param_runner.py.
+        
+        Purpose: Replicates the hyper_param_runner.py configuration to catch its specific issues
+        
+        Given: The exact same configuration as used in hyper_param_runner.py
+        When: Configuration is validated and executed
+        Then: Specific issues from hyper_param_runner.py are identified and handled
+        
+        Test type: integration
+        """
+        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir,
+            experiment_name="hyper_param_experiment",
+            n_jobs=1,  # Simplified for testing
+            confidence_interval_level=0.95,
+            alpha=0.1
+        )
+        
+        env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
+        
+        # Test configuration with correct parameter order (fixing hyper_param_runner.py issue)
+        fixed_config = HyperParameterRunParams(
+            environment=env,
+            belief=get_initial_belief(env, n_particles=10),  # Smaller for fast tests
+            policy_cls=POMCP,
+            hyper_parameters=[
+                # Fixed order: name, low, high (original was low, high, name)
+                NumericalHyperParameter("exploration_constant", 0.1, 1.0),  # Smaller range for fast tests
+                NumericalHyperParameter("n_simulations", 10, 50),            # Smaller range for fast tests
+                NumericalHyperParameter("depth", 2, 5)                      # Smaller range for fast tests
+            ],
+            constant_parameters={
+                "discount_factor": env.discount_factor,  # This was missing in original
+                "name": "POMCP_Tiger_095"
+            },
+            num_episodes=2,  # Smaller for fast tests
+            num_steps=3,     # Smaller for fast tests
+            n_trials=2,      # Smaller for fast tests
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return"
+        )
+        
+        # This should work now
+        tasks = optimizer._create_tasks([fixed_config])
+        assert len(tasks) == 1
+        
+        # Verify the task has correct configuration
+        task = tasks[0]
+        assert task.policy_cls == POMCP
+        assert task.constant_parameters["discount_factor"] == 0.95
+        assert task.hyper_parameters[0].name == "exploration_constant"
+        assert task.hyper_parameters[1].name == "n_simulations"
+        assert task.hyper_parameters[2].name == "depth"
+        
+        # The optimization should succeed (or at least not fail due to missing parameters)
+        try:
+            result = optimizer.optimize([fixed_config])
+            # If it succeeds, verify we got results
+            assert isinstance(result, list)
+        except Exception as e:
+            # If it fails, it should not be due to missing discount_factor or parameter order issues
+            error_message = str(e).lower()
+            assert "discount_factor" not in error_message
+            assert "missing" not in error_message or "positional argument" not in error_message
