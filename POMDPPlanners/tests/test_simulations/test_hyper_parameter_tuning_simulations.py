@@ -65,8 +65,8 @@ def real_belief(real_environment):
 def sample_hyperparameters():
     """Create sample hyperparameters for testing."""
     return [
-        NumericalHyperParameter("branching_factor", 1, 3),  # Small range for fast tests
-        NumericalHyperParameter("depth", 1, 3),             # Small range for fast tests
+        NumericalHyperParameter(1, 3, "branching_factor"),  # Correct order: low, high, name
+        NumericalHyperParameter(1, 3, "depth"),             # Correct order: low, high, name
     ]
 
 
@@ -79,8 +79,8 @@ def sample_configs(real_environment, real_policy_class, real_belief):
             belief=real_belief,
             policy_cls=real_policy_class,
             hyper_parameters=[
-                NumericalHyperParameter("branching_factor", 1, 2),
-                NumericalHyperParameter("depth", 1, 2)
+                NumericalHyperParameter(1, 2, "branching_factor"),
+                NumericalHyperParameter(1, 2, "depth")
             ],
             constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=2,  # Small for fast tests
@@ -94,8 +94,8 @@ def sample_configs(real_environment, real_policy_class, real_belief):
             belief=real_belief,
             policy_cls=real_policy_class,
             hyper_parameters=[
-                NumericalHyperParameter("branching_factor", 1, 2),
-                NumericalHyperParameter("depth", 1, 2)
+                NumericalHyperParameter(1, 2, "branching_factor"),
+                NumericalHyperParameter(1, 2, "depth")
             ],
             constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=2,  # Small for fast tests
@@ -625,6 +625,16 @@ class TestHyperParameterOptimizerEdgeCases:
             assert optimizer.n_jobs == n_jobs
 
 
+# Create a test policy class that requires specific constant parameters
+# This needs to be defined outside the test method to avoid pickling issues
+class PolicyRequiringConstants(StandardSparseSamplingDiscreteActionsPlanner):
+    def __init__(self, environment, branching_factor, depth, required_constant=None, **kwargs):
+        if required_constant is None:
+            raise TypeError("PolicyRequiringConstants.__init__() missing 1 required keyword argument: 'required_constant'")
+        super().__init__(environment, branching_factor, depth, **kwargs)
+        self.required_constant = required_constant
+
+
 class TestHyperParameterOptimizerMLFlowIntegration:
     """Test MLFlow logging integration that should catch issues from hyper_param_runner.py."""
     
@@ -651,8 +661,8 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             belief=real_belief,
             policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
             hyper_parameters=[
-                NumericalHyperParameter("branching_factor", 1, 2),
-                NumericalHyperParameter("depth", 1, 2)
+                NumericalHyperParameter(1, 2, "branching_factor"),
+                NumericalHyperParameter(1, 2, "depth")
             ],
             constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=2,  # Small for fast tests
@@ -725,10 +735,10 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             cache_dir_path=temp_cache_dir
         )
         
-        # Test correct parameter order: name, low, high
+        # Test correct parameter order: low, high, name
         correct_hyperparams = [
-            NumericalHyperParameter("branching_factor", 1, 3),  # Correct: name, low, high
-            NumericalHyperParameter("depth", 1, 3)
+            NumericalHyperParameter(1, 3, "branching_factor"),  # Correct: low, high, name
+            NumericalHyperParameter(1, 3, "depth")
         ]
         
         correct_config = HyperParameterRunParams(
@@ -754,6 +764,35 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         assert task.hyper_parameters[1].name == "depth"
         assert task.hyper_parameters[0].low == 1
         assert task.hyper_parameters[0].high == 3
+        
+        # Test that incorrect parameter order (name, low, high) fails
+        # This was the original issue in hyper_param_runner.py
+        incorrect_hyperparams = [
+            NumericalHyperParameter("branching_factor", 1, 3),  # Wrong order: name, low, high
+            NumericalHyperParameter("depth", 1, 3)             # Wrong order: name, low, high
+        ]
+        
+        incorrect_config = HyperParameterRunParams(
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=incorrect_hyperparams,
+            constant_parameters={},
+            num_episodes=1,
+            num_steps=1,
+            n_trials=1,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return"
+        )
+        
+        # This should fail because the parameters are in wrong order
+        # The low and high values are strings instead of numbers
+        with pytest.raises(Exception) as exc_info:
+            optimizer.optimize([incorrect_config])
+        
+        # Verify the error is related to parameter type issues
+        error_message = str(exc_info.value).lower()
+        assert "type" in error_message or ">" in error_message or "comparison" in error_message
 
     def test_missing_constant_parameters_for_complex_policies(self, temp_cache_dir, real_environment, real_belief):
         """Test that missing constant parameters for complex policies are detected.
@@ -767,14 +806,6 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         Test type: integration
         """
         
-        # Create a test policy class that requires specific constant parameters
-        class PolicyRequiringConstants(StandardSparseSamplingDiscreteActionsPlanner):
-            def __init__(self, environment, branching_factor, depth, required_constant=None, **kwargs):
-                if required_constant is None:
-                    raise TypeError("PolicyRequiringConstants.__init__() missing 1 required keyword argument: 'required_constant'")
-                super().__init__(environment, branching_factor, depth, **kwargs)
-                self.required_constant = required_constant
-        
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir
         )
@@ -785,11 +816,11 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             belief=real_belief,
             policy_cls=PolicyRequiringConstants,
             hyper_parameters=[
-                NumericalHyperParameter("branching_factor", 1, 2),
-                NumericalHyperParameter("depth", 1, 2)
+                NumericalHyperParameter(1, 2, "branching_factor"),
+                NumericalHyperParameter(1, 2, "depth")
             ],
             constant_parameters={},  # Missing required_constant
-            num_episodes=1,
+            num_episodes=2,  # Need at least 2 for confidence intervals
             num_steps=1,
             n_trials=1,
             direction=HyperParameterOptimizationDirection.MAXIMIZE,
@@ -814,11 +845,11 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             belief=real_belief,
             policy_cls=PolicyRequiringConstants,
             hyper_parameters=[
-                NumericalHyperParameter("branching_factor", 1, 2),
-                NumericalHyperParameter("depth", 1, 2)
+                NumericalHyperParameter(1, 2, "branching_factor"),
+                NumericalHyperParameter(1, 2, "depth")
             ],
             constant_parameters={"required_constant": "test_value"},  # Providing required parameter
-            num_episodes=1,
+            num_episodes=2,  # Need at least 2 for confidence intervals
             num_steps=1,
             n_trials=1,
             direction=HyperParameterOptimizationDirection.MAXIMIZE,
@@ -852,8 +883,8 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             belief=real_belief,
             policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
             hyper_parameters=[
-                NumericalHyperParameter("branching_factor", 1, 2),
-                NumericalHyperParameter("depth", 1, 2)
+                NumericalHyperParameter(1, 2, "branching_factor"),
+                NumericalHyperParameter(1, 2, "depth")
             ],
             constant_parameters={},
             num_episodes=2,  # Need multiple episodes for statistics
@@ -943,10 +974,10 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             belief=get_initial_belief(env, n_particles=10),  # Smaller for fast tests
             policy_cls=POMCP,
             hyper_parameters=[
-                # Fixed order: name, low, high (original was low, high, name)
-                NumericalHyperParameter("exploration_constant", 0.1, 1.0),  # Smaller range for fast tests
-                NumericalHyperParameter("n_simulations", 10, 50),            # Smaller range for fast tests
-                NumericalHyperParameter("depth", 2, 5)                      # Smaller range for fast tests
+                # Correct order: low, high, name (original was wrong: low, high, name)
+                NumericalHyperParameter(0.1, 1.0, "exploration_constant"),  # Smaller range for fast tests
+                NumericalHyperParameter(10, 50, "n_simulations"),            # Smaller range for fast tests
+                NumericalHyperParameter(2, 5, "depth")                      # Smaller range for fast tests
             ],
             constant_parameters={
                 "discount_factor": env.discount_factor,  # This was missing in original

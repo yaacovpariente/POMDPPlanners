@@ -805,11 +805,10 @@ def test_hyper_parameter_tuning_task_with_constant_parameters(environment, hyper
     assert 1 <= result.chosen_hyper_parameters['depth'] <= 3
     
     # Verify that the constant parameters were applied during optimization
-    # Note: The final result policy gets a standardized name, but constant_parameters
-    # are applied during the optimization trials
+    # The policy keeps the custom name from constant_parameters during optimization
     policy = result.policy
-    # The final result policy gets a standardized name for consistency
-    assert policy.name == f"{StandardSparseSamplingDiscreteActionsPlanner.__name__}_{environment.name}_optimized"
+    # The final result policy keeps the custom name from constant_parameters
+    assert policy.name == "CustomSparseSamplingPlanner"
     
     # Verify the policy was created with the correct hyperparameters
     assert policy.branching_factor == result.chosen_hyper_parameters['branching_factor']
