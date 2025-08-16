@@ -1,4 +1,4 @@
-from typing import Union, Optional, Type, List
+from typing import Union, Optional, Type, List, Dict, Any
 from pathlib import Path
 import logging
 import random
@@ -23,6 +23,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         belief: Belief,
         policy_cls: Type[Policy], 
         hyper_parameters: List[HyperParameterFeature], 
+        constant_parameters: Dict[str, Any],
         num_episodes: int, 
         num_steps: int, 
         direction: HyperParameterOptimizationDirection, 
@@ -40,6 +41,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.belief = belief
         self.policy_cls = policy_cls
         self.hyper_parameters = hyper_parameters
+        self.constant_parameters = constant_parameters
         self.num_episodes = num_episodes
         self.num_steps = num_steps
         self.direction = direction
@@ -169,9 +171,9 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         """
         policy_params = {
             "environment": self.environment,
-            "name": f"{self.policy_cls.__name__}_{self.environment.name}_optimized"
         }
-        
+
+        policy_params.update(self.constant_parameters)
         # Add optimization parameters based on their types
         for param in hyperparameters:
             if isinstance(param, CategoricalHyperParameter):
@@ -192,7 +194,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
     
     def _evaluate_policy_configuration(self, policy: Policy, trial) -> float:
         """Evaluate a policy configuration by running episodes and computing statistics.
-        
+        s
         Args:
             policy: Policy instance to evaluate
             trial: Optuna trial object for storing metadata
@@ -242,7 +244,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         except Exception as e:
             self.logger.error(f"Error in evaluation function for trial {trial.number}: {e}")
             # Return a very poor value to signal failure
-            return float('-inf') if self.direction.value == "maximize" else float('inf')
+            raise e
     
     def _create_optuna_objective_function(self):
         """Create the Optuna objective function for hyperparameter optimization.
@@ -270,7 +272,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 self.logger.error(f"Error in objective function for trial {trial.number}: {e}")
                 self.logger.exception("Full exception details:")
                 # Return a very poor value to signal failure
-                return float('-inf') if self.direction.value == "maximize" else float('inf')
+                raise e
+                # return float('-inf') if self.direction.value == "maximize" else float('inf')
         
         return objective
     
@@ -317,6 +320,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             "environment": self.environment,
             "name": f"{self.policy_cls.__name__}_{self.environment.name}_optimized"
         }
+
+        best_policy_params.update(self.constant_parameters)
         
         # Add the best hyperparameters found during optimization
         for param_name, param_value in study.best_params.items():
@@ -374,7 +379,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         optimization_time = time.time() - start_time
         self.logger.error(f"Failed optimization time: {optimization_time:.4f} seconds")
         
-        return None
+        raise exception
 
     def get_optimization_metadata(self) -> Optional[dict]:
         """Get additional optimization metadata for backward compatibility.
@@ -522,6 +527,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             "belief": self.belief.config_id,
             "policy_cls": str(self.policy_cls),
             "hyper_parameters": self.hyper_parameters,
+            "constant_parameters": self.constant_parameters,
             "num_episodes": self.num_episodes,
             "num_steps": self.num_steps,
             "direction": self.direction.value,
