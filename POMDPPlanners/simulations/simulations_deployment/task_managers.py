@@ -334,3 +334,55 @@ class JoblibTaskManager(TaskManagerExternalDB):
             
         except Exception as e:
             self.logger.warning(f"Could not log cache statistics: {str(e)}")
+
+
+class SequentialTaskManager(JoblibTaskManager):
+    """A task manager that runs tasks sequentially."""
+    
+    def __init__(
+        self,
+        cache_db: DataBaseInterface,
+        cache_dir: Optional[str] = None,
+        clear_cache_on_start: bool = False,
+        verbose: int = 0,
+        logger_debug: bool = False
+    ):
+        super().__init__(
+            cache_db=cache_db, 
+            n_jobs=1, 
+            cache_dir=cache_dir, 
+            clear_cache_on_start=clear_cache_on_start, 
+            verbose=verbose, 
+            logger_debug=logger_debug
+        )
+
+    def _run_tasks(self, tasks: List[SimulationTask]) -> List[History]:
+        """Run tasks sequentially one by one."""
+        import time
+        
+        # Log system information
+        self._log_system_info()
+        
+        # Log sequential processing setup
+        self.logger.info(f"Starting sequential processing")
+        self.logger.info(f"Processing {len(tasks)} tasks sequentially")
+        
+        results = []
+        for i, task in enumerate(tasks):
+            self.logger.info(f"Processing task {i+1}/{len(tasks)}: {task.__class__.__name__}")
+            start_time = time.time()
+            
+            try:
+                result = task.run()
+                if result is not None:
+                    results.append(result)
+                    execution_time = time.time() - start_time
+                    self.logger.info(f"Task {i+1} completed successfully in {execution_time:.2f}s")
+                else:
+                    self.logger.warning(f"Task {i+1} returned None result")
+            except Exception as e:
+                self.logger.error(f"Task {i+1} failed: {e}")
+                self.logger.exception("Full exception details:")
+        
+        self.logger.info(f"Sequential processing completed. {len(results)}/{len(tasks)} tasks successful")
+        return results
