@@ -2,7 +2,7 @@ from typing import TYPE_CHECKING, Optional
 from pathlib import Path
 from dataclasses import dataclass
 
-from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParameterFeatures, CategoricalHyperParameter, NumericalHyperParameter
+from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParameterFeature, CategoricalHyperParameter, NumericalHyperParameter
 
 
 if TYPE_CHECKING:
@@ -26,7 +26,7 @@ class HyperParameterRunParams:
     policies: list['Policy']
     num_episodes: int
     num_steps: int
-    hyper_parameters: list[HyperParameterFeatures]
+    hyper_parameters: list[HyperParameterFeature]
     b_trials: int
     n_jobs: int
     cache_visualizations: bool
