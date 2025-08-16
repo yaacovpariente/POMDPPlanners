@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, NamedTuple, Union, Type, List, Literal, TYPE_CHECKING
+from typing import Any, NamedTuple, Union, Type, List, Literal, TYPE_CHECKING, Dict
 from pathlib import Path
 from enum import Enum
 
@@ -33,6 +33,7 @@ class HyperParameterRunParams(NamedTuple):
     belief: "Belief"
     policy_cls: Type["Policy"]
     hyper_parameters: List[HyperParameterFeature]
+    constant_parameters: Dict[str, Any]
     num_episodes: int
     num_steps: int
     n_trials: int
