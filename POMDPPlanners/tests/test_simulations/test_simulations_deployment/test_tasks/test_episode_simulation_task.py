@@ -39,6 +39,19 @@ def policy(environment):
         n_simulations=2
     )
 
+def test_episode_simulation_task_import():
+    """Test that EpisodeSimulationTask can be imported.
+    
+    Purpose: Validates basic task import functionality
+    
+    Given: EpisodeSimulationTask class
+    When: Task class is imported
+    Then: Task class is available and not None
+    
+    Test type: unit
+    """
+    assert EpisodeSimulationTask is not None
+
 def test_episode_simulation_task_creation(environment, policy):
     """Test creation and basic properties of EpisodeSimulationTask.
     
