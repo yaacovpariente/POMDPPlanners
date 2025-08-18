@@ -139,3 +139,249 @@ def test_simulate_path(planner, initial_belief, environment):
     # For LightDarkPOMDP, rewards are typically between -10 (obstacle hit) and 10 (goal reached)
     assert return_value >= (-10 - environment.grid_size * np.sqrt(2)) * 5  # Minimum possible reward
     assert return_value <= 10  # Maximum possible reward
+
+
+# Config ID Tests
+
+def test_pft_dpw_config_id_consistency_identical_parameters(environment, action_sampler):
+    """Test that config_id is consistent for identical PFT_DPW parameters.
+    
+    Purpose: Validates that PFT_DPW with identical parameters produces identical config_id
+    
+    Given: Two PFT_DPW instances with identical parameters
+    When: config_id is accessed on both instances
+    Then: Both instances return the same config_id
+    
+    Test type: unit
+    """
+    # Create two PFT_DPW instances with identical parameters
+    pft_dpw1 = PFT_DPW(
+        environment=environment,
+        discount_factor=0.99,
+        depth=10,
+        name="PFT_DPW_Test1",
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.5,
+        k_o=1.0,
+        alpha_o=0.5,
+        exploration_constant=1.41,
+        n_simulations=100,
+    )
+
+    pft_dpw2 = PFT_DPW(
+        environment=environment,
+        discount_factor=0.99,
+        depth=10,
+        name="PFT_DPW_Test1",  # Same name
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.5,
+        k_o=1.0,
+        alpha_o=0.5,
+        exploration_constant=1.41,
+        n_simulations=100,
+    )
+
+    # Config IDs should be identical
+    config_id1 = pft_dpw1.config_id
+    config_id2 = pft_dpw2.config_id
+
+    assert config_id1 == config_id2
+    assert isinstance(config_id1, str)
+    assert len(config_id1) > 0
+
+
+def test_pft_dpw_config_id_different_action_sampler_values(environment):
+    """Test that config_id changes when action sampler is initialized with different values.
+    
+    Purpose: Validates that config_id changes when action sampler parameters differ
+    
+    Given: Two PFT_DPW instances with action samplers having different max_action_magnitude
+    When: config_id is accessed on both instances
+    Then: config_id values are different
+    
+    Test type: unit
+    """
+    # Create action samplers with different max_action_magnitude
+    sampler1 = UnitCircleActionSampler(max_action_magnitude=1.0)
+    sampler2 = UnitCircleActionSampler(max_action_magnitude=2.0)
+
+    pft_dpw1 = PFT_DPW(
+        environment=environment,
+        discount_factor=0.99,
+        depth=10,
+        name="PFT_DPW_Test",
+        action_sampler=sampler1,
+        k_a=2.0,
+        alpha_a=0.5,
+        k_o=1.0,
+        alpha_o=0.5,
+        exploration_constant=1.41,
+        n_simulations=100,
+    )
+
+    pft_dpw2 = PFT_DPW(
+        environment=environment,
+        discount_factor=0.99,
+        depth=10,
+        name="PFT_DPW_Test",
+        action_sampler=sampler2,  # Different sampler parameters
+        k_a=2.0,
+        alpha_a=0.5,
+        k_o=1.0,
+        alpha_o=0.5,
+        exploration_constant=1.41,
+        n_simulations=100,
+    )
+
+    config_id1 = pft_dpw1.config_id
+    config_id2 = pft_dpw2.config_id
+
+    assert config_id1 != config_id2
+    assert isinstance(config_id1, str)
+    assert isinstance(config_id2, str)
+    assert len(config_id1) > 0
+    assert len(config_id2) > 0
+
+
+def test_pft_dpw_config_id_different_planner_parameters(environment, action_sampler):
+    """Test that config_id changes when PFT_DPW planner parameters differ.
+    
+    Purpose: Validates that config_id changes when core PFT_DPW parameters differ
+    
+    Given: Two PFT_DPW instances with different exploration_constant values
+    When: config_id is accessed on both instances
+    Then: config_id values are different
+    
+    Test type: unit
+    """
+    pft_dpw1 = PFT_DPW(
+        environment=environment,
+        discount_factor=0.99,
+        depth=10,
+        name="PFT_DPW_Test",
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.5,
+        k_o=1.0,
+        alpha_o=0.5,
+        exploration_constant=1.0,  # Different exploration constant
+        n_simulations=100,
+    )
+
+    pft_dpw2 = PFT_DPW(
+        environment=environment,
+        discount_factor=0.99,
+        depth=10,
+        name="PFT_DPW_Test",
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.5,
+        k_o=1.0,
+        alpha_o=0.5,
+        exploration_constant=2.0,  # Different exploration constant
+        n_simulations=100,
+    )
+
+    config_id1 = pft_dpw1.config_id
+    config_id2 = pft_dpw2.config_id
+
+    assert config_id1 != config_id2
+
+
+def test_pft_dpw_config_id_consistency_across_evaluations(environment, action_sampler):
+    """Test that config_id remains consistent across different policy evaluations.
+    
+    Purpose: Validates that config_id is stable across multiple accesses and policy actions
+    
+    Given: Single PFT_DPW instance and initial belief
+    When: config_id is accessed before and after policy actions
+    Then: config_id remains identical across all evaluations
+    
+    Test type: integration
+    """
+    pft_dpw = PFT_DPW(
+        environment=environment,
+        discount_factor=0.99,
+        depth=5,  # Reduced for testing
+        name="PFT_DPW_Consistency_Test",
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.5,
+        k_o=1.0,
+        alpha_o=0.5,
+        exploration_constant=1.41,
+        n_simulations=10,  # Reduced for testing
+    )
+
+    # Get initial config_id
+    initial_config_id = pft_dpw.config_id
+
+    # Create initial belief and perform policy actions
+    initial_belief = get_initial_belief(environment, n_particles=50)
+
+    # Perform multiple policy evaluations
+    for i in range(3):
+        action, run_data = pft_dpw.action(initial_belief)
+        
+        # Check config_id remains the same
+        current_config_id = pft_dpw.config_id
+        assert current_config_id == initial_config_id
+        
+        # Verify the action and run_data are valid
+        assert isinstance(action, list)
+        assert len(action) == 1
+        assert isinstance(action[0], np.ndarray)
+        assert action[0].shape == (2,)
+        assert run_data is not None
+
+    # Final check
+    final_config_id = pft_dpw.config_id
+    assert final_config_id == initial_config_id
+
+
+def test_pft_dpw_config_id_action_sampler_attribute_changes(environment):
+    """Test config_id changes when action sampler attributes are modified.
+    
+    Purpose: Validates that modifying action sampler attributes affects config_id
+    
+    Given: PFT_DPW instance with modifiable action sampler
+    When: Action sampler attributes are changed
+    Then: config_id reflects the change
+    
+    Test type: unit
+    """
+    # Create initial action sampler and PFT_DPW
+    action_sampler = UnitCircleActionSampler(max_action_magnitude=1.0)
+    
+    pft_dpw = PFT_DPW(
+        environment=environment,
+        discount_factor=0.99,
+        depth=10,
+        name="PFT_DPW_Attribute_Test",
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.5,
+        k_o=1.0,
+        alpha_o=0.5,
+        exploration_constant=1.41,
+        n_simulations=100,
+    )
+
+    # Get initial config_id
+    initial_config_id = pft_dpw.config_id
+
+    # Modify the action sampler's attribute
+    action_sampler.max_action_magnitude = 2.0
+
+    # Config ID should be different after modification
+    modified_config_id = pft_dpw.config_id
+    assert modified_config_id != initial_config_id
+
+    # Restore original value
+    action_sampler.max_action_magnitude = 1.0
+
+    # Config ID should return to original
+    restored_config_id = pft_dpw.config_id
+    assert restored_config_id == initial_config_id

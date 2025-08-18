@@ -512,3 +512,224 @@ def test_sanity_pomdp_belief_children():
         assert len(next_belief_node.belief.particles) == 100
         assert next_belief_node.observation in [0, 1]  # SanityPOMDP has binary observations
         assert next_belief_node.immediate_cost is not None
+
+
+# Config ID Tests
+
+def test_sparse_pft_config_id_consistency_identical_parameters():
+    """Test that config_id is consistent for identical SparsePFT parameters.
+    
+    Purpose: Validates that SparsePFT with identical parameters produces identical config_id
+    
+    Given: Two SparsePFT instances with identical parameters
+    When: config_id is accessed on both instances
+    Then: Both instances return the same config_id
+    
+    Test type: unit
+    """
+    environment = TigerPOMDP(discount_factor=0.95)
+    
+    # Create two SparsePFT instances with identical parameters
+    sparse_pft1 = SparsePFT(
+        environment=environment,
+        discount_factor=0.95,
+        gamma=0.95,
+        depth=12,
+        c_ucb=1.0,
+        beta_ucb=2.0,
+        belief_child_num=5,
+        n_simulations=100,
+        name="SparsePFT_Test1",
+    )
+
+    sparse_pft2 = SparsePFT(
+        environment=environment,
+        discount_factor=0.95,
+        gamma=0.95,
+        depth=12,
+        c_ucb=1.0,
+        beta_ucb=2.0,
+        belief_child_num=5,
+        n_simulations=100,
+        name="SparsePFT_Test1",  # Same name
+    )
+
+    # Config IDs should be identical
+    config_id1 = sparse_pft1.config_id
+    config_id2 = sparse_pft2.config_id
+
+    assert config_id1 == config_id2
+    assert isinstance(config_id1, str)
+    assert len(config_id1) > 0
+
+
+def test_sparse_pft_config_id_different_c_ucb():
+    """Test that config_id changes when c_ucb parameter differs.
+    
+    Purpose: Validates that config_id changes when c_ucb exploration parameter differs
+    
+    Given: Two SparsePFT instances with different c_ucb values
+    When: config_id is accessed on both instances
+    Then: config_id values are different
+    
+    Test type: unit
+    """
+    environment = TigerPOMDP(discount_factor=0.95)
+    
+    sparse_pft1 = SparsePFT(
+        environment=environment,
+        discount_factor=0.95,
+        gamma=0.95,
+        depth=12,
+        c_ucb=1.0,
+        beta_ucb=2.0,
+        belief_child_num=5,
+        n_simulations=100,
+        name="SparsePFT_Test",
+    )
+
+    sparse_pft2 = SparsePFT(
+        environment=environment,
+        discount_factor=0.95,
+        gamma=0.95,
+        depth=12,
+        c_ucb=1.5,  # Different c_ucb
+        beta_ucb=2.0,
+        belief_child_num=5,
+        n_simulations=100,
+        name="SparsePFT_Test",
+    )
+
+    config_id1 = sparse_pft1.config_id
+    config_id2 = sparse_pft2.config_id
+
+    assert config_id1 != config_id2
+
+
+def test_sparse_pft_config_id_different_belief_child_num():
+    """Test that config_id changes when belief_child_num parameter differs.
+    
+    Purpose: Validates that config_id changes when belief_child_num branching parameter differs
+    
+    Given: Two SparsePFT instances with different belief_child_num values
+    When: config_id is accessed on both instances
+    Then: config_id values are different
+    
+    Test type: unit
+    """
+    environment = TigerPOMDP(discount_factor=0.95)
+    
+    sparse_pft1 = SparsePFT(
+        environment=environment,
+        discount_factor=0.95,
+        gamma=0.95,
+        depth=12,
+        c_ucb=1.0,
+        beta_ucb=2.0,
+        belief_child_num=5,
+        n_simulations=100,
+        name="SparsePFT_Test",
+    )
+
+    sparse_pft2 = SparsePFT(
+        environment=environment,
+        discount_factor=0.95,
+        gamma=0.95,
+        depth=12,
+        c_ucb=1.0,
+        beta_ucb=2.0,
+        belief_child_num=10,  # Different belief_child_num
+        n_simulations=100,
+        name="SparsePFT_Test",
+    )
+
+    config_id1 = sparse_pft1.config_id
+    config_id2 = sparse_pft2.config_id
+
+    assert config_id1 != config_id2
+
+
+def test_sparse_pft_config_id_consistency_across_evaluations():
+    """Test that config_id remains consistent across different policy evaluations.
+    
+    Purpose: Validates that config_id is stable across multiple accesses and policy actions
+    
+    Given: Single SparsePFT instance and initial belief
+    When: config_id is accessed before and after policy actions
+    Then: config_id remains identical across all evaluations
+    
+    Test type: integration
+    """
+    environment = TigerPOMDP(discount_factor=0.95)
+    
+    sparse_pft = SparsePFT(
+        environment=environment,
+        discount_factor=0.95,
+        gamma=0.95,
+        depth=5,  # Reduced for testing
+        c_ucb=1.0,
+        beta_ucb=2.0,
+        belief_child_num=3,  # Reduced for testing
+        n_simulations=10,  # Reduced for testing
+        name="SparsePFT_Consistency_Test",
+    )
+
+    # Get initial config_id
+    initial_config_id = sparse_pft.config_id
+
+    # Create initial belief and perform policy actions
+    initial_belief = get_initial_belief(environment, n_particles=50)
+
+    # Perform multiple policy evaluations
+    for i in range(3):
+        action, run_data = sparse_pft.action(initial_belief)
+        
+        # Check config_id remains the same
+        current_config_id = sparse_pft.config_id
+        assert current_config_id == initial_config_id
+        
+        # Verify the action and run_data are valid
+        assert isinstance(action, list)
+        assert len(action) == 1
+        assert action[0] in environment.get_actions()
+        assert run_data is not None
+
+    # Final check
+    final_config_id = sparse_pft.config_id
+    assert final_config_id == initial_config_id
+
+
+def test_sparse_pft_config_id_hash_properties():
+    """Test that config_id has proper hash properties.
+    
+    Purpose: Validates that config_id produces valid hash strings
+    
+    Given: SparsePFT instance
+    When: config_id is accessed
+    Then: config_id is a valid hash string with expected properties
+    
+    Test type: unit
+    """
+    environment = TigerPOMDP(discount_factor=0.95)
+    
+    sparse_pft = SparsePFT(
+        environment=environment,
+        discount_factor=0.95,
+        gamma=0.95,
+        depth=12,
+        c_ucb=1.0,
+        beta_ucb=2.0,
+        belief_child_num=5,
+        n_simulations=100,
+        name="SparsePFT_Hash_Test",
+    )
+
+    config_id = sparse_pft.config_id
+
+    # Should be a non-empty string
+    assert isinstance(config_id, str)
+    assert len(config_id) > 0
+
+    # Should be a valid hexadecimal hash (SHA-256 produces 64 hex characters)
+    assert len(config_id) == 64
+    assert all(c in '0123456789abcdef' for c in config_id.lower())

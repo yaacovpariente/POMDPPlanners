@@ -220,3 +220,184 @@ def test_integration_with_tiger_pomdp(planner, tiger_pomdp):
         assert next_state in tiger_pomdp.states
         assert observation in tiger_pomdp.observations
         assert isinstance(reward, float)
+
+
+# Config ID Tests
+
+def test_discrete_action_sequences_config_id_consistency_identical_parameters(tiger_pomdp):
+    """Test that config_id is consistent for identical DiscreteActionSequencesPlanner parameters.
+    
+    Purpose: Validates that DiscreteActionSequencesPlanner with identical parameters produces identical config_id
+    
+    Given: Two DiscreteActionSequencesPlanner instances with identical parameters
+    When: config_id is accessed on both instances
+    Then: Both instances return the same config_id
+    
+    Test type: unit
+    """
+    # Create two DiscreteActionSequencesPlanner instances with identical parameters
+    planner1 = DiscreteActionSequencesPlanner(
+        environment=tiger_pomdp,
+        discount_factor=0.98,
+        name="DiscreteActionSeq_Test1",
+        depth=8,
+        n_return_samples=25,
+    )
+
+    planner2 = DiscreteActionSequencesPlanner(
+        environment=tiger_pomdp,
+        discount_factor=0.98,
+        name="DiscreteActionSeq_Test1",  # Same name
+        depth=8,
+        n_return_samples=25,
+    )
+
+    # Config IDs should be identical
+    config_id1 = planner1.config_id
+    config_id2 = planner2.config_id
+
+    assert config_id1 == config_id2
+    assert isinstance(config_id1, str)
+    assert len(config_id1) > 0
+
+
+def test_discrete_action_sequences_config_id_different_depth(tiger_pomdp):
+    """Test that config_id changes when depth parameter differs.
+    
+    Purpose: Validates that config_id changes when depth parameter differs
+    
+    Given: Two DiscreteActionSequencesPlanner instances with different depth values
+    When: config_id is accessed on both instances
+    Then: config_id values are different
+    
+    Test type: unit
+    """
+    planner1 = DiscreteActionSequencesPlanner(
+        environment=tiger_pomdp,
+        discount_factor=0.98,
+        name="DiscreteActionSeq_Test",
+        depth=5,
+        n_return_samples=25,
+    )
+
+    planner2 = DiscreteActionSequencesPlanner(
+        environment=tiger_pomdp,
+        discount_factor=0.98,
+        name="DiscreteActionSeq_Test",
+        depth=12,  # Different depth
+        n_return_samples=25,
+    )
+
+    config_id1 = planner1.config_id
+    config_id2 = planner2.config_id
+
+    assert config_id1 != config_id2
+
+
+def test_discrete_action_sequences_config_id_different_n_return_samples(tiger_pomdp):
+    """Test that config_id changes when n_return_samples parameter differs.
+    
+    Purpose: Validates that config_id changes when n_return_samples parameter differs
+    
+    Given: Two DiscreteActionSequencesPlanner instances with different n_return_samples values
+    When: config_id is accessed on both instances
+    Then: config_id values are different
+    
+    Test type: unit
+    """
+    planner1 = DiscreteActionSequencesPlanner(
+        environment=tiger_pomdp,
+        discount_factor=0.98,
+        name="DiscreteActionSeq_Test",
+        depth=8,
+        n_return_samples=15,
+    )
+
+    planner2 = DiscreteActionSequencesPlanner(
+        environment=tiger_pomdp,
+        discount_factor=0.98,
+        name="DiscreteActionSeq_Test",
+        depth=8,
+        n_return_samples=30,  # Different n_return_samples
+    )
+
+    config_id1 = planner1.config_id
+    config_id2 = planner2.config_id
+
+    assert config_id1 != config_id2
+
+
+def test_discrete_action_sequences_config_id_consistency_across_evaluations(tiger_pomdp):
+    """Test that config_id remains consistent across different policy evaluations.
+    
+    Purpose: Validates that config_id is stable across multiple accesses and policy actions
+    
+    Given: Single DiscreteActionSequencesPlanner instance and initial belief
+    When: config_id is accessed before and after policy actions
+    Then: config_id remains identical across all evaluations
+    
+    Test type: integration
+    """
+    planner = DiscreteActionSequencesPlanner(
+        environment=tiger_pomdp,
+        discount_factor=0.98,
+        name="DiscreteActionSeq_Consistency_Test",
+        depth=3,  # Reduced for testing
+        n_return_samples=10,  # Reduced for testing
+    )
+
+    # Get initial config_id
+    initial_config_id = planner.config_id
+
+    # Create initial belief
+    particles = ["tiger_left", "tiger_right"] * 5
+    log_weights = np.log(np.ones(10) / 10)
+    initial_belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+
+    # Perform multiple policy evaluations
+    for i in range(3):
+        actions, run_data = planner.action(initial_belief)
+        
+        # Check config_id remains the same
+        current_config_id = planner.config_id
+        assert current_config_id == initial_config_id
+        
+        # Verify the action and run_data are valid
+        assert isinstance(actions, list)
+        assert len(actions) == 1
+        assert actions[0] in tiger_pomdp.get_actions()
+        assert run_data is not None
+
+    # Final check
+    final_config_id = planner.config_id
+    assert final_config_id == initial_config_id
+
+
+def test_discrete_action_sequences_config_id_hash_properties(tiger_pomdp):
+    """Test that config_id has proper hash properties.
+    
+    Purpose: Validates that config_id produces valid hash strings
+    
+    Given: DiscreteActionSequencesPlanner instance
+    When: config_id is accessed
+    Then: config_id is a valid hash string with expected properties
+    
+    Test type: unit
+    """
+    planner = DiscreteActionSequencesPlanner(
+        environment=tiger_pomdp,
+        discount_factor=0.98,
+        name="DiscreteActionSeq_Hash_Test",
+        depth=8,
+        n_return_samples=25,
+    )
+
+    config_id = planner.config_id
+
+    # Should be a non-empty string
+    assert isinstance(config_id, str)
+    assert len(config_id) > 0
+
+    # Should be a valid hexadecimal hash (SHA-256 produces 64 hex characters)
+    assert len(config_id) == 64
+    assert all(c in '0123456789abcdef' for c in config_id.lower())

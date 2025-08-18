@@ -6,10 +6,14 @@ from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDP,
+)
 from POMDPPlanners.core.belief import WeightedParticleBelief, WeightedParticleBeliefStateUpdate, get_initial_belief
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils import validate_tree_structure_with_progressive_widening
+from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 
 
 class MockActionSampler(ActionSampler):
@@ -761,3 +765,300 @@ def test_pomcpow_tree_structure_construction(environment, discount_factor, depth
         expected_belief_type=WeightedParticleBeliefStateUpdate,  # POMCPOW uses weighted particles
         planner_type="POMCPOW"  # Allow more flexible visit count validation for POMCPOW
     )
+
+
+# Config ID Tests
+
+def test_pomcpow_config_id_consistency_identical_parameters(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
+    """Test that config_id is consistent for identical POMCPOW parameters.
+    
+    Purpose: Validates that POMCPOW with identical parameters produces identical config_id
+    
+    Given: Two POMCPOW instances with identical parameters
+    When: config_id is accessed on both instances
+    Then: Both instances return the same config_id
+    
+    Test type: unit
+    """
+    # Create two POMCPOW instances with identical parameters
+    pomcpow1 = POMCPOW(
+        environment=environment,
+        discount_factor=discount_factor,
+        depth=depth,
+        exploration_constant=exploration_constant,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        name="POMCPOW_Test1",
+        action_sampler=action_sampler,
+        n_simulations=100,
+    )
+
+    pomcpow2 = POMCPOW(
+        environment=environment,
+        discount_factor=discount_factor,
+        depth=depth,
+        exploration_constant=exploration_constant,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        name="POMCPOW_Test1",  # Same name
+        action_sampler=action_sampler,
+        n_simulations=100,
+    )
+
+    # Config IDs should be identical
+    config_id1 = pomcpow1.config_id
+    config_id2 = pomcpow2.config_id
+
+    assert config_id1 == config_id2
+    assert isinstance(config_id1, str)
+    assert len(config_id1) > 0
+
+
+def test_pomcpow_config_id_different_action_sampler_values():
+    """Test that config_id changes when action sampler is initialized with different values.
+    
+    Purpose: Validates that config_id changes when action sampler parameters differ
+    
+    Given: Two POMCPOW instances with action samplers having different max_action_magnitude
+    When: config_id is accessed on both instances
+    Then: config_id values are different
+    
+    Test type: unit
+    """
+    # Create continuous environment for testing
+    continuous_environment = ContinuousLightDarkPOMDP(
+        discount_factor=0.99,
+        goal_state=np.array([5, 0]),
+        start_state=np.array([0, 0]),
+        name="TestContinuous",
+    )
+
+    # Create action samplers with different max_action_magnitude
+    sampler1 = UnitCircleActionSampler(max_action_magnitude=1.0)
+    sampler2 = UnitCircleActionSampler(max_action_magnitude=2.0)
+
+    pomcpow1 = POMCPOW(
+        environment=continuous_environment,
+        discount_factor=0.99,
+        depth=10,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        name="POMCPOW_Test",
+        action_sampler=sampler1,
+        n_simulations=100,
+    )
+
+    pomcpow2 = POMCPOW(
+        environment=continuous_environment,
+        discount_factor=0.99,
+        depth=10,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        name="POMCPOW_Test",
+        action_sampler=sampler2,  # Different sampler parameters
+        n_simulations=100,
+    )
+
+    config_id1 = pomcpow1.config_id
+    config_id2 = pomcpow2.config_id
+
+    assert config_id1 != config_id2
+    assert isinstance(config_id1, str)
+    assert isinstance(config_id2, str)
+    assert len(config_id1) > 0
+    assert len(config_id2) > 0
+
+
+def test_pomcpow_config_id_different_planner_parameters(environment, discount_factor, depth, k_o, k_a, alpha_o, alpha_a, action_sampler):
+    """Test that config_id changes when POMCPOW planner parameters differ.
+    
+    Purpose: Validates that config_id changes when core POMCPOW parameters differ
+    
+    Given: Two POMCPOW instances with different exploration_constant values
+    When: config_id is accessed on both instances
+    Then: config_id values are different
+    
+    Test type: unit
+    """
+    pomcpow1 = POMCPOW(
+        environment=environment,
+        discount_factor=discount_factor,
+        depth=depth,
+        exploration_constant=1.0,  # Different exploration constant
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        name="POMCPOW_Test",
+        action_sampler=action_sampler,
+        n_simulations=100,
+    )
+
+    pomcpow2 = POMCPOW(
+        environment=environment,
+        discount_factor=discount_factor,
+        depth=depth,
+        exploration_constant=2.0,  # Different exploration constant
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        name="POMCPOW_Test",
+        action_sampler=action_sampler,
+        n_simulations=100,
+    )
+
+    config_id1 = pomcpow1.config_id
+    config_id2 = pomcpow2.config_id
+
+    assert config_id1 != config_id2
+
+
+def test_pomcpow_config_id_consistency_across_evaluations(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
+    """Test that config_id remains consistent across different policy evaluations.
+    
+    Purpose: Validates that config_id is stable across multiple accesses and policy actions
+    
+    Given: Single POMCPOW instance and initial belief
+    When: config_id is accessed before and after policy actions
+    Then: config_id remains identical across all evaluations
+    
+    Test type: integration
+    """
+    pomcpow = POMCPOW(
+        environment=environment,
+        discount_factor=discount_factor,
+        depth=3,  # Reduced for testing
+        exploration_constant=exploration_constant,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        name="POMCPOW_Consistency_Test",
+        action_sampler=action_sampler,
+        n_simulations=10,  # Reduced for testing
+    )
+
+    # Get initial config_id
+    initial_config_id = pomcpow.config_id
+
+    # Create initial belief and perform policy actions
+    initial_belief = get_initial_belief(environment, n_particles=50)
+
+    # Perform multiple policy evaluations
+    for i in range(3):
+        action, run_data = pomcpow.action(initial_belief)
+        
+        # Check config_id remains the same
+        current_config_id = pomcpow.config_id
+        assert current_config_id == initial_config_id
+        
+        # Verify the action and run_data are valid
+        assert isinstance(action, list)
+        assert len(action) == 1
+        assert action[0] in action_sampler.get_space()
+        assert run_data is not None
+
+    # Final check
+    final_config_id = pomcpow.config_id
+    assert final_config_id == initial_config_id
+
+
+def test_pomcpow_config_id_action_sampler_attribute_changes():
+    """Test config_id changes when action sampler attributes are modified.
+    
+    Purpose: Validates that modifying action sampler attributes affects config_id
+    
+    Given: POMCPOW instance with modifiable action sampler
+    When: Action sampler attributes are changed
+    Then: config_id reflects the change
+    
+    Test type: unit
+    """
+    # Create continuous environment for testing
+    continuous_environment = ContinuousLightDarkPOMDP(
+        discount_factor=0.99,
+        goal_state=np.array([5, 0]),
+        start_state=np.array([0, 0]),
+        name="TestContinuous",
+    )
+
+    # Create initial action sampler and POMCPOW
+    action_sampler = UnitCircleActionSampler(max_action_magnitude=1.0)
+    
+    pomcpow = POMCPOW(
+        environment=continuous_environment,
+        discount_factor=0.99,
+        depth=10,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        name="POMCPOW_Attribute_Test",
+        action_sampler=action_sampler,
+        n_simulations=100,
+    )
+
+    # Get initial config_id
+    initial_config_id = pomcpow.config_id
+
+    # Modify the action sampler's attribute
+    action_sampler.max_action_magnitude = 2.0
+
+    # Config ID should be different after modification
+    modified_config_id = pomcpow.config_id
+    assert modified_config_id != initial_config_id
+
+    # Restore original value
+    action_sampler.max_action_magnitude = 1.0
+
+    # Config ID should return to original
+    restored_config_id = pomcpow.config_id
+    assert restored_config_id == initial_config_id
+
+
+def test_pomcpow_config_id_hash_properties(environment, discount_factor, depth, exploration_constant, k_o, k_a, alpha_o, alpha_a, action_sampler):
+    """Test that config_id has proper hash properties.
+    
+    Purpose: Validates that config_id produces valid hash strings
+    
+    Given: POMCPOW instance
+    When: config_id is accessed
+    Then: config_id is a valid hash string with expected properties
+    
+    Test type: unit
+    """
+    pomcpow = POMCPOW(
+        environment=environment,
+        discount_factor=discount_factor,
+        depth=depth,
+        exploration_constant=exploration_constant,
+        k_o=k_o,
+        k_a=k_a,
+        alpha_o=alpha_o,
+        alpha_a=alpha_a,
+        name="POMCPOW_Hash_Test",
+        action_sampler=action_sampler,
+        n_simulations=100,
+    )
+
+    config_id = pomcpow.config_id
+
+    # Should be a non-empty string
+    assert isinstance(config_id, str)
+    assert len(config_id) > 0
+
+    # Should be a valid hexadecimal hash (SHA-256 produces 64 hex characters)
+    assert len(config_id) == 64
+    assert all(c in '0123456789abcdef' for c in config_id.lower())

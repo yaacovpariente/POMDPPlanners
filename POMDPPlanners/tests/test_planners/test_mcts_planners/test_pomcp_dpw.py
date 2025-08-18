@@ -850,3 +850,251 @@ def test_numpy_array_observation_comparison():
             pytest.fail("POMCP_DPW failed to handle numpy array observations correctly")
         else:
             raise
+
+
+# Config ID Tests
+
+def test_pomcp_dpw_config_id_consistency_identical_parameters(environment, discrete_action_sampler):
+    """Test that config_id is consistent for identical POMCP_DPW parameters.
+    
+    Purpose: Validates that POMCP_DPW with identical parameters produces identical config_id
+    
+    Given: Two POMCP_DPW instances with identical parameters
+    When: config_id is accessed on both instances
+    Then: Both instances return the same config_id
+    
+    Test type: unit
+    """
+    # Create two POMCP_DPW instances with identical parameters
+    pomcp_dpw1 = POMCP_DPW(
+        environment=environment,
+        discount_factor=0.95,
+        depth=10,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        name="POMCP_DPW_Test1",
+        action_sampler=discrete_action_sampler,
+        n_simulations=100,
+    )
+
+    pomcp_dpw2 = POMCP_DPW(
+        environment=environment,
+        discount_factor=0.95,
+        depth=10,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        name="POMCP_DPW_Test1",  # Same name
+        action_sampler=discrete_action_sampler,
+        n_simulations=100,
+    )
+
+    # Config IDs should be identical
+    config_id1 = pomcp_dpw1.config_id
+    config_id2 = pomcp_dpw2.config_id
+
+    assert config_id1 == config_id2
+    assert isinstance(config_id1, str)
+    assert len(config_id1) > 0
+
+
+def test_pomcp_dpw_config_id_different_action_sampler_values():
+    """Test that config_id changes when action sampler is initialized with different values.
+    
+    Purpose: Validates that config_id changes when action sampler parameters differ
+    
+    Given: Two POMCP_DPW instances with action samplers having different max_action_magnitude
+    When: config_id is accessed on both instances
+    Then: config_id values are different
+    
+    Test type: unit
+    """
+    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+        ContinuousLightDarkPOMDP,
+    )
+    from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
+    
+    # Create continuous environment for testing
+    continuous_environment = ContinuousLightDarkPOMDP(
+        discount_factor=0.99,
+        goal_state=np.array([5, 0]),
+        start_state=np.array([0, 0]),
+        name="TestContinuous",
+    )
+
+    # Create action samplers with different max_action_magnitude
+    sampler1 = UnitCircleActionSampler(max_action_magnitude=1.0)
+    sampler2 = UnitCircleActionSampler(max_action_magnitude=2.0)
+
+    pomcp_dpw1 = POMCP_DPW(
+        environment=continuous_environment,
+        discount_factor=0.99,
+        depth=10,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        name="POMCP_DPW_Test",
+        action_sampler=sampler1,
+        n_simulations=100,
+    )
+
+    pomcp_dpw2 = POMCP_DPW(
+        environment=continuous_environment,
+        discount_factor=0.99,
+        depth=10,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        name="POMCP_DPW_Test",
+        action_sampler=sampler2,  # Different sampler parameters
+        n_simulations=100,
+    )
+
+    config_id1 = pomcp_dpw1.config_id
+    config_id2 = pomcp_dpw2.config_id
+
+    assert config_id1 != config_id2
+    assert isinstance(config_id1, str)
+    assert isinstance(config_id2, str)
+    assert len(config_id1) > 0
+    assert len(config_id2) > 0
+
+
+def test_pomcp_dpw_config_id_different_progressive_widening_parameters(environment, discrete_action_sampler):
+    """Test that config_id changes when progressive widening parameters differ.
+    
+    Purpose: Validates that config_id changes when k_o, k_a, alpha_o, or alpha_a parameters differ
+    
+    Given: POMCP_DPW instances with different progressive widening parameters
+    When: config_id is accessed on both instances
+    Then: config_id values are different
+    
+    Test type: unit
+    """
+    pomcp_dpw1 = POMCP_DPW(
+        environment=environment,
+        discount_factor=0.95,
+        depth=10,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        name="POMCP_DPW_Test",
+        action_sampler=discrete_action_sampler,
+        n_simulations=100,
+    )
+
+    pomcp_dpw2 = POMCP_DPW(
+        environment=environment,
+        discount_factor=0.95,
+        depth=10,
+        exploration_constant=1.0,
+        k_o=5.0,  # Different k_o
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        name="POMCP_DPW_Test",
+        action_sampler=discrete_action_sampler,
+        n_simulations=100,
+    )
+
+    config_id1 = pomcp_dpw1.config_id
+    config_id2 = pomcp_dpw2.config_id
+
+    assert config_id1 != config_id2
+
+
+def test_pomcp_dpw_config_id_consistency_across_evaluations(environment, discrete_action_sampler):
+    """Test that config_id remains consistent across different policy evaluations.
+    
+    Purpose: Validates that config_id is stable across multiple accesses and policy actions
+    
+    Given: Single POMCP_DPW instance and initial belief
+    When: config_id is accessed before and after policy actions
+    Then: config_id remains identical across all evaluations
+    
+    Test type: integration
+    """
+    pomcp_dpw = POMCP_DPW(
+        environment=environment,
+        discount_factor=0.95,
+        depth=5,  # Reduced for testing
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        name="POMCP_DPW_Consistency_Test",
+        action_sampler=discrete_action_sampler,
+        n_simulations=10,  # Reduced for testing
+    )
+
+    # Get initial config_id
+    initial_config_id = pomcp_dpw.config_id
+
+    # Create initial belief and perform policy actions
+    initial_belief = get_initial_belief(environment, n_particles=50)
+
+    # Perform multiple policy evaluations
+    for i in range(3):
+        action, run_data = pomcp_dpw.action(initial_belief)
+        
+        # Check config_id remains the same
+        current_config_id = pomcp_dpw.config_id
+        assert current_config_id == initial_config_id
+        
+        # Verify the action and run_data are valid
+        assert isinstance(action, list)
+        assert len(action) == 1
+        assert action[0] in environment.get_actions()
+        assert run_data is not None
+
+    # Final check
+    final_config_id = pomcp_dpw.config_id
+    assert final_config_id == initial_config_id
+
+
+def test_pomcp_dpw_config_id_hash_properties(environment, discrete_action_sampler):
+    """Test that config_id has proper hash properties.
+    
+    Purpose: Validates that config_id produces valid hash strings
+    
+    Given: POMCP_DPW instance
+    When: config_id is accessed
+    Then: config_id is a valid hash string with expected properties
+    
+    Test type: unit
+    """
+    pomcp_dpw = POMCP_DPW(
+        environment=environment,
+        discount_factor=0.95,
+        depth=10,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        name="POMCP_DPW_Hash_Test",
+        action_sampler=discrete_action_sampler,
+        n_simulations=100,
+    )
+
+    config_id = pomcp_dpw.config_id
+
+    # Should be a non-empty string
+    assert isinstance(config_id, str)
+    assert len(config_id) > 0
+
+    # Should be a valid hexadecimal hash (SHA-256 produces 64 hex characters)
+    assert len(config_id) == 64
+    assert all(c in '0123456789abcdef' for c in config_id.lower())

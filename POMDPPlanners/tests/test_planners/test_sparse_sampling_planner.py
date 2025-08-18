@@ -307,3 +307,174 @@ def test_sanity_pomdp_action_selection():
     # We expect at least 70% success rate since sparse sampling is more systematic than MCTS
     assert action_0_count >= 0.7 * n_trials, \
         f"Sparse sampling planner selected action 0 only {action_0_count}/{n_trials} times, expected at least {0.7 * n_trials}"
+
+
+# Config ID Tests
+
+def test_sparse_sampling_config_id_consistency_identical_parameters(tiger_pomdp):
+    """Test that config_id is consistent for identical StandardSparseSampling parameters.
+    
+    Purpose: Validates that StandardSparseSamplingPlanner with identical parameters produces identical config_id
+    
+    Given: Two StandardSparseSamplingPlanner instances with identical parameters
+    When: config_id is accessed on both instances
+    Then: Both instances return the same config_id
+    
+    Test type: unit
+    """
+    # Create two StandardSparseSamplingPlanner instances with identical parameters
+    planner1 = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=tiger_pomdp,
+        branching_factor=5,
+        depth=8,
+        name="SparseSampling_Test1",
+    )
+
+    planner2 = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=tiger_pomdp,
+        branching_factor=5,
+        depth=8,
+        name="SparseSampling_Test1",  # Same name
+    )
+
+    # Config IDs should be identical
+    config_id1 = planner1.config_id
+    config_id2 = planner2.config_id
+
+    assert config_id1 == config_id2
+    assert isinstance(config_id1, str)
+    assert len(config_id1) > 0
+
+
+def test_sparse_sampling_config_id_different_branching_factor(tiger_pomdp):
+    """Test that config_id changes when branching_factor parameter differs.
+    
+    Purpose: Validates that config_id changes when branching_factor parameter differs
+    
+    Given: Two StandardSparseSamplingPlanner instances with different branching_factor values
+    When: config_id is accessed on both instances
+    Then: config_id values are different
+    
+    Test type: unit
+    """
+    planner1 = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=tiger_pomdp,
+        branching_factor=3,
+        depth=8,
+        name="SparseSampling_Test",
+    )
+
+    planner2 = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=tiger_pomdp,
+        branching_factor=6,  # Different branching factor
+        depth=8,
+        name="SparseSampling_Test",
+    )
+
+    config_id1 = planner1.config_id
+    config_id2 = planner2.config_id
+
+    assert config_id1 != config_id2
+
+
+def test_sparse_sampling_config_id_different_depth(tiger_pomdp):
+    """Test that config_id changes when depth parameter differs.
+    
+    Purpose: Validates that config_id changes when depth parameter differs
+    
+    Given: Two StandardSparseSamplingPlanner instances with different depth values
+    When: config_id is accessed on both instances
+    Then: config_id values are different
+    
+    Test type: unit
+    """
+    planner1 = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=tiger_pomdp,
+        branching_factor=5,
+        depth=5,
+        name="SparseSampling_Test",
+    )
+
+    planner2 = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=tiger_pomdp,
+        branching_factor=5,
+        depth=12,  # Different depth
+        name="SparseSampling_Test",
+    )
+
+    config_id1 = planner1.config_id
+    config_id2 = planner2.config_id
+
+    assert config_id1 != config_id2
+
+
+def test_sparse_sampling_config_id_consistency_across_evaluations(tiger_pomdp):
+    """Test that config_id remains consistent across different policy evaluations.
+    
+    Purpose: Validates that config_id is stable across multiple accesses and policy actions
+    
+    Given: Single StandardSparseSamplingPlanner instance and initial belief
+    When: config_id is accessed before and after policy actions
+    Then: config_id remains identical across all evaluations
+    
+    Test type: integration
+    """
+    planner = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=tiger_pomdp,
+        branching_factor=3,  # Reduced for testing
+        depth=3,  # Reduced for testing
+        name="SparseSampling_Consistency_Test",
+    )
+
+    # Get initial config_id
+    initial_config_id = planner.config_id
+
+    # Create initial belief and perform policy actions
+    initial_belief = get_initial_belief(tiger_pomdp, n_particles=50)
+
+    # Perform multiple policy evaluations
+    for i in range(3):
+        action, run_data = planner.action(initial_belief)
+        
+        # Check config_id remains the same
+        current_config_id = planner.config_id
+        assert current_config_id == initial_config_id
+        
+        # Verify the action and run_data are valid
+        assert isinstance(action, list)
+        assert len(action) == 1
+        assert action[0] in tiger_pomdp.get_actions()
+        assert run_data is not None
+
+    # Final check
+    final_config_id = planner.config_id
+    assert final_config_id == initial_config_id
+
+
+def test_sparse_sampling_config_id_hash_properties(tiger_pomdp):
+    """Test that config_id has proper hash properties.
+    
+    Purpose: Validates that config_id produces valid hash strings
+    
+    Given: StandardSparseSamplingPlanner instance
+    When: config_id is accessed
+    Then: config_id is a valid hash string with expected properties
+    
+    Test type: unit
+    """
+    planner = StandardSparseSamplingDiscreteActionsPlanner(
+        environment=tiger_pomdp,
+        branching_factor=5,
+        depth=8,
+        name="SparseSampling_Hash_Test",
+    )
+
+    config_id = planner.config_id
+
+    # Should be a non-empty string
+    assert isinstance(config_id, str)
+    assert len(config_id) > 0
+
+    # Should be a valid hexadecimal hash (SHA-256 produces 64 hex characters)
+    assert len(config_id) == 64
+    assert all(c in '0123456789abcdef' for c in config_id.lower())
