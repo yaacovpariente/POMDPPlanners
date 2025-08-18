@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 from typing import Any
 from math import floor
 import numpy as np
+import pickle
 
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 
@@ -16,6 +17,9 @@ class ActionSampler(ABC):
     The ActionSampler interface enables flexible action space exploration by allowing
     custom sampling strategies that can incorporate domain knowledge, belief state
     information, or specialized sampling distributions.
+    
+    The class is serializable and can be safely pickled/unpickled for distributed
+    computing, caching, or saving/loading configurations.
     
     Examples:
         Basic continuous control action sampler::
@@ -36,6 +40,11 @@ class ActionSampler(ABC):
             # Usage with PFT-DPW
             sampler = ContinuousControlSampler(action_bounds=(-2.0, 2.0), action_dim=4)
             action = sampler.sample()  # Returns 4D action vector
+            
+            # Serialization works automatically
+            import pickle
+            serialized = pickle.dumps(sampler)
+            restored_sampler = pickle.loads(serialized)
             
         Discrete action sampler with custom distribution::
         
@@ -163,6 +172,65 @@ class ActionSampler(ABC):
             A sampled action compatible with the environment's action space
         """
         pass
+    
+    def __getstate__(self):
+        """Return state for serialization.
+        
+        This method is automatically called by pickle to get the object's state.
+        Subclasses should override this if they have non-serializable attributes.
+        
+        Returns:
+            Dictionary containing the object's state
+        """
+        return self.__dict__.copy()
+    
+    def __setstate__(self, state):
+        """Restore state from serialization.
+        
+        This method is automatically called by pickle to restore the object's state.
+        Subclasses should override this if they need custom restoration logic.
+        
+        Args:
+            state: Dictionary containing the object's state
+        """
+        self.__dict__.update(state)
+    
+    def __reduce__(self):
+        """Custom reduction for pickle to handle abstract base classes.
+        
+        This ensures that concrete subclasses can be properly serialized
+        even when referenced through the abstract base class.
+        
+        Returns:
+            Tuple for pickle reconstruction
+        """
+        # Get the actual class of the instance (not the abstract base)
+        cls = self.__class__
+        # Get the current state
+        state = self.__getstate__()
+        # Return reconstruction tuple: (class, (), state)
+        return (cls, (), state)
+    
+    def __eq__(self, other):
+        """Equality comparison for serialization testing.
+        
+        Args:
+            other: Another ActionSampler instance
+            
+        Returns:
+            True if samplers are equivalent, False otherwise
+        """
+        if not isinstance(other, self.__class__):
+            return False
+        return self.__getstate__() == other.__getstate__()
+    
+    def __hash__(self):
+        """Hash based on state for consistent behavior.
+        
+        Returns:
+            Hash value based on the sampler's state
+        """
+        return hash(str(self.__getstate__()))
 
 
 def action_progressive_widening(

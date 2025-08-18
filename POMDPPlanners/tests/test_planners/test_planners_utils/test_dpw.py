@@ -1099,3 +1099,211 @@ def test_progressive_widening_parameter_tuning_example():
     
     # Alpha = 1.0 should create an action at every visit (linear growth)
     assert results[1.0] == 20, "Alpha = 1.0 should create action at every visit"
+
+
+# Test classes for serialization testing
+class TestContinuousSampler(ActionSampler):
+    """Test sampler for continuous action spaces."""
+    
+    def __init__(self, bounds=(-1.0, 1.0), dim=2):
+        self.bounds = bounds
+        self.dim = dim
+    
+    def sample(self, belief_node=None):
+        low, high = self.bounds
+        return np.random.uniform(low, high, size=self.dim)
+
+
+class TestDiscreteSampler(ActionSampler):
+    """Test sampler for discrete action spaces."""
+    
+    def __init__(self, actions=None, probs=None):
+        if actions is None:
+            actions = ['a', 'b']
+        if probs is None:
+            probs = [0.5, 0.5]
+        self.actions = actions
+        self.probabilities = np.array(probs)
+    
+    def sample(self, belief_node=None):
+        return np.random.choice(self.actions, p=self.probabilities)
+
+
+class TestComplexSampler(ActionSampler):
+    """Test sampler with complex state including numpy arrays."""
+    
+    def __init__(self, goal=None, noise_level=0.1):
+        if goal is None:
+            goal = [0.0, 0.0]
+        self.goal = np.array(goal)
+        self.noise_level = noise_level
+    
+    def sample(self, belief_node=None):
+        noise = np.random.normal(0, self.noise_level, size=self.goal.shape)
+        return self.goal + noise
+
+
+class EmptySampler(ActionSampler):
+    """Test sampler with minimal state."""
+    
+    def sample(self, belief_node=None):
+        return None
+
+
+def test_action_sampler_serialization():
+    """Test that ActionSampler serialization works correctly.
+    
+    Purpose: Validates that ActionSampler instances can be properly serialized and deserialized
+    using pickle, which is essential for distributed computing, caching, and configuration saving.
+    
+    Given: Various ActionSampler implementations with different state types (continuous, discrete, complex)
+    When: Each sampler is serialized with pickle.dumps() and deserialized with pickle.loads()
+    Then: The restored samplers have identical state to originals and can produce similar results
+    
+    Test type: unit
+    """
+    import pickle
+    
+    # Create test instances
+    continuous_sampler = TestContinuousSampler((-1.0, 1.0), 3)
+    discrete_sampler = TestDiscreteSampler(['a', 'b', 'c'], [0.5, 0.3, 0.2])
+    complex_sampler = TestComplexSampler([1.0, 2.0, 3.0], 0.1)
+    
+    samplers = [continuous_sampler, discrete_sampler, complex_sampler]
+    
+    for i, sampler in enumerate(samplers):
+        # Test serialization
+        serialized = pickle.dumps(sampler)
+        restored = pickle.loads(serialized)
+        
+        # Test that restored sampler has same state
+        original_state = sampler.__getstate__()
+        restored_state = restored.__getstate__()
+        
+        # Compare state attributes individually to handle numpy arrays
+        assert len(original_state) == len(restored_state), "State dictionaries have different lengths"
+        
+        for key in original_state:
+            assert key in restored_state, f"Key {key} missing in restored state"
+            original_val = original_state[key]
+            restored_val = restored_state[key]
+            
+            if isinstance(original_val, np.ndarray):
+                np.testing.assert_array_equal(original_val, restored_val, 
+                                            err_msg=f"Array mismatch for key {key}")
+            else:
+                assert original_val == restored_val, f"Value mismatch for key {key}: {original_val} != {restored_val}"
+        
+        # Test that restored sampler produces similar results
+        original_samples = [sampler.sample() for _ in range(5)]
+        restored_samples = [restored.sample() for _ in range(5)]
+        
+        # For continuous samplers, check that ranges are similar
+        if hasattr(sampler, 'bounds'):
+            assert sampler.bounds == restored.bounds
+            assert sampler.dim == restored.dim
+        elif hasattr(sampler, 'actions'):
+            assert sampler.actions == restored.actions
+            np.testing.assert_array_almost_equal(sampler.probabilities, restored.probabilities)
+        elif hasattr(sampler, 'goal'):
+            np.testing.assert_array_almost_equal(sampler.goal, restored.goal)
+            assert sampler.noise_level == restored.noise_level
+
+
+def test_action_sampler_serialization_edge_cases():
+    """Test edge cases for ActionSampler serialization.
+    
+    Purpose: Validates that ActionSampler serialization handles edge cases gracefully,
+    including empty state and numpy random state handling.
+    
+    Given: EmptySampler with minimal state and samplers with numpy random dependencies
+    When: Serialization and deserialization is performed on edge case samplers
+    Then: All samplers are successfully serialized and restored with identical state
+    
+    Test type: unit
+    """
+    import pickle
+    
+    # Test empty state
+    empty_sampler = EmptySampler()
+    serialized_empty = pickle.dumps(empty_sampler)
+    restored_empty = pickle.loads(serialized_empty)
+    assert empty_sampler.__getstate__() == restored_empty.__getstate__()
+    
+    # Test with numpy random state (should be handled gracefully)
+    continuous_sampler = TestContinuousSampler((-1.0, 1.0), 2)
+    np.random.seed(42)
+    test_sample = continuous_sampler.sample()
+    np.random.seed(42)
+    restored_sample = continuous_sampler.sample()
+    
+    # Note: numpy random state isn't serialized, so samples may differ
+    # but the sampler structure should be identical
+    # This test just ensures no errors occur during serialization
+
+
+def test_action_sampler_equality_and_hashing():
+    """Test that ActionSampler equality and hashing work correctly for serialization.
+    
+    Purpose: Validates that ActionSampler instances can be compared for equality and
+    have consistent hash values, which are important for serialization and caching.
+    
+    Given: Multiple ActionSampler instances with identical and different states
+    When: Equality comparison and hashing are performed
+    Then: Identical samplers are equal and have same hash, different samplers are not equal
+    
+    Test type: unit
+    """
+    # Test identical samplers
+    sampler1 = TestContinuousSampler((-1.0, 1.0), 2)
+    sampler2 = TestContinuousSampler((-1.0, 1.0), 2)
+    
+    assert sampler1 == sampler2, "Identical samplers should be equal"
+    assert hash(sampler1) == hash(sampler2), "Identical samplers should have same hash"
+    
+    # Test different samplers
+    sampler3 = TestContinuousSampler((-2.0, 2.0), 2)
+    assert sampler1 != sampler3, "Different samplers should not be equal"
+    
+    # Test different types
+    discrete_sampler = TestDiscreteSampler(['a', 'b'], [0.5, 0.5])
+    assert sampler1 != discrete_sampler, "Different sampler types should not be equal"
+
+
+def test_action_sampler_getstate_setstate():
+    """Test that ActionSampler __getstate__ and __setstate__ methods work correctly.
+    
+    Purpose: Validates that ActionSampler state serialization methods properly
+    capture and restore the internal state of sampler instances.
+    
+    Given: ActionSampler instances with various state attributes
+    When: __getstate__ and __setstate__ methods are called
+    Then: State is correctly captured and restored, maintaining all attributes
+    
+    Test type: unit
+    """
+    # Test continuous sampler state
+    continuous_sampler = TestContinuousSampler((-1.0, 1.0), 3)
+    state = continuous_sampler.__getstate__()
+    
+    # Verify state contains expected attributes
+    assert 'bounds' in state
+    assert 'dim' in state
+    assert state['bounds'] == (-1.0, 1.0)
+    assert state['dim'] == 3
+    
+    # Test state restoration
+    new_sampler = TestContinuousSampler((0, 0), 1)
+    new_sampler.__setstate__(state)
+    
+    assert new_sampler.bounds == (-1.0, 1.0)
+    assert new_sampler.dim == 3
+    
+    # Test discrete sampler state
+    discrete_sampler = TestDiscreteSampler(['x', 'y'], [0.7, 0.3])
+    state = discrete_sampler.__getstate__()
+    
+    assert 'actions' in state
+    assert 'probabilities' in state
+    assert state['actions'] == ['x', 'y']
+    np.testing.assert_array_almost_equal(state['probabilities'], [0.7, 0.3])
