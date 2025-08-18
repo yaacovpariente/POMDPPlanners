@@ -11,6 +11,22 @@ class NumpyEncoder(json.JSONEncoder):
             return int(obj)
         if isinstance(obj, np.floating):
             return float(obj)
+        
+        # Handle ActionSampler instances by converting to their state
+        if hasattr(obj, '__class__') and hasattr(obj, '__getstate__'):
+            try:
+                # Try to get the serializable state
+                state = obj.__getstate__()
+                # Add class information for reconstruction
+                return {
+                    "__class__": obj.__class__.__name__,
+                    "__module__": obj.__class__.__module__,
+                    "__state__": state
+                }
+            except Exception:
+                # If serialization fails, use string representation
+                return str(obj)
+        
         return super().default(obj)
 
 def config_to_id(config_dict: dict) -> str:
