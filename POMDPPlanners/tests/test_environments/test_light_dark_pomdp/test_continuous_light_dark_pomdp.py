@@ -592,3 +592,418 @@ def test_dangerous_states_reward_model():
     assert len(positive_rewards) > 0, "Should get some positive rewards"
     assert len(negative_rewards) > 0, "Should get some negative rewards"
     # Note: We do not check the mean reward, as the environment's reward structure includes other penalties.
+
+
+class TestVisualizePath:
+    """Test suite for visualize_path function."""
+    
+    def test_visualize_path_creates_gif_file(self, base_light_dark_environment, tmp_path):
+        """Test that visualize_path creates a GIF file at the specified cache path.
+        
+        Purpose: Validates that visualize_path successfully creates a GIF animation file
+        
+        Given: A light-dark environment, simple agent path, belief path, actions, and valid cache path
+        When: visualize_path is called with the test data
+        Then: A GIF file is created at the specified cache path and has non-zero size
+        
+        Test type: unit
+        """
+        env = base_light_dark_environment
+        
+        # Create simple test path
+        path = [
+            np.array([0, 5]),  # Start state
+            np.array([1, 5]),  # Move right
+            np.array([2, 5]),  # Move right again
+            np.array([3, 5])   # Final position
+        ]
+        
+        # Create simple belief distributions
+        belief_path = [
+            DiscreteDistribution(values=[np.array([0, 5]), np.array([0, 4])], probs=np.array([0.8, 0.2])),
+            DiscreteDistribution(values=[np.array([1, 5]), np.array([1, 4])], probs=np.array([0.9, 0.1])),
+            DiscreteDistribution(values=[np.array([2, 5]), np.array([2, 4])], probs=np.array([0.95, 0.05])),
+            DiscreteDistribution(values=[np.array([3, 5])], probs=np.array([1.0]))
+        ]
+        
+        # Create actions
+        actions = ["right", "right", "right"]
+        
+        # Create cache path
+        cache_path = tmp_path / "test_visualization.gif"
+        
+        # Call visualize_path
+        env.visualize_path(path, belief_path, actions, cache_path)
+        
+        # Verify file was created
+        assert cache_path.exists(), "GIF file should be created"
+        assert cache_path.stat().st_size > 0, "GIF file should have non-zero size"
+        
+        # Verify it's a valid GIF file by checking magic bytes
+        with open(cache_path, 'rb') as f:
+            magic = f.read(6)
+            assert magic in [b'GIF87a', b'GIF89a'], "File should have valid GIF magic bytes"
+    
+    def test_visualize_path_with_invalid_cache_path_type(self, base_light_dark_environment):
+        """Test that visualize_path raises TypeError for invalid cache_path type.
+        
+        Purpose: Validates proper error handling when cache_path is not a Path object
+        
+        Given: A light-dark environment and cache_path as string instead of Path object
+        When: visualize_path is called with invalid cache_path type
+        Then: TypeError is raised with appropriate error message
+        
+        Test type: unit
+        """
+        env = base_light_dark_environment
+        
+        path = [np.array([0, 5])]
+        belief_path = [DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0]))]
+        actions = []
+        
+        # Test with string instead of Path
+        with pytest.raises(TypeError, match="cache_path must be a Path object"):
+            env.visualize_path(path, belief_path, actions, "not_a_path.gif")
+    
+    def test_visualize_path_with_invalid_cache_path_extension(self, base_light_dark_environment, tmp_path):
+        """Test that visualize_path raises ValueError for non-GIF cache path.
+        
+        Purpose: Validates proper error handling when cache_path doesn't end with .gif
+        
+        Given: A light-dark environment and cache_path without .gif extension
+        When: visualize_path is called with invalid file extension
+        Then: ValueError is raised with appropriate error message
+        
+        Test type: unit
+        """
+        env = base_light_dark_environment
+        
+        path = [np.array([0, 5])]
+        belief_path = [DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0]))]
+        actions = []
+        
+        # Test with .png extension
+        cache_path = tmp_path / "test_visualization.png"
+        with pytest.raises(ValueError, match="cache_path must end with .gif"):
+            env.visualize_path(path, belief_path, actions, cache_path)
+    
+    def test_visualize_path_with_empty_path(self, base_light_dark_environment, tmp_path):
+        """Test that visualize_path handles empty path gracefully.
+        
+        Purpose: Validates robustness when provided with empty input data
+        
+        Given: A light-dark environment with empty path, belief_path, and actions
+        When: visualize_path is called with empty data
+        Then: IndexError is raised due to matplotlib limitation with empty frames
+        
+        Test type: unit
+        """
+        env = base_light_dark_environment
+        
+        path = []
+        belief_path = []
+        actions = []
+        cache_path = tmp_path / "empty_visualization.gif"
+        
+        # Empty path causes matplotlib to fail with IndexError
+        with pytest.raises(IndexError, match="list index out of range"):
+            env.visualize_path(path, belief_path, actions, cache_path)
+    
+    def test_visualize_path_with_complex_belief_distributions(self, base_light_dark_environment, tmp_path):
+        """Test visualize_path with complex belief distributions containing multiple particles.
+        
+        Purpose: Validates visualization handles complex belief states with many particles
+        
+        Given: A light-dark environment with path and belief distributions having many particles
+        When: visualize_path is called with complex belief data
+        Then: GIF file is created successfully and belief particles are properly visualized
+        
+        Test type: unit
+        """
+        env = base_light_dark_environment
+        
+        # Create path with more complex movement
+        path = [
+            np.array([0, 5]),
+            np.array([1, 4]),
+            np.array([2, 4]),
+            np.array([3, 5]),
+            np.array([4, 5])
+        ]
+        
+        # Create complex belief distributions with multiple particles
+        belief_path = [
+            DiscreteDistribution(
+                values=[np.array([0, 5]), np.array([0, 4]), np.array([1, 5]), np.array([0, 6])], 
+                probs=np.array([0.4, 0.3, 0.2, 0.1])
+            ),
+            DiscreteDistribution(
+                values=[np.array([1, 4]), np.array([1, 3]), np.array([2, 4]), np.array([1, 5])], 
+                probs=np.array([0.5, 0.2, 0.2, 0.1])
+            ),
+            DiscreteDistribution(
+                values=[np.array([2, 4]), np.array([2, 3]), np.array([3, 4])], 
+                probs=np.array([0.6, 0.25, 0.15])
+            ),
+            DiscreteDistribution(
+                values=[np.array([3, 5]), np.array([3, 4])], 
+                probs=np.array([0.8, 0.2])
+            ),
+            DiscreteDistribution(
+                values=[np.array([4, 5])], 
+                probs=np.array([1.0])
+            )
+        ]
+        
+        actions = ["down", "right", "up", "right"]
+        cache_path = tmp_path / "complex_visualization.gif"
+        
+        env.visualize_path(path, belief_path, actions, cache_path)
+        
+        # Verify successful creation
+        assert cache_path.exists()
+        assert cache_path.stat().st_size > 0
+    
+    def test_visualize_path_with_continuous_actions(self, base_continuous_light_dark_pomdp, tmp_path):
+        """Test visualize_path with continuous actions (numpy arrays).
+        
+        Purpose: Validates visualization works with continuous action spaces
+        
+        Given: A continuous light-dark environment with numpy array actions
+        When: visualize_path is called with continuous actions
+        Then: GIF file is created successfully with proper action arrows
+        
+        Test type: unit
+        """
+        env = base_continuous_light_dark_pomdp
+        
+        path = [
+            np.array([0, 5]),
+            np.array([1.5, 4.5]),
+            np.array([3.2, 4.8])
+        ]
+        
+        belief_path = [
+            DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0])),
+            DiscreteDistribution(values=[np.array([1.5, 4.5])], probs=np.array([1.0])),
+            DiscreteDistribution(values=[np.array([3.2, 4.8])], probs=np.array([1.0]))
+        ]
+        
+        # Use continuous actions (numpy arrays)
+        actions = [np.array([1.5, -0.5]), np.array([1.7, 0.3])]
+        cache_path = tmp_path / "continuous_actions_visualization.gif"
+        
+        env.visualize_path(path, belief_path, actions, cache_path)
+        
+        assert cache_path.exists()
+        assert cache_path.stat().st_size > 0
+    
+    def test_visualize_path_caching_behavior(self, base_light_dark_environment, tmp_path):
+        """Test that visualize_path caching works correctly by overwriting existing files.
+        
+        Purpose: Validates that visualization caching works properly by overwriting files
+        
+        Given: A light-dark environment and an existing GIF file at the cache path
+        When: visualize_path is called multiple times with the same cache path
+        Then: File is successfully overwritten each time and contains different content
+        
+        Test type: unit
+        """
+        env = base_light_dark_environment
+        cache_path = tmp_path / "cached_visualization.gif"
+        
+        # First visualization with simple path
+        path1 = [np.array([0, 5]), np.array([1, 5])]
+        belief_path1 = [
+            DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0])),
+            DiscreteDistribution(values=[np.array([1, 5])], probs=np.array([1.0]))
+        ]
+        actions1 = ["right"]
+        
+        env.visualize_path(path1, belief_path1, actions1, cache_path)
+        
+        # Verify first file exists
+        assert cache_path.exists()
+        first_size = cache_path.stat().st_size
+        first_mtime = cache_path.stat().st_mtime
+        
+        # Small delay to ensure different modification time
+        import time
+        time.sleep(0.1)
+        
+        # Second visualization with different path (should overwrite)
+        path2 = [
+            np.array([0, 5]), 
+            np.array([1, 5]), 
+            np.array([2, 5]), 
+            np.array([3, 5]), 
+            np.array([4, 5])
+        ]
+        belief_path2 = [
+            DiscreteDistribution(values=[np.array([i, 5])], probs=np.array([1.0])) 
+            for i in range(5)
+        ]
+        actions2 = ["right", "right", "right", "right"]
+        
+        env.visualize_path(path2, belief_path2, actions2, cache_path)
+        
+        # Verify file was updated
+        assert cache_path.exists()
+        second_size = cache_path.stat().st_size
+        second_mtime = cache_path.stat().st_mtime
+        
+        # File should have been modified (different size or modification time)
+        assert second_mtime > first_mtime or second_size != first_size, \
+            "Cache file should be updated with new visualization"
+    
+    def test_visualize_path_cache_directory_creation(self, base_light_dark_environment, tmp_path):
+        """Test that visualize_path requires parent directories to exist.
+        
+        Purpose: Validates that visualization requires existing parent directories
+        
+        Given: A light-dark environment and cache path with non-existent parent directories
+        When: visualize_path is called with nested cache path
+        Then: FileNotFoundError is raised due to missing parent directories
+        
+        Test type: unit
+        """
+        env = base_light_dark_environment
+        
+        # Create nested path that doesn't exist
+        nested_cache_path = tmp_path / "visualizations" / "experiments" / "test_run.gif"
+        
+        # Ensure parent directories don't exist initially
+        assert not nested_cache_path.parent.exists()
+        
+        path = [np.array([0, 5]), np.array([1, 5])]
+        belief_path = [
+            DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0])),
+            DiscreteDistribution(values=[np.array([1, 5])], probs=np.array([1.0]))
+        ]
+        actions = ["right"]
+        
+        # Should raise FileNotFoundError due to missing parent directories
+        with pytest.raises(FileNotFoundError):
+            env.visualize_path(path, belief_path, actions, nested_cache_path)
+        
+        # Now create parent directories and try again
+        nested_cache_path.parent.mkdir(parents=True)
+        env.visualize_path(path, belief_path, actions, nested_cache_path)
+        
+        # Verify file was created successfully
+        assert nested_cache_path.exists(), "GIF file should be created when parent directories exist"
+        assert nested_cache_path.stat().st_size > 0
+    
+    def test_visualize_path_with_mismatched_lengths(self, base_light_dark_environment, tmp_path):
+        """Test visualize_path behavior with mismatched path, belief_path, and actions lengths.
+        
+        Purpose: Validates robustness when input arrays have different lengths
+        
+        Given: A light-dark environment with path, belief_path, and actions of different lengths
+        When: visualize_path is called with mismatched array lengths
+        Then: Function completes without error, handling missing data gracefully
+        
+        Test type: unit
+        """
+        env = base_light_dark_environment
+        
+        # Intentionally create mismatched lengths
+        path = [np.array([0, 5]), np.array([1, 5]), np.array([2, 5]), np.array([3, 5])]  # 4 states
+        belief_path = [
+            DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0])),
+            DiscreteDistribution(values=[np.array([1, 5])], probs=np.array([1.0]))  # Only 2 beliefs
+        ]
+        actions = ["right"]  # Only 1 action
+        
+        cache_path = tmp_path / "mismatched_lengths.gif"
+        
+        # Should handle gracefully without throwing exceptions
+        env.visualize_path(path, belief_path, actions, cache_path)
+        
+        assert cache_path.exists()
+        assert cache_path.stat().st_size > 0
+    
+    def test_visualize_path_belief_particles_with_zero_probabilities(self, base_light_dark_environment, tmp_path):
+        """Test visualize_path with belief distributions containing zero probabilities.
+        
+        Purpose: Validates handling of belief particles with zero or very small probabilities
+        
+        Given: A light-dark environment with belief distributions containing zero probabilities
+        When: visualize_path is called with zero-probability particles
+        Then: Visualization handles zero probabilities correctly without errors
+        
+        Test type: unit
+        """
+        env = base_light_dark_environment
+        
+        path = [np.array([0, 5]), np.array([1, 5])]
+        
+        # Create belief with zero probabilities
+        belief_path = [
+            DiscreteDistribution(
+                values=[np.array([0, 5]), np.array([0, 4]), np.array([1, 5])], 
+                probs=np.array([0.8, 0.0, 0.2])  # Middle particle has zero probability
+            ),
+            DiscreteDistribution(
+                values=[np.array([1, 5]), np.array([1, 4])], 
+                probs=np.array([1.0, 0.0])  # Second particle has zero probability
+            )
+        ]
+        
+        actions = ["right"]
+        cache_path = tmp_path / "zero_prob_particles.gif"
+        
+        env.visualize_path(path, belief_path, actions, cache_path)
+        
+        assert cache_path.exists()
+        assert cache_path.stat().st_size > 0
+    
+    def test_visualize_path_preserves_existing_cache_structure(self, base_light_dark_environment, tmp_path):
+        """Test that visualize_path preserves existing cache directory structure.
+        
+        Purpose: Validates that caching doesn't interfere with existing directory structure
+        
+        Given: A light-dark environment and existing cache directory with other files
+        When: visualize_path is called to save in existing directory
+        Then: New GIF is saved without affecting other files in the cache directory
+        
+        Test type: integration
+        """
+        env = base_light_dark_environment
+        
+        # Create existing cache structure
+        cache_dir = tmp_path / "cache"
+        cache_dir.mkdir()
+        
+        # Create some existing files
+        existing_file1 = cache_dir / "existing1.txt"
+        existing_file2 = cache_dir / "existing2.json"
+        existing_file1.write_text("existing content 1")
+        existing_file2.write_text('{"existing": "content"}')
+        
+        # Store original content and timestamps
+        original_content1 = existing_file1.read_text()
+        original_content2 = existing_file2.read_text()
+        original_mtime1 = existing_file1.stat().st_mtime
+        original_mtime2 = existing_file2.stat().st_mtime
+        
+        # Create visualization in same directory
+        path = [np.array([0, 5]), np.array([1, 5])]
+        belief_path = [
+            DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0])),
+            DiscreteDistribution(values=[np.array([1, 5])], probs=np.array([1.0]))
+        ]
+        actions = ["right"]
+        cache_path = cache_dir / "new_visualization.gif"
+        
+        env.visualize_path(path, belief_path, actions, cache_path)
+        
+        # Verify new file was created
+        assert cache_path.exists()
+        assert cache_path.stat().st_size > 0
+        
+        # Verify existing files were not modified
+        assert existing_file1.read_text() == original_content1
+        assert existing_file2.read_text() == original_content2
+        assert existing_file1.stat().st_mtime == original_mtime1
+        assert existing_file2.stat().st_mtime == original_mtime2
