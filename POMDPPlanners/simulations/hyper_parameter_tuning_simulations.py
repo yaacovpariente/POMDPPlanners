@@ -566,6 +566,18 @@ class HyperParameterOptimizer:
             "optimization_metadata": task_metadata
         }
         mlflow.log_dict(results_data, f"optimization_results_config_{original_index+1}.json")
+        
+        # Log the planner's chosen configuration as a separate artifact
+        planner_config = {
+            "planner_type": config.policy_cls.__name__,
+            "chosen_hyper_parameters": optimization_result.chosen_hyper_parameters,
+            "constant_parameters": config.constant_parameters if hasattr(config, 'constant_parameters') else {},
+            "environment_type": config.environment.__class__.__name__,
+            "optimization_direction": config.direction.value,
+            "parameter_to_optimize": config.parameter_to_optimize,
+            "best_value": task_metadata['best_value'] if task_metadata else "unknown"
+        }
+        mlflow.log_dict(planner_config, f"planner_chosen_config_{original_index+1}.json")
 
     def _get_best_value_from_task(self, task: 'HyperParameterTuningSimulationTask') -> str:
         task_metadata = task.get_optimization_metadata()
