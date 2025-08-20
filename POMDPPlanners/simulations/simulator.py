@@ -39,6 +39,46 @@ from POMDPPlanners.simulations.simulations_deployment.task_managers import (
 from POMDPPlanners.simulations.simulations_deployment import TaskManagerFactory
 
 
+def _validate_environment_policy_comparison_parameters(
+    environment_run_params: List[EnvironmentRunParams],
+    alpha: float,
+    confidence_interval_level: float,
+    n_jobs: int,
+    cache_visualizations: bool
+) -> None:
+    """Validate input parameters for environment-policy comparison methods.
+    
+    Args:
+        environment_run_params: List of environment run parameters
+        alpha: Alpha value for risk metrics (must be between 0 and 1)
+        confidence_interval_level: Confidence level for statistics (must be between 0 and 1, exclusive)
+        n_jobs: Number of parallel jobs (positive integer or -1)
+        cache_visualizations: Whether to cache visualizations
+        
+    Raises:
+        ValueError: If any parameter has invalid type or value
+    """
+    # Type checks for all parameters
+    if not isinstance(environment_run_params, list):
+        raise ValueError("environment_run_params must be a list")
+    if not all(isinstance(param, EnvironmentRunParams) for param in environment_run_params):
+        raise ValueError("All elements in environment_run_params must be EnvironmentRunParams")
+    if not isinstance(alpha, float):
+        raise ValueError("alpha must be a float")
+    if not (0 <= alpha <= 1):
+        raise ValueError("alpha must be between 0 and 1")
+    if not isinstance(confidence_interval_level, float):
+        raise ValueError("confidence_interval_level must be a float")
+    if not (0 < confidence_interval_level < 1):
+        raise ValueError("confidence_interval_level must be between 0 and 1")
+    if not isinstance(n_jobs, int):
+        raise ValueError("n_jobs must be an integer")
+    if not (n_jobs > 0 or n_jobs == -1):
+        raise ValueError("n_jobs must be a positive integer or -1")
+    if not isinstance(cache_visualizations, bool):
+        raise ValueError("cache_visualizations must be a boolean")
+
+
 class BaseSimulator(ABC):
     """Abstract base class for POMDP simulation frameworks.
     
@@ -313,159 +353,244 @@ class BaseSimulator(ABC):
         cache_visualizations: bool = True,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         """Compare multiple policies on multiple environments and cache results in MLFlow."""
-        # Log environment and algorithm names
-        env_algo_info = "\n".join([
-            f"Environment: {params.environment.name} - Algorithms: {[p.name for p in params.policies]}"
-            for params in environment_run_params
-        ])
-        self.logger.info(f"Running comparison with:\n{env_algo_info}")
+        _validate_environment_policy_comparison_parameters(
+            environment_run_params=environment_run_params,
+            alpha=alpha,
+            confidence_interval_level=confidence_interval_level,
+            n_jobs=n_jobs,
+            cache_visualizations=cache_visualizations
+        )
         
-        # Type checks for all parameters
-        if not isinstance(environment_run_params, list):
-            raise ValueError("environment_run_params must be a list")
-        if not all(isinstance(param, EnvironmentRunParams) for param in environment_run_params):
-            raise ValueError("All elements in environment_run_params must be EnvironmentRunParams")
-        if not isinstance(alpha, float):
-            raise ValueError("alpha must be a float")
-        if not (0 <= alpha <= 1):
-            raise ValueError("alpha must be between 0 and 1")
-        if not isinstance(confidence_interval_level, float):
-            raise ValueError("confidence_interval_level must be a float")
-        if not (0 < confidence_interval_level < 1):
-            raise ValueError("confidence_interval_level must be between 0 and 1")
-        if not isinstance(n_jobs, int):
-            raise ValueError("n_jobs must be an integer")
-        if not (n_jobs > 0 or n_jobs == -1):
-            raise ValueError("n_jobs must be a positive integer or -1")
-        if not isinstance(cache_visualizations, bool):
-            raise ValueError("cache_visualizations must be a boolean")
+        self._log_comparison_overview(environment_run_params)
 
         # Run main comparison
-        # Check if there's already an active run and use nested if so
         active_run = mlflow.active_run()
         nested = active_run is not None
         with mlflow.start_run(run_name="environment_policy_comparison", nested=nested):
-            # Log input parameters
-            mlflow.log_param("alpha", alpha)
-            mlflow.log_param("confidence_interval_level", confidence_interval_level)
-            mlflow.log_param("n_jobs", n_jobs)
-            mlflow.log_param("cache_visualizations", cache_visualizations)
-            mlflow.log_param("num_environments", len(environment_run_params))
-            
-            # Log environment and policy information
-            for i, params in enumerate(environment_run_params):
-                env_prefix = f"env_{i}"
-                mlflow.log_param(f"{env_prefix}_name", params.environment.name)
-                mlflow.log_param(f"{env_prefix}_num_episodes", params.num_episodes)
-                mlflow.log_param(f"{env_prefix}_num_steps", params.num_steps)
-                mlflow.log_param(f"{env_prefix}_num_policies", len(params.policies))
-                
-                for j, policy in enumerate(params.policies):
-                    policy_prefix = f"{env_prefix}_policy_{j}"
-                    mlflow.log_param(f"{policy_prefix}_name", policy.name)
-                    mlflow.log_param(f"{policy_prefix}_type", policy.__class__.__name__)
-            
-            # Run simulations
-            results = self.simulate_multiple_environments_and_policies_parallel(
-                environment_run_params=environment_run_params,
+            self._log_mlflow_comparison_parameters(
                 alpha=alpha,
                 confidence_interval_level=confidence_interval_level,
                 n_jobs=n_jobs,
+                cache_visualizations=cache_visualizations,
+                environment_run_params=environment_run_params
             )
             
-            metrics = self._compute_metrics(
-                results=results,
+            results, metrics = self._run_simulations_and_compute_metrics(
                 environment_run_params=environment_run_params,
                 alpha=alpha,
                 confidence_interval_level=confidence_interval_level,
+                n_jobs=n_jobs
             )
             
-            # Log metrics to MLflow
-            self._log_metrics_to_mlflow(metrics)
-            
-            # Compute statistics
-            statistics_df = metrics_dict_to_dataframe(metrics_dict=metrics)
-
-            # Create and merge policy configurations
-            policy_configs_df = self._create_policy_configurations_df([(params.environment, params.belief, params.policies) for params in environment_run_params])
-            merged_df = pd.merge(
-                statistics_df,
-                policy_configs_df,
-                on=['environment', 'policy']
-            )
-
-            # Log statistics and configurations
-            mlflow.log_table(merged_df, "statistics/comparison_results.json")
-            mlflow.log_table(policy_configs_df, "statistics/policy_configurations.json")
-
-            # Create policy comparison plots using the metrics
-            with tempfile.TemporaryDirectory() as temp_plots_dir_str:
-                temp_plots_dir = Path(temp_plots_dir_str)
-                plot_policies_comparison_on_environment(
-                    metrics_dict=metrics,
-                    cache_dir_path=temp_plots_dir
-                )
-                # Log the policy comparison plots - log contents, not the directory itself
-                for item in temp_plots_dir.iterdir():
-                    mlflow.log_artifact(str(item), "policy_comparison_plots")
-
-            # Create visualizations for each environment and log them directly
-            def create_and_log_env_viz(
-                env_name: str, 
-                policy_results_dict: Dict[str, list], 
-                tracking_uri: str, 
-                experiment_name: str, 
-                run_id: str
-            ) -> None:
-                # Set up MLflow context in the worker process
-                import mlflow
-                mlflow.set_tracking_uri(tracking_uri)
-                mlflow.set_experiment(experiment_name)
-                
-                environment = next(params.environment for params in environment_run_params if params.environment.name == env_name)
-                policies = [p for params in environment_run_params for p in params.policies if p.name in policy_results_dict]
-                with tempfile.TemporaryDirectory() as temp_env_dir_str:
-                    temp_env_dir = Path(temp_env_dir_str)
-                    self._create_environment_visualizations(
-                        env_name=env_name,
-                        environment=environment,
-                        policy_results_dict=policy_results_dict,
-                        policies=policies,
-                        results_dir=temp_env_dir,
-                        cache_visualizations=cache_visualizations
-                    )
-                    # Instead of creating nested runs in parallel workers, return the directory path
-                    # The parent process will handle logging artifacts
-                    return str(temp_env_dir)
-            
-            # Get current MLflow context for parallel workers
-            current_tracking_uri = mlflow.get_tracking_uri()
-            current_experiment_name = self.experiment_name
-            current_run_id = mlflow.active_run().info.run_id
-            
-            # Run visualizations in parallel and collect directory paths
-            visualization_dirs = Parallel(n_jobs=n_jobs)(
-                delayed(create_and_log_env_viz)(
-                    env_name, 
-                    policy_results_dict,
-                    current_tracking_uri,
-                    current_experiment_name,
-                    current_run_id
-                )
-                for env_name, policy_results_dict in results.items()
+            merged_df = self._create_statistics_and_policy_dataframes(
+                metrics=metrics,
+                environment_run_params=environment_run_params
             )
             
-            # Log artifacts from the parent process to avoid nested run issues
-            for env_name, temp_dir_path in zip(results.keys(), visualization_dirs):
-                if temp_dir_path and Path(temp_dir_path).exists():
-                    temp_dir = Path(temp_dir_path)
-                    for item in temp_dir.iterdir():
-                        if item.is_dir():
-                            mlflow.log_artifact(str(item), env_name)
-                        else:
-                            mlflow.log_artifact(str(item), env_name)
+            self._log_comparison_data_to_mlflow(merged_df, environment_run_params)
+            
+            self._generate_and_log_comparison_plots(metrics)
+            
+            self._create_and_log_environment_visualizations(
+                results=results,
+                environment_run_params=environment_run_params,
+                cache_visualizations=cache_visualizations,
+                n_jobs=n_jobs
+            )
 
         return results, merged_df
+    
+    def _log_comparison_overview(self, environment_run_params: List[EnvironmentRunParams]) -> None:
+        """Log overview information about the environments and algorithms being compared."""
+        env_algo_info = "\n".join([
+            f"Environment: {run_params.environment.name} - Algorithms: {[p.name for p in run_params.policies]}"
+            for run_params in environment_run_params
+        ])
+        self.logger.info(f"Running comparison with:\n{env_algo_info}")
+    
+    def _log_mlflow_comparison_parameters(
+        self,
+        alpha: float,
+        confidence_interval_level: float,
+        n_jobs: int,
+        cache_visualizations: bool,
+        environment_run_params: List[EnvironmentRunParams]
+    ) -> None:
+        """Log all input parameters and configuration details to MLflow."""
+        # Log input parameters
+        mlflow.log_param("alpha", alpha)
+        mlflow.log_param("confidence_interval_level", confidence_interval_level)
+        mlflow.log_param("n_jobs", n_jobs)
+        mlflow.log_param("cache_visualizations", cache_visualizations)
+        mlflow.log_param("num_environments", len(environment_run_params))
+        
+        # Log environment and policy information
+        for i, params in enumerate(environment_run_params):
+            env_prefix = f"env_{i}"
+            mlflow.log_param(f"{env_prefix}_name", params.environment.name)
+            mlflow.log_param(f"{env_prefix}_num_episodes", params.num_episodes)
+            mlflow.log_param(f"{env_prefix}_num_steps", params.num_steps)
+            mlflow.log_param(f"{env_prefix}_num_policies", len(params.policies))
+            
+            for j, policy in enumerate(params.policies):
+                policy_prefix = f"{env_prefix}_policy_{j}"
+                mlflow.log_param(f"{policy_prefix}_name", policy.name)
+                mlflow.log_param(f"{policy_prefix}_type", policy.__class__.__name__)
+    
+    def _run_simulations_and_compute_metrics(
+        self,
+        environment_run_params: List[EnvironmentRunParams],
+        alpha: float,
+        confidence_interval_level: float,
+        n_jobs: int
+    ) -> Tuple[Dict[str, Dict[str, list]], Dict[str, Dict[str, List[MetricValue]]]]:
+        """Execute simulations in parallel and compute performance metrics."""
+        results = self.simulate_multiple_environments_and_policies_parallel(
+            environment_run_params=environment_run_params,
+            alpha=alpha,
+            confidence_interval_level=confidence_interval_level,
+            n_jobs=n_jobs,
+        )
+        
+        metrics = self._compute_metrics(
+            results=results,
+            environment_run_params=environment_run_params,
+            alpha=alpha,
+            confidence_interval_level=confidence_interval_level,
+        )
+        
+        # Log metrics to MLflow
+        self._log_metrics_to_mlflow(metrics)
+        
+        return results, metrics
+    
+    def _create_statistics_and_policy_dataframes(
+        self,
+        metrics: Dict[str, Dict[str, List[MetricValue]]],
+        environment_run_params: List[EnvironmentRunParams]
+    ) -> pd.DataFrame:
+        """Create and merge statistics DataFrame with policy configurations."""
+        # Compute statistics
+        statistics_df = metrics_dict_to_dataframe(metrics_dict=metrics)
+
+        # Create and merge policy configurations
+        policy_configs_df = self._create_policy_configurations_df(
+            [(run_params.environment, run_params.belief, run_params.policies) 
+             for run_params in environment_run_params]
+        )
+        merged_df = pd.merge(
+            statistics_df,
+            policy_configs_df,
+            on=['environment', 'policy']
+        )
+        
+        return merged_df
+    
+    def _log_comparison_data_to_mlflow(
+        self,
+        merged_df: pd.DataFrame,
+        environment_run_params: List[EnvironmentRunParams]
+    ) -> None:
+        """Log statistics tables and policy configurations to MLflow."""
+        # Log statistics and configurations
+        mlflow.log_table(merged_df, "statistics/comparison_results.json")
+        
+        policy_configs_df = self._create_policy_configurations_df(
+            [(run_params.environment, run_params.belief, run_params.policies) 
+             for run_params in environment_run_params]
+        )
+        mlflow.log_table(policy_configs_df, "statistics/policy_configurations.json")
+    
+    def _generate_and_log_comparison_plots(self, metrics: Dict[str, Dict[str, List[MetricValue]]]) -> None:
+        """Generate policy comparison plots and log them to MLflow."""
+        with tempfile.TemporaryDirectory() as temp_plots_dir_str:
+            temp_plots_dir = Path(temp_plots_dir_str)
+            plot_policies_comparison_on_environment(
+                metrics_dict=metrics,
+                cache_dir_path=temp_plots_dir
+            )
+            # Log the policy comparison plots - log contents, not the directory itself
+            for item in temp_plots_dir.iterdir():
+                mlflow.log_artifact(str(item), "policy_comparison_plots")
+    
+    def _create_and_log_environment_visualizations(
+        self,
+        results: Dict[str, Dict[str, list]],
+        environment_run_params: List[EnvironmentRunParams],
+        cache_visualizations: bool,
+        n_jobs: int
+    ) -> None:
+        """Create environment-specific visualizations in parallel and log them to MLflow."""
+        def create_and_log_env_viz(
+            env_name: str, 
+            policy_results_dict: Dict[str, list], 
+            tracking_uri: str, 
+            experiment_name: str, 
+            run_id: str,
+            persistent_cache_dir: Path
+        ) -> Path:
+            # Set up MLflow context in the worker process
+            import mlflow
+            mlflow.set_tracking_uri(tracking_uri)
+            mlflow.set_experiment(experiment_name)
+            
+            environment = next(run_params.environment for run_params in environment_run_params if run_params.environment.name == env_name)
+            policies = [p for run_params in environment_run_params for p in run_params.policies if p.name in policy_results_dict]
+            
+            # Create a persistent directory for this environment's visualizations
+            env_viz_dir = persistent_cache_dir / "viz_artifacts" / env_name
+            env_viz_dir.mkdir(parents=True, exist_ok=True)
+            
+            self._create_environment_visualizations(
+                env_name=env_name,
+                environment=environment,
+                policy_results_dict=policy_results_dict,
+                policies=policies,
+                results_dir=env_viz_dir,
+                cache_visualizations=cache_visualizations
+            )
+            
+            return env_viz_dir
+        
+        # Get current MLflow context for parallel workers
+        current_tracking_uri = mlflow.get_tracking_uri()
+        current_experiment_name = self.experiment_name
+        current_run_id = mlflow.active_run().info.run_id
+        
+        # Create a persistent cache directory for visualization artifacts
+        if self.cache_dir_path:
+            viz_cache_dir = self.cache_dir_path
+        else:
+            viz_cache_dir = Path.cwd() / ".cache"
+            viz_cache_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Run visualizations in parallel and collect directory paths
+        visualization_dirs = Parallel(n_jobs=n_jobs)(
+            delayed(create_and_log_env_viz)(
+                env_name, 
+                policy_results_dict,
+                current_tracking_uri,
+                current_experiment_name,
+                current_run_id,
+                viz_cache_dir
+            )
+            for env_name, policy_results_dict in results.items()
+        )
+        
+        # Log artifacts from the parent process to avoid nested run issues
+        for env_name, env_viz_dir in zip(results.keys(), visualization_dirs):
+            if env_viz_dir and env_viz_dir.exists():
+                for item in env_viz_dir.iterdir():
+                    if item.is_dir():
+                        mlflow.log_artifact(str(item), env_name)
+                    else:
+                        mlflow.log_artifact(str(item), env_name)
+        
+        # Clean up the visualization artifacts after logging to MLflow
+        if self.cache_dir_path:
+            viz_artifacts_dir = self.cache_dir_path / "viz_artifacts"
+            if viz_artifacts_dir.exists():
+                shutil.rmtree(viz_artifacts_dir, ignore_errors=True)
     
     def _create_policy_configurations_df(
         self,
