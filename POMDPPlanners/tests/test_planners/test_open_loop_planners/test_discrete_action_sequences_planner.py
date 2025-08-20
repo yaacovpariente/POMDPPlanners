@@ -364,8 +364,9 @@ def test_discrete_action_sequences_config_id_consistency_across_evaluations(tige
         
         # Verify the action and run_data are valid
         assert isinstance(actions, list)
-        assert len(actions) == 1
-        assert actions[0] in tiger_pomdp.get_actions()
+        assert len(actions) == planner.depth  # Should return full action sequence
+        for action in actions:
+            assert action in tiger_pomdp.get_actions()
         assert run_data is not None
 
     # Final check

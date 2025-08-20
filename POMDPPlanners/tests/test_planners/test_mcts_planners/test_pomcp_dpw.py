@@ -75,6 +75,11 @@ def action_sampler():
     return MockActionSampler([0, 1, 2])
 
 
+@pytest.fixture  
+def discrete_action_sampler(environment):
+    return MockActionSampler(environment.get_actions())
+
+
 @pytest.fixture
 def environment(discount_factor):
     return TigerPOMDP(discount_factor=discount_factor)
