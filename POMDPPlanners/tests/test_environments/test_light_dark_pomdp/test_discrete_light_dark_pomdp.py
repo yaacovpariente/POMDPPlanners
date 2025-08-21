@@ -1,6 +1,10 @@
 import numpy as np
 import pytest
 from pathlib import Path
+import random
+
+np.random.seed(42)
+random.seed(42)
 
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import DiscreteLightDarkPOMDP
 from POMDPPlanners.core.distributions import DiscreteDistribution

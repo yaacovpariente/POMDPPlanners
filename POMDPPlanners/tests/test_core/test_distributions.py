@@ -1,6 +1,10 @@
 import numpy as np
 import pytest
 from POMDPPlanners.core.distributions import DiscreteDistribution, Numpy2DDistribution
+import random
+
+np.random.seed(42)
+random.seed(42)
 
 
 def test_discrete_distribution_initialization():

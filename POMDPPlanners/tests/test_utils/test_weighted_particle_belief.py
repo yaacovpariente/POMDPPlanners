@@ -1,11 +1,16 @@
 import numpy as np
 import pytest
+import random
 from POMDPPlanners.utils.weighted_particle_beliefs import (
     WeightedParticleBeliefDiscreteLightDark,
     WeightedParticleBeliefDiscreteLightDarkFullCoverage,
     WeightedParticleBeliefContinuousLightDarkFullCoverage
 )
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDPDiscreteActions
+
+np.random.seed(42)
+random.seed(42)
+
 
 def test_initialization():
     """Test proper initialization of WeightedParticleBeliefDiscreteLightDark

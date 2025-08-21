@@ -1,5 +1,6 @@
 import pytest
 import numpy as np
+import random
 from typing import List
 from POMDPPlanners.core.simulation import History, StepData, MetricValue
 from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
@@ -9,6 +10,10 @@ from POMDPPlanners.simulations.simulation_statistics import (
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.core.belief import WeightedParticleBelief
+
+
+np.random.seed(42)
+random.seed(42)
 
 
 def create_test_history(rewards: List[float], discount_factor: float = 0.95) -> History:

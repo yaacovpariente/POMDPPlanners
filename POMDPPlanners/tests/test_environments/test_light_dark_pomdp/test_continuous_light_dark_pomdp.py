@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 from pathlib import Path
+import random
 
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDPDiscreteActions, ContinuousLightDarkPOMDP
 from POMDPPlanners.core.distributions import DiscreteDistribution
@@ -8,6 +9,9 @@ from POMDPPlanners.core.environment import ObservationModel, SpaceInfo, SpaceTyp
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
+
+np.random.seed(42)
+random.seed(42)
 
 
 @pytest.fixture

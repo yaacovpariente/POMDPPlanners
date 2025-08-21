@@ -1,6 +1,10 @@
 import numpy as np
 import pytest
 from pathlib import Path
+import random
+
+np.random.seed(42)
+random.seed(42)
 
 from POMDPPlanners.environments.push_pomdp import (
     PushPOMDP,

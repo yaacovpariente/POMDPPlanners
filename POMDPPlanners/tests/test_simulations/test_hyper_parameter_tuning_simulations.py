@@ -10,6 +10,7 @@ import shutil
 from pathlib import Path
 import mlflow
 import numpy as np
+import random
 
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
     HyperParameterOptimizer
@@ -27,6 +28,10 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
 from POMDPPlanners.core.belief import get_initial_belief
+
+
+np.random.seed(42)
+random.seed(42)
 
 
 @pytest.fixture

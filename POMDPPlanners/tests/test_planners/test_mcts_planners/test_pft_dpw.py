@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
 import random
+import numpy as np
 from typing import Any
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
@@ -10,6 +11,9 @@ from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.tree import BeliefNode
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
+
+np.random.seed(42)
+random.seed(42)
 
 
 @pytest.fixture

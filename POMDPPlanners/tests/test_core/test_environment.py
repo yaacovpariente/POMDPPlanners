@@ -12,6 +12,10 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+import random
+
+np.random.seed(42)
+random.seed(42)
 
 class MockDistribution(Distribution):
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:

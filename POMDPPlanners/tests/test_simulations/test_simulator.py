@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 import shutil
 import pandas as pd
+import random
 
 from distributed import Client as DaskClient
 
@@ -13,6 +14,10 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.simulation import History, EnvironmentRunParams
+
+
+np.random.seed(42)
+random.seed(42)
 
 
 @pytest.fixture

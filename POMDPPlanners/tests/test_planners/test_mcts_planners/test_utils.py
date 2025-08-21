@@ -5,8 +5,12 @@ to ensure consistent validation and reduce code duplication.
 """
 
 import numpy as np
+import random
 from anytree import PostOrderIter
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
+
+np.random.seed(42)
+random.seed(42)
 
 
 def validate_tree_structure_with_progressive_widening(

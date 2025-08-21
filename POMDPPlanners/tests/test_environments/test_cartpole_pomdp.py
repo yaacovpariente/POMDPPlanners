@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import random
 from POMDPPlanners.environments.cartpole_pomdp import (
     CartPolePOMDP,
     CartPoleStateTransition,
@@ -8,6 +9,7 @@ from POMDPPlanners.environments.cartpole_pomdp import (
 )
 
 np.random.seed(42)
+random.seed(42)
 
 @pytest.fixture
 def base_cartpole_environment() -> CartPolePOMDP:

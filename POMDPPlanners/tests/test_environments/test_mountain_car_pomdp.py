@@ -1,7 +1,11 @@
 import pytest
 import numpy as np
+import random
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.core.simulation import StepData
+
+np.random.seed(42)
+random.seed(42)
 
 
 def test_mountain_car_initialization():

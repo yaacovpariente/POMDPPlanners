@@ -1,6 +1,7 @@
 import pytest
 from typing import Any, List, Dict, Tuple, Optional
 import numpy as np
+import random
 
 from POMDPPlanners.core.simulation import (
     History,
@@ -8,6 +9,9 @@ from POMDPPlanners.core.simulation import (
     TaskManagerExternalDB
 )
 from POMDPPlanners.core.belief import WeightedParticleBelief
+
+np.random.seed(42)
+random.seed(42)
 
 def create_test_belief():
     """Helper function to create a valid belief state for testing."""

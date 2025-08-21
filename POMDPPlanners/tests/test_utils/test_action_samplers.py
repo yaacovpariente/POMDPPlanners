@@ -19,7 +19,11 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     ContinuousLightDarkPOMDP,
 )
 from POMDPPlanners.core.belief import get_initial_belief
+import random
 
+
+np.random.seed(42)
+random.seed(42)
 
 class TestUnitCircleActionSampler:
     """Test cases for the UnitCircleActionSampler class."""

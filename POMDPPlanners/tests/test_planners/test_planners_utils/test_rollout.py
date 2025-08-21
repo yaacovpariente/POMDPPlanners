@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
 from typing import Any
+import random
 
 from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
@@ -8,6 +9,9 @@ from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 
+
+np.random.seed(42)
+random.seed(42)
 
 class MockActionSampler(ActionSampler):
     """Mock action sampler for testing rollouts."""

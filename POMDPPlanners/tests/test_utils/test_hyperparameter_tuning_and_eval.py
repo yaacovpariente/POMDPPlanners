@@ -10,6 +10,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import pandas as pd
 import pytest
+import random
+import numpy as np
 
 from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
     optimize_and_evaluate_planners,
@@ -33,6 +35,10 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.core.belief import get_initial_belief
+
+
+np.random.seed(42)
+random.seed(42)
 
 
 @pytest.fixture
@@ -154,7 +160,7 @@ class TestOptimizeAndEvaluatePlanners:
             direction=HyperParameterOptimizationDirection.MAXIMIZE,
             parameter_to_optimize="average_return",
         )
-        mock_optimize.return_value = mock_optimization_result
+        mock_optimize.return_value = [mock_optimization_result]
 
         # Mock evaluation result
         mock_evaluation_results = {
@@ -268,7 +274,7 @@ class TestOptimizeAndEvaluatePlanners:
             # Setup mocks
             mock_policy = Mock()
             mock_policy.name = "MinimizedPOMCP"
-            mock_opt.return_value = OptimizedPolicyResult(
+            mock_opt.return_value = [OptimizedPolicyResult(
                 environment=test_environment,
                 policy=mock_policy,
                 chosen_hyper_parameters={},
@@ -276,7 +282,7 @@ class TestOptimizeAndEvaluatePlanners:
                 num_steps=6,
                 direction=HyperParameterOptimizationDirection.MINIMIZE,
                 parameter_to_optimize="average_cost",
-            )
+            )]
             mock_eval.return_value = ({}, pd.DataFrame())
 
             # Test with MINIMIZE direction
@@ -349,8 +355,8 @@ class TestOptimizeAndEvaluatePlanners:
             parameter_to_optimize="average_return",
         )
         
-        # Mock optimize to return different results for each call
-        mock_optimize.side_effect = [mock_result_1, mock_result_2]
+        # Mock optimize to return list of results from single call
+        mock_optimize.return_value = [mock_result_1, mock_result_2]
 
         # Mock evaluation result with multiple policies
         mock_evaluation_results = {
@@ -381,8 +387,8 @@ class TestOptimizeAndEvaluatePlanners:
             verbose=False,
         )
 
-        # Verify that optimization was called for each planner
-        assert mock_optimize.call_count == 2
+        # Verify that optimization was called once with all planners
+        assert mock_optimize.call_count == 1
 
         # Verify results structure for multiple planners
         assert len(result["optimization_results"]) == 2
@@ -1099,7 +1105,7 @@ class TestUsageExamples:
         with patch(
             "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
         ) as mock_opt, patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_optimized_planner"
+            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
         ) as mock_eval:
 
             # Setup mocks to return valid results
@@ -1119,7 +1125,7 @@ class TestUsageExamples:
                 direction=HyperParameterOptimizationDirection.MAXIMIZE,
                 parameter_to_optimize="average_return",
             )
-            mock_opt.return_value = mock_optimization_result
+            mock_opt.return_value = [mock_optimization_result]
 
             mock_evaluation_results = {
                 "Tiger_095": {"OptimizedPOMCP": [Mock(), Mock()]}
@@ -1144,22 +1150,28 @@ class TestUsageExamples:
                 "name": "OptimizedPOMCP",
             }
 
-            results = optimize_and_evaluate_planner(
-                environment=env,
-                initial_belief=initial_belief,
+            planner_config = HyperParamPlannerConfig(
                 policy_cls=POMCP,
                 hyper_parameters=hyper_parameters,
-                constant_parameters=constant_parameters,
+                constant_parameters=constant_parameters
+            )
+            
+            results = optimize_and_evaluate_planners(
+                environment=env,
+                initial_belief=initial_belief,
+                planner_configs=[planner_config],
                 cache_dir=temp_dir,
                 optimization_direction=HyperParameterOptimizationDirection.MAXIMIZE,
                 parameter_to_optimize="average_return",
             )
 
             # Verify the example worked as expected
-            optimization_result = results["optimization_result"]
+            optimization_results = results["optimization_results"]
             evaluation_results = results["evaluation_results"]
             evaluation_statistics = results["evaluation_statistics"]
 
+            assert len(optimization_results) == 1
+            optimization_result = optimization_results[0]
             assert optimization_result.policy.name == "OptimizedPOMCP"
             assert "exploration_constant" in optimization_result.chosen_hyper_parameters
             assert len(evaluation_results) == 1
@@ -1246,13 +1258,17 @@ class TestUsageExamples:
             constant_parameters = {"discount_factor": 0.95, "name": "TestPOMCP"}
 
             # This should call the function with unpacked fast defaults
+            planner_config = HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=hyper_parameters,
+                constant_parameters=constant_parameters
+            )
+            
             with pytest.raises(ValueError):
-                optimize_and_evaluate_planner(
+                optimize_and_evaluate_planners(
                     environment=env,
                     initial_belief=initial_belief,
-                    policy_cls=POMCP,
-                    hyper_parameters=hyper_parameters,
-                    constant_parameters=constant_parameters,
+                    planner_configs=[planner_config],
                     cache_dir=temp_dir,
                     **fast_config,
                     verbose=False
@@ -1265,13 +1281,13 @@ class TestUsageExamples:
 class TestHyperParamRunnerUseCases:
     """Test cases for comprehensive testing of the hyperparameter_tuning_and_eval.py module functions."""
 
-    def test_optimize_and_evaluate_planner_comprehensive_workflow(self, temp_dir):
-        """Test the complete optimize_and_evaluate_planner workflow with all parameters.
+    def test_optimize_and_evaluate_planners_comprehensive_workflow(self, temp_dir):
+        """Test the complete optimize_and_evaluate_planners workflow with all parameters.
         
         Purpose: Validates the main function handles all parameters correctly and executes complete workflow
         
         Given: Complete parameter set including all optional parameters
-        When: optimize_and_evaluate_planner is called with comprehensive configuration
+        When: optimize_and_evaluate_planners is called with comprehensive configuration
         Then: Function executes both optimization and evaluation phases with correct parameter handling
         
         Test type: integration
@@ -1284,7 +1300,7 @@ class TestHyperParamRunnerUseCases:
         with patch(
             "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
         ) as mock_opt, patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_optimized_planner"
+            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
         ) as mock_eval:
             
             # Set up environment
@@ -1306,7 +1322,7 @@ class TestHyperParamRunnerUseCases:
             # Mock successful optimization
             mock_policy = Mock()
             mock_policy.name = "ComprehensivePOMCP"
-            mock_opt.return_value = OptimizedPolicyResult(
+            mock_opt.return_value = [OptimizedPolicyResult(
                 environment=env,
                 policy=mock_policy,
                 chosen_hyper_parameters={
@@ -1318,7 +1334,7 @@ class TestHyperParamRunnerUseCases:
                 num_steps=6,
                 direction=HyperParameterOptimizationDirection.MAXIMIZE,
                 parameter_to_optimize="average_return"
-            )
+            )]
             
             # Mock evaluation results
             mock_eval.return_value = (
@@ -1327,12 +1343,16 @@ class TestHyperParamRunnerUseCases:
             )
             
             # Execute with comprehensive parameters
-            results = optimize_and_evaluate_planner(
-                environment=env,
-                initial_belief=initial_belief,
+            planner_config = HyperParamPlannerConfig(
                 policy_cls=POMCP,
                 hyper_parameters=hyper_parameters,
-                constant_parameters=constant_parameters,
+                constant_parameters=constant_parameters
+            )
+            
+            results = optimize_and_evaluate_planners(
+                environment=env,
+                initial_belief=initial_belief,
+                planner_configs=[planner_config],
                 cache_dir=temp_dir,
                 optimization_direction=HyperParameterOptimizationDirection.MAXIMIZE,
                 parameter_to_optimize="average_return",
@@ -1351,8 +1371,10 @@ class TestHyperParamRunnerUseCases:
             )
             
             # Verify comprehensive results
-            assert results["optimization_result"].policy.name == "ComprehensivePOMCP"
-            assert results["summary"]["optimization_trials"] == 7
+            optimization_results = results["optimization_results"]
+            assert len(optimization_results) == 1
+            assert optimization_results[0].policy.name == "ComprehensivePOMCP"
+            assert results["summary"]["optimization_trials_per_planner"] == 7
             assert results["summary"]["evaluation_episodes"] == 15
             
             # Verify mocks were called with correct parameters
@@ -1390,17 +1412,20 @@ class TestHyperParamRunnerUseCases:
             mock_opt_class.return_value = mock_optimizer
             mock_optimizer.optimize.return_value = []
             
+            planner_config = HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=[],  # Empty list
+                constant_parameters={"discount_factor": 0.95, "name": "TestPOMCP"}
+            )
             result = optimize_planner_hyperparameters(
                 environment=env,
                 initial_belief=initial_belief,
-                policy_cls=POMCP,
-                hyper_parameters=[],  # Empty list
-                constant_parameters={"discount_factor": 0.95, "name": "TestPOMCP"},
+                planner_configs=[planner_config],
                 cache_dir=temp_dir,
                 verbose=False
             )
             
-            assert result is None
+            assert result == []
             
         # Test with single hyperparameter
         with patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.HyperParameterOptimizer") as mock_opt_class:
@@ -1421,19 +1446,23 @@ class TestHyperParamRunnerUseCases:
             mock_optimizer.optimize.return_value = [mock_result]
             
             single_hyper_param = [NumericalHyperParameter(0.1, 5.0, "exploration_constant")]
+            planner_config = HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=single_hyper_param,
+                constant_parameters={"discount_factor": 0.95, "name": "SingleParamPOMCP"}
+            )
             result = optimize_planner_hyperparameters(
                 environment=env,
                 initial_belief=initial_belief,
-                policy_cls=POMCP,
-                hyper_parameters=single_hyper_param,
-                constant_parameters={"discount_factor": 0.95, "name": "SingleParamPOMCP"},
+                planner_configs=[planner_config],
                 cache_dir=temp_dir,
                 verbose=False
             )
             
             assert result is not None
-            assert result.policy.name == "SingleParamPOMCP"
-            assert len(result.chosen_hyper_parameters) == 1
+            assert len(result) == 1
+            assert result[0].policy.name == "SingleParamPOMCP"
+            assert len(result[0].chosen_hyper_parameters) == 1
 
     def test_evaluate_optimized_planner_edge_cases(self, temp_dir):
         """Test evaluate_optimized_planner with edge cases and error conditions.
@@ -1653,13 +1682,13 @@ class TestHyperParamRunnerUseCases:
         assert fast_defaults["confidence_interval_level"] == thorough_defaults["confidence_interval_level"]
         assert fast_defaults["alpha"] == thorough_defaults["alpha"]
 
-    def test_optimize_and_evaluate_planner_error_handling(self, temp_dir):
-        """Test error handling in optimize_and_evaluate_planner.
+    def test_optimize_and_evaluate_planners_error_handling(self, temp_dir):
+        """Test error handling in optimize_and_evaluate_planners.
         
         Purpose: Validates proper error handling for various failure scenarios
         
         Given: Various error conditions including optimization failures and invalid inputs
-        When: optimize_and_evaluate_planner encounters errors
+        When: optimize_and_evaluate_planners encounters errors
         Then: Function raises appropriate exceptions with descriptive messages
         
         Test type: unit
@@ -1680,25 +1709,33 @@ class TestHyperParamRunnerUseCases:
         ) as mock_opt:
             mock_opt.return_value = None
             
+            planner_config = HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=hyper_parameters,
+                constant_parameters=constant_parameters
+            )
+            
             with pytest.raises(ValueError, match="optimization failed"):
-                optimize_and_evaluate_planner(
+                optimize_and_evaluate_planners(
                     environment=env,
                     initial_belief=initial_belief,
-                    policy_cls=POMCP,
-                    hyper_parameters=hyper_parameters,
-                    constant_parameters=constant_parameters,
+                    planner_configs=[planner_config],
                     cache_dir=temp_dir,
                     verbose=False
                 )
         
         # Test with invalid policy class
+        invalid_config = HyperParamPlannerConfig(
+            policy_cls=str,  # Invalid policy class
+            hyper_parameters=hyper_parameters,
+            constant_parameters=constant_parameters
+        )
+        
         with pytest.raises(TypeError):
-            optimize_and_evaluate_planner(
+            optimize_and_evaluate_planners(
                 environment=env,
                 initial_belief=initial_belief,
-                policy_cls=str,  # Invalid policy class
-                hyper_parameters=hyper_parameters,
-                constant_parameters=constant_parameters,
+                planner_configs=[invalid_config],
                 cache_dir=temp_dir,
                 verbose=False
             )
@@ -1822,7 +1859,7 @@ class TestHyperParamRunnerUseCases:
         with patch(
             "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
         ) as mock_opt, patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_optimized_planner"
+            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
         ) as mock_eval:
             
             # Create real environment and belief
@@ -1837,7 +1874,7 @@ class TestHyperParamRunnerUseCases:
             # Mock successful results
             mock_policy = Mock()
             mock_policy.name = "RealPOMCP"
-            mock_opt.return_value = OptimizedPolicyResult(
+            mock_opt.return_value = [OptimizedPolicyResult(
                 environment=env,
                 policy=mock_policy,
                 chosen_hyper_parameters={"exploration_constant": 1.5},
@@ -1845,7 +1882,7 @@ class TestHyperParamRunnerUseCases:
                 num_steps=6,
                 direction=HyperParameterOptimizationDirection.MAXIMIZE,
                 parameter_to_optimize="average_return"
-            )
+            )]
             
             mock_eval.return_value = (
                 {"RealTiger": {"RealPOMCP": [Mock()]}},
@@ -1856,17 +1893,23 @@ class TestHyperParamRunnerUseCases:
             hyper_parameters = [NumericalHyperParameter(0.1, 5.0, "exploration_constant")]
             constant_parameters = {"discount_factor": 0.95, "name": "RealPOMCP"}
             
-            results = optimize_and_evaluate_planner(
-                environment=env,
-                initial_belief=initial_belief,
+            planner_config = HyperParamPlannerConfig(
                 policy_cls=POMCP,
                 hyper_parameters=hyper_parameters,
-                constant_parameters=constant_parameters,
+                constant_parameters=constant_parameters
+            )
+            
+            results = optimize_and_evaluate_planners(
+                environment=env,
+                initial_belief=initial_belief,
+                planner_configs=[planner_config],
                 cache_dir=temp_dir,
                 verbose=False
             )
             
             # Verify results with real classes
-            assert results["optimization_result"].environment == env
-            assert results["optimization_result"].environment.name == "RealTiger"
+            optimization_results = results["optimization_results"]
+            assert len(optimization_results) == 1
+            assert optimization_results[0].environment == env
+            assert optimization_results[0].environment.name == "RealTiger"
             assert results["summary"]["environment_name"] == "RealTiger"

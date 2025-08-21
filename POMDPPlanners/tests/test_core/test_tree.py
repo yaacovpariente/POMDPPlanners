@@ -1,10 +1,14 @@
 import pytest
 import numpy as np
 from anytree import NodeMixin, RenderTree, PostOrderIter
+import random
 
 from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action_cost_setting
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
+
+np.random.seed(42)
+random.seed(42)
 
 
 # Create a simple test environment for belief updates

@@ -1,6 +1,7 @@
 import pytest
 import numpy as np
 from anytree import PostOrderIter
+import random
 
 from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
@@ -15,6 +16,8 @@ from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils import validate_tree_structure_with_progressive_widening
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 
+np.random.seed(42)
+random.seed(42)
 
 class MockActionSampler(ActionSampler):
     """Mock action sampler for testing POMCPOW."""

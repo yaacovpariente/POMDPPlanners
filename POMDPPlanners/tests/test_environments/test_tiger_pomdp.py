@@ -1,8 +1,12 @@
 import pytest
 import numpy as np
+import random
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
+
+np.random.seed(42)
+random.seed(42)
 
 
 @pytest.fixture

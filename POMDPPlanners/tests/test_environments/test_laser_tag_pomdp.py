@@ -10,6 +10,7 @@ import numpy as np
 from pathlib import Path
 from typing import List, Any
 from unittest.mock import Mock
+import random
 
 from POMDPPlanners.environments.laser_tag_pomdp import (
     LaserTagPOMDP,
@@ -19,6 +20,9 @@ from POMDPPlanners.environments.laser_tag_pomdp import (
 )
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.distributions import DiscreteDistribution
+
+np.random.seed(42)
+random.seed(42)
 
 
 class TestLaserTagState:
