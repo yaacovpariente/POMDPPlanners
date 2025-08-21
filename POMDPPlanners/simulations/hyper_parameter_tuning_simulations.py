@@ -9,7 +9,7 @@ The module integrates with the POMDPPlanners simulation framework to run paralle
 episodes and compute performance statistics for hyperparameter evaluation.
 
 Key Features:
-    - Advanced optimization algorithms via Optuna (TPE, CMA-ES, etc.)
+    - Advanced optimization algorithms via w (TPE, CMA-ES, etc.)
     - Parallel episode execution with caching support via JoblibTaskManager
     - Comprehensive MLFlow experiment tracking and visualization
     - Support for both categorical and numerical hyperparameters

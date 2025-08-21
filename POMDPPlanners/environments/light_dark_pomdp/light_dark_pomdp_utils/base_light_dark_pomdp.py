@@ -276,7 +276,10 @@ class BaseLightDarkPOMDP(Environment, ABC):
             # Update action arrow based on the action vector
             if frame < len(actions):
                 action = actions[frame]
-                if isinstance(action, str):
+                if action is None:
+                    # Handle None actions (e.g., terminal step)
+                    dx, dy = 0, 0
+                elif isinstance(action, str):
                     dx, dy = self.action_to_vector[action]
                 else:
                     dx, dy = action
