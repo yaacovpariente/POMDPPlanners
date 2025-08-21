@@ -1,9 +1,14 @@
 import numpy as np
 import pytest
+import random
 
 from POMDPPlanners.core.tree import BeliefNode
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
+
+
+np.random.seed(42)
+random.seed(42)
 
 
 @pytest.fixture

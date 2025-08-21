@@ -4,10 +4,14 @@ import pytest
 import numpy as np
 from pathlib import Path
 import logging
+import random
 from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
 from POMDPPlanners.core.environment import Environment, StateTransitionModel, ObservationModel, SpaceInfo, SpaceType
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.utils.logger import get_logger
+
+np.random.seed(42)
+random.seed(42)
 
 class MockEnvironment(Environment):
     def __init__(self, discount_factor: float, name: str):

@@ -3,6 +3,13 @@ import importlib
 import pkg_resources
 import sys
 from pathlib import Path
+    
+import random
+import numpy as np
+
+np.random.seed(42)
+random.seed(42)
+
 
 def test_package_installed():
     """Test that the package is installed and importable.

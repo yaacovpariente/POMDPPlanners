@@ -1,9 +1,13 @@
 import pytest
-
+import random
 import numpy as np
 from scipy.stats import norm
 
 from POMDPPlanners.utils.statistics import cvar_estimator
+
+
+np.random.seed(42)
+random.seed(42)
 
 
 def test_cvar_estimator_negative_values():

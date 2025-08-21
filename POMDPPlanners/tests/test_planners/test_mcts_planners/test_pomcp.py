@@ -1,4 +1,5 @@
 import pytest
+import numpy as np
 
 from anytree import PostOrderIter
 
@@ -9,6 +10,11 @@ from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
 
 import time
+
+import random
+
+np.random.seed(42)
+random.seed(42)
 
 @pytest.fixture
 def discount_factor():

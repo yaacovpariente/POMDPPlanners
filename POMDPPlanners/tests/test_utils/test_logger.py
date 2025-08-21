@@ -2,7 +2,13 @@ import os
 import tempfile
 import logging
 from pathlib import Path
+import random
+import numpy as np
 from POMDPPlanners.utils.logger import get_logger
+
+np.random.seed(42)
+random.seed(42)
+
 
 def test_logger_console_output_true(capsys):
     """Test logger console output true.

@@ -8,9 +8,14 @@ import os
 from pathlib import Path
 import tempfile
 import shutil
+import random
 
 # Add the current directory to Python path for relative imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+np.random.seed(42)
+random.seed(42)
+
 
 def test_run_episode_usage_example():
     """Test the run_episode usage example from the function docstring.

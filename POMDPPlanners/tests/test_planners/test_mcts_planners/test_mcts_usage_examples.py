@@ -6,6 +6,10 @@ import traceback
 import numpy as np
 import os
 from pathlib import Path
+import random
+
+np.random.seed(42)
+random.seed(42)
 
 # Add the current directory to Python path for relative imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))

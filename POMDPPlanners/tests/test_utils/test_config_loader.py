@@ -2,7 +2,13 @@ import pytest
 import yaml
 from pathlib import Path
 import tempfile
+import random
+import numpy as np
 from POMDPPlanners.utils.config_loader import load_config
+
+np.random.seed(42)
+random.seed(42)
+
 
 def test_load_config_valid_yaml():
     """Test loading a valid YAML configuration.

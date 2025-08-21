@@ -4,6 +4,10 @@ from POMDPPlanners.core.belief import Belief, WeightedParticleBelief, WeightedPa
 from POMDPPlanners.core.config_types import BeliefConfig
 from POMDPPlanners.utils.weighted_particle_beliefs import create_belief, WeightedParticleBeliefDiscreteLightDark, WeightedParticleBeliefDiscreteLightDarkFullCoverage, WeightedParticleBeliefContinuousLightDarkFullCoverage, WeightedParticleBeliefSanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+import random
+
+np.random.seed(42)
+random.seed(42)
 
 def test_belief_config_id_identical_values_produces_same_hash():
     """

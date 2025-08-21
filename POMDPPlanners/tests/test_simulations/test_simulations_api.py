@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import List, Dict
 import tempfile
 import time
+import random
 
 import pandas as pd
 import numpy as np
@@ -17,6 +18,10 @@ from POMDPPlanners.simulations.simulations_api import SimulationsAPI
 from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
+
+np.random.seed(42)
+random.seed(42)
+
 
 @pytest.fixture
 def temp_cache_dir():

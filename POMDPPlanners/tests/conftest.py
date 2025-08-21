@@ -1,6 +1,11 @@
 import pytest
 import mlflow
 import os
+import random
+import numpy as np
+
+np.random.seed(42)
+random.seed(42)
 
 
 @pytest.fixture(autouse=True)

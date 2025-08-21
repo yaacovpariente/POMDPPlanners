@@ -8,6 +8,7 @@ import mlflow
 import os
 import time
 import logging
+import random
 from contextlib import contextmanager
 
 from POMDPPlanners.utils.visualization import plot_metrics_comparison, plot_policy_returns, AgentPath
@@ -18,6 +19,10 @@ from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
 )
 from POMDPPlanners.core.simulation import MetricValue
+
+np.random.seed(42)
+random.seed(42)
+
 
 # Set up logger for tests
 test_logger = logging.getLogger(__name__)
