@@ -5,12 +5,20 @@ from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSim
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
+from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+from POMDPPlanners.planners.mcts_planners.pomcp_dpw import POMCP_DPW
+from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import DiscreteActionSequencesPlanner
 
 __all__ = [
     "POMCP",
     "StandardSparseSamplingDiscreteActionsPlanner",
     "SparsePFT",
-    "PathSimulationPolicy"
+    "PathSimulationPolicy",
+    "POMCPOW",
+    "PFT_DPW",
+    "POMCP_DPW",
+    "DiscreteActionSequencesPlanner"
 ]
 
 # Registry of available policies
@@ -18,7 +26,11 @@ POLICY_REGISTRY: Dict[str, Type] = {
     "POMCP": POMCP,
     "StandardSparseSamplingDiscreteActionsPlanner": StandardSparseSamplingDiscreteActionsPlanner,
     "SparsePFT": SparsePFT,
-    "PathSimulationPolicy": PathSimulationPolicy
+    "PathSimulationPolicy": PathSimulationPolicy,
+    "POMCPOW": POMCPOW,
+    "PFT_DPW": PFT_DPW,
+    "POMCP_DPW": POMCP_DPW,
+    "DiscreteActionSequencesPlanner": DiscreteActionSequencesPlanner
 }
 
 def get_policy(policy_type: str, **kwargs) -> Any:
