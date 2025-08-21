@@ -474,7 +474,7 @@ class TestEvaluateMultipleOptimizedPlanners:
         # Verify simulator was created with correct parameters
         mock_simulator_class.assert_called_once()
         call_kwargs = mock_simulator_class.call_args[1]
-        assert call_kwargs["cache_dir_path"] == temp_dir / "evaluation"
+        assert call_kwargs["cache_dir_path"] == temp_dir
         assert call_kwargs["experiment_name"] == "planner_evaluation"
 
         # Verify evaluation was run with all policies
@@ -758,7 +758,7 @@ class TestEvaluateOptimizedPlanner:
         # Verify simulator was created with correct parameters
         mock_simulator_class.assert_called_once()
         call_kwargs = mock_simulator_class.call_args[1]
-        assert call_kwargs["cache_dir_path"] == temp_dir / "evaluation"
+        assert call_kwargs["cache_dir_path"] == temp_dir
         assert call_kwargs["experiment_name"] == "planner_evaluation"
         assert call_kwargs["n_jobs"] == 1
         assert call_kwargs["debug"] == False
@@ -867,9 +867,9 @@ class TestEvaluateOptimizedPlanner:
             )
 
             # Verify evaluation directory was created
-            eval_dir = temp_dir / "evaluation"
-            assert eval_dir.exists()
-            assert eval_dir.is_dir()
+            # Verify cache directory was created (no longer creates evaluation subdirectory)
+            assert temp_dir.exists()
+            assert temp_dir.is_dir()
 
 
 class TestHelperFunctions:
@@ -1505,9 +1505,9 @@ class TestHyperParamRunnerUseCases:
                 verbose=False
             )
             
-            # Verify evaluation directory was created
-            eval_dir = temp_dir / "evaluation"
-            assert eval_dir.exists()
+            # Verify cache directory was used (no longer creates evaluation subdirectory)
+            assert temp_dir.exists()
+            assert temp_dir.is_dir()
             
             # Verify simulator was called with minimal parameters
             mock_sim.assert_called_once()
@@ -1782,13 +1782,9 @@ class TestHyperParamRunnerUseCases:
                 verbose=False
             )
             
-            # Verify evaluation subdirectory was created
-            eval_dir = temp_dir / "evaluation"
-            assert eval_dir.exists()
-            assert eval_dir.is_dir()
-            
-            # Verify it's a subdirectory of the main cache
-            assert eval_dir.parent == temp_dir
+            # Verify cache directory was used (no longer creates evaluation subdirectory)
+            assert temp_dir.exists()
+            assert temp_dir.is_dir()
 
     def test_parameter_validation_and_type_safety(self):
         """Test parameter validation and type safety across all functions.
