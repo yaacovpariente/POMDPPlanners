@@ -32,14 +32,6 @@ def tiger_environment():
 
 
 @pytest.fixture
-def mock_policy():
-    """Create mock policy for testing."""
-    policy = Mock()
-    policy.name = "TestPlannerPolicy"
-    return policy
-
-
-@pytest.fixture
 def mock_planner():
     """Create mock planner for testing."""
     planner = Mock()
@@ -94,12 +86,12 @@ def sample_episode_history():
 class TestVisualizePlannerEpisode:
     """Test cases for visualize_planner_episode function."""
 
-    def test_visualize_planner_episode_basic_functionality(self, mock_planner, tiger_environment, mock_policy, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_basic_functionality(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
         """Test basic functionality of visualize_planner_episode.
         
         Purpose: Validates that the function runs episodes and calls environment visualization
         
-        Given: Mock planner, environment, policy, belief, and cache directory
+        Given: Mock planner, environment, belief, and cache directory
         When: visualize_planner_episode is called with n_episodes=2
         Then: Episodes are run and environment visualization is cached for each episode
         
@@ -116,7 +108,6 @@ class TestVisualizePlannerEpisode:
             visualize_planner_episode(
                 planner=mock_planner,
                 environment=tiger_environment,
-                policy=mock_policy,
                 belief=mock_belief,
                 n_episodes=2,
                 cache_dir=temp_cache_dir,
@@ -131,7 +122,7 @@ class TestVisualizePlannerEpisode:
                 call_args = mock_run_episode.call_args_list[i]
                 kwargs = call_args[1]
                 assert kwargs['environment'] == tiger_environment
-                assert kwargs['policy'] == mock_policy
+                assert kwargs['policy'] == mock_planner
                 assert kwargs['initial_belief'] == mock_belief
                 assert kwargs['num_steps'] == 5
                 assert 'logger' in kwargs
@@ -152,7 +143,7 @@ class TestVisualizePlannerEpisode:
                 assert history_arg == sample_episode_history
                 assert cache_path_arg == expected_cache_paths[i]
 
-    def test_visualize_planner_episode_single_episode(self, mock_planner, tiger_environment, mock_policy, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_single_episode(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
         """Test visualization with single episode.
         
         Purpose: Validates function works correctly with n_episodes=1
@@ -171,7 +162,6 @@ class TestVisualizePlannerEpisode:
             visualize_planner_episode(
                 planner=mock_planner,
                 environment=tiger_environment,
-                policy=mock_policy,
                 belief=mock_belief,
                 n_episodes=1,
                 cache_dir=temp_cache_dir,
@@ -182,7 +172,7 @@ class TestVisualizePlannerEpisode:
             mock_run_episode.assert_called_once()
             call_args = mock_run_episode.call_args[1]
             assert call_args['environment'] == tiger_environment
-            assert call_args['policy'] == mock_policy
+            assert call_args['policy'] == mock_planner
             assert call_args['initial_belief'] == mock_belief
             assert call_args['num_steps'] == 5
             assert 'logger' in call_args
@@ -192,7 +182,7 @@ class TestVisualizePlannerEpisode:
                 cache_path=temp_cache_dir / "TestPlanner_0.gif"
             )
 
-    def test_visualize_planner_episode_zero_episodes(self, mock_planner, tiger_environment, mock_policy, mock_belief, temp_cache_dir):
+    def test_visualize_planner_episode_zero_episodes(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir):
         """Test behavior with zero episodes.
         
         Purpose: Validates function handles n_episodes=0 correctly
@@ -209,7 +199,6 @@ class TestVisualizePlannerEpisode:
             visualize_planner_episode(
                 planner=mock_planner,
                 environment=tiger_environment,
-                policy=mock_policy,
                 belief=mock_belief,
                 n_episodes=0,
                 cache_dir=temp_cache_dir,
@@ -220,7 +209,7 @@ class TestVisualizePlannerEpisode:
             mock_run_episode.assert_not_called()
             tiger_environment.cache_visualization.assert_not_called()
 
-    def test_visualize_planner_episode_cache_path_formatting(self, mock_planner, tiger_environment, mock_policy, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_cache_path_formatting(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
         """Test cache path formatting for different planner names and episode IDs.
         
         Purpose: Validates that cache paths are formatted correctly with planner name and episode ID
@@ -242,7 +231,6 @@ class TestVisualizePlannerEpisode:
             visualize_planner_episode(
                 planner=mock_planner,
                 environment=tiger_environment,
-                policy=mock_policy,
                 belief=mock_belief,
                 n_episodes=3,
                 cache_dir=temp_cache_dir,
@@ -298,7 +286,6 @@ class TestVisualizePlannerEpisode:
         visualize_planner_episode(
             planner=pomcp_policy,
             environment=env,
-            policy=pomcp_policy,
             belief=belief,
             n_episodes=2,
             cache_dir=temp_cache_dir,
@@ -322,7 +309,7 @@ class TestVisualizePlannerEpisode:
             history_arg = call_args[1]['history']
             assert isinstance(history_arg, History)  # Should be a History object
 
-    def test_visualize_planner_episode_exception_handling(self, mock_planner, tiger_environment, mock_policy, mock_belief, temp_cache_dir):
+    def test_visualize_planner_episode_exception_handling(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir):
         """Test exception handling when run_episode fails.
         
         Purpose: Validates that exceptions in run_episode are properly propagated
@@ -340,14 +327,13 @@ class TestVisualizePlannerEpisode:
                 visualize_planner_episode(
                     planner=mock_planner,
                     environment=tiger_environment,
-                    policy=mock_policy,
                     belief=mock_belief,
                     n_episodes=1,
                     cache_dir=temp_cache_dir,
                     num_steps=5
                 )
 
-    def test_visualize_planner_episode_visualization_exception(self, mock_planner, tiger_environment, mock_policy, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_visualization_exception(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
         """Test exception handling when environment visualization fails.
         
         Purpose: Validates that exceptions in cache_visualization are properly propagated
@@ -367,14 +353,13 @@ class TestVisualizePlannerEpisode:
                 visualize_planner_episode(
                     planner=mock_planner,
                     environment=tiger_environment,
-                    policy=mock_policy,
                     belief=mock_belief,
                     n_episodes=1,
                     cache_dir=temp_cache_dir,
                     num_steps=5
                 )
 
-    def test_visualize_planner_episode_parameter_validation(self, mock_planner, tiger_environment, mock_policy, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_parameter_validation(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
         """Test parameter validation and type checking.
         
         Purpose: Validates that function accepts correct parameter types
@@ -394,7 +379,6 @@ class TestVisualizePlannerEpisode:
             visualize_planner_episode(
                 planner=mock_planner,
                 environment=tiger_environment,
-                policy=mock_policy,
                 belief=mock_belief,
                 n_episodes=5,  # int
                 cache_dir=temp_cache_dir,  # Path
@@ -404,7 +388,7 @@ class TestVisualizePlannerEpisode:
             # Should execute without errors
             assert tiger_environment.cache_visualization.call_count == 5
 
-    def test_visualize_planner_episode_large_number_episodes(self, mock_planner, tiger_environment, mock_policy, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_large_number_episodes(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
         """Test performance with larger number of episodes.
         
         Purpose: Validates function can handle larger episode counts efficiently
@@ -424,7 +408,6 @@ class TestVisualizePlannerEpisode:
             visualize_planner_episode(
                 planner=mock_planner,
                 environment=tiger_environment,
-                policy=mock_policy,
                 belief=mock_belief,
                 n_episodes=n_episodes,
                 cache_dir=temp_cache_dir,
@@ -439,12 +422,12 @@ class TestVisualizePlannerEpisode:
             for call_args in mock_run_episode.call_args_list:
                 kwargs = call_args[1]
                 assert kwargs['environment'] == tiger_environment
-                assert kwargs['policy'] == mock_policy
+                assert kwargs['policy'] == mock_planner
                 assert kwargs['initial_belief'] == mock_belief
                 assert kwargs['num_steps'] == 3
                 assert 'logger' in kwargs
 
-    def test_visualize_planner_episode_different_environments(self, mock_planner, mock_policy, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_different_environments(self, mock_planner, mock_belief, temp_cache_dir, sample_episode_history):
         """Test function works with different environment types.
         
         Purpose: Validates function is environment-agnostic
@@ -471,7 +454,6 @@ class TestVisualizePlannerEpisode:
                 visualize_planner_episode(
                     planner=mock_planner,
                     environment=env,
-                    policy=mock_policy,
                     belief=mock_belief,
                     n_episodes=1,
                     cache_dir=temp_cache_dir,
@@ -481,7 +463,7 @@ class TestVisualizePlannerEpisode:
                 # Verify visualization was called for each environment
                 env.cache_visualization.assert_called_once()
 
-    def test_visualize_planner_episode_cache_dir_types(self, mock_planner, tiger_environment, mock_policy, mock_belief, sample_episode_history):
+    def test_visualize_planner_episode_cache_dir_types(self, mock_planner, tiger_environment, mock_belief, sample_episode_history):
         """Test function accepts different cache directory path types.
         
         Purpose: Validates function works with both string and Path objects for cache_dir
@@ -504,7 +486,6 @@ class TestVisualizePlannerEpisode:
                 visualize_planner_episode(
                     planner=mock_planner,
                     environment=tiger_environment,
-                    policy=mock_policy,
                     belief=mock_belief,
                     n_episodes=1,
                     cache_dir=temp_path,  # Path object
@@ -551,7 +532,6 @@ class TestVisualizePlannerEpisode:
         visualize_planner_episode(
             planner=policy,  # Often same as policy
             environment=env,
-            policy=policy,
             belief=belief,
             n_episodes=3,
             cache_dir=temp_cache_dir,

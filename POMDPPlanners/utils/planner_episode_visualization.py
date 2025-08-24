@@ -2,7 +2,7 @@ from pathlib import Path
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.core.belief import Belief, get_initial_belief
+from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.utils.logger import get_logger
 
@@ -10,7 +10,6 @@ from POMDPPlanners.utils.logger import get_logger
 def visualize_planner_episode(
     planner: Policy,
     environment: Environment,
-    policy: Policy,
     belief: Belief,
     n_episodes: int,
     cache_dir: Path,
@@ -22,7 +21,6 @@ def visualize_planner_episode(
     Args:
         planner: The planner policy (used for naming cache files)
         environment: The POMDP environment to run episodes in
-        policy: The policy to use for action selection during episodes
         belief: The initial belief to use for episodes
         n_episodes: Number of episodes to run and visualize
         cache_dir: Directory to cache visualization files
@@ -35,7 +33,7 @@ def visualize_planner_episode(
     for episode_id in range(n_episodes):
         episode_result = run_episode(
             environment=environment,
-            policy=policy,
+            policy=planner,
             initial_belief=belief,
             num_steps=num_steps,
             logger=logger
