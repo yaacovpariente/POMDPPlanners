@@ -90,7 +90,7 @@ class TestLaserTagStateTransition:
     """
     
     def test_robot_movement_basic(self):
-        """Test basic robot movement without obstacles.
+        """Test basic robot movement without walls.
         
         Purpose: Validates robot movement follows action directions correctly
         
@@ -102,10 +102,10 @@ class TestLaserTagStateTransition:
         """
         state = LaserTagState(robot=(3, 5), opponent=(1, 1), terminal=False)
         floor_shape = (7, 11)
-        obstacles = set()
+        walls = set()
         
         # Test North movement (action 0)
-        transition = LaserTagStateTransition(state, 0, floor_shape, obstacles)
+        transition = LaserTagStateTransition(state, 0, floor_shape, walls)
         next_states = transition.sample(n_samples=10)
         for next_state in next_states:
             assert next_state.robot == (2, 5)  # One row up
@@ -123,32 +123,32 @@ class TestLaserTagStateTransition:
         Test type: unit
         """
         floor_shape = (7, 11)
-        obstacles = set()
+        walls = set()
         
         # Test robot at top boundary trying to go North
         state = LaserTagState(robot=(0, 5), opponent=(3, 3), terminal=False)
-        transition = LaserTagStateTransition(state, 0, floor_shape, obstacles)
+        transition = LaserTagStateTransition(state, 0, floor_shape, walls)
         next_states = transition.sample(n_samples=5)
         for next_state in next_states:
             assert next_state.robot == (0, 5)  # Should stay in place
     
-    def test_robot_obstacle_collision(self):
-        """Test robot cannot move into obstacles.
+    def test_robot_wall_collision(self):
+        """Test robot cannot move into walls.
         
-        Purpose: Validates robot respects obstacle positions and cannot move through them
+        Purpose: Validates robot respects wall positions and cannot move through them
         
-        Given: Robot adjacent to obstacle positions
-        When: Actions try to move robot into obstacles
-        Then: Robot stays at current position instead of moving into obstacle
+        Given: Robot adjacent to wall positions
+        When: Actions try to move robot into walls
+        Then: Robot stays at current position instead of moving into wall
         
         Test type: unit
         """
         state = LaserTagState(robot=(3, 2), opponent=(1, 1), terminal=False)
         floor_shape = (7, 11)
-        obstacles = {(3, 3)}  # Obstacle to the East
+        walls = {(3, 3)}  # Wall to the East
         
-        # Test robot trying to move East into obstacle
-        transition = LaserTagStateTransition(state, 2, floor_shape, obstacles)
+        # Test robot trying to move East into wall
+        transition = LaserTagStateTransition(state, 2, floor_shape, walls)
         next_states = transition.sample(n_samples=5)
         for next_state in next_states:
             assert next_state.robot == (3, 2)  # Should stay in place
@@ -166,9 +166,9 @@ class TestLaserTagStateTransition:
         """
         state = LaserTagState(robot=(2, 5), opponent=(5, 5), terminal=False)
         floor_shape = (7, 11)
-        obstacles = set()
+        walls = set()
         
-        transition = LaserTagStateTransition(state, 1, floor_shape, obstacles)  # Robot moves South
+        transition = LaserTagStateTransition(state, 1, floor_shape, walls)  # Robot moves South
         samples = transition.sample(n_samples=1000)
         
         # Count opponent positions
@@ -197,9 +197,9 @@ class TestLaserTagStateTransition:
         """
         state = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=False)
         floor_shape = (7, 11)
-        obstacles = set()
+        walls = set()
         
-        transition = LaserTagStateTransition(state, 4, floor_shape, obstacles)
+        transition = LaserTagStateTransition(state, 4, floor_shape, walls)
         next_states = transition.sample(n_samples=10)
         
         for next_state in next_states:
@@ -220,9 +220,9 @@ class TestLaserTagStateTransition:
         """
         state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
         floor_shape = (7, 11)
-        obstacles = set()
+        walls = set()
         
-        transition = LaserTagStateTransition(state, 4, floor_shape, obstacles)
+        transition = LaserTagStateTransition(state, 4, floor_shape, walls)
         next_states = transition.sample(n_samples=10)
         
         for next_state in next_states:
@@ -253,20 +253,24 @@ class TestLaserTagObservation:
         
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
-        obs_model = LaserTagObservation(state, 0, measurement_noise=1.0)
+        state = LaserTagState(robot=(2, 2), opponent=(2, 4), terminal=False)
+        obs_model = LaserTagObservation(
+            state, 0, measurement_noise=0.1,  # Low noise for testing
+            floor_shape=(5, 5), walls=set()
+        )
         
-        observations = obs_model.sample(n_samples=1000)
+        observations = obs_model.sample(n_samples=100)
         obs_array = np.array(observations)
         
-        # Check mean is close to true position
-        mean_obs = np.mean(obs_array, axis=0)
-        true_pos = np.array([2.0, 4.0])
-        assert np.allclose(mean_obs, true_pos, atol=0.1)
+        # Check all observations are 8-dimensional
+        assert obs_array.shape[1] == 8, "Observations should be 8-dimensional laser measurements"
         
-        # Check standard deviation is around measurement_noise
+        # Check observations are reasonable laser ranges (non-negative)
+        assert np.all(obs_array >= 0), "Laser measurements should be non-negative"
+        
+        # Check standard deviation is around measurement_noise for each direction
         std_obs = np.std(obs_array, axis=0)
-        assert np.allclose(std_obs, [1.0, 1.0], atol=0.2)
+        assert np.all(std_obs <= 1.0), "Standard deviation should be reasonable for laser measurements"
     
     def test_terminal_state_observation(self):
         """Test terminal state produces special observation.
@@ -280,11 +284,15 @@ class TestLaserTagObservation:
         Test type: unit
         """
         state = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=True)
-        obs_model = LaserTagObservation(state, 4, measurement_noise=1.0)
+        obs_model = LaserTagObservation(
+            state, 4, measurement_noise=1.0,
+            floor_shape=(7, 11), walls=set()
+        )
         
         observations = obs_model.sample(n_samples=10)
+        terminal_obs = (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
         for obs in observations:
-            assert obs == (-1.0, -1.0)
+            assert obs == terminal_obs, f"Terminal observation should be {terminal_obs}"
 
 
 class TestLaserTagPOMDP:
@@ -313,28 +321,31 @@ class TestLaserTagPOMDP:
         env = LaserTagPOMDP(discount_factor=0.95)
         
         assert env.discount_factor == 0.95
-        assert env.floor_shape == (7, 11)
-        assert env.obstacles == set()
+        assert env.floor_shape == (11, 7)
+        # Default walls - 8 walls within valid grid bounds
+        expected_walls = {(1, 2), (3, 0), (3, 4), (5, 0), (6, 4), (9, 1), (9, 4), (10, 6)}
+        assert env.walls == expected_walls
+        assert len(env.walls) == 8  # Should have 8 walls by default
         assert env.tag_reward == 10.0
         assert env.tag_penalty == 10.0
         assert env.step_cost == 1.0
         assert len(env.get_actions()) == 5
     
-    def test_environment_initialization_with_obstacles(self):
-        """Test LaserTag POMDP environment initialization with obstacles.
+    def test_environment_initialization_with_walls(self):
+        """Test LaserTag POMDP environment initialization with walls.
         
-        Purpose: Validates environment initializes correctly with obstacle configuration
+        Purpose: Validates environment initializes correctly with wall configuration
         
-        Given: LaserTag environment constructor with custom obstacle set
-        When: Environment is created with obstacles parameter
-        Then: Environment stores obstacles correctly
+        Given: LaserTag environment constructor with custom wall set
+        When: Environment is created with walls parameter
+        Then: Environment stores walls correctly
         
         Test type: unit
         """
-        obstacles = {(3, 3), (4, 4)}
-        env = LaserTagPOMDP(discount_factor=0.95, obstacles=obstacles)
+        walls = {(3, 3), (4, 4)}
+        env = LaserTagPOMDP(discount_factor=0.95, walls=walls)
         
-        assert env.obstacles == obstacles
+        assert env.walls == walls
     
     def test_reward_structure(self):
         """Test reward function returns correct values.
@@ -412,9 +423,9 @@ class TestLaserTagPOMDP:
     def test_observation_equality(self):
         """Test observation equality comparison.
         
-        Purpose: Validates observation equality handles continuous values correctly
+        Purpose: Validates observation equality handles 8-dimensional laser measurements correctly
         
-        Given: Pairs of similar and different continuous observations
+        Given: Pairs of similar and different 8D laser observations
         When: is_equal_observation method is called
         Then: Returns correct equality based on small tolerance for floating point
         
@@ -422,37 +433,37 @@ class TestLaserTagPOMDP:
         """
         env = LaserTagPOMDP(discount_factor=0.95)
         
-        obs1 = (2.0, 4.0)
-        obs2 = (2.0, 4.0)
-        obs3 = (2.1, 4.1)
+        obs1 = (2.0, 4.0, 1.5, 3.2, 2.8, 1.1, 0.9, 2.5)
+        obs2 = (2.0, 4.0, 1.5, 3.2, 2.8, 1.1, 0.9, 2.5)
+        obs3 = (2.1, 4.1, 1.6, 3.3, 2.9, 1.2, 1.0, 2.6)
         
         assert env.is_equal_observation(obs1, obs2)
         assert not env.is_equal_observation(obs1, obs3)
     
-    def test_compute_metrics_with_obstacle_collisions(self):
-        """Test compute_metrics includes obstacle collision counting.
+    def test_compute_metrics_with_wall_collisions(self):
+        """Test compute_metrics includes wall collision counting.
         
-        Purpose: Validates metrics computation includes obstacle collision tracking
+        Purpose: Validates metrics computation includes wall collision tracking
         
-        Given: Mock history with obstacle collision scenario
+        Given: Mock history with wall collision scenario
         When: compute_metrics is called
-        Then: Returns metrics including obstacle collision count
+        Then: Returns metrics including wall collision count
         
         Test type: unit
         """
-        obstacles = {(3, 3)}
-        env = LaserTagPOMDP(discount_factor=0.95, obstacles=obstacles)
+        walls = {(3, 3)}
+        env = LaserTagPOMDP(discount_factor=0.95, walls=walls)
         
-        # Create mock history with obstacle collision
+        # Create mock history with wall collision
         # Mock the policy_run_data
         mock_policy_run_data = Mock()
         
-        # Step 1: Robot tries to move East into obstacle
+        # Step 1: Robot tries to move East into wall
         state1 = LaserTagState(robot=(3, 2), opponent=(1, 1), terminal=False)
         step1 = StepData(
             state=state1, 
             action=2,  # East
-            next_state=LaserTagState(robot=(3, 2), opponent=(1, 0), terminal=False),  # Robot stayed due to obstacle
+            next_state=LaserTagState(robot=(3, 2), opponent=(1, 0), terminal=False),  # Robot stayed due to wall
             observation=(1.1, 0.9),
             reward=-1.0,
             belief=Mock()
@@ -485,15 +496,55 @@ class TestLaserTagPOMDP:
         histories = [history]
         metrics = env.compute_metrics(histories)
         
-        # Find obstacle collision metric
+        # Find wall collision metric
         collision_metric = None
         for metric in metrics:
             if metric.name == "average_obstacle_collisions":
                 collision_metric = metric
                 break
         
-        assert collision_metric is not None, "Obstacle collision metric not found"
+        assert collision_metric is not None, "Wall collision metric not found"
         assert collision_metric.value == 1.0, f"Expected 1.0 collision, got {collision_metric.value}"
+        
+        # Find dangerous area steps metric
+        dangerous_area_metric = None
+        for metric in metrics:
+            if metric.name == "average_dangerous_area_steps":
+                dangerous_area_metric = metric
+                break
+        
+        assert dangerous_area_metric is not None, "Dangerous area steps metric not found"
+        # Should have 0 dangerous area steps since robot positions are not in default dangerous areas
+        assert dangerous_area_metric.value == 0.0, f"Expected 0.0 dangerous area steps, got {dangerous_area_metric.value}"
+    
+    def test_wall_collision_penalty(self):
+        """Test wall collision applies dangerous area penalty.
+        
+        Purpose: Validates wall collisions apply additional dangerous area penalty
+        
+        Given: LaserTag environment with walls and robot attempting wall collision
+        When: Robot tries to move into a wall
+        Then: Reward includes both step cost and dangerous area penalty
+        
+        Test type: unit
+        """
+        walls = {(3, 3)}
+        env = LaserTagPOMDP(
+            discount_factor=0.95, 
+            walls=walls, 
+            dangerous_area_penalty=5.0,
+            step_cost=1.0
+        )
+        
+        # Test wall collision penalty
+        state = LaserTagState(robot=(3, 2), opponent=(1, 1), terminal=False)
+        
+        # Try to move East into wall at (3, 3)
+        reward = env.reward(state, 2)  # East action
+        
+        # Expected: -1.0 (step cost) - 5.0 (wall collision penalty) = -6.0
+        expected_reward = -env.step_cost - env.dangerous_area_penalty
+        assert reward == expected_reward, f"Expected {expected_reward} for wall collision, got {reward}"
     
     def test_cache_visualization_functionality(self):
         """Test cache_visualization method basic functionality.

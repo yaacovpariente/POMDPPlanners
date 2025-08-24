@@ -5,13 +5,13 @@ where an agent must navigate a grid to tag an opponent that moves stochastically
 The agent has noisy observations of the opponent's location.
 
 The LaserTag problem features:
-- A grid-based environment (default 7x11) with optional obstacles
+- A grid-based environment (default 7x11) with optional walls
 - Robot and opponent moving on discrete grid cells
 - 5 possible actions: North, South, East, West, Tag
-- Noisy observations of opponent location (with measurement error)
+- 8-directional laser range measurements with Gaussian noise
 - Positive reward for successful tagging, negative reward for failed tag attempts
 - Step cost for each movement action
-- Opponent moves probabilistically toward robot's position
+- Opponent moves with 0.4 prob toward robot in x-dir, 0.4 prob toward robot in y-dir, 0.2 prob stay
 
 Based on the LaserTag.jl implementation from: https://github.com/JuliaPOMDP/LaserTag.jl
 
@@ -22,7 +22,7 @@ Classes:
     LaserTagPOMDP: Main environment class implementing the LaserTag problem
 """
 
-from typing import List, Any, Optional, Tuple
+from typing import List, Any, Optional, Tuple, Set, Dict
 from pathlib import Path
 from dataclasses import dataclass
 
@@ -83,7 +83,7 @@ class LaserTagStateTransition(StateTransitionModel):
         state: Current LaserTagState
         action: Action to be executed (0=North, 1=South, 2=East, 3=West, 4=Tag)
         floor_shape: Tuple of (rows, cols) for grid dimensions
-        obstacles: Set of obstacle positions
+        walls: Set of wall positions
         
     Example:
         Creating and using the state transition model::
@@ -93,26 +93,26 @@ class LaserTagStateTransition(StateTransitionModel):
                 state=state, 
                 action=0,  # North
                 floor_shape=(7, 11),
-                obstacles=set()
+                walls=set()
             )
             next_states = transition.sample(n_samples=5)
             probabilities = transition.probability(next_states)
     """
     
     def __init__(self, state: LaserTagState, action: int, floor_shape: Tuple[int, int], 
-                 obstacles: set):
+                 walls: Set[Tuple[int, int]]):
         """Initialize the state transition model.
         
         Args:
             state: Current LaserTagState
             action: Action to execute (0=North, 1=South, 2=East, 3=West, 4=Tag)
             floor_shape: Grid dimensions as (rows, cols)
-            obstacles: Set of obstacle positions as (row, col) tuples
+            walls: Set of wall positions as (row, col) tuples
         """
         super().__init__(state, action)
-        self.floor_shape = floor_shape
-        self.obstacles = obstacles
-        self._action_directions = {
+        self.floor_shape: Tuple[int, int] = floor_shape
+        self.walls: Set[Tuple[int, int]] = walls
+        self._action_directions: Dict[int, Tuple[int, int]] = {
             0: (-1, 0),  # North (up)
             1: (1, 0),   # South (down)
             2: (0, 1),   # East (right)  
@@ -121,11 +121,11 @@ class LaserTagStateTransition(StateTransitionModel):
         }
     
     def _is_valid_position(self, pos: Tuple[int, int]) -> bool:
-        """Check if position is within bounds and not an obstacle."""
+        """Check if position is within bounds and not a wall."""
         row, col = pos
         return (0 <= row < self.floor_shape[0] and 
                 0 <= col < self.floor_shape[1] and
-                pos not in self.obstacles)
+                pos not in self.walls)
     
     def _get_robot_next_position(self) -> Tuple[int, int]:
         """Get robot's next position based on action."""
@@ -142,51 +142,101 @@ class LaserTagStateTransition(StateTransitionModel):
             return self.state.robot
     
     def _get_opponent_move_probabilities(self, robot_pos: Tuple[int, int]) -> List[Tuple[Tuple[int, int], float]]:
-        """Get opponent's movement probabilities based on robot position."""
+        """Get opponent's movement probabilities based on robot position.
+        
+        Uses Julia LaserTag.jl movement model:
+        - 0.4 probability to move in x-direction (toward/away from robot)
+        - 0.4 probability to move in y-direction (toward/away from robot) 
+        - 0.2 probability to stay in place
+        """
         current_opp = self.state.opponent
+        robot_row, robot_col = robot_pos
+        opp_row, opp_col = current_opp
         
-        # Possible movement directions for opponent
-        directions = [(-1, 0), (1, 0), (0, 1), (0, -1), (0, 0)]  # N, S, E, W, Stay
-        valid_moves = []
+        # Calculate movement preferences
+        x_moves = []  # Column movements
+        y_moves = []  # Row movements
         
-        for dr, dc in directions:
-            new_pos = (current_opp[0] + dr, current_opp[1] + dc)
-            if self._is_valid_position(new_pos):
-                valid_moves.append(new_pos)
+        # X-direction (column) movements
+        if robot_col > opp_col:  # Robot is east, opponent should move east
+            east_pos = (opp_row, opp_col + 1)
+            if self._is_valid_position(east_pos):
+                x_moves.append((east_pos, 0.4))  # Move toward robot
+            west_pos = (opp_row, opp_col - 1)
+            if self._is_valid_position(west_pos):
+                x_moves.append((west_pos, 0.0))  # Move away from robot gets remaining prob
+        elif robot_col < opp_col:  # Robot is west, opponent should move west
+            west_pos = (opp_row, opp_col - 1)
+            if self._is_valid_position(west_pos):
+                x_moves.append((west_pos, 0.4))  # Move toward robot
+            east_pos = (opp_row, opp_col + 1)
+            if self._is_valid_position(east_pos):
+                x_moves.append((east_pos, 0.0))  # Move away from robot gets remaining prob
+        else:  # Same column
+            east_pos = (opp_row, opp_col + 1)
+            if self._is_valid_position(east_pos):
+                x_moves.append((east_pos, 0.0))
+            west_pos = (opp_row, opp_col - 1)
+            if self._is_valid_position(west_pos):
+                x_moves.append((west_pos, 0.0))
         
-        # If no valid moves, stay in place
-        if not valid_moves:
-            return [(current_opp, 1.0)]
+        # Y-direction (row) movements  
+        if robot_row > opp_row:  # Robot is south, opponent should move south
+            south_pos = (opp_row + 1, opp_col)
+            if self._is_valid_position(south_pos):
+                y_moves.append((south_pos, 0.4))  # Move toward robot
+            north_pos = (opp_row - 1, opp_col)
+            if self._is_valid_position(north_pos):
+                y_moves.append((north_pos, 0.0))  # Move away from robot gets remaining prob
+        elif robot_row < opp_row:  # Robot is north, opponent should move north
+            north_pos = (opp_row - 1, opp_col)
+            if self._is_valid_position(north_pos):
+                y_moves.append((north_pos, 0.4))  # Move toward robot
+            south_pos = (opp_row + 1, opp_col)
+            if self._is_valid_position(south_pos):
+                y_moves.append((south_pos, 0.0))  # Move away from robot gets remaining prob
+        else:  # Same row
+            north_pos = (opp_row - 1, opp_col)
+            if self._is_valid_position(north_pos):
+                y_moves.append((north_pos, 0.0))
+            south_pos = (opp_row + 1, opp_col)
+            if self._is_valid_position(south_pos):
+                y_moves.append((south_pos, 0.0))
         
-        # Calculate probabilities - opponent has 0.4 chance to move toward robot
+        # Combine moves and normalize probabilities
         move_probs = []
-        toward_robot_moves = []
+        total_x_prob = 0.4 if any(prob > 0 for _, prob in x_moves) else 0.0
+        total_y_prob = 0.4 if any(prob > 0 for _, prob in y_moves) else 0.0
+        stay_prob = 0.2
         
-        # Find moves that get closer to robot
-        for pos in valid_moves:
-            old_dist = abs(current_opp[0] - robot_pos[0]) + abs(current_opp[1] - robot_pos[1])
-            new_dist = abs(pos[0] - robot_pos[0]) + abs(pos[1] - robot_pos[1])
-            
-            if new_dist < old_dist:
-                toward_robot_moves.append(pos)
-        
-        # Distribute probabilities
-        if toward_robot_moves:
-            # 0.4 total probability for moves toward robot, distributed equally
-            toward_prob = 0.4 / len(toward_robot_moves)
-            # Remaining 0.6 for other moves
-            other_prob = 0.6 / (len(valid_moves) - len(toward_robot_moves)) if len(valid_moves) > len(toward_robot_moves) else 0
-            
-            for pos in valid_moves:
-                if pos in toward_robot_moves:
-                    move_probs.append((pos, toward_prob))
-                else:
-                    move_probs.append((pos, other_prob))
-        else:
-            # No beneficial moves, distribute equally
-            prob = 1.0 / len(valid_moves)
-            for pos in valid_moves:
+        # Add x-direction moves
+        for pos, prob in x_moves:
+            if prob > 0:  # Toward robot
                 move_probs.append((pos, prob))
+            elif total_x_prob > 0:  # Away from robot gets remaining x-prob
+                remaining_x_prob = 0.0  # No probability for away moves in Julia model
+                move_probs.append((pos, remaining_x_prob))
+        
+        # Add y-direction moves
+        for pos, prob in y_moves:
+            if prob > 0:  # Toward robot
+                move_probs.append((pos, prob))
+            elif total_y_prob > 0:  # Away from robot gets remaining y-prob
+                remaining_y_prob = 0.0  # No probability for away moves in Julia model
+                move_probs.append((pos, remaining_y_prob))
+        
+        # Add stay probability
+        move_probs.append((current_opp, stay_prob))
+        
+        # Normalize probabilities to handle blocked moves
+        actual_total = sum(prob for _, prob in move_probs if prob > 0)
+        if actual_total < 1.0:
+            # Redistribute remaining probability to staying
+            stay_index = len(move_probs) - 1
+            move_probs[stay_index] = (current_opp, stay_prob + (1.0 - actual_total))
+        
+        # Filter out zero probability moves
+        move_probs = [(pos, prob) for pos, prob in move_probs if prob > 0]
         
         return move_probs
     
@@ -246,13 +296,16 @@ class LaserTagStateTransition(StateTransitionModel):
 class LaserTagObservation(ObservationModel):
     """Observation model for LaserTag POMDP.
     
-    Provides noisy observations of the opponent's position. The observation
-    is the opponent's true position plus Gaussian noise.
+    Provides 8-directional laser range measurements from the robot's position.
+    Each measurement represents the number of clear cells in that direction
+    before hitting a wall or boundary, with Gaussian noise.
     
     Attributes:
         next_state: The state after action execution
         action: The action that was taken
-        measurement_noise: Standard deviation of measurement noise
+        measurement_noise: Standard deviation of Gaussian measurement noise
+        floor_shape: Grid dimensions as (rows, cols)
+        walls: Set of wall positions
         
     Example:
         Creating and using the observation model::
@@ -261,38 +314,103 @@ class LaserTagObservation(ObservationModel):
             obs_model = LaserTagObservation(
                 next_state=state,
                 action=0,
-                measurement_noise=1.0
+                measurement_noise=1.0,
+                floor_shape=(7, 11),
+                walls=set()
             )
             observations = obs_model.sample(n_samples=3)
             probabilities = obs_model.probability(observations)
     """
     
-    def __init__(self, next_state: LaserTagState, action: int, measurement_noise: float = 1.0):
+    def __init__(self, next_state: LaserTagState, action: int, measurement_noise: float = 1.0,
+                 floor_shape: Tuple[int, int] = (7, 11), walls: Set[Tuple[int, int]] = None):
         """Initialize the observation model.
         
         Args:
             next_state: State after taking the action
             action: Action that was executed
             measurement_noise: Standard deviation of Gaussian measurement noise
+            floor_shape: Grid dimensions as (rows, cols)
+            walls: Set of wall positions as (row, col) tuples
         """
         super().__init__(next_state, action)
         self.measurement_noise = measurement_noise
+        self.floor_shape = floor_shape
+        self.walls = walls if walls is not None else set()
+        
+        # 8-directional laser measurements: N, NE, E, SE, S, SW, W, NW
+        self._laser_directions = [
+            (-1, 0),   # North
+            (-1, 1),   # Northeast  
+            (0, 1),    # East
+            (1, 1),    # Southeast
+            (1, 0),    # South
+            (1, -1),   # Southwest
+            (0, -1),   # West
+            (-1, -1)   # Northwest
+        ]
     
-    def sample(self, n_samples: int = 1) -> List[Tuple[float, float]]:
-        """Sample observations from the observation model."""
+    def _get_laser_measurement(self, robot_pos: Tuple[int, int], direction: Tuple[int, int]) -> float:
+        """Get laser range measurement in a specific direction.
+        
+        Args:
+            robot_pos: Robot's position as (row, col)
+            direction: Direction vector as (row_delta, col_delta)
+            
+        Returns:
+            Number of clear cells in that direction before hitting obstacle/boundary
+        """
+        row, col = robot_pos
+        dr, dc = direction
+        distance = 0.0
+        
+        # Cast ray in direction until hitting obstacle or boundary
+        while True:
+            row += dr
+            col += dc
+            distance += 1.0
+            
+            # Check if hit boundary
+            if (row < 0 or row >= self.floor_shape[0] or 
+                col < 0 or col >= self.floor_shape[1]):
+                break
+                
+            # Check if hit wall
+            if (row, col) in self.walls or (row, col) == (self.next_state.opponent[0], self.next_state.opponent[1]):
+                break
+                
+        return distance - 1.0  # Don't count the wall/boundary cell
+    
+    def sample(self, n_samples: int = 1) -> List[Tuple[float, ...]]:
+        """Sample observations from the observation model.
+        
+        Returns:
+            List of 8-tuple observations representing laser measurements in 8 directions
+        """
         samples = []
         
         if self.next_state.terminal:
-            # Terminal state - return terminal observation
+            # Terminal state - return special terminal observation
             for _ in range(n_samples):
-                samples.append((-1.0, -1.0))  # Special terminal observation
+                samples.append((-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0))
         else:
-            # Add Gaussian noise to opponent's true position
-            true_pos = np.array(self.next_state.opponent, dtype=float)
+            # Get true laser measurements from robot position
+            robot_pos = self.next_state.robot
+            true_measurements = []
+            
+            for direction in self._laser_directions:
+                measurement = self._get_laser_measurement(robot_pos, direction)
+                true_measurements.append(measurement)
+            
+            # Add Gaussian noise to each measurement
             for _ in range(n_samples):
-                noise = np.random.normal(0, self.measurement_noise, size=2)
-                noisy_obs = true_pos + noise
-                samples.append((noisy_obs[0], noisy_obs[1]))
+                noisy_measurements = []
+                for true_measure in true_measurements:
+                    noise = np.random.normal(0, self.measurement_noise)
+                    noisy_measure = max(0.0, true_measure + noise)  # Clamp to non-negative
+                    noisy_measurements.append(noisy_measure)
+                
+                samples.append(tuple(noisy_measurements))
         
         return samples
     
@@ -302,21 +420,34 @@ class LaserTagObservation(ObservationModel):
         
         if self.next_state.terminal:
             # Terminal state case
+            terminal_obs = (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
             for i, obs in enumerate(values):
-                if obs == (-1.0, -1.0):
+                if obs == terminal_obs:
                     result[i] = 1.0
         else:
-            # Calculate Gaussian probability density
-            true_pos = np.array(self.next_state.opponent, dtype=float)
+            # Get true laser measurements
+            robot_pos = self.next_state.robot
+            true_measurements = []
+            
+            for direction in self._laser_directions:
+                measurement = self._get_laser_measurement(robot_pos, direction)
+                true_measurements.append(measurement)
+            
+            # Calculate Gaussian probability density for each observation
             variance = self.measurement_noise ** 2
             
             for i, obs in enumerate(values):
-                if isinstance(obs, (tuple, list)) and len(obs) == 2:
-                    obs_pos = np.array(obs, dtype=float)
-                    # Bivariate Gaussian PDF
-                    diff = obs_pos - true_pos
-                    exp_term = np.exp(-0.5 * np.sum(diff ** 2) / variance)
-                    result[i] = exp_term / (2 * np.pi * variance)
+                if isinstance(obs, (tuple, list)) and len(obs) == 8:
+                    # Product of independent Gaussian PDFs for each direction
+                    prob = 1.0
+                    for j, (true_measure, observed_measure) in enumerate(zip(true_measurements, obs)):
+                        if observed_measure >= 0:  # Valid measurement
+                            diff = observed_measure - true_measure
+                            prob *= np.exp(-0.5 * diff ** 2 / variance) / np.sqrt(2 * np.pi * variance)
+                        else:
+                            prob = 0.0  # Invalid negative measurement
+                            break
+                    result[i] = prob
         
         return result
 
@@ -331,12 +462,12 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     Problem Structure:
     - States: Robot position, opponent position, terminal flag
     - Actions: North(0), South(1), East(2), West(3), Tag(4)
-    - Observations: Noisy (x, y) coordinates of opponent position
+    - Observations: 8-directional laser measurements (N,NE,E,SE,S,SW,W,NW)
     - Rewards: Tag success(+10), Tag failure(-10), Movement(-1)
     
     Attributes:
         floor_shape: Grid dimensions as (rows, cols)
-        obstacles: Set of obstacle positions
+        walls: Set of wall positions as (row, col) tuples
         tag_reward: Reward for successful tagging
         tag_penalty: Penalty for unsuccessful tagging  
         step_cost: Cost per movement action
@@ -367,12 +498,15 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     def __init__(self, 
                  discount_factor: float,
                  name: str = "LaserTagPOMDP",
-                 floor_shape: Tuple[int, int] = (7, 11),
-                 obstacles: Optional[set] = None,
+                 floor_shape: Tuple[int, int] = (11, 7),
+                 walls: Optional[Set[Tuple[int, int]]] = {(1, 2), (3, 0), (3, 4), (5, 0), (6, 4), (9, 1), (9, 4), (10, 6)},
                  tag_reward: float = 10.0,
                  tag_penalty: float = 10.0,
                  step_cost: float = 1.0,
                  measurement_noise: float = 1.0,
+                 dangerous_areas: Optional[List[Tuple[int, int]]] = {(5, 3), (7, 1), (2, 5)},
+                 dangerous_area_radius: float = 1.0,
+                 dangerous_area_penalty: float = 5.0,
                  output_dir: Optional[Path] = None,
                  debug: bool = False):
         """Initialize the LaserTag POMDP environment.
@@ -380,12 +514,16 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         Args:
             discount_factor: Discount factor for future rewards (0 < discount_factor <= 1)
             name: Name identifier for this environment instance
-            floor_shape: Grid dimensions as (rows, cols). Defaults to (7, 11).
-            obstacles: Set of obstacle positions as (row, col) tuples. Defaults to empty set.
+            floor_shape: Grid dimensions as (rows, cols). Defaults to (11, 7).
+            walls: Set of wall positions as (row, col) tuples. Each tuple represents
+                the (row, col) coordinates of a wall on the grid. Defaults to empty set.
             tag_reward: Reward for successful tagging. Defaults to 10.0.
             tag_penalty: Penalty for unsuccessful tagging. Defaults to 10.0.
             step_cost: Cost per movement action. Defaults to 1.0.
             measurement_noise: Standard deviation of observation noise. Defaults to 1.0.
+            dangerous_areas: List of dangerous area center positions as (row, col) tuples. Defaults to None.
+            dangerous_area_radius: Radius around dangerous area centers. Defaults to 1.0.
+            dangerous_area_penalty: Penalty magnitude applied randomly when in dangerous areas. Defaults to 2.0.
             output_dir: Optional directory for logging output. Defaults to None.
             debug: Enable debug logging. Defaults to False.
             
@@ -397,7 +535,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,  # 5 discrete actions
-            observation_space=SpaceType.CONTINUOUS  # Continuous (x,y) coordinates with noise
+            observation_space=SpaceType.CONTINUOUS  # Continuous 8-dimensional laser measurements with noise
         )
         
         super().__init__(
@@ -408,12 +546,15 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             debug=debug
         )
         
-        self.floor_shape = floor_shape
-        self.obstacles = obstacles if obstacles is not None else set()
+        self.floor_shape: Tuple[int, int] = floor_shape
+        self.walls: Set[Tuple[int, int]] = walls if walls is not None else set()
         self.tag_reward = tag_reward
         self.tag_penalty = tag_penalty
         self.step_cost = step_cost
         self.measurement_noise = measurement_noise
+        self.dangerous_areas: List[Tuple[int, int]] = dangerous_areas if dangerous_areas is not None else []
+        self.dangerous_area_radius = dangerous_area_radius
+        self.dangerous_area_penalty = dangerous_area_penalty
         
         # Action definitions
         self.actions = [0, 1, 2, 3, 4]  # North, South, East, West, Tag
@@ -425,7 +566,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             state=state,
             action=action,
             floor_shape=self.floor_shape,
-            obstacles=self.obstacles
+            walls=self.walls
         )
     
     def observation_model(self, next_state: LaserTagState, action: int) -> ObservationModel:
@@ -433,21 +574,67 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         return LaserTagObservation(
             next_state=next_state,
             action=action,
-            measurement_noise=self.measurement_noise
+            measurement_noise=self.measurement_noise,
+            floor_shape=self.floor_shape,
+            walls=self.walls
         )
+    
+    def _is_in_dangerous_area(self, position: Tuple[int, int]) -> bool:
+        """Check if a position is within any dangerous area.
+        
+        Args:
+            position: Position to check as (row, col) tuple
+            
+        Returns:
+            True if position is within radius of any dangerous area center
+        """
+        if not self.dangerous_areas:
+            return False
+            
+        pos_row, pos_col = position
+        
+        for danger_row, danger_col in self.dangerous_areas:
+            # Calculate Euclidean distance
+            distance = np.sqrt((pos_row - danger_row)**2 + (pos_col - danger_col)**2)
+            if distance <= self.dangerous_area_radius:
+                return True
+        
+        return False
     
     def reward(self, state: LaserTagState, action: int) -> float:
         """Calculate the immediate reward for a state-action pair."""
         if state.terminal:
             return 0.0  # No reward in terminal state
         
+        base_reward = 0.0
+        
         if action == 4:  # Tag action
             if state.robot == state.opponent:
-                return self.tag_reward  # Successful tag
+                base_reward = self.tag_reward  # Successful tag
             else:
-                return -self.tag_penalty  # Failed tag attempt
+                base_reward = -self.tag_penalty  # Failed tag attempt
         else:
-            return -self.step_cost  # Movement cost
+            base_reward = -self.step_cost  # Movement cost
+        
+        # Check for wall collision and apply dangerous area penalty
+        if action in [0, 1, 2, 3]:  # Movement actions
+            # Calculate intended position based on action
+            action_directions = {0: (-1, 0), 1: (1, 0), 2: (0, 1), 3: (0, -1)}
+            dr, dc = action_directions[action]
+            intended_pos = (state.robot[0] + dr, state.robot[1] + dc)
+            
+            # Check if intended position is a wall (collision)
+            if intended_pos in self.walls:
+                # Apply dangerous area penalty for wall collision
+                base_reward -= self.dangerous_area_penalty
+        
+        # Add dangerous area penalty/bonus with 50% probability
+        if self._is_in_dangerous_area(state.robot):
+            # Random penalty or bonus with equal probability
+            danger_modifier = self.dangerous_area_penalty if np.random.random() < 0.5 else -self.dangerous_area_penalty
+            base_reward += danger_modifier
+        
+        return base_reward
     
     def is_terminal(self, state: LaserTagState) -> bool:
         """Check if a state is terminal."""
@@ -459,7 +646,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         valid_positions = []
         for row in range(self.floor_shape[0]):
             for col in range(self.floor_shape[1]):
-                if (row, col) not in self.obstacles:
+                if (row, col) not in self.walls:
                     valid_positions.append((row, col))
         
         # Create all possible initial states (robot and opponent at different positions)
@@ -477,10 +664,12 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     
     def initial_observation_dist(self) -> Distribution:
         """Get the initial observation distribution."""
-        # Return distribution over possible noisy observations at start
-        # For simplicity, return a distribution centered at (0, 0) with noise
+        # Return distribution over possible initial laser observations
+        # For simplicity, return a uniform distribution over typical laser readings
+        # This would normally be computed from the initial state distribution
+        typical_readings = (3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0, 3.0)  # Mid-range readings
         return DiscreteDistribution(
-            values=[(0.0, 0.0)], 
+            values=[typical_readings], 
             probs=np.array([1.0])
         )
     
@@ -489,11 +678,14 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         return self.actions
     
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
-        """Check if two observations are equal."""
+        """Check if two observations are equal.
+        
+        Observations are 8-dimensional laser measurements or terminal observations.
+        """
         if isinstance(observation1, (tuple, list)) and isinstance(observation2, (tuple, list)):
-            if len(observation1) == len(observation2) == 2:
-                return (abs(observation1[0] - observation2[0]) < 1e-10 and 
-                        abs(observation1[1] - observation2[1]) < 1e-10)
+            if len(observation1) == len(observation2) == 8:
+                # Compare 8-dimensional laser measurements with tolerance
+                return all(abs(obs1 - obs2) < 1e-10 for obs1, obs2 in zip(observation1, observation2))
         return observation1 == observation2
     
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
@@ -502,6 +694,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         successful_tags = 0
         failed_tag_attempts = 0
         obstacle_collisions = 0
+        dangerous_area_steps = 0
         total_episodes = len(histories)
         episode_lengths = []
         
@@ -513,10 +706,15 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             if history.history and history.history[-1].reward > 0:
                 successful_tags += 1
             
-            # Count failed tag attempts and obstacle collisions
+            # Count failed tag attempts, obstacle collisions, and dangerous area steps
             for i, step in enumerate(history.history):
                 if step.action == 4 and step.reward < 0:  # Tag action with negative reward
                     failed_tag_attempts += 1
+                
+                # Check if robot is in dangerous area during this step
+                if isinstance(step.state, LaserTagState):
+                    if self._is_in_dangerous_area(step.state.robot):
+                        dangerous_area_steps += 1
                 
                 # Check for obstacle collision by comparing robot position before and after movement
                 if step.action in [0, 1, 2, 3]:  # Movement actions
@@ -530,8 +728,8 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                             dr, dc = action_dirs[step.action]
                             intended_pos = (step.state.robot[0] + dr, step.state.robot[1] + dc)
                             
-                            # Check if intended position was an obstacle and robot didn't move
-                            if (intended_pos in self.obstacles and 
+                            # Check if intended position was a wall and robot didn't move
+                            if (intended_pos in self.walls and 
                                 step.next_state.robot == step.state.robot):
                                 obstacle_collisions += 1
         
@@ -539,6 +737,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         avg_episode_length = np.mean(episode_lengths) if episode_lengths else 0.0
         avg_failed_tags = failed_tag_attempts / total_episodes if total_episodes > 0 else 0.0
         avg_obstacle_collisions = obstacle_collisions / total_episodes if total_episodes > 0 else 0.0
+        avg_dangerous_area_steps = dangerous_area_steps / total_episodes if total_episodes > 0 else 0.0
         
         return [
             MetricValue(
@@ -564,6 +763,12 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 value=avg_obstacle_collisions,
                 lower_confidence_bound=avg_obstacle_collisions,
                 upper_confidence_bound=avg_obstacle_collisions
+            ),
+            MetricValue(
+                name="average_dangerous_area_steps",
+                value=avg_dangerous_area_steps,
+                lower_confidence_bound=avg_dangerous_area_steps,
+                upper_confidence_bound=avg_dangerous_area_steps
             )
         ]
     
@@ -573,8 +778,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         Creates an animated visualization showing:
         - Robot movement (red circle with path trail)
         - Opponent movement (blue circle)
-        - Obstacles (black squares with red borders)
+        - Walls (black squares)
         - Action arrows showing robot's intended movement
+        - Laser measurements (green rays from robot position)
         - Belief particles (if available) showing robot's belief about opponent location
         - Grid boundaries and coordinate system
         
@@ -619,29 +825,40 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # Set up the figure and axis with extra space for legend
         fig, ax = plt.subplots(figsize=(14, 8))
         rows, cols = self.floor_shape
-        ax.set_xlim(-0.5, cols - 0.5)
-        ax.set_ylim(-0.5, rows - 0.5)
+        ax.set_xlim(-0.5, rows - 0.5)
+        ax.set_ylim(-0.5, cols - 0.5)
         ax.set_aspect('equal')
         ax.invert_yaxis()  # Invert y-axis so (0,0) is top-left like matrix indexing
         
         # Set grid
-        ax.set_xticks(range(cols))
-        ax.set_yticks(range(rows))
+        ax.set_xticks(range(rows))
+        ax.set_yticks(range(cols))
         ax.grid(True, alpha=0.3)
-        ax.set_xlabel('Column')
-        ax.set_ylabel('Row')
+        ax.set_xlabel('Row')
+        ax.set_ylabel('Column')
         ax.set_title('LaserTag POMDP Episode Visualization')
         
-        # Draw obstacles as red squares
-        obstacle_patches = []
-        for i, obstacle in enumerate(self.obstacles):
-            row, col = obstacle
-            square = plt.Rectangle((col - 0.4, row - 0.4), 0.8, 0.8, 
-                                 facecolor='red', edgecolor='black', alpha=0.7,
-                                 label='Obstacles' if i == 0 else "")  # Only label first obstacle
+        # Draw walls as black squares
+        wall_patches = []
+        for i, wall in enumerate(self.walls):
+            row, col = wall
+            square = plt.Rectangle((row - 0.4, col - 0.4), 0.8, 0.8, 
+                                 facecolor='black', edgecolor='black', alpha=0.7,
+                                 label='Wall' if i == 0 else "")  # Only label first wall
             ax.add_patch(square)
             if i == 0:  # Keep reference for legend
-                obstacle_patches.append(square)
+                wall_patches.append(square)
+        
+        # Draw dangerous areas as red circles (like in light_dark_pomdp)
+        danger_patches = []
+        for i, danger_center in enumerate(self.dangerous_areas):
+            row, col = danger_center
+            circle = plt.Circle((row, col), self.dangerous_area_radius, 
+                               facecolor='red', edgecolor='none', alpha=0.3,
+                               label='Dangerous Areas' if i == 0 else "")  # Only label first area
+            ax.add_patch(circle)
+            if i == 0:  # Keep reference for legend
+                danger_patches.append(circle)
         
         # Initialize animated elements
         robot_agent, = ax.plot([], [], 'ro', markersize=12, label='Robot')
@@ -661,8 +878,24 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         action_text = ax.text(0.02, 0.90, '', transform=ax.transAxes, fontsize=10,
                             verticalalignment='top', bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
         
-        # Belief particles (if available)
-        belief_scatter = ax.scatter([], [], c='yellow', alpha=0.6, s=30, label='Belief Particles')
+        # Tag success indicator
+        tag_text = ax.text(0.02, 0.02, '', transform=ax.transAxes, fontsize=24, fontweight='bold',
+                         horizontalalignment='left', verticalalignment='bottom',
+                         bbox=dict(boxstyle='round,pad=0.5', facecolor='gold', edgecolor='red', linewidth=3, alpha=0.9),
+                         color='red', visible=False)
+        
+        # Belief particles (if available) - opponent beliefs
+        opponent_belief_scatter = ax.scatter([], [], c='lightblue', alpha=0.6, s=30, label='Opponent Belief Particles')
+        # Robot belief particles
+        robot_belief_scatter = ax.scatter([], [], c='lightcoral', alpha=0.6, s=30, label='Robot Belief Particles')
+        
+        # Laser rays (8 directions from robot)
+        laser_lines = []
+        laser_directions = [(-1, 0), (-1, 1), (0, 1), (1, 1), (1, 0), (1, -1), (0, -1), (-1, -1)]
+        for i in range(8):
+            line, = ax.plot([], [], 'g-', alpha=0.4, linewidth=1, 
+                           label='Laser Rays' if i == 0 else "")
+            laser_lines.append(line)
         
         # Legend - position it inside the plot area to avoid truncation
         ax.legend(loc='upper right', bbox_to_anchor=(0.98, 0.98), framealpha=0.9)
@@ -676,27 +909,32 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             action_arrow.xy = (0, 0)
             step_text.set_text('')
             action_text.set_text('')
-            belief_scatter.set_offsets(np.empty((0, 2)))
+            tag_text.set_visible(False)
+            opponent_belief_scatter.set_offsets(np.empty((0, 2)))
+            robot_belief_scatter.set_offsets(np.empty((0, 2)))
+            # Clear laser rays
+            for line in laser_lines:
+                line.set_data([], [])
             return [robot_agent, opponent_agent, robot_path_line, opponent_path_line, 
-                   action_arrow, step_text, action_text, belief_scatter]
+                   action_arrow, step_text, action_text, tag_text, opponent_belief_scatter, robot_belief_scatter] + laser_lines
         
         def update(frame):
             # Current positions
             robot_pos = robot_path[frame]
             opponent_pos = opponent_path[frame]
             
-            # Update agent positions (convert row,col to x,y for plotting)
-            robot_agent.set_data([robot_pos[1]], [robot_pos[0]])  # col, row
-            opponent_agent.set_data([opponent_pos[1]], [opponent_pos[0]])  # col, row
+            # Update agent positions (transpose: row,col to x,y for plotting)
+            robot_agent.set_data([robot_pos[0]], [robot_pos[1]])  # row, col
+            opponent_agent.set_data([opponent_pos[0]], [opponent_pos[1]])  # row, col
             
             # Update path lines up to current frame
-            robot_cols = [pos[1] for pos in robot_path[:frame+1]]
             robot_rows = [pos[0] for pos in robot_path[:frame+1]]
-            opponent_cols = [pos[1] for pos in opponent_path[:frame+1]]
+            robot_cols = [pos[1] for pos in robot_path[:frame+1]]
             opponent_rows = [pos[0] for pos in opponent_path[:frame+1]]
+            opponent_cols = [pos[1] for pos in opponent_path[:frame+1]]
             
-            robot_path_line.set_data(robot_cols, robot_rows)
-            opponent_path_line.set_data(opponent_cols, opponent_rows)
+            robot_path_line.set_data(robot_rows, robot_cols)
+            opponent_path_line.set_data(opponent_rows, opponent_cols)
             
             # Update action arrow
             if frame < len(actions):
@@ -707,12 +945,27 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 if action in action_dirs:
                     dr, dc = action_dirs[action]
                     # Arrow from robot position in direction of action
-                    action_arrow.set_position((robot_pos[1], robot_pos[0]))
-                    action_arrow.xy = (robot_pos[1] + dc * 0.3, robot_pos[0] + dr * 0.3)
+                    action_arrow.set_position((robot_pos[0], robot_pos[1]))
+                    action_arrow.xy = (robot_pos[0] + dr * 0.3, robot_pos[1] + dc * 0.3)
                     
                     # Update text displays
                     step_text.set_text(f'Step: {frame + 1}/{len(robot_path)}')
                     action_text.set_text(f'Action: {action_names.get(action, "Unknown")}')
+                    
+                    # Show tag indicator for tag actions
+                    if action == 4:  # Tag action
+                        if robot_pos == opponent_pos:  # Successful tag
+                            tag_text.set_text('🏷️ TAGGED! 🏷️')
+                            tag_text.set_bbox(dict(boxstyle='round,pad=0.5', facecolor='gold', edgecolor='green', linewidth=3, alpha=0.9))
+                            tag_text.set_color('green')
+                            tag_text.set_visible(True)
+                        else:  # Failed tag attempt
+                            tag_text.set_text('❌ MISSED! ❌')
+                            tag_text.set_bbox(dict(boxstyle='round,pad=0.5', facecolor='lightcoral', edgecolor='red', linewidth=3, alpha=0.9))
+                            tag_text.set_color('darkred')
+                            tag_text.set_visible(True)
+                    else:
+                        tag_text.set_visible(False)
             
             # Update belief particles if available
             if frame < len(beliefs) and beliefs[frame] is not None:
@@ -721,29 +974,72 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                     if hasattr(belief, 'to_unique_support_distribution'):
                         unique_belief = belief.to_unique_support_distribution()
                         if len(unique_belief.values) > 0:
-                            # Extract opponent positions from belief states
-                            belief_positions = []
-                            belief_weights = []
+                            # Extract opponent and robot positions from belief states
+                            opponent_belief_positions = []
+                            opponent_belief_weights = []
+                            robot_belief_positions = []
+                            robot_belief_weights = []
+                            
                             for i, state in enumerate(unique_belief.values):
                                 if isinstance(state, LaserTagState):
-                                    # Convert row,col to x,y for plotting
-                                    belief_positions.append([state.opponent[1], state.opponent[0]])
-                                    belief_weights.append(unique_belief.probs[i] * 100)  # Scale for visibility
+                                    # Convert row,col to x,y for plotting (transposed mapping)
+                                    opponent_belief_positions.append([state.opponent[0], state.opponent[1]])
+                                    opponent_belief_weights.append(unique_belief.probs[i] * 100)  # Scale for visibility
+                                    
+                                    robot_belief_positions.append([state.robot[0], state.robot[1]])
+                                    robot_belief_weights.append(unique_belief.probs[i] * 100)  # Scale for visibility
                             
-                            if belief_positions:
-                                belief_scatter.set_offsets(np.array(belief_positions))
-                                belief_scatter.set_sizes(np.array(belief_weights))
+                            if opponent_belief_positions:
+                                opponent_belief_scatter.set_offsets(np.array(opponent_belief_positions))
+                                opponent_belief_scatter.set_sizes(np.array(opponent_belief_weights))
                             else:
-                                belief_scatter.set_offsets(np.empty((0, 2)))
+                                opponent_belief_scatter.set_offsets(np.empty((0, 2)))
+                                
+                            if robot_belief_positions:
+                                robot_belief_scatter.set_offsets(np.array(robot_belief_positions))
+                                robot_belief_scatter.set_sizes(np.array(robot_belief_weights))
+                            else:
+                                robot_belief_scatter.set_offsets(np.empty((0, 2)))
                         else:
-                            belief_scatter.set_offsets(np.empty((0, 2)))
+                            opponent_belief_scatter.set_offsets(np.empty((0, 2)))
+                            robot_belief_scatter.set_offsets(np.empty((0, 2)))
                 except:
-                    belief_scatter.set_offsets(np.empty((0, 2)))
+                    opponent_belief_scatter.set_offsets(np.empty((0, 2)))
+                    robot_belief_scatter.set_offsets(np.empty((0, 2)))
             else:
-                belief_scatter.set_offsets(np.empty((0, 2)))
+                opponent_belief_scatter.set_offsets(np.empty((0, 2)))
+                robot_belief_scatter.set_offsets(np.empty((0, 2)))
+            
+            # Update laser rays visualization
+            for i, (line, direction) in enumerate(zip(laser_lines, laser_directions)):
+                dr, dc = direction
+                # Show laser ray from robot position
+                start_x, start_y = robot_pos[0], robot_pos[1]  # row, col
+                
+                # Calculate laser measurement for visualization
+                robot_r, robot_c = robot_pos
+                distance = 0
+                ray_x, ray_y = robot_r, robot_c
+                
+                # Cast ray to find end point
+                while True:
+                    ray_r = robot_r + dr * (distance + 1)
+                    ray_c = robot_c + dc * (distance + 1)
+                    
+                    # Check bounds and walls
+                    if (ray_r < 0 or ray_r >= self.floor_shape[0] or 
+                        ray_c < 0 or ray_c >= self.floor_shape[1] or
+                        (ray_r, ray_c) in self.walls):
+                        break
+                    distance += 1
+                
+                # Draw laser ray
+                end_x = robot_r + dr * distance
+                end_y = robot_c + dc * distance
+                line.set_data([start_x, end_x], [start_y, end_y])
             
             return [robot_agent, opponent_agent, robot_path_line, opponent_path_line,
-                   action_arrow, step_text, action_text, belief_scatter]
+                   action_arrow, step_text, action_text, tag_text, opponent_belief_scatter, robot_belief_scatter] + laser_lines
         
         # Create animation
         anim = animation.FuncAnimation(
