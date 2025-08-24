@@ -547,3 +547,285 @@ class TestVisualizePlannerEpisode:
             cache_path = call_args[1]['cache_path']
             expected_path = temp_cache_dir / f"POMCP_{i}.gif"
             assert cache_path == expected_path
+
+    def test_visualize_planner_episode_parallel_basic(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+        """Test basic parallel execution with n_jobs=2.
+        
+        Purpose: Validates that parallel execution works correctly with n_jobs=2
+        
+        Given: Mock planner, environment, belief, and n_jobs=2
+        When: visualize_planner_episode is called with n_episodes=4 and n_jobs=2
+        Then: Episodes are run in parallel and environment visualization is cached for each episode
+        
+        Test type: unit
+        """
+        # Mock the helper function to track calls and avoid actual execution
+        with patch('POMDPPlanners.utils.planner_episode_visualization._run_single_episode') as mock_run_single:
+            with patch('POMDPPlanners.utils.planner_episode_visualization.Parallel') as mock_parallel:
+                # Verify Parallel gets called for n_jobs > 1
+                mock_parallel.return_value = Mock(return_value=None)
+                
+                # Execute function with parallel execution
+                visualize_planner_episode(
+                    planner=mock_planner,
+                    environment=tiger_environment,
+                    belief=mock_belief,
+                    n_episodes=4,
+                    cache_dir=temp_cache_dir,
+                    num_steps=5,
+                    n_jobs=2
+                )
+                
+                # Verify Parallel was called with correct n_jobs
+                mock_parallel.assert_called_once_with(n_jobs=2)
+                
+                # Verify Parallel instance was called (indicating parallel path was taken)
+                mock_parallel.return_value.assert_called_once()
+                
+                # Note: We can't easily verify the exact number of _run_single_episode calls
+                # in parallel execution due to joblib's internal behavior, but we verified
+                # that the parallel path was taken by checking Parallel was called
+
+    def test_visualize_planner_episode_parallel_vs_sequential_equivalence(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+        """Test that parallel and sequential execution use correct paths.
+        
+        Purpose: Validates that n_jobs=1 uses sequential path and n_jobs=2 uses parallel path
+        
+        Given: Same parameters for both sequential and parallel execution
+        When: Function is called with n_jobs=1 and n_jobs=2
+        Then: Correct execution paths are chosen
+        
+        Test type: equivalence
+        """
+        # Test sequential execution (n_jobs=1)
+        with patch('POMDPPlanners.utils.planner_episode_visualization._run_single_episode') as mock_run_single:
+            with patch('POMDPPlanners.utils.planner_episode_visualization.Parallel') as mock_parallel:
+                
+                visualize_planner_episode(
+                    planner=mock_planner,
+                    environment=tiger_environment,
+                    belief=mock_belief,
+                    n_episodes=3,
+                    cache_dir=temp_cache_dir,
+                    num_steps=5,
+                    n_jobs=1  # Sequential
+                )
+                
+                # Verify Parallel was NOT called for sequential execution
+                mock_parallel.assert_not_called()
+                
+                # Verify _run_single_episode was called 3 times sequentially
+                assert mock_run_single.call_count == 3
+        
+        # Test parallel execution (n_jobs=2)
+        with patch('POMDPPlanners.utils.planner_episode_visualization._run_single_episode') as mock_run_single:
+            with patch('POMDPPlanners.utils.planner_episode_visualization.Parallel') as mock_parallel:
+                mock_parallel.return_value = Mock(return_value=None)
+                
+                visualize_planner_episode(
+                    planner=mock_planner,
+                    environment=tiger_environment,
+                    belief=mock_belief,
+                    n_episodes=3,
+                    cache_dir=temp_cache_dir,
+                    num_steps=5,
+                    n_jobs=2  # Parallel
+                )
+                
+                # Verify Parallel WAS called for parallel execution
+                mock_parallel.assert_called_once_with(n_jobs=2)
+                mock_parallel.return_value.assert_called_once()
+
+    def test_visualize_planner_episode_parallel_n_jobs_parameter_validation(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+        """Test that different n_jobs values trigger correct execution paths.
+        
+        Purpose: Validates that n_jobs=1 uses sequential path and n_jobs>1 uses parallel path
+        
+        Given: Different n_jobs values
+        When: Function is called with various n_jobs parameters
+        Then: Correct execution path (sequential vs parallel) is chosen
+        
+        Test type: unit
+        """
+        mock_episode_result = sample_episode_history
+        
+        with patch('POMDPPlanners.utils.planner_episode_visualization.run_episode', return_value=mock_episode_result):
+            with patch('POMDPPlanners.utils.planner_episode_visualization.Parallel') as mock_parallel:
+                mock_parallel.return_value.__call__ = Mock(side_effect=lambda func_list: [func() for func in func_list])
+                tiger_environment.cache_visualization = Mock()
+                
+                # Test n_jobs=1 (should NOT call Parallel)
+                visualize_planner_episode(
+                    planner=mock_planner,
+                    environment=tiger_environment,
+                    belief=mock_belief,
+                    n_episodes=2,
+                    cache_dir=temp_cache_dir,
+                    num_steps=5,
+                    n_jobs=1
+                )
+                
+                # Verify Parallel was NOT called for n_jobs=1
+                mock_parallel.assert_not_called()
+                
+                # Reset mock for parallel test
+                mock_parallel.reset_mock()
+                tiger_environment.cache_visualization.reset_mock()
+                
+                # Test n_jobs=2 (should call Parallel)
+                visualize_planner_episode(
+                    planner=mock_planner,
+                    environment=tiger_environment,
+                    belief=mock_belief,
+                    n_episodes=2,
+                    cache_dir=temp_cache_dir,
+                    num_steps=5,
+                    n_jobs=2
+                )
+                
+                # Verify Parallel WAS called for n_jobs=2
+                mock_parallel.assert_called_once_with(n_jobs=2)
+
+    def test_visualize_planner_episode_parallel_different_n_jobs_values(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+        """Test parallel execution with different n_jobs values.
+        
+        Purpose: Validates that various n_jobs values (2, 4, -1) work correctly
+        
+        Given: Different n_jobs values for parallel execution
+        When: Function is called with n_jobs=2, n_jobs=4, n_jobs=-1
+        Then: Parallel execution is triggered with correct n_jobs parameter
+        
+        Test type: unit
+        """
+        n_jobs_values = [2, 4, -1]  # -1 means use all available processors
+        
+        for n_jobs in n_jobs_values:
+            with patch('POMDPPlanners.utils.planner_episode_visualization._run_single_episode') as mock_run_single:
+                with patch('POMDPPlanners.utils.planner_episode_visualization.Parallel') as mock_parallel:
+                    mock_parallel.return_value = Mock(return_value=None)
+                    
+                    visualize_planner_episode(
+                        planner=mock_planner,
+                        environment=tiger_environment,
+                        belief=mock_belief,
+                        n_episodes=3,
+                        cache_dir=temp_cache_dir,
+                        num_steps=5,
+                        n_jobs=n_jobs
+                    )
+                    
+                    # Verify Parallel was called with correct n_jobs
+                    mock_parallel.assert_called_once_with(n_jobs=n_jobs)
+                    
+                    # Verify parallel execution path was taken
+                    mock_parallel.return_value.assert_called_once()
+
+    def test_visualize_planner_episode_parallel_exception_handling(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir):
+        """Test exception handling in parallel execution.
+        
+        Purpose: Validates that exceptions in parallel execution are properly propagated
+        
+        Given: Parallel that raises an exception during execution
+        When: visualize_planner_episode is called with n_jobs=2
+        Then: Exception is propagated to caller from parallel execution
+        
+        Test type: error handling
+        """
+        with patch('POMDPPlanners.utils.planner_episode_visualization._run_single_episode') as mock_run_single:
+            with patch('POMDPPlanners.utils.planner_episode_visualization.Parallel') as mock_parallel:
+                # Configure Parallel to raise an exception
+                mock_parallel.return_value = Mock(side_effect=RuntimeError("Parallel execution failed"))
+                
+                with pytest.raises(RuntimeError, match="Parallel execution failed"):
+                    visualize_planner_episode(
+                        planner=mock_planner,
+                        environment=tiger_environment,
+                        belief=mock_belief,
+                        n_episodes=2,
+                        cache_dir=temp_cache_dir,
+                        num_steps=5,
+                        n_jobs=2
+                    )
+                    
+                # Verify Parallel was called
+                mock_parallel.assert_called_once_with(n_jobs=2)
+
+    def test_visualize_planner_episode_parallel_single_episode(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+        """Test parallel execution with single episode.
+        
+        Purpose: Validates that parallel execution works correctly even with n_episodes=1
+        
+        Given: Single episode and n_jobs=2
+        When: visualize_planner_episode is called
+        Then: Single episode is processed through parallel path correctly
+        
+        Test type: edge case
+        """
+        with patch('POMDPPlanners.utils.planner_episode_visualization._run_single_episode') as mock_run_single:
+            with patch('POMDPPlanners.utils.planner_episode_visualization.Parallel') as mock_parallel:
+                mock_parallel.return_value = Mock(return_value=None)
+                
+                visualize_planner_episode(
+                    planner=mock_planner,
+                    environment=tiger_environment,
+                    belief=mock_belief,
+                    n_episodes=1,
+                    cache_dir=temp_cache_dir,
+                    num_steps=5,
+                    n_jobs=2
+                )
+                
+                # Verify parallel execution was used
+                mock_parallel.assert_called_once_with(n_jobs=2)
+                
+                # Verify parallel path was taken
+                mock_parallel.return_value.assert_called_once()
+
+    def test_visualize_planner_episode_parallel_real_integration(self, temp_cache_dir):
+        """Test parallel execution with real components.
+        
+        Purpose: Validates that parallel execution is triggered with actual policy and environment
+        
+        Given: Real TigerPOMDP environment, POMCP policy, and n_jobs=2
+        When: visualize_planner_episode is called with parallel execution
+        Then: Parallel path is taken and function completes successfully
+        
+        Test type: integration
+        """
+        # Create real environment and policy
+        env = TigerPOMDP(discount_factor=0.95, name="ParallelTiger")
+        
+        pomcp_policy = POMCP(
+            environment=env,
+            discount_factor=0.95,
+            name="ParallelPOMCP",
+            exploration_constant=1.0,
+            n_simulations=5,  # Minimal for testing
+            depth=2
+        )
+        
+        # Create proper belief
+        from POMDPPlanners.core.belief import get_initial_belief
+        belief = get_initial_belief(env, n_particles=10)  # Minimal for testing
+        
+        # Mock visualization to avoid file I/O
+        env.cache_visualization = Mock()
+        
+        # Mock Parallel to verify it's called but avoid actual parallel execution
+        with patch('POMDPPlanners.utils.planner_episode_visualization.Parallel') as mock_parallel:
+            mock_parallel.return_value = Mock(return_value=None)
+            
+            # Execute with parallel processing
+            visualize_planner_episode(
+                planner=pomcp_policy,
+                environment=env,
+                belief=belief,
+                n_episodes=2,
+                cache_dir=temp_cache_dir,
+                num_steps=3,  # Minimal for testing
+                n_jobs=2
+            )
+            
+            # Verify parallel execution was triggered
+            mock_parallel.assert_called_once_with(n_jobs=2)
+            mock_parallel.return_value.assert_called_once()

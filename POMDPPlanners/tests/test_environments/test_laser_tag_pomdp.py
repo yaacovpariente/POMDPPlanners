@@ -358,15 +358,16 @@ class TestLaserTagPOMDP:
         
         Test type: unit
         """
-        env = LaserTagPOMDP(discount_factor=0.95)
+        # Create environment with no dangerous areas to get deterministic rewards
+        env = LaserTagPOMDP(discount_factor=0.95, dangerous_areas=[])
         
-        # Test successful tag
-        same_pos_state = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=False)
+        # Test successful tag - using position (1, 1) which is not in default dangerous areas
+        same_pos_state = LaserTagState(robot=(1, 1), opponent=(1, 1), terminal=False)
         tag_reward = env.reward(same_pos_state, 4)
         assert tag_reward == env.tag_reward
         
         # Test failed tag
-        diff_pos_state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
+        diff_pos_state = LaserTagState(robot=(1, 1), opponent=(2, 4), terminal=False)
         failed_tag_reward = env.reward(diff_pos_state, 4)
         assert failed_tag_reward == -env.tag_penalty
         
@@ -375,7 +376,7 @@ class TestLaserTagPOMDP:
         assert move_reward == -env.step_cost
         
         # Test terminal state
-        terminal_state = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=True)
+        terminal_state = LaserTagState(robot=(1, 1), opponent=(1, 1), terminal=True)
         terminal_reward = env.reward(terminal_state, 0)
         assert terminal_reward == 0.0
     
