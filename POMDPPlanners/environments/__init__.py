@@ -15,6 +15,7 @@ Available Environments:
     DiscreteLightDarkPOMDP: Grid-based light-dark navigation
     ContinuousLightDarkPOMDP: Continuous light-dark navigation problem
     LaserTagPOMDP: Pursuit-evasion problem with robot tagging opponent
+    RockSamplePOMDP: Rock sampling problem with sensor-based rock quality evaluation
 
 Factory Functions:
     get_environment: Create environment instances by name with parameters
@@ -31,6 +32,7 @@ from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.rock_sample_pomdp import RockSamplePOMDP
 
 __all__ = [
     "PushPOMDP",
@@ -42,7 +44,8 @@ __all__ = [
     "SanityPOMDP",
     "CartPolePOMDP",
     "MountainCarPOMDP",
-    "LaserTagPOMDP"
+    "LaserTagPOMDP",
+    "RockSamplePOMDP"
 ]
 
 # Registry of available environments
@@ -57,6 +60,7 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
     "ContinuousLightDarkPOMDP": ContinuousLightDarkPOMDP,
     "ContinuousLightDarkPOMDPDiscreteActions": ContinuousLightDarkPOMDPDiscreteActions,
     "LaserTagPOMDP": LaserTagPOMDP,
+    "RockSamplePOMDP": RockSamplePOMDP,
 }
 
 def get_environment(env_type: str, **kwargs) -> Any:
