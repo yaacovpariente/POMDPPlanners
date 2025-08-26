@@ -284,8 +284,14 @@ class PushPOMDP(DiscreteActionsEnvironment):
             action_space=SpaceType.DISCRETE,  # Action space is discrete positions
             observation_space=SpaceType.CONTINUOUS  # Observation space is positions with noise
         )
+        # Calculate reward range based on maximum distance to target
+        # Maximum distance is diagonal from corner to corner: sqrt(2) * (grid_size - 1)
+        max_distance = np.sqrt(2) * (grid_size - 1)
+        min_reward = -max_distance  # Worst case: maximum distance to target
+        max_reward = 100.0  # Best case: at target with bonus reward
+        
         super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
-                        reward_range=(-2 * np.sqrt(self.grid_size), 100.0), output_dir=output_dir, debug=debug)
+                        reward_range=(min_reward, max_reward), output_dir=output_dir, debug=debug)
 
     def state_transition_model(self, state: np.ndarray, action: str) -> StateTransitionModel:
         return PushStateTransition(
