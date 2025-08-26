@@ -810,6 +810,46 @@ class TestRewardFunction:
         
         reward = pomdp.reward(state, 5)  # Check rock 0
         assert reward == -1.0 + (-2.0)
+    
+    def test_reward_range(self):
+        """Test that reward range is correctly calculated.
+        
+        Purpose: Validates that RockSamplePOMDP reward range is properly calculated based on environment parameters
+        
+        Given: A RockSamplePOMDP environment with specific penalty/reward parameters
+        When: Environment reward_range attribute is checked
+        Then: Returns range based on min_reward (step+bad_rock+sensor penalties) and max_reward (step+exit reward)
+        
+        Test type: unit
+        """
+        pomdp = RockSamplePOMDP(
+            step_penalty=-1.0,
+            bad_rock_penalty=-5.0,
+            good_rock_reward=8.0,
+            exit_reward=12.0,
+            sensor_use_penalty=-0.5
+        )
+        
+        # Expected calculations from RockSamplePOMDP constructor:
+        # min_reward = step_penalty + bad_rock_penalty + sensor_use_penalty = -1.0 + (-5.0) + (-0.5) = -6.5
+        # max_reward = step_penalty + exit_reward = -1.0 + 12.0 = 11.0
+        expected_min = -6.5
+        expected_max = 11.0
+        
+        assert pomdp.reward_range == (expected_min, expected_max)
+        
+        # Verify with different parameters
+        pomdp2 = RockSamplePOMDP(
+            step_penalty=-0.5,
+            bad_rock_penalty=-10.0,
+            exit_reward=20.0,
+            sensor_use_penalty=-1.0
+        )
+        
+        expected_min2 = -0.5 + (-10.0) + (-1.0)  # -11.5
+        expected_max2 = -0.5 + 20.0  # 19.5
+        
+        assert pomdp2.reward_range == (expected_min2, expected_max2)
 
 
 class TestMetricsComputation:

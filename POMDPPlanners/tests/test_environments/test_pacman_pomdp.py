@@ -797,6 +797,39 @@ class TestPacManPOMDP:
         )
         assert self.pomdp.is_terminal(terminal_state)
 
+    def test_reward_range(self):
+        """Test that reward range is correctly calculated.
+        
+        Purpose: Validates that PacManPOMDP reward range is properly calculated based on environment parameters
+        
+        Given: A PacManPOMDP environment with specific reward/penalty parameters
+        When: Environment reward_range attribute is checked
+        Then: Returns range based on min_reward (step + ghost collision penalties) and max_reward (step + pellet + win rewards)
+        
+        Test type: unit
+        """
+        # Expected calculation from PacManPOMDP constructor:
+        # min_reward = step_penalty + ghost_collision_penalty = -1.0 + (-100.0) = -101.0
+        # max_reward = step_penalty + win_reward = -1.0 + 100.0 = 99.0
+        expected_min = self.pomdp.step_penalty + self.pomdp.ghost_collision_penalty
+        expected_max = self.pomdp.step_penalty + self.pomdp.win_reward
+        
+        assert self.pomdp.reward_range == (expected_min, expected_max)
+        
+        # Test with custom parameters
+        custom_pomdp = PacManPOMDP(
+            maze_size=(5, 5),
+            pellet_reward=20.0,
+            ghost_collision_penalty=-200.0,
+            step_penalty=-2.0,
+            win_reward=500.0
+        )
+        
+        expected_min_custom = -2.0 + (-200.0)  # -202.0
+        expected_max_custom = -2.0 + 500.0     # 498.0
+        
+        assert custom_pomdp.reward_range == (expected_min_custom, expected_max_custom)
+
     def test_observation_equality(self):
         """Test observation equality comparison.
 

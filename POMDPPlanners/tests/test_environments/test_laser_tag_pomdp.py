@@ -399,6 +399,44 @@ class TestLaserTagPOMDP:
         assert not env.is_terminal(non_terminal)
         assert env.is_terminal(terminal)
     
+    def test_reward_range(self):
+        """Test that reward range is correctly calculated.
+        
+        Purpose: Validates that LaserTagPOMDP reward range is properly calculated based on tag rewards and penalties
+        
+        Given: A LaserTagPOMDP environment with specific tag reward and penalty parameters
+        When: Environment reward_range attribute is checked
+        Then: Returns range based on worst case (-tag_penalty) and best case (tag_reward)
+        
+        Test type: unit
+        """
+        env = LaserTagPOMDP(
+            discount_factor=0.95,
+            tag_reward=15.0,
+            tag_penalty=20.0,
+            step_cost=2.0
+        )
+        
+        # Expected calculation from LaserTagPOMDP constructor:
+        # reward_range=(-tag_penalty, tag_reward) = (-20.0, 15.0)
+        expected_min = -20.0  # Failed tag penalty
+        expected_max = 15.0   # Successful tag reward
+        
+        assert env.reward_range == (expected_min, expected_max)
+        
+        # Test with different parameters
+        env2 = LaserTagPOMDP(
+            discount_factor=0.95,
+            tag_reward=50.0,
+            tag_penalty=100.0,
+            step_cost=1.0
+        )
+        
+        expected_min2 = -100.0  # Failed tag penalty
+        expected_max2 = 50.0    # Successful tag reward
+        
+        assert env2.reward_range == (expected_min2, expected_max2)
+    
     def test_initial_state_distribution(self):
         """Test initial state distribution properties.
         

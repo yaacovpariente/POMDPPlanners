@@ -214,6 +214,46 @@ def test_terminal_state():
     state_unsafe = np.array([0.0, 0.0, 3.0, 3.0])  # Speed = 3*sqrt(2) ≈ 4.2
     assert env.is_terminal(state_unsafe)
 
+
+def test_reward_range():
+    """Test that reward range is correctly calculated.
+    
+    Purpose: Validates that SafeAntVelocityPOMDP reward range is properly calculated based on environment parameters
+    
+    Given: A SafeAntVelocityPOMDP environment with specific safety parameters
+    When: Environment reward_range attribute is checked
+    Then: Returns range based on min_reward (no movement + safety penalty) and max_reward (max safe speed * movement scale)
+    
+    Test type: unit
+    """
+    env = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
+        safe_velocity_threshold=2.0,
+        safety_violation_penalty=-50.0,
+        movement_reward_scale=1.5
+    )
+    
+    # Expected calculations from SafeAntVelocityPOMDP constructor:
+    # min_reward = 0.0 + safety_violation_penalty = 0.0 + (-50.0) = -50.0
+    # max_reward = safe_velocity_threshold * 1.5 * movement_reward_scale = 2.0 * 1.5 * 1.5 = 4.5
+    expected_min = 0.0 + (-50.0)  # -50.0
+    expected_max = 2.0 * 1.5 * 1.5  # 4.5
+    
+    assert env.reward_range == (expected_min, expected_max)
+    
+    # Test with different parameters
+    env2 = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
+        safe_velocity_threshold=3.0,
+        safety_violation_penalty=-100.0,
+        movement_reward_scale=2.0
+    )
+    
+    expected_min2 = 0.0 + (-100.0)  # -100.0
+    expected_max2 = 3.0 * 1.5 * 2.0  # 9.0
+    
+    assert env2.reward_range == (expected_min2, expected_max2)
+
 def test_initial_state_distribution():
     """Test initial state distribution sampling and bounds.
     

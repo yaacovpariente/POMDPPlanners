@@ -318,6 +318,37 @@ def test_is_terminal():
     assert not env.is_terminal(np.array([1, 1]))
 
 
+def test_reward_range():
+    """Test that reward range is correctly set.
+    
+    Purpose: Validates that ContinuousLightDarkPOMDP has the correct reward range parameters
+    
+    Given: A ContinuousLightDarkPOMDP environment with default configuration
+    When: Environment reward_range attribute is checked
+    Then: Returns (-10.0, 10.0) representing the minimum (obstacle hit) and maximum (goal achievement) rewards
+    
+    Test type: unit
+    """
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        obstacle_reward=-15.0,
+        goal_reward=25.0
+    )
+    
+    # The reward range is set to fixed values in the constructor
+    assert env.reward_range == (-10.0, 10.0)
+    
+    # Test with another environment instance
+    env2 = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.99,
+        obstacle_reward=-50.0,  # This won't affect reward_range as it's fixed
+        goal_reward=100.0       # This won't affect reward_range as it's fixed
+    )
+    
+    # The reward range is always set to (-10.0, 10.0) regardless of parameters
+    assert env2.reward_range == (-10.0, 10.0)
+
+
 def test_compute_metrics():
     """Test computation of metrics for different simulation histories"""
     env = ContinuousLightDarkPOMDPDiscreteActions(

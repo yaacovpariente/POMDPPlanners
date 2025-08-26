@@ -212,6 +212,37 @@ def test_is_terminal(tiger_pomdp):
         assert not tiger_pomdp.is_terminal(state)
 
 
+def test_reward_range(tiger_pomdp):
+    """Test that reward range is correctly set.
+    
+    Purpose: Validates that TigerPOMDP has the correct reward range parameters
+    
+    Given: A TigerPOMDP environment with default configuration
+    When: Environment reward_range attribute is checked
+    Then: Returns (-100.0, 10.0) representing the minimum (opening door with tiger) and maximum (opening door with treasure) rewards
+    
+    Test type: unit
+    """
+    assert tiger_pomdp.reward_range == (-100.0, 10.0)
+    
+    # Verify the actual rewards match the range
+    min_reward = min(
+        tiger_pomdp.reward("tiger_left", "open_left"),    # Opening door with tiger: -100.0
+        tiger_pomdp.reward("tiger_right", "open_right"),  # Opening door with tiger: -100.0
+        tiger_pomdp.reward("tiger_left", "listen"),       # Listening: -1.0
+        tiger_pomdp.reward("tiger_right", "listen")       # Listening: -1.0
+    )
+    max_reward = max(
+        tiger_pomdp.reward("tiger_left", "open_right"),   # Opening door with treasure: 10.0
+        tiger_pomdp.reward("tiger_right", "open_left"),   # Opening door with treasure: 10.0
+        tiger_pomdp.reward("tiger_left", "listen"),       # Listening: -1.0
+        tiger_pomdp.reward("tiger_right", "listen")       # Listening: -1.0
+    )
+    
+    assert min_reward == tiger_pomdp.reward_range[0]
+    assert max_reward == tiger_pomdp.reward_range[1]
+
+
 class TestTigerPOMDPConfigId:
     """Test suite for TigerPOMDP config_id functionality.
     

@@ -245,6 +245,37 @@ def test_mountain_car_actions():
     assert 1 in actions
 
 
+def test_reward_range():
+    """Test that reward range is correctly set.
+    
+    Purpose: Validates that MountainCarPOMDP has the correct reward range parameters
+    
+    Given: A MountainCarPOMDP environment with default configuration
+    When: Environment reward_range attribute is checked
+    Then: Returns (-1.0, 0.0) representing the minimum (per-step penalty) and maximum (goal achievement) rewards
+    
+    Test type: unit
+    """
+    pomdp = MountainCarPOMDP(discount_factor=0.95)
+    assert pomdp.reward_range == (-1.0, 0.0)
+    
+    # Verify the actual rewards match the range
+    non_goal_state = (0.0, 0.0)  # Below goal position
+    goal_state = (pomdp.goal_position, 0.0)  # At goal position
+    past_goal_state = (pomdp.goal_position + 0.1, 0.0)  # Past goal position
+    
+    # Test all possible rewards
+    non_goal_reward = pomdp.reward(non_goal_state, 0)
+    goal_reward = pomdp.reward(goal_state, 0)
+    past_goal_reward = pomdp.reward(past_goal_state, 0)
+    
+    min_reward = min(non_goal_reward, goal_reward, past_goal_reward)
+    max_reward = max(non_goal_reward, goal_reward, past_goal_reward)
+    
+    assert min_reward == pomdp.reward_range[0]  # Should be -1.0
+    assert max_reward == pomdp.reward_range[1]  # Should be 0.0
+
+
 def test_mountain_car_state_bounds():
     """Test state boundary enforcement in transitions.
     

@@ -235,6 +235,43 @@ class TestSanityPOMDPActions:
         assert len(actions) == 2
 
 
+class TestSanityPOMDPReward:
+    """Test suite for SanityPOMDP reward-related functionality."""
+    
+    def test_reward_range(self, sanity_pomdp):
+        """Test that reward range is correctly set.
+        
+        Purpose: Validates that SanityPOMDP has the correct reward range parameters
+        
+        Given: A SanityPOMDP environment with default configuration
+        When: Environment reward_range attribute is checked
+        Then: Returns (0.0, 1.0) representing the minimum (bad state) and maximum (good state) rewards
+        
+        Test type: unit
+        """
+        assert sanity_pomdp.reward_range == (0.0, 1.0)
+        
+        # Verify the actual rewards match the range
+        # Test reward based on next state (after state transition)
+        reward_from_state_0_action_0 = sanity_pomdp.reward(state=0, action=0)  # Action 0 leads to state 0 -> reward 1.0
+        reward_from_state_0_action_1 = sanity_pomdp.reward(state=0, action=1)  # Action 1 leads to state 1 -> reward 0.0
+        reward_from_state_1_action_0 = sanity_pomdp.reward(state=1, action=0)  # Action 0 leads to state 0 -> reward 1.0
+        reward_from_state_1_action_1 = sanity_pomdp.reward(state=1, action=1)  # Action 1 leads to state 1 -> reward 0.0
+        
+        all_rewards = [
+            reward_from_state_0_action_0,
+            reward_from_state_0_action_1,
+            reward_from_state_1_action_0,
+            reward_from_state_1_action_1
+        ]
+        
+        min_reward = min(all_rewards)
+        max_reward = max(all_rewards)
+        
+        assert min_reward == sanity_pomdp.reward_range[0]  # Should be 0.0
+        assert max_reward == sanity_pomdp.reward_range[1]  # Should be 1.0
+
+
 class TestSanityStateTransitionModel:
     """Test suite for SanityStateTransitionModel."""
     

@@ -205,6 +205,53 @@ def test_terminal_state():
     state_near = np.array([9.0, 9.0, 8.8, 8.8, 9.0, 9.0])  # Closer to target
     assert env.is_terminal(state_near)
 
+
+def test_reward_range():
+    """Test that reward range is correctly calculated.
+    
+    Purpose: Validates that PushPOMDP reward range is properly calculated based on grid size
+    
+    Given: A PushPOMDP environment with specified grid_size
+    When: Environment reward_range attribute is checked
+    Then: Returns range based on max possible distance (-2*sqrt(grid_size)) to goal achievement reward (100.0)
+    
+    Test type: unit
+    """
+    # Test with default grid size (10)
+    env = PushPOMDP(discount_factor=0.95, grid_size=10)
+    
+    # Expected calculation from PushPOMDP constructor:
+    # reward_range=(-2 * np.sqrt(self.grid_size), 100.0)
+    # For grid_size=10: -2 * sqrt(10) ≈ -6.32, 100.0
+    expected_min = -2 * np.sqrt(10)
+    expected_max = 100.0
+    
+    assert env.reward_range == (expected_min, expected_max)
+    
+    # Test with different grid size
+    env2 = PushPOMDP(discount_factor=0.95, grid_size=25)
+    
+    expected_min2 = -2 * np.sqrt(25)  # -2 * 5 = -10.0
+    expected_max2 = 100.0
+    
+    assert env2.reward_range == (expected_min2, expected_max2)
+    
+    # Verify the reward range bounds with actual rewards
+    # Maximum distance in grid is from (0,0) to (grid_size-1, grid_size-1)
+    max_distance = np.sqrt((9)**2 + (9)**2)  # Diagonal distance for 10x10 grid
+    
+    # State with maximum distance (object at origin, target at far corner)
+    worst_state = np.array([0.0, 0.0, 0.0, 0.0, 9.0, 9.0])
+    worst_reward = env.reward(worst_state, "right")
+    
+    # State at target (object reaches target for bonus reward)
+    best_state = np.array([9.0, 9.0, 8.9, 8.9, 9.0, 9.0])  # Just under 0.5 distance
+    best_reward = env.reward(best_state, "right")
+    
+    # Verify rewards are within expected range
+    assert worst_reward >= env.reward_range[0]
+    assert best_reward <= env.reward_range[1]
+
 def test_initial_state_distribution():
     """Test initial state distribution.
     
