@@ -810,15 +810,17 @@ class TestPacManPOMDP:
         """
         # Expected calculation from PacManPOMDP constructor:
         # min_reward = step_penalty + ghost_collision_penalty = -1.0 + (-100.0) = -101.0
-        # max_reward = step_penalty + win_reward = -1.0 + 100.0 = 99.0
+        # max_reward = step_penalty + pellet_reward + win_reward = -1.0 + 10.0 + 100.0 = 109.0
         expected_min = self.pomdp.step_penalty + self.pomdp.ghost_collision_penalty
-        expected_max = self.pomdp.step_penalty + self.pomdp.win_reward
+        expected_max = self.pomdp.step_penalty + self.pomdp.pellet_reward + self.pomdp.win_reward
         
         assert self.pomdp.reward_range == (expected_min, expected_max)
         
         # Test with custom parameters
         custom_pomdp = PacManPOMDP(
             maze_size=(5, 5),
+            initial_pacman_pos=(0, 0),
+            initial_ghost_pos=(4, 4),  # Within 5x5 maze bounds
             pellet_reward=20.0,
             ghost_collision_penalty=-200.0,
             step_penalty=-2.0,
@@ -826,7 +828,7 @@ class TestPacManPOMDP:
         )
         
         expected_min_custom = -2.0 + (-200.0)  # -202.0
-        expected_max_custom = -2.0 + 500.0     # 498.0
+        expected_max_custom = -2.0 + 20.0 + 500.0  # 518.0
         
         assert custom_pomdp.reward_range == (expected_min_custom, expected_max_custom)
 

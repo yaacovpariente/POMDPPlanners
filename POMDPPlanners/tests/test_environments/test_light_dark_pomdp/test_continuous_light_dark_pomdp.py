@@ -319,34 +319,51 @@ def test_is_terminal():
 
 
 def test_reward_range():
-    """Test that reward range is correctly set.
+    """Test that reward range is correctly calculated.
     
-    Purpose: Validates that ContinuousLightDarkPOMDP has the correct reward range parameters
+    Purpose: Validates that ContinuousLightDarkPOMDPDiscreteActions calculates reward range based on environment parameters
     
-    Given: A ContinuousLightDarkPOMDP environment with default configuration
+    Given: A ContinuousLightDarkPOMDPDiscreteActions environment with specific parameters
     When: Environment reward_range attribute is checked
-    Then: Returns (-10.0, 10.0) representing the minimum (obstacle hit) and maximum (goal achievement) rewards
+    Then: Returns calculated range based on maximum distance to goal and reward parameters
     
     Test type: unit
     """
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
         obstacle_reward=-15.0,
-        goal_reward=25.0
+        goal_reward=25.0,
+        fuel_cost=2.0,
+        grid_size=11
     )
     
-    # The reward range is set to fixed values in the constructor
-    assert env.reward_range == (-10.0, 10.0)
+    # Expected calculation for STANDARD reward model:
+    # Maximum distance to goal is diagonal of grid: sqrt(2) * grid_size
+    max_distance_to_goal = np.sqrt(2) * 11  # grid_size=11
+    # Min: -fuel_cost - max_distance + obstacle_reward
+    expected_min = -2.0 - max_distance_to_goal + (-15.0)
+    # Max: -fuel_cost + goal_reward
+    expected_max = -2.0 + 25.0
     
-    # Test with another environment instance
+    expected_reward_range = (expected_min, expected_max)
+    assert env.reward_range == expected_reward_range
+    
+    # Test with another environment instance with different parameters
     env2 = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.99,
-        obstacle_reward=-50.0,  # This won't affect reward_range as it's fixed
-        goal_reward=100.0       # This won't affect reward_range as it's fixed
+        obstacle_reward=-50.0,
+        goal_reward=100.0,
+        fuel_cost=3.0,
+        grid_size=15
     )
     
-    # The reward range is always set to (-10.0, 10.0) regardless of parameters
-    assert env2.reward_range == (-10.0, 10.0)
+    # Calculate expected range for different parameters
+    max_distance2 = np.sqrt(2) * 15  # grid_size=15
+    expected_min2 = -3.0 - max_distance2 + (-50.0)
+    expected_max2 = -3.0 + 100.0
+    expected_reward_range2 = (expected_min2, expected_max2)
+    
+    assert env2.reward_range == expected_reward_range2
 
 
 def test_compute_metrics():

@@ -221,17 +221,19 @@ def test_reward_range():
     env = PushPOMDP(discount_factor=0.95, grid_size=10)
     
     # Expected calculation from PushPOMDP constructor:
-    # reward_range=(-2 * np.sqrt(self.grid_size), 100.0)
-    # For grid_size=10: -2 * sqrt(10) ≈ -6.32, 100.0
-    expected_min = -2 * np.sqrt(10)
-    expected_max = 100.0
+    # Maximum distance is diagonal from corner to corner: sqrt(2) * (grid_size - 1)
+    # For grid_size=10: sqrt(2) * 9 ≈ 12.73
+    max_distance = np.sqrt(2) * (10 - 1)
+    expected_min = -max_distance  # Worst case: maximum distance to target
+    expected_max = 100.0  # Best case: at target with bonus reward
     
     assert env.reward_range == (expected_min, expected_max)
     
     # Test with different grid size
     env2 = PushPOMDP(discount_factor=0.95, grid_size=25)
     
-    expected_min2 = -2 * np.sqrt(25)  # -2 * 5 = -10.0
+    max_distance2 = np.sqrt(2) * (25 - 1)  # sqrt(2) * 24 ≈ 33.94
+    expected_min2 = -max_distance2
     expected_max2 = 100.0
     
     assert env2.reward_range == (expected_min2, expected_max2)
