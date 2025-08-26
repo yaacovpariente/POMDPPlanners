@@ -284,7 +284,8 @@ class PushPOMDP(DiscreteActionsEnvironment):
             action_space=SpaceType.DISCRETE,  # Action space is discrete positions
             observation_space=SpaceType.CONTINUOUS  # Observation space is positions with noise
         )
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, output_dir=output_dir, debug=debug)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
+                        reward_range=(-2 * np.sqrt(self.grid_size), 100.0), output_dir=output_dir, debug=debug)
 
     def state_transition_model(self, state: np.ndarray, action: str) -> StateTransitionModel:
         return PushStateTransition(

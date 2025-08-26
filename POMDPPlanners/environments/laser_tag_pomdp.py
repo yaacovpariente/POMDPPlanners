@@ -542,6 +542,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             discount_factor=discount_factor,
             name=name,
             space_info=space_info,
+            reward_range=(-tag_penalty, tag_reward),
             output_dir=output_dir,
             debug=debug
         )

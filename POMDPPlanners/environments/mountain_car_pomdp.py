@@ -240,7 +240,8 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             action_space=SpaceType.DISCRETE,  # Action space is [-1, 0, 1]
             observation_space=SpaceType.CONTINUOUS  # Observation space is position and velocity
         )
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, output_dir=output_dir, debug=debug)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
+                        reward_range=(-1.0, 0.0), output_dir=output_dir, debug=debug)
 
     def state_transition_model(
         self, state: Tuple[float, float], action: int

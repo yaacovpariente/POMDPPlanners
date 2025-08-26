@@ -299,7 +299,8 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         )
         
         # Call parent's __init__ last, which will generate the config_id
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, output_dir=output_dir, debug=debug)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
+                        reward_range=(0.0, 1.0), output_dir=output_dir, debug=debug)
 
     def state_transition_model(
         self, state: np.ndarray, action: int
