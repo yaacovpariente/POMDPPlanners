@@ -65,7 +65,16 @@ class SpaceInfo:
             )
             
             # Both discrete
-            discrete_space = SpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE)
+            discrete_space = SpaceInfo(
+                action_space=SpaceType.DISCRETE, 
+                observation_space=SpaceType.DISCRETE
+            )
+            
+            # Mixed space types
+            mixed_space = SpaceInfo(
+                action_space=SpaceType.MIXED,
+                observation_space=SpaceType.CONTINUOUS
+            )
     """
     action_space: SpaceType
     observation_space: SpaceType
@@ -204,11 +213,13 @@ class Environment(ABC):
         discount_factor: Discount factor for future rewards
         name: Environment identifier string
         space_info: Information about action and observation space types
+        reward_range: Optional tuple containing (min_reward, max_reward)
         output_dir: Optional directory for logging output
         debug: Flag to enable debug logging
     """
     
     def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo, 
+                 reward_range: Optional[Tuple[float, float]] = None,
                  output_dir: Optional[Path] = None, debug: bool = False):
         """Initialize the POMDP environment.
         
@@ -216,17 +227,61 @@ class Environment(ABC):
             discount_factor: Discount factor for future rewards (0 < discount_factor <= 1)
             name: Unique identifier for the environment
             space_info: Information about action and observation space types
+            reward_range: Optional tuple containing (min_reward, max_reward) for the environment.
+                Defaults to None. If provided, will be validated.
             output_dir: Optional directory for logging output. Defaults to None.
             debug: Enable debug logging. Defaults to False.
         """
         self.discount_factor = discount_factor
         self.name = name
         self.space_info = space_info
+        self.reward_range = self._validate_reward_range(reward_range)
         self.output_dir = output_dir
         self.debug = debug
         
         self.logger.info(f"Initializing {self.name} environment with discount factor {self.discount_factor}")
         self.logger.debug(f"Space info: action_space={self.space_info.action_space}, observation_space={self.space_info.observation_space}")
+        if self.reward_range is not None:
+            self.logger.debug(f"Reward range: {self.reward_range}")
+
+    def _validate_reward_range(self, reward_range: Optional[Tuple[float, float]]) -> Optional[Tuple[float, float]]:
+        """Validate reward_range if provided.
+        
+        Args:
+            reward_range: Optional tuple containing (min_reward, max_reward)
+            
+        Returns:
+            Validated reward_range tuple or None if input was None
+            
+        Raises:
+            ValueError: If reward_range structure or values are invalid
+            TypeError: If reward_range values are not numeric
+        """
+        if reward_range is None:
+            return None
+            
+        # Validate structure
+        if not isinstance(reward_range, tuple) or len(reward_range) != 2:
+            raise ValueError("reward_range must be a tuple of exactly two float values")
+        
+        min_reward, max_reward = reward_range
+        
+        # Check that both values are numeric (float or int)
+        if not isinstance(min_reward, (int, float)) or not isinstance(max_reward, (int, float)):
+            raise TypeError("reward_range values must be numeric (int or float)")
+        
+        # Convert to float to ensure consistency
+        min_reward, max_reward = float(min_reward), float(max_reward)
+        
+        # Check for NaN values
+        if np.isnan(min_reward) or np.isnan(max_reward):
+            raise ValueError("reward_range values cannot be NaN")
+        
+        # Check that min_reward <= max_reward (allowing inf values)
+        if min_reward > max_reward:
+            raise ValueError(f"reward_range minimum ({min_reward}) must be less than or equal to maximum ({max_reward})")
+        
+        return (min_reward, max_reward)
 
     @property
     def logger(self) -> logging.Logger:
@@ -494,6 +549,7 @@ class DiscreteActionsEnvironment(Environment):
     """
     
     def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo, 
+                 reward_range: Optional[Tuple[float, float]] = None,
                  output_dir: Optional[Path] = None, debug: bool = False):
         """Initialize the discrete actions environment.
         
@@ -501,10 +557,13 @@ class DiscreteActionsEnvironment(Environment):
             discount_factor: Discount factor for future rewards (0 < discount_factor <= 1)
             name: Unique identifier for the environment
             space_info: Information about action and observation space types
+            reward_range: Optional tuple containing (min_reward, max_reward) for the environment.
+                Defaults to None. If provided, will be validated.
             output_dir: Optional directory for logging output. Defaults to None.
             debug: Enable debug logging. Defaults to False.
         """
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, output_dir=output_dir, debug=debug)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
+                        reward_range=reward_range, output_dir=output_dir, debug=debug)
         self.logger.debug("Initialized DiscreteActionsEnvironment")
 
     @abstractmethod
