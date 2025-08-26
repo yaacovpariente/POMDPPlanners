@@ -275,7 +275,8 @@ class POMCPOW(PathSimulationPolicy):
 
         return total
 
-    def get_space_info(self) -> PolicySpaceInfo:
+    @classmethod
+    def get_space_info(cls) -> PolicySpaceInfo:
         """Get information about action and observation spaces.
         
         POMCPOW supports mixed-type spaces through its action sampler interface,

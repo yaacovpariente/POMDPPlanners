@@ -292,7 +292,8 @@ class PFT_DPW(PathSimulationPolicy):
         action_node.q_value += (total - action_node.q_value) / action_node.visit_count
         belief_node.v_value = np.max([child.q_value for child in belief_node.children])
 
-    def get_space_info(self) -> PolicySpaceInfo:
+    @classmethod
+    def get_space_info(cls) -> PolicySpaceInfo:
         return PolicySpaceInfo(
             action_space=SpaceType.CONTINUOUS,
             observation_space=SpaceType.MIXED

@@ -194,7 +194,8 @@ class POMCP(PathSimulationPolicy):
         action_node.q_value += (return_sample - action_node.q_value) / action_node.visit_count
         belief_node.v_value = np.max([child.q_value for child in belief_node.children if child.visit_count > 0])
 
-    def get_space_info(self) -> PolicySpaceInfo:
+    @classmethod
+    def get_space_info(cls) -> PolicySpaceInfo:
         return PolicySpaceInfo(
             action_space=SpaceType.DISCRETE,
             observation_space=SpaceType.DISCRETE

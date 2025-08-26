@@ -175,7 +175,8 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         for action in self.environment.get_actions():
             child = ActionNode(action=action, parent=node, children=tuple(), data=None)
             
-    def get_space_info(self) -> PolicySpaceInfo:
+    @classmethod
+    def get_space_info(cls) -> PolicySpaceInfo:
         return PolicySpaceInfo(
             action_space=SpaceType.DISCRETE,
             observation_space=SpaceType.MIXED
