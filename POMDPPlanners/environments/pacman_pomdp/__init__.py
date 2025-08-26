@@ -1,6 +1,6 @@
 """PacMan POMDP package with sprite-based visualization."""
 
-from .pacman_pomdp import (
+from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (
     PacManPOMDP,
     PacManState,
     PacManStateTransitionModel,
