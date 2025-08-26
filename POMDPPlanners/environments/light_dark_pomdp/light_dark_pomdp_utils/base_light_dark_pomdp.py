@@ -1,4 +1,4 @@
-from typing import List, Any
+from typing import List, Any, Optional, Tuple
 from pathlib import Path
 import json
 import hashlib
@@ -27,6 +27,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         discount_factor: float,
         name: str,
         space_info: SpaceInfo,
+        reward_range: Optional[Tuple[float, float]] = None,
         beacons: np.ndarray = np.array(
             [[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]
         ),
@@ -57,7 +58,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
             grid_size=grid_size,
         )
         
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, reward_range=reward_range)
         
         self.beacons = beacons
         self.goal_state = goal_state
@@ -408,6 +409,7 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
         discount_factor: float,
         name: str,
         is_discrete_observations: bool,
+        reward_range: Optional[Tuple[float, float]] = None,
         beacons: np.ndarray = np.array(
             [[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]
         ),
@@ -429,6 +431,7 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
             discount_factor=discount_factor,
             name=name,
             space_info=space_info,
+            reward_range=reward_range,
             beacons=beacons,
             goal_state=goal_state,
             start_state=start_state,

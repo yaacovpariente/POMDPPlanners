@@ -263,7 +263,8 @@ class SanityPOMDP(DiscreteActionsEnvironment):
             action_space=SpaceType.DISCRETE,  # Binary action space
             observation_space=SpaceType.DISCRETE  # Binary observation space
         )
-        super().__init__(discount_factor=discount_factor, name="SanityPOMDP", space_info=space_info, output_dir=output_dir, debug=debug)
+        super().__init__(discount_factor=discount_factor, name="SanityPOMDP", space_info=space_info, 
+                        reward_range=(0.0, 1.0), output_dir=output_dir, debug=debug)
         
     def state_transition_model(self, state: int, action: int) -> SanityStateTransitionModel:
         return SanityStateTransitionModel(state, action)

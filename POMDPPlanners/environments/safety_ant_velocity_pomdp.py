@@ -290,12 +290,19 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         # Define actions (different force magnitudes)
         self.actions = [0, 1, 2, 3]  # 0: no force, 1: small, 2: medium, 3: large
 
+        # Calculate reward range based on parameters
+        # Minimum: no movement reward + safety penalty
+        min_reward = 0.0 + safety_violation_penalty
+        # Maximum: maximum safe speed (termination threshold) * movement scale
+        max_reward = safe_velocity_threshold * 1.5 * movement_reward_scale
+        
         # Create space info with appropriate bounds
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,  # Action space is discrete force magnitudes
             observation_space=SpaceType.CONTINUOUS  # Observation space is positions and velocities with noise
         )
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, output_dir=output_dir, debug=debug)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
+                        reward_range=(min_reward, max_reward), output_dir=output_dir, debug=debug)
 
     def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
         return SafeAntVelocityStateTransition(

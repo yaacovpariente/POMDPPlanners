@@ -185,10 +185,38 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             action_space=SpaceType.CONTINUOUS,
             observation_space=SpaceType.CONTINUOUS
         )
+        # Calculate reward range based on reward model type
+        # Maximum distance to goal is diagonal of grid: sqrt(2) * grid_size
+        max_distance_to_goal = np.sqrt(2) * grid_size
+        
+        if reward_model_type == RewardModelType.STANDARD:
+            # Min: -fuel_cost - max_distance + obstacle_reward (always negative)
+            # Max: -fuel_cost - 0 + goal_reward (at goal)
+            min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
+            max_reward = -fuel_cost + goal_reward
+        elif reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
+            # Similar to standard but with distance-based penalties
+            # Min: -fuel_cost - max_distance + obstacle_reward (max penalty)
+            # Max: -fuel_cost - 0 + goal_reward (at goal, no penalty)
+            min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
+            max_reward = -fuel_cost + goal_reward
+        elif reward_model_type == RewardModelType.DANGEROUS_STATES:
+            # Min: -fuel_cost - max_distance + obstacle_reward (negative)
+            # Max: -fuel_cost - 0 + goal_reward OR -fuel_cost - distance - obstacle_reward (if obstacle_reward is negative)
+            min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
+            max_reward = max(-fuel_cost + goal_reward, -fuel_cost - obstacle_reward)
+        else:
+            # Default fallback
+            min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
+            max_reward = -fuel_cost + goal_reward
+            
+        calculated_reward_range = (min_reward, max_reward)
+        
         super().__init__(
             discount_factor=discount_factor,
             name=name,
             space_info=space_info,
+            reward_range=calculated_reward_range,
             beacons=beacons,
             goal_state=goal_state,
             start_state=start_state,

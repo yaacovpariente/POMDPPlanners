@@ -257,6 +257,10 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             output_dir: Output directory for logging. Defaults to None.
             debug: Enable debug logging. Defaults to False.
         """
+        # Calculate reward range based on parameters
+        min_reward = step_penalty + bad_rock_penalty + sensor_use_penalty
+        max_reward = step_penalty + exit_reward
+        
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,
             observation_space=SpaceType.DISCRETE
@@ -266,6 +270,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             discount_factor=discount_factor,
             name=name,
             space_info=space_info,
+            reward_range=(min_reward, max_reward),
             output_dir=output_dir,
             debug=debug
         )
