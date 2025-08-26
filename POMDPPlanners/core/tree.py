@@ -84,7 +84,14 @@ class BeliefNode(BaseNode):
         
     def update_belief(self, action: Any, observation: Any, pomdp: Environment, **kwargs):
         self.belief = self.belief.update(action=action, observation=observation, pomdp=pomdp, **kwargs)
-        
+
+    def get_child(self, action: Any) -> Union['ActionNode', None]:
+        for child in self.children:
+            if child.action == action:
+                return child
+                
+        return None
+    
         
 def print_tree(tree: Union[BeliefNode, ActionNode]):
     for pre, fill, node in RenderTree(tree):

@@ -433,3 +433,138 @@ def test_get_belief_node_child_none_observation(test_belief, test_env):
     # Test getting regular observation
     result_obs = action_node.get_belief_node_child("obs1", test_env)
     assert result_obs == belief_obs
+
+
+def test_belief_node_get_child(test_belief):
+    """Test the get_child method of BeliefNode.
+    
+    Purpose: Validates that get_child correctly retrieves ActionNode children based on action matching
+    
+    Given: BeliefNode with 3 ActionNode children having different actions (action1, action2, action3)
+    When: get_child is called with existing and non-existing action identifiers
+    Then: Returns correct ActionNode for existing actions and None for non-existent actions
+    
+    Test type: unit
+    """
+    # Create a belief node with multiple action children
+    belief_node = BeliefNode(test_belief, children=())
+    
+    # Create action nodes with different actions
+    action1 = ActionNode("action1", parent=belief_node, children=())
+    action2 = ActionNode("action2", parent=belief_node, children=())
+    action3 = ActionNode("action3", parent=belief_node, children=())
+    
+    # Test getting existing actions
+    result1 = belief_node.get_child("action1")
+    assert result1 == action1
+    
+    result2 = belief_node.get_child("action2")
+    assert result2 == action2
+    
+    result3 = belief_node.get_child("action3")
+    assert result3 == action3
+    
+    # Test getting non-existing action
+    result_none = belief_node.get_child("non_existent_action")
+    assert result_none is None
+
+
+def test_belief_node_get_child_no_children(test_belief):
+    """Test get_child with no children.
+    
+    Purpose: Validates that get_child handles edge case of BeliefNode with no children gracefully
+    
+    Given: BeliefNode with empty children tuple
+    When: get_child is called with any action identifier
+    Then: Returns None indicating no matching child found
+    
+    Test type: unit
+    """
+    belief_node = BeliefNode(test_belief, children=())
+    
+    # Should return None for any action
+    result = belief_node.get_child("any_action")
+    assert result is None
+
+
+def test_belief_node_get_child_duplicate_actions(test_belief):
+    """Test get_child with duplicate actions (should return first match).
+    
+    Purpose: Validates that get_child returns first matching ActionNode when multiple children have identical actions
+    
+    Given: BeliefNode with 2 ActionNode children both having action "same_action"
+    When: get_child searches for "same_action"
+    Then: Returns first child (action1) with matching action due to first-match search behavior
+    
+    Test type: unit
+    """
+    belief_node = BeliefNode(test_belief, children=())
+    
+    # Create action nodes with the same action
+    action1 = ActionNode("same_action", parent=belief_node, children=())
+    action2 = ActionNode("same_action", parent=belief_node, children=())
+    
+    # Should return the first child with matching action
+    result = belief_node.get_child("same_action")
+    assert result == action1
+
+
+def test_belief_node_get_child_none_action(test_belief):
+    """Test get_child with None action.
+    
+    Purpose: Validates that get_child correctly handles None actions using proper equality comparison
+    
+    Given: BeliefNode with ActionNode children having None and string actions
+    When: get_child searches for None action and string action
+    Then: Returns correct ActionNode for None action match and string action match respectively
+    
+    Test type: unit
+    """
+    belief_node = BeliefNode(test_belief, children=())
+    
+    # Create action nodes with None action
+    action_none = ActionNode(None, parent=belief_node, children=())
+    action_str = ActionNode("action1", parent=belief_node, children=())
+    
+    # Test getting None action
+    result = belief_node.get_child(None)
+    assert result == action_none
+    
+    # Test getting regular action
+    result_str = belief_node.get_child("action1")
+    assert result_str == action_str
+
+
+def test_belief_node_get_child_numeric_actions(test_belief):
+    """Test get_child with numeric actions.
+    
+    Purpose: Validates that get_child works correctly with numeric action identifiers
+    
+    Given: BeliefNode with ActionNode children having integer and float actions
+    When: get_child searches for matching numeric actions
+    Then: Returns correct ActionNode for exact numeric matches
+    
+    Test type: unit
+    """
+    belief_node = BeliefNode(test_belief, children=())
+    
+    # Create action nodes with numeric actions
+    action_int = ActionNode(1, parent=belief_node, children=())
+    action_float = ActionNode(2.5, parent=belief_node, children=())
+    action_zero = ActionNode(0, parent=belief_node, children=())
+    
+    # Test getting integer action
+    result_int = belief_node.get_child(1)
+    assert result_int == action_int
+    
+    # Test getting float action
+    result_float = belief_node.get_child(2.5)
+    assert result_float == action_float
+    
+    # Test getting zero action
+    result_zero = belief_node.get_child(0)
+    assert result_zero == action_zero
+    
+    # Test non-existing numeric action
+    result_none = belief_node.get_child(999)
+    assert result_none is None
