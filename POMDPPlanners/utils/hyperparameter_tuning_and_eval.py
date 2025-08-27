@@ -71,7 +71,7 @@ Example:
             logger.info(f"Planner {i+1}: {result.policy.name} - Best hyperparameters: {result.chosen_hyper_parameters}")
 """
 
-from typing import List, Dict, Any, Optional, Tuple, Union
+from typing import List, Dict, Any, Optional, Tuple, Union, Type
 from pathlib import Path
 import pandas as pd
 import logging
@@ -83,7 +83,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
     OptimizedPolicyResult
 )
-from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.simulations.simulator import POMDPSimulator
@@ -915,3 +915,114 @@ def get_thorough_optimization_defaults() -> Dict[str, Any]:
         'confidence_interval_level': 0.95,
         'alpha': 0.05
     }
+
+def get_benchmark_hyperparameter_planners(env: Environment, debug: bool = False, verbose: bool = False) -> List[Type[Policy]]:
+    """Get benchmark hyperparameter planners for the given environment.
+    
+    This function iterates over the POLICY_REGISTRY and returns a list of planner classes
+    that are compatible with the given environment's space types.
+    
+    Compatibility rules:
+    - A planner with MIXED or CONTINUOUS action space can solve DISCRETE action spaces
+    - A planner with MIXED or CONTINUOUS observation space can solve DISCRETE observation spaces
+    - A planner with DISCRETE action/observation space CANNOT solve CONTINUOUS action/observation spaces
+    - MIXED planners can handle any space type
+    
+    Args:
+        env: The environment to get benchmark planners for
+        debug: Whether to enable debug logging
+        verbose: Whether to enable verbose logging
+        
+    Returns:
+        List of compatible policy classes from the POLICY_REGISTRY
+        
+    Example:
+        Get compatible planners for Tiger POMDP (discrete actions, discrete observations)::
+        
+            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            
+            env = TigerPOMDP(discount_factor=0.95)
+            compatible_planners = get_benchmark_hyperparameter_planners(env)
+            print(f"Compatible planners: {[p.__name__ for p in compatible_planners]}")
+    """
+    from POMDPPlanners.planners import POLICY_REGISTRY
+    
+    if debug:
+        logger.debug(f"Finding compatible planners for environment: {env.name}")
+        logger.debug(f"Environment spaces - action: {env.space_info.action_space.value}, obs: {env.space_info.observation_space.value}")
+    
+    compatible_planners = []
+    
+    # Get environment space types
+    env_action_space = env.space_info.action_space
+    env_obs_space = env.space_info.observation_space
+    
+    for planner_name, planner_class in POLICY_REGISTRY.items():
+        try:
+            # Skip abstract classes that don't have proper space info
+            planner_space_info = planner_class.get_space_info()
+            if planner_space_info is None:
+                if debug:
+                    logger.debug(f"Skipping {planner_name}: no space info available (likely abstract class)")
+                continue
+                
+            planner_action_space = planner_space_info.action_space
+            planner_obs_space = planner_space_info.observation_space
+            
+            if debug:
+                logger.debug(f"Checking {planner_name}: action={planner_action_space.value}, obs={planner_obs_space.value}")
+            
+            # Check action space compatibility
+            action_compatible = _is_space_compatible(env_action_space, planner_action_space)
+            
+            # Check observation space compatibility  
+            obs_compatible = _is_space_compatible(env_obs_space, planner_obs_space)
+            
+            if action_compatible and obs_compatible:
+                compatible_planners.append(planner_class)
+                if debug:
+                    logger.debug(f"✓ {planner_name} is compatible")
+            else:
+                if debug:
+                    logger.debug(f"✗ {planner_name} not compatible (action: {action_compatible}, obs: {obs_compatible})")
+                    
+        except Exception as e:
+            if debug:
+                logger.debug(f"Skipping {planner_name} due to error: {e}")
+            continue
+    
+    if verbose:
+        compatible_names = [p.__name__ for p in compatible_planners]
+        logger.info(f"Found {len(compatible_planners)} compatible planners for {env.name}: {compatible_names}")
+        
+    return compatible_planners
+
+
+def _is_space_compatible(env_space: SpaceType, planner_space: SpaceType) -> bool:
+    """Check if a planner's space type is compatible with an environment's space type.
+    
+    Compatibility rules:
+    - MIXED planners can handle any environment space type
+    - CONTINUOUS planners can handle DISCRETE and CONTINUOUS environment spaces
+    - DISCRETE planners can only handle DISCRETE environment spaces
+    
+    Args:
+        env_space: The environment's space type
+        planner_space: The planner's space type
+        
+    Returns:
+        True if compatible, False otherwise
+    """
+    # MIXED planners can handle anything
+    if planner_space == SpaceType.MIXED:
+        return True
+    
+    # CONTINUOUS planners can handle DISCRETE and CONTINUOUS
+    if planner_space == SpaceType.CONTINUOUS:
+        return env_space in [SpaceType.DISCRETE, SpaceType.CONTINUOUS]
+    
+    # DISCRETE planners can only handle DISCRETE
+    if planner_space == SpaceType.DISCRETE:
+        return env_space == SpaceType.DISCRETE
+    
+    return False
