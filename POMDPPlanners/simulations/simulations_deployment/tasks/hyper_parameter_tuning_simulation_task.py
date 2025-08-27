@@ -122,7 +122,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             objective_function = self._create_optuna_objective_function()
             
             # Execute the optimization study
-            study = self._execute_optimization_study(objective_function, self.n_trials)
+            study = self._execute_optimization_study(objective_function, n_trials=self.n_trials, n_jobs=self.n_jobs)
             
             # Calculate optimization time
             optimization_time = time.time() - start_time
@@ -277,7 +277,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         
         return objective
     
-    def _execute_optimization_study(self, objective_function, n_trials: int):
+    def _execute_optimization_study(self, objective_function, n_trials: int, n_jobs: int = 1):
         """Execute the Optuna optimization study.
         
         Args:
@@ -294,7 +294,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         study = optuna.create_study(direction=self.direction.value)
         
         self.logger.info("Starting optimization trials...")
-        study.optimize(objective_function, n_trials=n_trials, n_jobs=1)  # Use single job to avoid nested parallelism
+        study.optimize(objective_function, n_trials=n_trials, n_jobs=n_jobs)  # Use single job to avoid nested parallelism
         
         # Log optimization completion
         self.logger.info("Optimization completed successfully!")
@@ -509,7 +509,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             environment_run_params=env_run_params,
             alpha=self.alpha,  # Default alpha for intermediate results
             confidence_interval_level=self.confidence_interval_level,
-            n_jobs=self.n_jobs,
+            n_jobs=1,
         )
         
         # Extract histories from results
