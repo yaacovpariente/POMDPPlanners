@@ -704,12 +704,16 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             episode_lengths.append(episode_length)
             
             # Check if episode ended with successful tag
-            if history.history and history.history[-1].reward > 0:
+            if (history.history and 
+                history.history[-1].reward is not None and 
+                history.history[-1].reward > 0):
                 successful_tags += 1
             
             # Count failed tag attempts, obstacle collisions, and dangerous area steps
             for i, step in enumerate(history.history):
-                if step.action == 4 and step.reward < 0:  # Tag action with negative reward
+                if (step.action == 4 and 
+                    step.reward is not None and 
+                    step.reward < 0):  # Tag action with negative reward
                     failed_tag_attempts += 1
                 
                 # Check if robot is in dangerous area during this step
