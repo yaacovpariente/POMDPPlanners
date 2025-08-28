@@ -410,6 +410,10 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         safety_violations_ci = confidence_interval(data=safety_rates, confidence=0.95)
         critical_violations_ci = confidence_interval(data=critical_rates, confidence=0.95)
         
+        # Calculate confidence intervals for total violations
+        total_safety_violations_ci = confidence_interval(data=safety_violations, confidence=0.95)
+        total_critical_violations_ci = confidence_interval(data=critical_violations, confidence=0.95)
+        
         return [
             MetricValue(
                 name="safety_violation_rate",
@@ -422,6 +426,18 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
                 value=avg_critical_violations,
                 lower_confidence_bound=critical_violations_ci[0],
                 upper_confidence_bound=critical_violations_ci[1]
+            ),
+            MetricValue(
+                name="total_safety_violations",
+                value=sum(safety_violations),
+                lower_confidence_bound=total_safety_violations_ci[0],
+                upper_confidence_bound=total_safety_violations_ci[1]
+            ),
+            MetricValue(
+                name="total_critical_violations", 
+                value=sum(critical_violations),
+                lower_confidence_bound=total_critical_violations_ci[0],
+                upper_confidence_bound=total_critical_violations_ci[1]
             )
         ]
 
