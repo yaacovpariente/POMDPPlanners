@@ -235,6 +235,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         step_penalty: float = 0.0,
         sensor_use_penalty: float = 0.0,
         exit_reward: float = 10.0,
+        dangerous_areas: Optional[List[Tuple[int, int]]] = None,
+        dangerous_area_radius: float = 1.0,
+        dangerous_area_penalty: float = 5.0,
         discount_factor: float = 0.95,
         name: str = "RockSample",
         output_dir: Optional[Path] = None,
@@ -252,6 +255,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             step_penalty: Action cost. Defaults to 0.0.
             sensor_use_penalty: Sensor cost. Defaults to 0.0.
             exit_reward: Exit reward. Defaults to 10.0.
+            dangerous_areas: List of dangerous area center positions as (row, col) tuples. Defaults to None.
+            dangerous_area_radius: Radius around dangerous area centers. Defaults to 1.0.
+            dangerous_area_penalty: Penalty magnitude applied randomly when in dangerous areas. Defaults to 5.0.
             discount_factor: Discount factor. Defaults to 0.95.
             name: Environment name. Defaults to "RockSample".
             output_dir: Output directory for logging. Defaults to None.
@@ -284,6 +290,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         self.step_penalty = step_penalty
         self.sensor_use_penalty = sensor_use_penalty
         self.exit_reward = exit_reward
+        self.dangerous_areas: List[Tuple[int, int]] = dangerous_areas if dangerous_areas is not None else []
+        self.dangerous_area_radius = dangerous_area_radius
+        self.dangerous_area_penalty = dangerous_area_penalty
         
         # Validate parameters
         self._validate_parameters()
@@ -314,6 +323,28 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         if not (0 <= self.init_pos[0] < self.map_size[0] and 0 <= self.init_pos[1] < self.map_size[1]):
             raise ValueError(f"Initial position {self.init_pos} is outside map bounds {self.map_size}")
     
+    def _is_in_dangerous_area(self, position: Tuple[int, int]) -> bool:
+        """Check if a position is within any dangerous area.
+        
+        Args:
+            position: Position to check as (row, col) tuple
+            
+        Returns:
+            True if position is within radius of any dangerous area center
+        """
+        if not self.dangerous_areas:
+            return False
+            
+        pos_row, pos_col = position
+        
+        for danger_row, danger_col in self.dangerous_areas:
+            # Calculate Euclidean distance
+            distance = math.sqrt((pos_row - danger_row)**2 + (pos_col - danger_col)**2)
+            if distance <= self.dangerous_area_radius:
+                return True
+        
+        return False
+
     def get_actions(self) -> List[int]:
         """Get all available actions."""
         return list(range(len(self.action_names)))
@@ -349,6 +380,12 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         # Sensor use penalty
         if action >= 5:  # Check actions
             total_reward += self.sensor_use_penalty
+        
+        # Add dangerous area penalty/bonus with 50% probability
+        if self._is_in_dangerous_area(state.robot_pos):
+            # Random penalty or bonus with equal probability
+            danger_modifier = self.dangerous_area_penalty if np.random.random() < 0.5 else -self.dangerous_area_penalty
+            total_reward += danger_modifier
         
         return total_reward
     
@@ -421,6 +458,34 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
                 upper_confidence_bound=ci_high
             ))
         
+        # Calculate dangerous area metrics
+        dangerous_area_steps = []
+        for history in histories:
+            steps_in_danger = 0
+            for step in history.history:
+                if self._is_in_dangerous_area(step.state.robot_pos):
+                    steps_in_danger += 1
+            dangerous_area_steps.append(steps_in_danger)
+        
+        if dangerous_area_steps:
+            avg_dangerous_steps = np.mean(dangerous_area_steps)
+            total_dangerous_steps = sum(dangerous_area_steps)
+            ci_low, ci_high = confidence_interval(dangerous_area_steps)
+            
+            metrics.append(MetricValue(
+                name="average_dangerous_area_steps",
+                value=avg_dangerous_steps,
+                lower_confidence_bound=ci_low,
+                upper_confidence_bound=ci_high
+            ))
+            
+            metrics.append(MetricValue(
+                name="total_dangerous_area_steps",
+                value=total_dangerous_steps,
+                lower_confidence_bound=total_dangerous_steps,
+                upper_confidence_bound=total_dangerous_steps
+            ))
+        
         return metrics
     
     def visualize_path(self, path: List[RockSampleState], actions: List[int], cache_path: Path):
@@ -446,6 +511,17 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
                 color = 'green' if initial_state.rocks[i] else 'red'
                 ax.scatter(rock_pos[1], rock_pos[0], s=200, c=color, marker='s', 
                           alpha=0.7, label=f'Rock {i}')
+        
+        # Plot dangerous areas as red circles
+        danger_patches = []
+        for i, danger_center in enumerate(self.dangerous_areas):
+            row, col = danger_center
+            circle = plt.Circle((col, row), self.dangerous_area_radius, 
+                               facecolor='red', edgecolor='none', alpha=0.3,
+                               label='Dangerous Areas' if i == 0 else "")  # Only label first area
+            ax.add_patch(circle)
+            if i == 0:  # Keep reference for legend
+                danger_patches.append(circle)
         
         # Plot exit zone
         exit_x = self.map_size[1] - 0.5
