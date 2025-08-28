@@ -36,7 +36,8 @@ from POMDPPlanners.core.environment import (
     SpaceType
 )
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
-from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.simulation import History, StepData, MetricValue
+from POMDPPlanners.utils.statistics import confidence_interval
 
 
 class PushStateTransition(StateTransitionModel):
@@ -89,11 +90,15 @@ class PushStateTransition(StateTransitionModel):
         grid_size: int,
         push_threshold: float,
         friction_coefficient: float,
+        obstacles: List[Tuple[float, float]] = None,
+        obstacle_radius: float = 0.5,
     ):
         super().__init__(state, action)
         self.grid_size = grid_size
         self.push_threshold = push_threshold
         self.friction_coefficient = friction_coefficient
+        self.obstacles = obstacles if obstacles is not None else []
+        self.obstacle_radius = obstacle_radius
         
         # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
         self.robot_pos = state[:2]
@@ -112,16 +117,28 @@ class PushStateTransition(StateTransitionModel):
         # Get movement vector for the action
         movement = self.action_to_vector[self.action]
         
-        # Calculate new robot position
-        new_robot_pos = self.robot_pos + movement
+        # Calculate intended new robot position
+        intended_robot_pos = self.robot_pos + movement
+        
+        # Check for collision with obstacles - if colliding, robot doesn't move
+        if self._is_colliding_with_obstacle(intended_robot_pos):
+            new_robot_pos = self.robot_pos  # Robot stays in place
+        else:
+            new_robot_pos = intended_robot_pos
         
         # Check if robot is close enough to push object
         distance_to_object = np.linalg.norm(new_robot_pos - self.object_pos)
         
         if distance_to_object < self.push_threshold:
-            # Calculate push force based on friction
+            # Calculate intended object position after push
             push_force = movement * (1 - self.friction_coefficient)
-            new_object_pos = self.object_pos + push_force
+            intended_object_pos = self.object_pos + push_force
+            
+            # Check for obstacle collision for object - if colliding, object doesn't move
+            if self._is_colliding_with_obstacle(intended_object_pos):
+                new_object_pos = self.object_pos  # Object stays in place
+            else:
+                new_object_pos = intended_object_pos
         else:
             new_object_pos = self.object_pos
             
@@ -132,6 +149,21 @@ class PushStateTransition(StateTransitionModel):
         # Combine all state components
         next_state = np.concatenate([new_robot_pos, new_object_pos, self.target_pos])
         return [next_state] * n_samples
+
+    def _is_colliding_with_obstacle(self, position: np.ndarray) -> bool:
+        """Check if a position collides with any obstacle."""
+        if not self.obstacles:
+            return False
+            
+        pos_x, pos_y = position
+        
+        for obs_x, obs_y in self.obstacles:
+            # Calculate Euclidean distance
+            distance = np.sqrt((pos_x - obs_x)**2 + (pos_y - obs_y)**2)
+            if distance <= self.obstacle_radius:
+                return True
+        
+        return False
 
 
 class PushObservation(ObservationModel):
@@ -232,17 +264,22 @@ class PushPOMDP(DiscreteActionsEnvironment):
     - Distance-based pushing threshold
     - Noisy observations of object position only
     - Dense reward signal based on object-target distance
+    - Obstacle collision detection with configurable penalties
+    - Obstacles prevent robot and object movement through them
     
     Example:
         Creating and using a Push POMDP::
         
-            # Create push environment
+            # Create push environment with obstacles
             push_env = PushPOMDP(
                 discount_factor=0.99,
                 grid_size=10,
                 push_threshold=1.0,
                 friction_coefficient=0.3,
-                observation_noise=0.1
+                observation_noise=0.1,
+                obstacles=[(3.0, 4.0), (6.0, 7.0)],  # Obstacle positions
+                obstacle_radius=0.5,
+                obstacle_penalty=-10.0
             )
             
             # Get initial state
@@ -265,6 +302,9 @@ class PushPOMDP(DiscreteActionsEnvironment):
         push_threshold: float = 1.0,
         friction_coefficient: float = 0.3,
         observation_noise: float = 0.1,
+        obstacles: Optional[List[Tuple[float, float]]] = None,
+        obstacle_radius: float = 0.5,
+        obstacle_penalty: float = -10.0,
         name: str = "PushPOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,
@@ -273,6 +313,9 @@ class PushPOMDP(DiscreteActionsEnvironment):
         self.push_threshold = push_threshold
         self.friction_coefficient = friction_coefficient
         self.observation_noise = observation_noise
+        self.obstacles: List[Tuple[float, float]] = obstacles if obstacles is not None else []
+        self.obstacle_radius = obstacle_radius
+        self.obstacle_penalty = obstacle_penalty
         
         # Define actions
         self.actions = ["up", "down", "right", "left"]
@@ -293,6 +336,28 @@ class PushPOMDP(DiscreteActionsEnvironment):
         super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
                         reward_range=(min_reward, max_reward), output_dir=output_dir, debug=debug)
 
+    def _is_colliding_with_obstacle(self, position: np.ndarray) -> bool:
+        """Check if a position collides with any obstacle.
+        
+        Args:
+            position: Position to check as [x, y] array
+            
+        Returns:
+            True if position is within obstacle_radius of any obstacle center
+        """
+        if not self.obstacles:
+            return False
+            
+        pos_x, pos_y = position
+        
+        for obs_x, obs_y in self.obstacles:
+            # Calculate Euclidean distance
+            distance = np.sqrt((pos_x - obs_x)**2 + (pos_y - obs_y)**2)
+            if distance <= self.obstacle_radius:
+                return True
+        
+        return False
+
     def state_transition_model(self, state: np.ndarray, action: str) -> StateTransitionModel:
         return PushStateTransition(
             state=state,
@@ -300,6 +365,8 @@ class PushPOMDP(DiscreteActionsEnvironment):
             grid_size=self.grid_size,
             push_threshold=self.push_threshold,
             friction_coefficient=self.friction_coefficient,
+            obstacles=self.obstacles,
+            obstacle_radius=self.obstacle_radius,
         )
 
     def observation_model(self, next_state: np.ndarray, action: str) -> ObservationModel:
@@ -312,6 +379,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
 
     def reward(self, state: np.ndarray, action: str) -> float:
         # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
+        robot_pos = state[:2]
         object_pos = state[2:4]
         target_pos = state[4:6]
         
@@ -324,6 +392,13 @@ class PushPOMDP(DiscreteActionsEnvironment):
         # Additional reward for reaching target
         if distance_to_target < 0.5:
             reward += 100.0
+        
+        # Apply obstacle penalty if robot or object is colliding with obstacles
+        if self._is_colliding_with_obstacle(robot_pos):
+            reward += self.obstacle_penalty
+        
+        if self._is_colliding_with_obstacle(object_pos):
+            reward += self.obstacle_penalty
             
         return reward
 
@@ -336,26 +411,43 @@ class PushPOMDP(DiscreteActionsEnvironment):
 
     def initial_state_dist(self) -> Distribution:
         class InitialState(Distribution):
-            def __init__(self, grid_size: int, target_pos: np.ndarray):
+            def __init__(self, grid_size: int, target_pos: np.ndarray, obstacles: List[Tuple[float, float]], 
+                        obstacle_radius: float, parent: 'PushPOMDP'):
                 self.grid_size = grid_size
                 self.target_pos = target_pos
+                self.obstacles = obstacles
+                self.obstacle_radius = obstacle_radius
+                self.parent = parent
                 
             def sample(self, n_samples: int = 1) -> List[Any]:
                 initial_states = []
                 for _ in range(n_samples):
-                    # Random initial positions for robot and object
-                    robot_pos = np.random.uniform(0, self.grid_size - 1, size=2)
-                    object_pos = np.random.uniform(0, self.grid_size - 1, size=2)
+                    # Random initial positions for robot and object, avoiding obstacles
+                    max_attempts = 100
                     
-                    # Ensure object is not too close to target initially
-                    while np.linalg.norm(object_pos - self.target_pos) < 2.0:
+                    # Generate robot position
+                    attempts = 0
+                    while attempts < max_attempts:
+                        robot_pos = np.random.uniform(0, self.grid_size - 1, size=2)
+                        if not self.parent._is_colliding_with_obstacle(robot_pos):
+                            break
+                        attempts += 1
+                    
+                    # Generate object position
+                    attempts = 0
+                    while attempts < max_attempts:
                         object_pos = np.random.uniform(0, self.grid_size - 1, size=2)
+                        # Ensure object is not too close to target initially and not in obstacles
+                        if (np.linalg.norm(object_pos - self.target_pos) >= 2.0 and 
+                            not self.parent._is_colliding_with_obstacle(object_pos)):
+                            break
+                        attempts += 1
                     
                     initial_state = np.concatenate([robot_pos, object_pos, self.target_pos])
                     initial_states.append(initial_state)
                 return initial_states
         
-        return InitialState(self.grid_size, self.target_pos)
+        return InitialState(self.grid_size, self.target_pos, self.obstacles, self.obstacle_radius, self)
 
     def initial_observation_dist(self) -> Distribution:
         return self.initial_state_dist()
@@ -368,4 +460,85 @@ class PushPOMDP(DiscreteActionsEnvironment):
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         # TODO: Implement visualization
-        pass 
+        pass
+
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        robot_collisions = []
+        object_collisions = []
+        total_collisions = []
+        
+        for history in histories:
+            history_robot_collisions = 0
+            history_object_collisions = 0
+            total_steps = len(history.history)
+            
+            for step in history.history:
+                robot_pos = step.state[:2]  # [robot_x, robot_y]
+                object_pos = step.state[2:4]  # [object_x, object_y]
+                
+                if self._is_colliding_with_obstacle(robot_pos):
+                    history_robot_collisions += 1
+                
+                if self._is_colliding_with_obstacle(object_pos):
+                    history_object_collisions += 1
+            
+            if total_steps > 0:
+                robot_collisions.append(history_robot_collisions)
+                object_collisions.append(history_object_collisions)
+                total_collisions.append(history_robot_collisions + history_object_collisions)
+        
+        total_steps_all = sum(len(history.history) for history in histories)
+        avg_robot_collisions = sum(robot_collisions) / total_steps_all if total_steps_all > 0 else 0
+        avg_object_collisions = sum(object_collisions) / total_steps_all if total_steps_all > 0 else 0
+        avg_total_collisions = sum(total_collisions) / total_steps_all if total_steps_all > 0 else 0
+        
+        robot_collision_rates = [c / len(history.history) for c, history in zip(robot_collisions, histories)]
+        object_collision_rates = [c / len(history.history) for c, history in zip(object_collisions, histories)]
+        total_collision_rates = [c / len(history.history) for c, history in zip(total_collisions, histories)]
+        
+        robot_collisions_ci = confidence_interval(data=robot_collision_rates, confidence=0.95)
+        object_collisions_ci = confidence_interval(data=object_collision_rates, confidence=0.95)
+        total_collisions_ci = confidence_interval(data=total_collision_rates, confidence=0.95)
+        
+        total_robot_collisions_ci = confidence_interval(data=robot_collisions, confidence=0.95)
+        total_object_collisions_ci = confidence_interval(data=object_collisions, confidence=0.95)
+        total_all_collisions_ci = confidence_interval(data=total_collisions, confidence=0.95)
+        
+        return [
+            MetricValue(
+                name="robot_obstacle_collision_rate",
+                value=avg_robot_collisions,
+                lower_confidence_bound=robot_collisions_ci[0],
+                upper_confidence_bound=robot_collisions_ci[1]
+            ),
+            MetricValue(
+                name="object_obstacle_collision_rate", 
+                value=avg_object_collisions,
+                lower_confidence_bound=object_collisions_ci[0],
+                upper_confidence_bound=object_collisions_ci[1]
+            ),
+            MetricValue(
+                name="total_obstacle_collision_rate",
+                value=avg_total_collisions,
+                lower_confidence_bound=total_collisions_ci[0],
+                upper_confidence_bound=total_collisions_ci[1]
+            ),
+            MetricValue(
+                name="total_robot_obstacle_collisions",
+                value=sum(robot_collisions),
+                lower_confidence_bound=total_robot_collisions_ci[0],
+                upper_confidence_bound=total_robot_collisions_ci[1]
+            ),
+            MetricValue(
+                name="total_object_obstacle_collisions",
+                value=sum(object_collisions),
+                lower_confidence_bound=total_object_collisions_ci[0],
+                upper_confidence_bound=total_object_collisions_ci[1]
+            ),
+            MetricValue(
+                name="total_all_obstacle_collisions",
+                value=sum(total_collisions),
+                lower_confidence_bound=total_all_collisions_ci[0],
+                upper_confidence_bound=total_all_collisions_ci[1]
+            )
+        ] 
