@@ -39,6 +39,7 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.utils.statistics import confidence_interval
 
 
 @dataclass
@@ -691,44 +692,57 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         """Compute LaserTag POMDP specific metrics from simulation histories."""
-        # Calculate success rate (successful tags)
-        successful_tags = 0
-        failed_tag_attempts = 0
-        obstacle_collisions = 0
-        dangerous_area_steps = 0
         total_episodes = len(histories)
-        episode_lengths = []
+        if total_episodes == 0:
+            # Return empty metrics for no data
+            return []
         
+        # Initialize per-episode lists for confidence intervals
+        episode_lengths = []
+        success_indicators = []
+        failed_tags_per_episode = []
+        obstacle_collisions_per_episode = []
+        dangerous_area_steps_per_episode = []
+        
+        # Action direction mappings (used multiple times)
+        action_dirs = {0: (-1, 0), 1: (1, 0), 2: (0, 1), 3: (0, -1)}
+        
+        # Single loop to collect all metrics
         for history in histories:
             episode_length = len(history.history)
             episode_lengths.append(episode_length)
             
             # Check if episode ended with successful tag
-            if (history.history and 
+            episode_successful = (
+                history.history and 
                 history.history[-1].reward is not None and 
-                history.history[-1].reward > 0):
-                successful_tags += 1
+                history.history[-1].reward > 0
+            )
+            success_indicators.append(1 if episode_successful else 0)
             
-            # Count failed tag attempts, obstacle collisions, and dangerous area steps
-            for i, step in enumerate(history.history):
+            # Initialize episode-specific counters
+            episode_failed_tags = 0
+            episode_obstacle_collisions = 0
+            episode_dangerous_area_steps = 0
+            
+            # Count per-step metrics
+            for step in history.history:
+                # Count failed tag attempts
                 if (step.action == 4 and 
                     step.reward is not None and 
                     step.reward < 0):  # Tag action with negative reward
-                    failed_tag_attempts += 1
+                    episode_failed_tags += 1
                 
-                # Check if robot is in dangerous area during this step
+                # Count dangerous area steps
                 if isinstance(step.state, LaserTagState):
                     if self._is_in_dangerous_area(step.state.robot):
-                        dangerous_area_steps += 1
+                        episode_dangerous_area_steps += 1
                 
-                # Check for obstacle collision by comparing robot position before and after movement
+                # Count obstacle collisions
                 if step.action in [0, 1, 2, 3]:  # Movement actions
-                    # Check if robot tried to move but stayed in same position due to obstacle
                     if (isinstance(step.state, LaserTagState) and 
                         hasattr(step, 'next_state') and isinstance(step.next_state, LaserTagState)):
                         
-                        # Calculate intended position based on current state and action
-                        action_dirs = {0: (-1, 0), 1: (1, 0), 2: (0, 1), 3: (0, -1)}
                         if step.action in action_dirs:
                             dr, dc = action_dirs[step.action]
                             intended_pos = (step.state.robot[0] + dr, step.state.robot[1] + dc)
@@ -736,44 +750,99 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                             # Check if intended position was a wall and robot didn't move
                             if (intended_pos in self.walls and 
                                 step.next_state.robot == step.state.robot):
-                                obstacle_collisions += 1
+                                episode_obstacle_collisions += 1
+            
+            # Store episode counts for confidence intervals
+            failed_tags_per_episode.append(episode_failed_tags)
+            obstacle_collisions_per_episode.append(episode_obstacle_collisions)
+            dangerous_area_steps_per_episode.append(episode_dangerous_area_steps)
         
-        success_rate = successful_tags / total_episodes if total_episodes > 0 else 0.0
-        avg_episode_length = np.mean(episode_lengths) if episode_lengths else 0.0
-        avg_failed_tags = failed_tag_attempts / total_episodes if total_episodes > 0 else 0.0
-        avg_obstacle_collisions = obstacle_collisions / total_episodes if total_episodes > 0 else 0.0
-        avg_dangerous_area_steps = dangerous_area_steps / total_episodes if total_episodes > 0 else 0.0
+        # Calculate aggregate statistics
+        successful_tags = sum(success_indicators)
+        success_rate = successful_tags / total_episodes
+        avg_episode_length = np.mean(episode_lengths)
+        avg_failed_tags = np.mean(failed_tags_per_episode)
+        avg_obstacle_collisions = np.mean(obstacle_collisions_per_episode)
+        avg_dangerous_area_steps = np.mean(dangerous_area_steps_per_episode)
+        
+        # Calculate totals
+        total_failed_tags = sum(failed_tags_per_episode)
+        total_obstacle_collisions = sum(obstacle_collisions_per_episode)
+        total_dangerous_area_steps = sum(dangerous_area_steps_per_episode)
+        
+        # Calculate confidence intervals (handle single episode case)
+        if total_episodes >= 2:
+            success_ci = confidence_interval(data=success_indicators, confidence=0.95)
+            episode_length_ci = confidence_interval(data=episode_lengths, confidence=0.95)
+            failed_tags_ci = confidence_interval(data=failed_tags_per_episode, confidence=0.95)
+            obstacle_collisions_ci = confidence_interval(data=obstacle_collisions_per_episode, confidence=0.95)
+            dangerous_area_steps_ci = confidence_interval(data=dangerous_area_steps_per_episode, confidence=0.95)
+            
+            # Calculate confidence intervals for total metrics using raw per-episode counts
+            total_failed_tags_ci = confidence_interval(data=failed_tags_per_episode, confidence=0.95)
+            total_obstacle_collisions_ci = confidence_interval(data=obstacle_collisions_per_episode, confidence=0.95)
+            total_dangerous_area_steps_ci = confidence_interval(data=dangerous_area_steps_per_episode, confidence=0.95)
+        else:
+            # For single episode, confidence bounds equal the value (no statistical inference)
+            success_ci = (success_rate, success_rate)
+            episode_length_ci = (avg_episode_length, avg_episode_length)
+            failed_tags_ci = (avg_failed_tags, avg_failed_tags)
+            obstacle_collisions_ci = (avg_obstacle_collisions, avg_obstacle_collisions)
+            dangerous_area_steps_ci = (avg_dangerous_area_steps, avg_dangerous_area_steps)
+            
+            # For single episode, totals have no confidence interval variation
+            total_failed_tags_ci = (total_failed_tags, total_failed_tags)
+            total_obstacle_collisions_ci = (total_obstacle_collisions, total_obstacle_collisions)
+            total_dangerous_area_steps_ci = (total_dangerous_area_steps, total_dangerous_area_steps)
         
         return [
             MetricValue(
                 name="tag_success_rate",
                 value=success_rate,
-                lower_confidence_bound=success_rate,
-                upper_confidence_bound=success_rate
+                lower_confidence_bound=success_ci[0],
+                upper_confidence_bound=success_ci[1]
             ),
             MetricValue(
                 name="average_episode_length", 
                 value=avg_episode_length,
-                lower_confidence_bound=avg_episode_length,
-                upper_confidence_bound=avg_episode_length
+                lower_confidence_bound=episode_length_ci[0],
+                upper_confidence_bound=episode_length_ci[1]
             ),
             MetricValue(
                 name="average_failed_tag_attempts",
                 value=avg_failed_tags,
-                lower_confidence_bound=avg_failed_tags,
-                upper_confidence_bound=avg_failed_tags
+                lower_confidence_bound=failed_tags_ci[0],
+                upper_confidence_bound=failed_tags_ci[1]
             ),
             MetricValue(
                 name="average_obstacle_collisions",
                 value=avg_obstacle_collisions,
-                lower_confidence_bound=avg_obstacle_collisions,
-                upper_confidence_bound=avg_obstacle_collisions
+                lower_confidence_bound=obstacle_collisions_ci[0],
+                upper_confidence_bound=obstacle_collisions_ci[1]
             ),
             MetricValue(
                 name="average_dangerous_area_steps",
                 value=avg_dangerous_area_steps,
-                lower_confidence_bound=avg_dangerous_area_steps,
-                upper_confidence_bound=avg_dangerous_area_steps
+                lower_confidence_bound=dangerous_area_steps_ci[0],
+                upper_confidence_bound=dangerous_area_steps_ci[1]
+            ),
+            MetricValue(
+                name="total_failed_tag_attempts",
+                value=total_failed_tags,
+                lower_confidence_bound=total_failed_tags_ci[0],
+                upper_confidence_bound=total_failed_tags_ci[1]
+            ),
+            MetricValue(
+                name="total_obstacle_collisions",
+                value=total_obstacle_collisions,
+                lower_confidence_bound=total_obstacle_collisions_ci[0],
+                upper_confidence_bound=total_obstacle_collisions_ci[1]
+            ),
+            MetricValue(
+                name="total_dangerous_area_steps",
+                value=total_dangerous_area_steps,
+                lower_confidence_bound=total_dangerous_area_steps_ci[0],
+                upper_confidence_bound=total_dangerous_area_steps_ci[1]
             )
         ]
     
