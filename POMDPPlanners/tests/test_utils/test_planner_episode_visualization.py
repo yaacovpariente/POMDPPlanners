@@ -8,8 +8,10 @@ import random
 
 from POMDPPlanners.utils.planner_episode_visualization import visualize_planner_episode
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDP
+from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
 from POMDPPlanners.core.simulation import History, StepData
 
 np.random.seed(42)
@@ -32,19 +34,22 @@ def tiger_environment():
 
 
 @pytest.fixture
-def mock_planner():
-    """Create mock planner for testing."""
-    planner = Mock()
-    planner.name = "TestPlanner"
-    return planner
+def test_planner(tiger_environment):
+    """Create real POMCP planner for testing."""
+    return POMCP(
+        environment=tiger_environment,
+        discount_factor=0.95,
+        name="TestPlanner",
+        exploration_constant=1.0,
+        n_simulations=5,  # Minimal for testing
+        depth=3
+    )
 
 
 @pytest.fixture
-def mock_belief():
-    """Create mock belief for testing."""
-    belief = Mock()
-    belief.name = "TestBelief"
-    return belief
+def test_belief(tiger_environment):
+    """Create real WeightedParticleBelief for testing."""
+    return get_initial_belief(tiger_environment, n_particles=20, resampling=True)
 
 
 @pytest.fixture
@@ -86,12 +91,12 @@ def sample_episode_history():
 class TestVisualizePlannerEpisode:
     """Test cases for visualize_planner_episode function."""
 
-    def test_visualize_planner_episode_basic_functionality(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_basic_functionality(self, test_planner, tiger_environment, test_belief, temp_cache_dir, sample_episode_history):
         """Test basic functionality of visualize_planner_episode.
         
         Purpose: Validates that the function runs episodes and calls environment visualization
         
-        Given: Mock planner, environment, belief, and cache directory
+        Given: Real planner, environment, belief, and cache directory
         When: visualize_planner_episode is called with n_episodes=2
         Then: Episodes are run and environment visualization is cached for each episode
         
@@ -106,9 +111,9 @@ class TestVisualizePlannerEpisode:
             
             # Execute function
             visualize_planner_episode(
-                planner=mock_planner,
+                planner=test_planner,
                 environment=tiger_environment,
-                belief=mock_belief,
+                belief=test_belief,
                 n_episodes=2,
                 cache_dir=temp_cache_dir,
                 num_steps=5  # Reduced for testing
@@ -122,8 +127,8 @@ class TestVisualizePlannerEpisode:
                 call_args = mock_run_episode.call_args_list[i]
                 kwargs = call_args[1]
                 assert kwargs['environment'] == tiger_environment
-                assert kwargs['policy'] == mock_planner
-                assert kwargs['initial_belief'] == mock_belief
+                assert kwargs['policy'] == test_planner
+                assert kwargs['initial_belief'] == test_belief
                 assert kwargs['num_steps'] == 5
                 assert 'logger' in kwargs
             
@@ -143,12 +148,12 @@ class TestVisualizePlannerEpisode:
                 assert history_arg == sample_episode_history
                 assert cache_path_arg == expected_cache_paths[i]
 
-    def test_visualize_planner_episode_single_episode(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_single_episode(self, test_planner, tiger_environment, test_belief, temp_cache_dir, sample_episode_history):
         """Test visualization with single episode.
         
         Purpose: Validates function works correctly with n_episodes=1
         
-        Given: Mock components, belief, and n_episodes=1
+        Given: Real components, belief, and n_episodes=1
         When: visualize_planner_episode is called
         Then: Single episode is run and visualized
         
@@ -160,9 +165,9 @@ class TestVisualizePlannerEpisode:
             tiger_environment.cache_visualization = Mock()
             
             visualize_planner_episode(
-                planner=mock_planner,
+                planner=test_planner,
                 environment=tiger_environment,
-                belief=mock_belief,
+                belief=test_belief,
                 n_episodes=1,
                 cache_dir=temp_cache_dir,
                 num_steps=5
@@ -172,8 +177,8 @@ class TestVisualizePlannerEpisode:
             mock_run_episode.assert_called_once()
             call_args = mock_run_episode.call_args[1]
             assert call_args['environment'] == tiger_environment
-            assert call_args['policy'] == mock_planner
-            assert call_args['initial_belief'] == mock_belief
+            assert call_args['policy'] == test_planner
+            assert call_args['initial_belief'] == test_belief
             assert call_args['num_steps'] == 5
             assert 'logger' in call_args
             
@@ -182,12 +187,12 @@ class TestVisualizePlannerEpisode:
                 cache_path=temp_cache_dir / "TestPlanner_0.gif"
             )
 
-    def test_visualize_planner_episode_zero_episodes(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir):
+    def test_visualize_planner_episode_zero_episodes(self, test_planner, tiger_environment, test_belief, temp_cache_dir):
         """Test behavior with zero episodes.
         
         Purpose: Validates function handles n_episodes=0 correctly
         
-        Given: Mock components, belief, and n_episodes=0
+        Given: Real components, belief, and n_episodes=0
         When: visualize_planner_episode is called
         Then: No episodes are run and no visualization calls are made
         
@@ -197,9 +202,9 @@ class TestVisualizePlannerEpisode:
             tiger_environment.cache_visualization = Mock()
             
             visualize_planner_episode(
-                planner=mock_planner,
+                planner=test_planner,
                 environment=tiger_environment,
-                belief=mock_belief,
+                belief=test_belief,
                 n_episodes=0,
                 cache_dir=temp_cache_dir,
                 num_steps=5
@@ -209,7 +214,7 @@ class TestVisualizePlannerEpisode:
             mock_run_episode.assert_not_called()
             tiger_environment.cache_visualization.assert_not_called()
 
-    def test_visualize_planner_episode_cache_path_formatting(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_cache_path_formatting(self, test_planner, tiger_environment, test_belief, temp_cache_dir, sample_episode_history):
         """Test cache path formatting for different planner names and episode IDs.
         
         Purpose: Validates that cache paths are formatted correctly with planner name and episode ID
@@ -221,7 +226,7 @@ class TestVisualizePlannerEpisode:
         Test type: unit
         """
         # Set specific planner name for testing
-        mock_planner.name = "POMCP_TestPlanner_123"
+        test_planner.name = "POMCP_TestPlanner_123"
         
         mock_episode_result = sample_episode_history
         
@@ -229,9 +234,9 @@ class TestVisualizePlannerEpisode:
             tiger_environment.cache_visualization = Mock()
             
             visualize_planner_episode(
-                planner=mock_planner,
+                planner=test_planner,
                 environment=tiger_environment,
-                belief=mock_belief,
+                belief=test_belief,
                 n_episodes=3,
                 cache_dir=temp_cache_dir,
                 num_steps=5
@@ -309,7 +314,7 @@ class TestVisualizePlannerEpisode:
             history_arg = call_args[1]['history']
             assert isinstance(history_arg, History)  # Should be a History object
 
-    def test_visualize_planner_episode_exception_handling(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir):
+    def test_visualize_planner_episode_exception_handling(self, test_planner, tiger_environment, test_belief, temp_cache_dir):
         """Test exception handling when run_episode fails.
         
         Purpose: Validates that exceptions in run_episode are properly propagated
@@ -325,15 +330,15 @@ class TestVisualizePlannerEpisode:
             
             with pytest.raises(RuntimeError, match="Episode execution failed"):
                 visualize_planner_episode(
-                    planner=mock_planner,
+                    planner=test_planner,
                     environment=tiger_environment,
-                    belief=mock_belief,
+                    belief=test_belief,
                     n_episodes=1,
                     cache_dir=temp_cache_dir,
                     num_steps=5
                 )
 
-    def test_visualize_planner_episode_visualization_exception(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_visualization_exception(self, test_planner, tiger_environment, test_belief, temp_cache_dir, sample_episode_history):
         """Test exception handling when environment visualization fails.
         
         Purpose: Validates that exceptions in cache_visualization are properly propagated
@@ -351,15 +356,15 @@ class TestVisualizePlannerEpisode:
             
             with pytest.raises(IOError, match="Visualization cache failed"):
                 visualize_planner_episode(
-                    planner=mock_planner,
+                    planner=test_planner,
                     environment=tiger_environment,
-                    belief=mock_belief,
+                    belief=test_belief,
                     n_episodes=1,
                     cache_dir=temp_cache_dir,
                     num_steps=5
                 )
 
-    def test_visualize_planner_episode_parameter_validation(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_parameter_validation(self, test_planner, tiger_environment, test_belief, temp_cache_dir, sample_episode_history):
         """Test parameter validation and type checking.
         
         Purpose: Validates that function accepts correct parameter types
@@ -377,9 +382,9 @@ class TestVisualizePlannerEpisode:
             
             # Test with various valid parameter types
             visualize_planner_episode(
-                planner=mock_planner,
+                planner=test_planner,
                 environment=tiger_environment,
-                belief=mock_belief,
+                belief=test_belief,
                 n_episodes=5,  # int
                 cache_dir=temp_cache_dir,  # Path
                 num_steps=5
@@ -388,7 +393,7 @@ class TestVisualizePlannerEpisode:
             # Should execute without errors
             assert tiger_environment.cache_visualization.call_count == 5
 
-    def test_visualize_planner_episode_large_number_episodes(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_large_number_episodes(self, test_planner, tiger_environment, test_belief, temp_cache_dir, sample_episode_history):
         """Test performance with larger number of episodes.
         
         Purpose: Validates function can handle larger episode counts efficiently
@@ -406,9 +411,9 @@ class TestVisualizePlannerEpisode:
             
             n_episodes = 10
             visualize_planner_episode(
-                planner=mock_planner,
+                planner=test_planner,
                 environment=tiger_environment,
-                belief=mock_belief,
+                belief=test_belief,
                 n_episodes=n_episodes,
                 cache_dir=temp_cache_dir,
                 num_steps=3  # Reduced for performance testing
@@ -422,12 +427,12 @@ class TestVisualizePlannerEpisode:
             for call_args in mock_run_episode.call_args_list:
                 kwargs = call_args[1]
                 assert kwargs['environment'] == tiger_environment
-                assert kwargs['policy'] == mock_planner
-                assert kwargs['initial_belief'] == mock_belief
+                assert kwargs['policy'] == test_planner
+                assert kwargs['initial_belief'] == test_belief
                 assert kwargs['num_steps'] == 3
                 assert 'logger' in kwargs
 
-    def test_visualize_planner_episode_different_environments(self, mock_planner, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_different_environments(self, test_planner, test_belief, temp_cache_dir, sample_episode_history):
         """Test function works with different environment types.
         
         Purpose: Validates function is environment-agnostic
@@ -440,21 +445,25 @@ class TestVisualizePlannerEpisode:
         """
         mock_episode_result = sample_episode_history
         
-        # Test with different mock environments
-        environments = []
-        for i, env_name in enumerate(["TigerPOMDP", "LightDarkPOMDP", "CartPolePOMDP"]):
-            env = Mock()
-            env.name = env_name
+        # Test with different real environments
+        noise_cov = np.eye(4) * 0.01  # 4x4 identity matrix with small noise
+        environments = [
+            TigerPOMDP(discount_factor=0.95, name="TigerPOMDP"),
+            ContinuousLightDarkPOMDP(discount_factor=0.95, name="LightDarkPOMDP"),
+            CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, name="CartPolePOMDP")
+        ]
+        
+        # Mock cache_visualization for all environments to avoid file I/O
+        for env in environments:
             env.cache_visualization = Mock()
-            environments.append(env)
         
         with patch('POMDPPlanners.utils.planner_episode_visualization.run_episode', return_value=mock_episode_result):
             
             for env in environments:
                 visualize_planner_episode(
-                    planner=mock_planner,
+                    planner=test_planner,
                     environment=env,
-                    belief=mock_belief,
+                    belief=test_belief,
                     n_episodes=1,
                     cache_dir=temp_cache_dir,
                     num_steps=5
@@ -463,7 +472,7 @@ class TestVisualizePlannerEpisode:
                 # Verify visualization was called for each environment
                 env.cache_visualization.assert_called_once()
 
-    def test_visualize_planner_episode_cache_dir_types(self, mock_planner, tiger_environment, mock_belief, sample_episode_history):
+    def test_visualize_planner_episode_cache_dir_types(self, test_planner, tiger_environment, test_belief, sample_episode_history):
         """Test function accepts different cache directory path types.
         
         Purpose: Validates function works with both string and Path objects for cache_dir
@@ -484,9 +493,9 @@ class TestVisualizePlannerEpisode:
                 temp_path = Path(temp_str)
                 
                 visualize_planner_episode(
-                    planner=mock_planner,
+                    planner=test_planner,
                     environment=tiger_environment,
-                    belief=mock_belief,
+                    belief=test_belief,
                     n_episodes=1,
                     cache_dir=temp_path,  # Path object
                     num_steps=5
@@ -548,12 +557,12 @@ class TestVisualizePlannerEpisode:
             expected_path = temp_cache_dir / f"POMCP_{i}.gif"
             assert cache_path == expected_path
 
-    def test_visualize_planner_episode_parallel_basic(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_parallel_basic(self, test_planner, tiger_environment, test_belief, temp_cache_dir, sample_episode_history):
         """Test basic parallel execution with n_jobs=2.
         
         Purpose: Validates that parallel execution works correctly with n_jobs=2
         
-        Given: Mock planner, environment, belief, and n_jobs=2
+        Given: Real planner, environment, belief, and n_jobs=2
         When: visualize_planner_episode is called with n_episodes=4 and n_jobs=2
         Then: Episodes are run in parallel and environment visualization is cached for each episode
         
@@ -567,9 +576,9 @@ class TestVisualizePlannerEpisode:
                 
                 # Execute function with parallel execution
                 visualize_planner_episode(
-                    planner=mock_planner,
+                    planner=test_planner,
                     environment=tiger_environment,
-                    belief=mock_belief,
+                    belief=test_belief,
                     n_episodes=4,
                     cache_dir=temp_cache_dir,
                     num_steps=5,
@@ -586,7 +595,7 @@ class TestVisualizePlannerEpisode:
                 # in parallel execution due to joblib's internal behavior, but we verified
                 # that the parallel path was taken by checking Parallel was called
 
-    def test_visualize_planner_episode_parallel_vs_sequential_equivalence(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_parallel_vs_sequential_equivalence(self, test_planner, tiger_environment, test_belief, temp_cache_dir, sample_episode_history):
         """Test that parallel and sequential execution use correct paths.
         
         Purpose: Validates that n_jobs=1 uses sequential path and n_jobs=2 uses parallel path
@@ -602,9 +611,9 @@ class TestVisualizePlannerEpisode:
             with patch('POMDPPlanners.utils.planner_episode_visualization.Parallel') as mock_parallel:
                 
                 visualize_planner_episode(
-                    planner=mock_planner,
+                    planner=test_planner,
                     environment=tiger_environment,
-                    belief=mock_belief,
+                    belief=test_belief,
                     n_episodes=3,
                     cache_dir=temp_cache_dir,
                     num_steps=5,
@@ -623,9 +632,9 @@ class TestVisualizePlannerEpisode:
                 mock_parallel.return_value = Mock(return_value=None)
                 
                 visualize_planner_episode(
-                    planner=mock_planner,
+                    planner=test_planner,
                     environment=tiger_environment,
-                    belief=mock_belief,
+                    belief=test_belief,
                     n_episodes=3,
                     cache_dir=temp_cache_dir,
                     num_steps=5,
@@ -636,7 +645,7 @@ class TestVisualizePlannerEpisode:
                 mock_parallel.assert_called_once_with(n_jobs=2)
                 mock_parallel.return_value.assert_called_once()
 
-    def test_visualize_planner_episode_parallel_n_jobs_parameter_validation(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_parallel_n_jobs_parameter_validation(self, test_planner, tiger_environment, test_belief, temp_cache_dir, sample_episode_history):
         """Test that different n_jobs values trigger correct execution paths.
         
         Purpose: Validates that n_jobs=1 uses sequential path and n_jobs>1 uses parallel path
@@ -656,9 +665,9 @@ class TestVisualizePlannerEpisode:
                 
                 # Test n_jobs=1 (should NOT call Parallel)
                 visualize_planner_episode(
-                    planner=mock_planner,
+                    planner=test_planner,
                     environment=tiger_environment,
-                    belief=mock_belief,
+                    belief=test_belief,
                     n_episodes=2,
                     cache_dir=temp_cache_dir,
                     num_steps=5,
@@ -674,9 +683,9 @@ class TestVisualizePlannerEpisode:
                 
                 # Test n_jobs=2 (should call Parallel)
                 visualize_planner_episode(
-                    planner=mock_planner,
+                    planner=test_planner,
                     environment=tiger_environment,
-                    belief=mock_belief,
+                    belief=test_belief,
                     n_episodes=2,
                     cache_dir=temp_cache_dir,
                     num_steps=5,
@@ -686,7 +695,7 @@ class TestVisualizePlannerEpisode:
                 # Verify Parallel WAS called for n_jobs=2
                 mock_parallel.assert_called_once_with(n_jobs=2)
 
-    def test_visualize_planner_episode_parallel_different_n_jobs_values(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_parallel_different_n_jobs_values(self, test_planner, tiger_environment, test_belief, temp_cache_dir, sample_episode_history):
         """Test parallel execution with different n_jobs values.
         
         Purpose: Validates that various n_jobs values (2, 4, -1) work correctly
@@ -705,9 +714,9 @@ class TestVisualizePlannerEpisode:
                     mock_parallel.return_value = Mock(return_value=None)
                     
                     visualize_planner_episode(
-                        planner=mock_planner,
+                        planner=test_planner,
                         environment=tiger_environment,
-                        belief=mock_belief,
+                        belief=test_belief,
                         n_episodes=3,
                         cache_dir=temp_cache_dir,
                         num_steps=5,
@@ -720,7 +729,7 @@ class TestVisualizePlannerEpisode:
                     # Verify parallel execution path was taken
                     mock_parallel.return_value.assert_called_once()
 
-    def test_visualize_planner_episode_parallel_exception_handling(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir):
+    def test_visualize_planner_episode_parallel_exception_handling(self, test_planner, tiger_environment, test_belief, temp_cache_dir):
         """Test exception handling in parallel execution.
         
         Purpose: Validates that exceptions in parallel execution are properly propagated
@@ -738,9 +747,9 @@ class TestVisualizePlannerEpisode:
                 
                 with pytest.raises(RuntimeError, match="Parallel execution failed"):
                     visualize_planner_episode(
-                        planner=mock_planner,
+                        planner=test_planner,
                         environment=tiger_environment,
-                        belief=mock_belief,
+                        belief=test_belief,
                         n_episodes=2,
                         cache_dir=temp_cache_dir,
                         num_steps=5,
@@ -750,7 +759,7 @@ class TestVisualizePlannerEpisode:
                 # Verify Parallel was called
                 mock_parallel.assert_called_once_with(n_jobs=2)
 
-    def test_visualize_planner_episode_parallel_single_episode(self, mock_planner, tiger_environment, mock_belief, temp_cache_dir, sample_episode_history):
+    def test_visualize_planner_episode_parallel_single_episode(self, test_planner, tiger_environment, test_belief, temp_cache_dir, sample_episode_history):
         """Test parallel execution with single episode.
         
         Purpose: Validates that parallel execution works correctly even with n_episodes=1
@@ -766,9 +775,9 @@ class TestVisualizePlannerEpisode:
                 mock_parallel.return_value = Mock(return_value=None)
                 
                 visualize_planner_episode(
-                    planner=mock_planner,
+                    planner=test_planner,
                     environment=tiger_environment,
-                    belief=mock_belief,
+                    belief=test_belief,
                     n_episodes=1,
                     cache_dir=temp_cache_dir,
                     num_steps=5,
