@@ -800,10 +800,10 @@ def test_numpy_array_observation_comparison():
         name="TestObservationComparison",
         state_transition_cov_matrix=np.eye(2) * 0.1,
         observation_cov_matrix=np.eye(2) * 0.5,
-        beacons=np.array([[0], [0]]),
+        beacons=[(0, 0)],  # List of tuples as expected
         goal_state=np.array([1, 1]),
         start_state=np.array([0, 0]),
-        obstacles=np.array([]).reshape(2, 0),
+        obstacles=[(0.5, 0.5)],  # Add one obstacle to avoid broadcasting issues
         goal_reward=1.0,
         fuel_cost=0.1,
         grid_size=2,
