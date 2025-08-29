@@ -1,3 +1,12 @@
+"""Tests for simulation functionality.
+
+This module tests the simulation functionality, focusing on:
+- Basic simulation operations
+- Episode simulation
+- History tracking
+- Metrics computation
+"""
+
 import pytest
 from typing import Any, List, Dict, Tuple, Optional
 import numpy as np
@@ -10,6 +19,7 @@ from POMDPPlanners.core.simulation import (
 )
 from POMDPPlanners.core.belief import WeightedParticleBelief
 
+# Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 

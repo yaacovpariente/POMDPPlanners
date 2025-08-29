@@ -1,3 +1,12 @@
+"""Tests for Sanity POMDP environment.
+
+This module tests the Sanity POMDP environment, focusing on:
+- Basic environment functionality
+- State transitions and observations
+- Reward calculations
+- Terminal conditions
+"""
+
 import pytest
 import numpy as np
 import random
@@ -11,6 +20,7 @@ from POMDPPlanners.environments.sanity_pomdp import (
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
 
+# Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 

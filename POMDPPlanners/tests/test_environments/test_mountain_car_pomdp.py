@@ -1,9 +1,19 @@
+"""Tests for MountainCar POMDP environment.
+
+This module tests the MountainCar POMDP environment, focusing on:
+- Basic environment functionality
+- State transitions and observations
+- Reward calculations
+- Terminal conditions
+"""
+
 import pytest
 import numpy as np
 import random
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.core.simulation import StepData
 
+# Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 

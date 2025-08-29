@@ -1,7 +1,19 @@
-import numpy as np
+"""Tests for Continuous Light Dark POMDP environment.
+
+This module tests the Continuous Light Dark POMDP environment, focusing on:
+- Basic environment functionality
+- State transitions and observations
+- Reward calculations
+- Terminal conditions
+"""
+
 import pytest
-from pathlib import Path
+import numpy as np
 import random
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDPDiscreteActions, ContinuousLightDarkPOMDP
 from POMDPPlanners.core.distributions import DiscreteDistribution
@@ -9,9 +21,6 @@ from POMDPPlanners.core.environment import ObservationModel, SpaceInfo, SpaceTyp
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
-
-np.random.seed(42)
-random.seed(42)
 
 
 @pytest.fixture

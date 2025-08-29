@@ -1,16 +1,20 @@
-"""Tests for LaserTag POMDP Environment Implementation.
+"""Tests for LaserTag POMDP environment.
 
-This module contains comprehensive tests for the LaserTag POMDP environment,
-including tests for state transitions, observations, rewards, metrics computation,
-and visualization functionality.
+This module tests the LaserTag POMDP environment, focusing on:
+- Basic environment functionality
+- State transitions and observations
+- Reward calculations
+- Terminal conditions
 """
 
 import pytest
 import numpy as np
-from pathlib import Path
-from typing import List, Any
-from unittest.mock import Mock
 import random
+from pathlib import Path
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 from POMDPPlanners.environments.laser_tag_pomdp import (
     LaserTagPOMDP,
@@ -20,9 +24,7 @@ from POMDPPlanners.environments.laser_tag_pomdp import (
 )
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.distributions import DiscreteDistribution
-
-np.random.seed(42)
-random.seed(42)
+from POMDPPlanners.core.belief import WeightedParticleBelief
 
 
 class TestLaserTagState:
@@ -494,8 +496,10 @@ class TestLaserTagPOMDP:
         env = LaserTagPOMDP(discount_factor=0.95, walls=walls)
         
         # Create mock history with wall collision
-        # Mock the policy_run_data
-        mock_policy_run_data = Mock()
+        # Create a simple belief for testing
+        dummy_particles = [LaserTagState(robot=(3, 2), opponent=(1, 1), terminal=False)]
+        dummy_log_weights = np.array([-0.1])  # Small non-zero log weight
+        test_belief = WeightedParticleBelief(particles=dummy_particles, log_weights=dummy_log_weights)
         
         # Step 1: Robot tries to move East into wall
         state1 = LaserTagState(robot=(3, 2), opponent=(1, 1), terminal=False)
@@ -503,9 +507,9 @@ class TestLaserTagPOMDP:
             state=state1, 
             action=2,  # East
             next_state=LaserTagState(robot=(3, 2), opponent=(1, 0), terminal=False),  # Robot stayed due to wall
-            observation=(1.1, 0.9),
+            observation=(1.1, 0.9, 1.2, 0.8, 1.0, 1.1, 0.9, 1.3),  # 8D laser observation
             reward=-1.0,
-            belief=Mock()
+            belief=test_belief
         )
         
         # Step 2: Normal movement
@@ -514,9 +518,9 @@ class TestLaserTagPOMDP:
             state=state2,
             action=0,  # North
             next_state=LaserTagState(robot=(2, 2), opponent=(1, 1), terminal=False),
-            observation=(1.0, 1.1),
+            observation=(1.0, 1.1, 1.05, 1.15, 1.02, 1.08, 1.12, 1.04),  # 8D laser observation
             reward=-1.0,
-            belief=Mock()
+            belief=test_belief
         )
         
         history = History(
@@ -529,7 +533,7 @@ class TestLaserTagPOMDP:
             average_reward_time=0.1,
             actual_num_steps=2,
             reach_terminal_state=False,
-            policy_run_data=mock_policy_run_data
+            policy_run_data={"policy_type": "test"}
         )
         
         histories = [history]
@@ -598,8 +602,12 @@ class TestLaserTagPOMDP:
         """
         env = LaserTagPOMDP(discount_factor=0.95)
         
-        # Create simple mock history
-        mock_policy_run_data = Mock()
+        # Create simple test history
+        
+        # Create a belief for testing
+        dummy_particles = [LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)]
+        dummy_log_weights = np.array([-0.1])  # Small non-zero log weight
+        test_belief = WeightedParticleBelief(particles=dummy_particles, log_weights=dummy_log_weights)
         
         steps = []
         for i in range(3):
@@ -608,9 +616,9 @@ class TestLaserTagPOMDP:
                 state=state,
                 action=1,  # South
                 next_state=state,
-                observation=(6-i + 0.1, 10.1),
+                observation=(6-i + 0.1, 10.1, 1.0, 1.5, 2.0, 1.2, 0.8, 1.8),  # 8D laser observation
                 reward=-1.0,
-                belief=Mock()
+                belief=test_belief
             )
             steps.append(step)
         
@@ -624,7 +632,7 @@ class TestLaserTagPOMDP:
             average_reward_time=0.1,
             actual_num_steps=3,
             reach_terminal_state=False,
-            policy_run_data=mock_policy_run_data
+            policy_run_data={"policy_type": "test"}
         )
         
         cache_path = Path("test_laser_tag_visualization.gif")
@@ -653,19 +661,31 @@ class TestLaserTagPOMDP:
         """
         env = LaserTagPOMDP(discount_factor=0.95)
         
+        # Create dummy history for testing
+        dummy_history = History(
+            history=[],
+            discount_factor=0.95,
+            average_state_sampling_time=0.1,
+            average_action_time=0.1,
+            average_observation_time=0.1,
+            average_belief_update_time=0.1,
+            average_reward_time=0.1,
+            actual_num_steps=0,
+            reach_terminal_state=False,
+            policy_run_data={"policy_type": "test"}
+        )
+        
         # Test with non-Path cache_path
         with pytest.raises(TypeError, match="cache_path must be a Path object"):
-            env.cache_visualization(Mock(), "invalid_path")
+            env.cache_visualization(dummy_history, "invalid_path")
         
         # Test with non-gif extension
         with pytest.raises(ValueError, match="cache_path must end with .gif"):
-            env.cache_visualization(Mock(), Path("test.png"))
+            env.cache_visualization(dummy_history, Path("test.png"))
         
         # Test with empty history
-        mock_history = Mock()
-        mock_history.history = []
         with pytest.raises(ValueError, match="Cannot visualize empty history"):
-            env.cache_visualization(mock_history, Path("test.gif"))
+            env.cache_visualization(dummy_history, Path("test.gif"))
     
     def test_compute_metrics_with_simulator_generated_history(self):
         """Test compute_metrics with realistic history generated using environment simulation.
@@ -706,6 +726,11 @@ class TestLaserTagPOMDP:
                 # Sample next step using environment
                 next_state, observation, reward = env.sample_next_step(current_state, action)
                 
+                # Create a belief for testing
+                dummy_particles = [current_state]
+                dummy_log_weights = np.array([-0.1])  # Small non-zero log weight
+                test_belief = WeightedParticleBelief(particles=dummy_particles, log_weights=dummy_log_weights)
+                
                 # Create step data
                 step = StepData(
                     state=current_state,
@@ -713,7 +738,7 @@ class TestLaserTagPOMDP:
                     next_state=next_state,
                     observation=observation,
                     reward=reward,
-                    belief=Mock()  # Mock belief for testing
+                    belief=test_belief
                 )
                 steps.append(step)
                 
@@ -725,7 +750,6 @@ class TestLaserTagPOMDP:
                     break
             
             # Create history object
-            mock_policy_run_data = Mock()
             history = History(
                 history=steps,
                 discount_factor=env.discount_factor,
@@ -736,7 +760,7 @@ class TestLaserTagPOMDP:
                 average_reward_time=0.01,
                 actual_num_steps=len(steps),
                 reach_terminal_state=env.is_terminal(current_state),
-                policy_run_data=mock_policy_run_data
+                policy_run_data={"policy_type": "random"}
             )
             histories.append(history)
         
@@ -799,8 +823,10 @@ class TestLaserTagPOMDP:
         """
         env = LaserTagPOMDP(discount_factor=0.95)
         
-        # Create mock history with None rewards
-        mock_policy_run_data = Mock()
+        # Create test belief
+        dummy_particles = [LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)]
+        dummy_log_weights = np.array([-0.1])  # Small non-zero log weight
+        test_belief = WeightedParticleBelief(particles=dummy_particles, log_weights=dummy_log_weights)
         
         # Step 1: Normal reward
         step1 = StepData(
@@ -809,7 +835,7 @@ class TestLaserTagPOMDP:
             next_state=LaserTagState(robot=(2, 5), opponent=(1, 4), terminal=False),
             observation=(1.0, 2.0, 3.0, 1.5, 2.5, 1.2, 0.8, 2.1),
             reward=-1.0,
-            belief=Mock()
+            belief=test_belief
         )
         
         # Step 2: None reward (this should not crash)
@@ -819,7 +845,7 @@ class TestLaserTagPOMDP:
             next_state=LaserTagState(robot=(2, 5), opponent=(0, 4), terminal=False),
             observation=(1.1, 2.1, 3.1, 1.6, 2.6, 1.3, 0.9, 2.2),
             reward=None,  # This is the problematic case
-            belief=Mock()
+            belief=test_belief
         )
         
         # Step 3: Successful tag with positive reward
@@ -829,7 +855,7 @@ class TestLaserTagPOMDP:
             next_state=LaserTagState(robot=(2, 5), opponent=(2, 5), terminal=True),
             observation=(-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0),  # Terminal obs
             reward=10.0,  # Successful tag
-            belief=Mock()
+            belief=test_belief
         )
         
         history = History(
@@ -842,7 +868,7 @@ class TestLaserTagPOMDP:
             average_reward_time=0.01,
             actual_num_steps=3,
             reach_terminal_state=True,
-            policy_run_data=mock_policy_run_data
+            policy_run_data={"policy_type": "test_none_rewards"}
         )
         
         # This should not raise any exceptions

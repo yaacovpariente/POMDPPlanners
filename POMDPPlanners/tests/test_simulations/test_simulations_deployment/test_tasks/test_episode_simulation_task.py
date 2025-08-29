@@ -1,10 +1,10 @@
 import pytest
 import numpy as np
 from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
-from POMDPPlanners.core.simulation import History
+from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
@@ -246,10 +246,36 @@ def test_episode_simulation_task_execution(environment, policy):
     # Mock the run_episode function to avoid actual execution
     # Patch at the point where it's used in the EpisodeSimulationTask class
     with patch.object(task, 'run') as mock_run:
-        mock_result = Mock()
-        mock_result.history = [Mock(), Mock()]
-        mock_result.reach_terminal_state = True
-        mock_result.actual_num_steps = 2
+        # Create real History object instead of Mock
+        step1 = StepData(
+            state="tiger_left",
+            action="listen",
+            next_state="tiger_left",
+            observation="growl_left",
+            reward=-1.0,
+            belief=None
+        )
+        step2 = StepData(
+            state="tiger_left",
+            action="open_left",
+            next_state="tiger_right",
+            observation="tiger_left",
+            reward=10.0,
+            belief=None
+        )
+        
+        mock_result = History(
+            history=[step1, step2],
+            actual_num_steps=2,
+            reach_terminal_state=True,
+            average_action_time=0.1,
+            average_belief_update_time=0.05,
+            average_observation_time=0.02,
+            average_reward_time=0.01,
+            average_state_sampling_time=0.03,
+            discount_factor=0.95,
+            policy_run_data={}
+        )
         mock_run.return_value = mock_result
         
         result = task.run()
@@ -278,34 +304,32 @@ def test_episode_simulation_task_value_error_logging(caplog, environment, policy
     
     belief = create_test_belief()
     
-    # Create a mock environment that will cause an error during execution
-    mock_env = Mock()
-    mock_env.name = "test_env"
-    mock_env.config_id = "test_env_config"
-    # Make the environment fail when state_transition_model is called
-    mock_env.state_transition_model.side_effect = ValueError("Test value error")
-    
-    # Create task using the mock environment
-    task = EpisodeSimulationTask(
-        environment=mock_env,
-        policy=policy,
-        initial_belief=belief,
-        num_steps=2,
-        episode_id=1,
-        seed=42,
-        discount_factor=0.95,
-        episode_number=1,
-        console_output=False
-    )
-    
-    # Run the task - it should handle the error gracefully
-    result = task.run()
-    
-    # Verify that the task handled the error and returned None
-    assert result is None
-    
-    # Verify that some error was logged (the exact message may vary)
-    assert "Error running episode 1:" in caplog.text
+    # Create a real environment and patch it to cause an error during execution
+    test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
+    # Patch the environment to fail when state_transition_model is called
+    with patch.object(test_env, 'state_transition_model', side_effect=ValueError("Test value error")):
+        
+        # Create task using the real environment
+        task = EpisodeSimulationTask(
+            environment=test_env,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=1,
+            seed=42,
+            discount_factor=0.95,
+            episode_number=1,
+            console_output=False
+        )
+        
+        # Run the task - it should handle the error gracefully
+        result = task.run()
+        
+        # Verify that the task handled the error and returned None
+        assert result is None
+        
+        # Verify that some error was logged (the exact message may vary)
+        assert "Error running episode 1:" in caplog.text
 
 def test_episode_simulation_task_runtime_error_logging(caplog, environment, policy):
     """Test that EpisodeSimulationTask logs RuntimeError exceptions properly.
@@ -322,34 +346,32 @@ def test_episode_simulation_task_runtime_error_logging(caplog, environment, poli
     
     belief = create_test_belief()
     
-    # Create a mock environment that will cause a RuntimeError during execution
-    mock_env = Mock()
-    mock_env.name = "test_env"
-    mock_env.config_id = "test_env_config"
-    # Make the environment fail when observation_model is called
-    mock_env.observation_model.side_effect = RuntimeError("Test runtime error")
-    
-    # Create task using the mock environment
-    task = EpisodeSimulationTask(
-        environment=mock_env,
-        policy=policy,
-        initial_belief=belief,
-        num_steps=2,
-        episode_id=1,
-        seed=42,
-        discount_factor=0.95,
-        episode_number=1,
-        console_output=False
-    )
-    
-    # Run the task - it should handle the error gracefully
-    result = task.run()
-    
-    # Verify that the task handled the error and returned None
-    assert result is None
-    
-    # Verify that some error was logged (the exact message may vary)
-    assert "Error running episode 1:" in caplog.text
+    # Create a real environment and patch it to cause a RuntimeError during execution
+    test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
+    # Patch the environment to fail when observation_model is called
+    with patch.object(test_env, 'observation_model', side_effect=RuntimeError("Test runtime error")):
+        
+        # Create task using the real environment
+        task = EpisodeSimulationTask(
+            environment=test_env,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=1,
+            seed=42,
+            discount_factor=0.95,
+            episode_number=1,
+            console_output=False
+        )
+        
+        # Run the task - it should handle the error gracefully
+        result = task.run()
+        
+        # Verify that the task handled the error and returned None
+        assert result is None
+        
+        # Verify that some error was logged (the exact message may vary)
+        assert "Error running episode 1:" in caplog.text
 
 def test_episode_simulation_task_type_error_logging(caplog, environment, policy):
     """Test that EpisodeSimulationTask logs TypeError exceptions properly.
@@ -366,34 +388,32 @@ def test_episode_simulation_task_type_error_logging(caplog, environment, policy)
     
     belief = create_test_belief()
     
-    # Create a mock environment that will cause a TypeError during execution
-    mock_env = Mock()
-    mock_env.name = "test_env"
-    mock_env.config_id = "test_env_config"
-    # Make the environment fail when reward is called
-    mock_env.reward.side_effect = TypeError("Test type error")
-    
-    # Create task using the mock environment
-    task = EpisodeSimulationTask(
-        environment=mock_env,
-        policy=policy,
-        initial_belief=belief,
-        num_steps=2,
-        episode_id=1,
-        seed=42,
-        discount_factor=0.95,
-        episode_number=1,
-        console_output=False
-    )
-    
-    # Run the task - it should handle the error gracefully
-    result = task.run()
-    
-    # Verify that the task handled the error and returned None
-    assert result is None
-    
-    # Verify that some error was logged (the exact message may vary)
-    assert "Error running episode 1:" in caplog.text
+    # Create a real environment and patch it to cause a TypeError during execution
+    test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
+    # Patch the environment to fail when reward is called
+    with patch.object(test_env, 'reward', side_effect=TypeError("Test type error")):
+        
+        # Create task using the real environment
+        task = EpisodeSimulationTask(
+            environment=test_env,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=1,
+            seed=42,
+            discount_factor=0.95,
+            episode_number=1,
+            console_output=False
+        )
+        
+        # Run the task - it should handle the error gracefully
+        result = task.run()
+        
+        # Verify that the task handled the error and returned None
+        assert result is None
+        
+        # Verify that some error was logged (the exact message may vary)
+        assert "Error running episode 1:" in caplog.text
 
 def test_episode_simulation_task_custom_exception_logging(caplog, environment, policy):
     """Test that EpisodeSimulationTask logs custom exceptions properly.
@@ -414,34 +434,32 @@ def test_episode_simulation_task_custom_exception_logging(caplog, environment, p
     
     belief = create_test_belief()
     
-    # Create a mock environment that will cause a custom exception during execution
-    mock_env = Mock()
-    mock_env.name = "test_env"
-    mock_env.config_id = "test_env_config"
-    # Make the environment fail when is_terminal is called
-    mock_env.is_terminal.side_effect = CustomTestException("Test custom exception")
-    
-    # Create task using the mock environment
-    task = EpisodeSimulationTask(
-        environment=mock_env,
-        policy=policy,
-        initial_belief=belief,
-        num_steps=2,
-        episode_id=1,
-        seed=42,
-        discount_factor=0.95,
-        episode_number=1,
-        console_output=False
-    )
-    
-    # Run the task - it should handle the error gracefully
-    result = task.run()
-    
-    # Verify that the task handled the error and returned None
-    assert result is None
-    
-    # Verify that some error was logged (the exact message may vary)
-    assert "Error running episode 1:" in caplog.text
+    # Create a real environment and patch it to cause a custom exception during execution
+    test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
+    # Patch the environment to fail when is_terminal is called
+    with patch.object(test_env, 'is_terminal', side_effect=CustomTestException("Test custom exception")):
+        
+        # Create task using the real environment
+        task = EpisodeSimulationTask(
+            environment=test_env,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=1,
+            seed=42,
+            discount_factor=0.95,
+            episode_number=1,
+            console_output=False
+        )
+        
+        # Run the task - it should handle the error gracefully
+        result = task.run()
+        
+        # Verify that the task handled the error and returned None
+        assert result is None
+        
+        # Verify that some error was logged (the exact message may vary)
+        assert "Error running episode 1:" in caplog.text
 
 def test_episode_simulation_task_logging_includes_traceback(caplog, environment, policy):
     """Test that EpisodeSimulationTask logs include full traceback information.
@@ -458,34 +476,32 @@ def test_episode_simulation_task_logging_includes_traceback(caplog, environment,
     
     belief = create_test_belief()
     
-    # Create a mock environment that will cause an exception during execution
-    mock_env = Mock()
-    mock_env.name = "test_env"
-    mock_env.config_id = "test_env_config"
-    # Make the environment fail when get_actions is called
-    mock_env.get_actions.side_effect = Exception("Test exception with traceback")
-    
-    # Create task using the mock environment
-    task = EpisodeSimulationTask(
-        environment=mock_env,
-        policy=policy,
-        initial_belief=belief,
-        num_steps=2,
-        episode_id=1,
-        seed=42,
-        discount_factor=0.95,
-        episode_number=1,
-        console_output=False
-    )
-    
-    # Run the task - it should handle the error gracefully
-    result = task.run()
-    
-    # Verify that the task handled the error and returned None
-    assert result is None
-    
-    # Verify that some error was logged (the exact message may vary)
-    assert "Error running episode 1:" in caplog.text
-    
-    # Verify that traceback information was logged
-    assert "Full exception details:" in caplog.text
+    # Create a real environment and patch it to cause an exception during execution
+    test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
+    # Patch the environment to fail when state_transition_model is called
+    with patch.object(test_env, 'state_transition_model', side_effect=Exception("Test exception with traceback")):
+        
+        # Create task using the real environment
+        task = EpisodeSimulationTask(
+            environment=test_env,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=1,
+            seed=42,
+            discount_factor=0.95,
+            episode_number=1,
+            console_output=False
+        )
+        
+        # Run the task - it should handle the error gracefully
+        result = task.run()
+        
+        # Verify that the task handled the error and returned None
+        assert result is None
+        
+        # Verify that some error was logged (the exact message may vary)
+        assert "Error running episode 1:" in caplog.text
+        
+        # Verify that traceback information was logged
+        assert "Full exception details:" in caplog.text

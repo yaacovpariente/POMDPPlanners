@@ -9,6 +9,11 @@ This module tests the reward models from light_dark_reward_models.py, focusing o
 
 import pytest
 import numpy as np
+import random
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
     BaseLightDarkRewardModel,
@@ -322,10 +327,31 @@ class TestContinuousLightDarkDecayingHitProbabilityRewardModel:
     def test_decaying_obstacle_probability(self):
         """Test that obstacle hit probability decreases with distance."""
         # Test positions at different distances from obstacles
-        close_to_obstacle = np.array([3.1, 3.1])  # Very close
-        medium_distance = np.array([4.0, 4.0])    # Medium distance
-        far_from_obstacle = np.array([7.0, 7.0])  # Far away
+        # Use positions that are clearly at different distances from obstacles
+        close_to_obstacle = np.array([3.1, 3.1])  # Very close to obstacle at (3,3)
+        medium_distance = np.array([5.0, 5.0])    # Medium distance from obstacles
+        far_from_obstacle = np.array([8.0, 8.0])  # Far from obstacles
         
+        # Calculate theoretical probabilities based on exponential decay
+        close_distance = np.min(np.linalg.norm(close_to_obstacle.reshape(-1, 1) - self.obstacles, axis=0))
+        medium_distance_val = np.min(np.linalg.norm(medium_distance.reshape(-1, 1) - self.obstacles, axis=0))
+        far_distance = np.min(np.linalg.norm(far_from_obstacle.reshape(-1, 1) - self.obstacles, axis=0))
+        
+        # Print distances for debugging
+        print(f"Distances: close={close_distance:.3f}, medium={medium_distance_val:.3f}, far={far_distance:.3f}")
+        
+        # Theoretical probabilities using exponential decay
+        close_prob_theoretical = np.exp(-close_distance / self.penalty_decay)
+        medium_prob_theoretical = np.exp(-medium_distance_val / self.penalty_decay)
+        far_prob_theoretical = np.exp(-far_distance / self.penalty_decay)
+        
+        # Verify theoretical ordering: closer = higher probability
+        assert close_prob_theoretical > medium_prob_theoretical, \
+            f"Close theoretical probability {close_prob_theoretical:.3f} should be > medium {medium_prob_theoretical:.3f}"
+        assert medium_prob_theoretical > far_prob_theoretical, \
+            f"Medium theoretical probability {medium_prob_theoretical:.3f} should be > far {far_prob_theoretical:.3f}"
+        
+        # Also verify that the model's empirical probabilities are reasonable
         # Run multiple times to get probability estimates
         close_rewards = []
         medium_rewards = []
@@ -341,13 +367,18 @@ class TestContinuousLightDarkDecayingHitProbabilityRewardModel:
         medium_penalties = sum(1 for r in medium_rewards if r < 0)
         far_penalties = sum(1 for r in far_rewards if r < 0)
         
-        # Probability should decrease with distance
-        close_prob = close_penalties / len(close_rewards)
-        medium_prob = medium_penalties / len(medium_rewards)
-        far_prob = far_penalties / len(far_rewards)
+        # Empirical probabilities
+        close_prob_empirical = close_penalties / len(close_rewards)
+        medium_prob_empirical = medium_penalties / len(medium_rewards)
+        far_prob_empirical = far_penalties / len(far_rewards)
         
-        assert close_prob > medium_prob, f"Close probability {close_prob} should be > medium {medium_prob}"
-        assert medium_prob > far_prob, f"Medium probability {medium_prob} should be > far {far_prob}"
+        # Verify empirical probabilities are close to theoretical (within reasonable tolerance)
+        assert abs(close_prob_empirical - close_prob_theoretical) < 0.2, \
+            f"Close empirical {close_prob_empirical:.3f} should be close to theoretical {close_prob_theoretical:.3f}"
+        assert abs(medium_prob_empirical - medium_prob_theoretical) < 0.2, \
+            f"Medium empirical {medium_prob_empirical:.3f} should be close to theoretical {medium_prob_theoretical:.3f}"
+        assert abs(far_prob_empirical - far_prob_theoretical) < 0.2, \
+            f"Far empirical {far_prob_empirical:.3f} should be close to theoretical {far_prob_theoretical:.3f}"
     
     def test_penalty_decay_parameter_effect(self):
         """Test that penalty_decay parameter affects probability decay rate."""

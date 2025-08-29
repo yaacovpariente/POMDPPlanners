@@ -1,8 +1,20 @@
+"""Tests for DPW (Double Progressive Widening) planner utilities.
+
+This module tests the DPW planner utilities, focusing on:
+- Basic DPW functionality
+- Progressive widening
+- Tree search operations
+- Planning algorithms
+"""
+
 import pytest
 import numpy as np
-from math import floor
-from typing import Any
 import random
+from typing import Any
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 from POMDPPlanners.planners.planners_utils.dpw import (
     ActionSampler, 
@@ -11,9 +23,6 @@ from POMDPPlanners.planners.planners_utils.dpw import (
 )
 from POMDPPlanners.core.tree import BeliefNode, ActionNode
 from POMDPPlanners.core.belief import WeightedParticleBelief
-
-np.random.seed(42)
-random.seed(42)
 
 
 class TestActionSampler(ActionSampler):

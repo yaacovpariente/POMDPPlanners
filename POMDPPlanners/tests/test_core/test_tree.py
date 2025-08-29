@@ -1,12 +1,21 @@
+"""Tests for tree data structures.
+
+This module tests the tree data structures, focusing on:
+- Basic tree functionality
+- Node operations
+- Tree traversal
+- Tree statistics
+"""
+
 import pytest
 import numpy as np
-from anytree import NodeMixin, RenderTree, PostOrderIter
 import random
 
 from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action_cost_setting
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 
+# Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 

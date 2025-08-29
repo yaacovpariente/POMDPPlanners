@@ -1,15 +1,23 @@
-"""Tests for the Policy class."""
+"""Tests for policy implementations.
+
+This module tests the policy implementations, focusing on:
+- Basic policy functionality
+- Policy execution
+- Policy data structures
+- Policy evaluation
+"""
 
 import pytest
 import numpy as np
+import random
 from pathlib import Path
 import logging
-import random
 from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
 from POMDPPlanners.core.environment import Environment, StateTransitionModel, ObservationModel, SpaceInfo, SpaceType
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.utils.logger import get_logger
 
+# Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 

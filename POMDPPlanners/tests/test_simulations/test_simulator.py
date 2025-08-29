@@ -1,10 +1,19 @@
+"""Tests for simulator functionality.
+
+This module tests the simulator functionality, focusing on:
+- Basic simulation operations
+- Episode simulation
+- History tracking
+- Metrics computation
+"""
+
 import pytest
 import numpy as np
+import random
 from pathlib import Path
 import tempfile
 import shutil
 import pandas as pd
-import random
 
 from distributed import Client as DaskClient
 
@@ -16,6 +25,7 @@ from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.simulation import History, EnvironmentRunParams
 
 
+# Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 

@@ -1,13 +1,89 @@
+"""Tests for belief implementations.
+
+This module tests the belief implementations, focusing on:
+- Basic belief functionality
+- Belief updates
+- Belief sampling
+- Belief types
+"""
+
 import pytest
 import numpy as np
-from POMDPPlanners.core.belief import Belief, WeightedParticleBelief, WeightedParticleBeliefStateUpdate, UnweightedParticleBeliefStateUpdate
-from POMDPPlanners.core.config_types import BeliefConfig
-from POMDPPlanners.utils.weighted_particle_beliefs import create_belief, WeightedParticleBeliefDiscreteLightDark, WeightedParticleBeliefDiscreteLightDarkFullCoverage, WeightedParticleBeliefContinuousLightDarkFullCoverage, WeightedParticleBeliefSanityPOMDP
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 import random
 
+# Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
+
+from POMDPPlanners.core.belief import (
+    Belief, 
+    WeightedParticleBelief, 
+    UnweightedParticleBelief,
+    WeightedParticleBeliefStateUpdate,
+    UnweightedParticleBeliefStateUpdate
+)
+from POMDPPlanners.core.config_types import BeliefConfig
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+from POMDPPlanners.utils.weighted_particle_beliefs import (
+    WeightedParticleBeliefDiscreteLightDark,
+    WeightedParticleBeliefDiscreteLightDarkFullCoverage,
+    WeightedParticleBeliefContinuousLightDarkFullCoverage,
+    WeightedParticleBeliefSanityPOMDP
+)
+
+def create_belief(env, config):
+    """Create a belief from configuration."""
+    if config.class_name == 'WeightedParticleBelief':
+        particles = env.initial_state_dist().sample(n_samples=config.params.get('n_particles', 10))
+        log_weights = np.log(np.ones(len(particles)) / len(particles))
+        return WeightedParticleBelief(
+            particles=particles,
+            log_weights=log_weights,
+            resampling=config.params.get('resampling', True),
+            ess_factor=config.params.get('ess_factor', 0.5)
+        )
+    elif config.class_name == 'WeightedParticleBeliefDiscreteLightDark':
+        particles = env.initial_state_dist().sample(n_samples=config.params.get('n_particles', 10))
+        log_weights = np.log(np.ones(len(particles)) / len(particles))
+        return WeightedParticleBeliefDiscreteLightDark(
+            particles=particles,
+            log_weights=log_weights,
+            resampling=config.params.get('resampling', True),
+            ess_factor=config.params.get('ess_factor', 0.5),
+            reinvigoration_fraction=config.params.get('reinvigoration_fraction', 0.2)
+        )
+    elif config.class_name == 'WeightedParticleBeliefDiscreteLightDarkFullCoverage':
+        particles = env.initial_state_dist().sample(n_samples=config.params.get('n_particles', 10))
+        log_weights = np.log(np.ones(len(particles)) / len(particles))
+        return WeightedParticleBeliefDiscreteLightDarkFullCoverage(
+            particles=particles,
+            log_weights=log_weights,
+            ess_factor=config.params.get('ess_factor', 0.5),
+            reinvigoration_fraction=config.params.get('reinvigoration_fraction', 0.05)
+        )
+    elif config.class_name == 'WeightedParticleBeliefContinuousLightDarkFullCoverage':
+        particles = env.initial_state_dist().sample(n_samples=config.params.get('n_particles', 10))
+        log_weights = np.log(np.ones(len(particles)) / len(particles))
+        return WeightedParticleBeliefContinuousLightDarkFullCoverage(
+            particles=particles,
+            log_weights=log_weights,
+            ess_factor=config.params.get('ess_factor', 0.5),
+            reinvigoration_fraction=config.params.get('reinvigoration_fraction', 0.05),
+            reinvigoration_cov_matrix=config.params.get('reinvigoration_cov_matrix', np.eye(2))
+        )
+    elif config.class_name == 'WeightedParticleBeliefSanityPOMDP':
+        particles = env.initial_state_dist().sample(n_samples=config.params.get('n_particles', 10))
+        log_weights = np.log(np.ones(len(particles)) / len(particles))
+        return WeightedParticleBeliefSanityPOMDP(
+            particles=particles,
+            log_weights=log_weights,
+            resampling=config.params.get('resampling', True),
+            ess_factor=config.params.get('ess_factor', 0.5),
+            reinvigoration_fraction=config.params.get('reinvigoration_fraction', 0.2)
+        )
+    else:
+        raise ValueError(f"Unknown belief class: {config.class_name}")
 
 def test_belief_config_id_identical_values_produces_same_hash():
     """

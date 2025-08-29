@@ -1,8 +1,17 @@
-import numpy as np
+"""Tests for Discrete Light Dark POMDP environment.
+
+This module tests the Discrete Light Dark POMDP environment, focusing on:
+- Basic environment functionality
+- State transitions and observations
+- Reward calculations
+- Terminal conditions
+"""
+
 import pytest
-from pathlib import Path
+import numpy as np
 import random
 
+# Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 

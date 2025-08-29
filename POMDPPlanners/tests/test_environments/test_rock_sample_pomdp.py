@@ -1,12 +1,15 @@
-"""Tests for RockSample POMDP environment implementation.
+"""Tests for RockSample POMDP environment.
 
-This module contains comprehensive tests for the RockSample POMDP environment,
-verifying alignment with the Julia RockSample.jl implementation and ensuring
-correct functionality of all core components.
+This module tests the RockSample POMDP environment, focusing on:
+- Basic environment functionality
+- State transitions and observations
+- Reward calculations
+- Terminal conditions
 """
 
 import pytest
 import numpy as np
+import random
 from pathlib import Path
 from unittest.mock import patch
 import tempfile
@@ -19,6 +22,10 @@ from POMDPPlanners.environments.rock_sample_pomdp import (
     create_random_rock_sample
 )
 from POMDPPlanners.core.simulation import History, StepData
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 
 class TestRockSampleState:

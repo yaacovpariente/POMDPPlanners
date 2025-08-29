@@ -1,5 +1,20 @@
-import numpy as np
+"""Tests for environment base classes.
+
+This module tests the environment base classes, focusing on:
+- Basic environment functionality
+- Environment interfaces
+- Space information
+- Environment types
+"""
+
 import pytest
+import numpy as np
+import random
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
+
 from typing import Optional, Any, List
 from pathlib import Path
 from POMDPPlanners.core.environment import (
@@ -12,10 +27,7 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-import random
 
-np.random.seed(42)
-random.seed(42)
 
 class MockDistribution(Distribution):
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:

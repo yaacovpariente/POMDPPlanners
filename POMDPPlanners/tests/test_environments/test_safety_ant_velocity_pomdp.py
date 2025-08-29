@@ -1,7 +1,19 @@
-import numpy as np
+"""Tests for Safety Ant Velocity POMDP environment.
+
+This module tests the Safety Ant Velocity POMDP environment, focusing on:
+- Basic environment functionality
+- State transitions and observations
+- Reward calculations
+- Terminal conditions
+"""
+
 import pytest
-from pathlib import Path
+import numpy as np
 import random
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
     SafeAntVelocityPOMDP,
@@ -11,8 +23,6 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
 
-np.random.seed(42)
-random.seed(42)
 
 @pytest.fixture
 def pomdp():

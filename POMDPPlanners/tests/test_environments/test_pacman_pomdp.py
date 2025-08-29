@@ -1,11 +1,15 @@
 """Tests for PacMan POMDP environment.
 
-This module contains comprehensive tests for the PacMan POMDP implementation,
-including unit tests for state transitions, observations, rewards, and visualization.
+This module tests the PacMan POMDP environment, focusing on:
+- Basic environment functionality
+- State transitions and observations
+- Reward calculations
+- Terminal conditions
 """
 
 import pytest
 import numpy as np
+import random
 from pathlib import Path
 from typing import List
 
@@ -18,6 +22,10 @@ from POMDPPlanners.environments.pacman_pomdp import (
 )
 from POMDPPlanners.core.environment import SpaceType, SpaceInfo
 from POMDPPlanners.core.simulation import History, StepData
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 
 class TestPacManState:

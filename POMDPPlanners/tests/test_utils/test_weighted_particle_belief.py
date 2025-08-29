@@ -1,5 +1,14 @@
-import numpy as np
+"""Tests for weighted particle belief implementations.
+
+This module tests the weighted particle belief implementations, focusing on:
+- Basic belief functionality
+- Belief updates
+- Belief sampling
+- Belief types
+"""
+
 import pytest
+import numpy as np
 import random
 from POMDPPlanners.utils.weighted_particle_beliefs import (
     WeightedParticleBeliefDiscreteLightDark,
@@ -8,6 +17,7 @@ from POMDPPlanners.utils.weighted_particle_beliefs import (
 )
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDPDiscreteActions
 
+# Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 

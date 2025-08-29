@@ -1,10 +1,24 @@
-import numpy as np
+"""Tests for distribution implementations.
+
+This module tests the distribution implementations, focusing on:
+- Basic distribution functionality
+- Sampling operations
+- Probability calculations
+- Distribution types
+"""
+
 import pytest
-from POMDPPlanners.core.distributions import DiscreteDistribution, Numpy2DDistribution
+import numpy as np
 import random
 
+# Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
+
+from POMDPPlanners.core.distributions import (
+    DiscreteDistribution,
+    Numpy2DDistribution
+)
 
 
 def test_discrete_distribution_initialization():

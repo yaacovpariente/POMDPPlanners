@@ -1,17 +1,25 @@
-"""Tests for hyperparameter tuning and evaluation utility functions.
+"""Tests for hyperparameter tuning and evaluation utilities.
 
-This module tests the high-level utility functions for conducting hyperparameter
-optimization and policy evaluation using the POMDPSimulator framework.
+This module tests the hyperparameter tuning and evaluation utilities, focusing on:
+- Basic tuning functionality
+- Parameter optimization
+- Evaluation methods
+- Performance metrics
 """
+
+import pytest
+import numpy as np
+import random
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 import tempfile
 import shutil
 from pathlib import Path
 from unittest.mock import Mock, patch
 import pandas as pd
-import pytest
-import random
-import numpy as np
 
 from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
     optimize_and_evaluate_planners,

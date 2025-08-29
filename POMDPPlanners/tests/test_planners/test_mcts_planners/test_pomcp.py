@@ -1,5 +1,15 @@
+"""Tests for POMCP planner.
+
+This module tests the POMCP planner, focusing on:
+- Basic POMCP functionality
+- Tree search operations
+- Belief updates
+- Planning algorithms
+"""
+
 import pytest
 import numpy as np
+import random
 
 from anytree import PostOrderIter
 
@@ -11,8 +21,8 @@ from POMDPPlanners.core.tree import BeliefNode, ActionNode
 
 import time
 
-import random
 
+# Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 

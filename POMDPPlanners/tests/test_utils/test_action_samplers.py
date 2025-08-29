@@ -10,7 +10,6 @@ import pickle
 import json
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock
 
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 from POMDPPlanners.core.tree import BeliefNode
@@ -18,7 +17,7 @@ from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
-from POMDPPlanners.core.belief import get_initial_belief
+from POMDPPlanners.core.belief import get_initial_belief, WeightedParticleBelief
 import random
 
 
@@ -192,7 +191,7 @@ class TestUnitCircleActionSampler:
 
         Purpose: Validates that optional belief_node parameter doesn't affect sampling
 
-        Given: UnitCircleActionSampler and mock belief node
+        Given: UnitCircleActionSampler and real belief node
         When: Sampler is called with and without belief_node parameter
         Then: Both calls produce valid actions of same distribution
 
@@ -200,14 +199,21 @@ class TestUnitCircleActionSampler:
         """
         sampler = UnitCircleActionSampler(max_action_magnitude=1.0)
 
-        # Mock belief node
-        mock_belief_node = Mock(spec=BeliefNode)
+        # Create real belief node with WeightedParticleBelief
+        particles = [np.array([0.0, 0.0]), np.array([1.0, 1.0])]
+        log_weights = np.array([-0.1, -0.2])
+        belief = WeightedParticleBelief(
+            particles=particles,
+            log_weights=log_weights,
+            resampling=False
+        )
+        belief_node = BeliefNode(belief=belief, observation=np.array([0.0, 0.0]))
 
         # Sample without belief node
         action1 = sampler.sample()
 
         # Sample with belief node
-        action2 = sampler.sample(belief_node=mock_belief_node)
+        action2 = sampler.sample(belief_node=belief_node)
 
         # Both should be valid actions
         assert isinstance(action1, np.ndarray) and action1.shape == (2,)

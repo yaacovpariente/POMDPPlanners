@@ -9,6 +9,11 @@ This module tests the Push POMDP environment, focusing on:
 import pytest
 import numpy as np
 from pathlib import Path
+import random
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 from POMDPPlanners.environments.push_pomdp import (
     PushPOMDP,
