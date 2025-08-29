@@ -1,4 +1,4 @@
-from typing import List, Any, Optional, Tuple
+from typing import List, Any, Optional, Tuple, Union
 from pathlib import Path
 import json
 import hashlib
@@ -28,12 +28,10 @@ class BaseLightDarkPOMDP(Environment, ABC):
         name: str,
         space_info: SpaceInfo,
         reward_range: Optional[Tuple[float, float]] = None,
-        beacons: np.ndarray = np.array(
-            [[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]
-        ),
+        beacons: List[Tuple[float, float]] = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)],
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
-        obstacles: np.ndarray = np.array([[3, 7], [5, 5]]),
+        obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
         obstacle_hit_probability: float = 0.2,
         obstacle_reward: float = -10.0,
         obstacle_radius: float = 1.0,
@@ -60,10 +58,11 @@ class BaseLightDarkPOMDP(Environment, ABC):
         
         super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, reward_range=reward_range)
         
-        self.beacons = beacons
+        # Convert lists of tuples to numpy arrays (maintaining internal representation)
+        self.beacons = self._convert_beacons_to_array(beacons)
         self.goal_state = goal_state
         self.start_state = start_state
-        self.obstacles = obstacles
+        self.obstacles = self._convert_obstacles_to_array(obstacles)
         self.obstacle_hit_probability = obstacle_hit_probability
         self.obstacle_reward = obstacle_reward
         self.obstacle_radius = obstacle_radius
@@ -71,15 +70,47 @@ class BaseLightDarkPOMDP(Environment, ABC):
         self.beacon_radius = beacon_radius
         self.fuel_cost = fuel_cost
         self.grid_size = grid_size
+    
+    def _convert_beacons_to_array(self, beacons_list: List[Tuple[float, float]]) -> np.ndarray:
+        """Convert list of (x, y) tuples to 2xN numpy array format for beacons.
+        
+        Args:
+            beacons_list: List of (x, y) coordinate tuples
+            
+        Returns:
+            2xN numpy array where first row is x coordinates, second row is y coordinates
+        """
+        if not beacons_list:
+            return np.empty((2, 0))
+        
+        # Convert list of tuples to numpy array and transpose to get 2xN format
+        coords_array = np.array(beacons_list).T  # Shape: (2, N)
+        return coords_array
+    
+    def _convert_obstacles_to_array(self, obstacles_list: List[Tuple[float, float]]) -> np.ndarray:
+        """Convert list of (x, y) tuples to Nx2 numpy array format for obstacles.
+        
+        Args:
+            obstacles_list: List of (x, y) coordinate tuples
+            
+        Returns:
+            Nx2 numpy array where each row is [x, y] coordinates
+        """
+        if not obstacles_list:
+            return np.empty((0, 2))
+        
+        # Convert list of tuples directly to numpy array (each tuple becomes a row)
+        coords_array = np.array(obstacles_list)  # Shape: (N, 2)
+        return coords_array
         
     def __type_check(
         self,
         discount_factor: float,
         name: str,
-        beacons: np.ndarray,
+        beacons: List[Tuple[float, float]],
         goal_state: np.ndarray,
         start_state: np.ndarray,
-        obstacles: np.ndarray,
+        obstacles: List[Tuple[float, float]],
         obstacle_hit_probability: float,
         obstacle_reward: float,
         obstacle_radius: float,
@@ -93,14 +124,18 @@ class BaseLightDarkPOMDP(Environment, ABC):
             raise TypeError("discount_factor must be a float")
         if not isinstance(name, str):
             raise TypeError("name must be a string")
-        if not isinstance(beacons, np.ndarray):
-            raise TypeError("beacons must be a numpy array")
+        if not isinstance(beacons, list):
+            raise TypeError("beacons must be a list of tuples")
+        if beacons and not all(isinstance(beacon, tuple) and len(beacon) == 2 for beacon in beacons):
+            raise TypeError("beacons must be a list of (x, y) coordinate tuples")
         if not isinstance(goal_state, np.ndarray):
             raise TypeError("goal_state must be a numpy array")
         if not isinstance(start_state, np.ndarray):
             raise TypeError("start_state must be a numpy array")
-        if not isinstance(obstacles, np.ndarray):
-            raise TypeError("obstacles must be a numpy array")
+        if not isinstance(obstacles, list):
+            raise TypeError("obstacles must be a list of tuples")
+        if obstacles and not all(isinstance(obstacle, tuple) and len(obstacle) == 2 for obstacle in obstacles):
+            raise TypeError("obstacles must be a list of (x, y) coordinate tuples")
         if not isinstance(obstacle_hit_probability, float):
             raise TypeError("obstacle_hit_probability must be a float")
         if not isinstance(obstacle_reward, float):
@@ -126,24 +161,22 @@ class BaseLightDarkPOMDP(Environment, ABC):
         if obstacle_radius <= 0:
             raise ValueError("obstacle_radius must be positive")
         # Shape checks
-        if beacons.shape[0] != 2:
-            raise ValueError("beacons must be a 2xN array")
         if goal_state.shape != (2,):
             raise ValueError("goal_state must be a 2D vector")
         if start_state.shape != (2,):
             raise ValueError("start_state must be a 2D vector")
-        if obstacles.shape[0] != 2:
-            raise ValueError("obstacles must be a 2xN array")
 
         # Range checks for states
-        if not (np.all(beacons >= 0) and np.all(beacons <= grid_size)):
-            raise ValueError("beacons coordinates must be within grid")
+        for beacon in beacons:
+            if not (0 <= beacon[0] <= grid_size and 0 <= beacon[1] <= grid_size):
+                raise ValueError("beacons coordinates must be within grid")
         if not (np.all(goal_state >= 0) and np.all(goal_state <= grid_size)):
             raise ValueError("goal_state must be within grid")
         if not (np.all(start_state >= 0) and np.all(start_state <= grid_size)):
             raise ValueError("start_state must be within grid")
-        if not (np.all(obstacles >= 0) and np.all(obstacles <= grid_size)):
-            raise ValueError("obstacles must be within grid")
+        for obstacle in obstacles:
+            if not (0 <= obstacle[0] <= grid_size and 0 <= obstacle[1] <= grid_size):
+                raise ValueError("obstacles coordinates must be within grid")
         
     @abstractmethod
     def state_transition_model(self, state: np.ndarray, action: Any) -> Distribution:
@@ -374,12 +407,15 @@ class BaseLightDarkPOMDP(Environment, ABC):
                 
             # Handle numpy arrays
             if isinstance(value, np.ndarray):
-                if key in ['beacons', 'obstacles']:
-                    # For beacons and obstacles, sort columns to ensure order invariance
-                    # First, transpose to get columns as rows
-                    # Then sort rows lexicographically
-                    # Finally, transpose back
+                if key == 'beacons':
+                    # Beacons are in 2xN format: [[x1,x2,...], [y1,y2,...]]
+                    # Transpose to get Nx2 format, sort, then transpose back
                     sorted_array = np.sort(value.T, axis=0).T
+                    config_dict[key] = sorted_array.tolist()
+                elif key == 'obstacles':
+                    # Obstacles are in Nx2 format: [[x1,y1], [x2,y2], ...]
+                    # Sort directly without transposing
+                    sorted_array = np.sort(value, axis=0)
                     config_dict[key] = sorted_array.tolist()
                 else:
                     config_dict[key] = value.tolist()
@@ -410,12 +446,10 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
         name: str,
         is_discrete_observations: bool,
         reward_range: Optional[Tuple[float, float]] = None,
-        beacons: np.ndarray = np.array(
-            [[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]
-        ),
+        beacons: List[Tuple[float, float]] = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)],
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
-        obstacles: np.ndarray = np.array([[3, 7], [5, 5]]),
+        obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
         obstacle_hit_probability: float = 0.2,
         obstacle_reward: float = -10.0,
         goal_reward: float = 10.0,
