@@ -12,7 +12,7 @@ import numpy as np
 import random
 from pathlib import Path
 
-from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
+from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI, RiskAverseEnvironmentConfigsAPI
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.belief import WeightedParticleBelief
 
@@ -207,6 +207,54 @@ class TestEnvironmentConfigs:
         
         print("  ✓ SafeAntVelocityPOMDP configuration test passed!")
     
+    def test_risk_averse_push_pomdp_config(self):
+        """Test RiskAverseEnvironmentConfigsAPI push POMDP configuration creation."""
+        print("Testing RiskAverseEnvironmentConfigsAPI push POMDP configuration...")
+        
+        # Create risk averse config API
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False, risk_aversion_factor=0.5)
+        
+        # Test initialization without errors
+        pomdp, belief = risk_averse_api.push_pomdp_config(n_particles=self.test_n_particles)
+        
+        print("  ✓ RiskAverseEnvironmentConfigsAPI push POMDP configuration test passed!")
+    
+    def test_risk_averse_rock_sample_pomdp_config(self):
+        """Test RiskAverseEnvironmentConfigsAPI rock sample POMDP configuration creation."""
+        print("Testing RiskAverseEnvironmentConfigsAPI rock sample POMDP configuration...")
+        
+        # Create risk averse config API
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False, risk_aversion_factor=0.5)
+        
+        # Test initialization without errors
+        pomdp, belief = risk_averse_api.rock_sample_pomdp_config(n_particles=self.test_n_particles)
+        
+        print("  ✓ RiskAverseEnvironmentConfigsAPI rock sample POMDP configuration test passed!")
+    
+    def test_risk_averse_light_dark_discrete_actions_config(self):
+        """Test RiskAverseEnvironmentConfigsAPI light dark discrete actions configuration creation."""
+        print("Testing RiskAverseEnvironmentConfigsAPI light dark discrete actions configuration...")
+        
+        # Create risk averse config API
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False, risk_aversion_factor=0.5)
+        
+        # Test initialization without errors
+        pomdp, belief = risk_averse_api.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=self.test_n_particles)
+        
+        print("  ✓ RiskAverseEnvironmentConfigsAPI light dark discrete actions configuration test passed!")
+    
+    def test_risk_averse_light_dark_continuous_actions_config(self):
+        """Test RiskAverseEnvironmentConfigsAPI light dark continuous actions configuration creation."""
+        print("Testing RiskAverseEnvironmentConfigsAPI light dark continuous actions configuration...")
+        
+        # Create risk averse config API
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False, risk_aversion_factor=0.5)
+        
+        # Test initialization without errors
+        pomdp, belief = risk_averse_api.continuous_observations_continuous_actions_light_dark_pomdp_config(n_particles=self.test_n_particles)
+        
+        print("  ✓ RiskAverseEnvironmentConfigsAPI light dark continuous actions configuration test passed!")
+    
     def test_config_api_initialization(self):
         """Test EnvironmentConfigsAPI initialization with different parameters."""
         print("Testing EnvironmentConfigsAPI initialization...")
@@ -222,6 +270,24 @@ class TestEnvironmentConfigs:
         assert api_custom.debug == True, f"Expected True, got {api_custom.debug}"
         
         print("  ✓ EnvironmentConfigsAPI initialization test passed!")
+    
+    def test_risk_averse_config_api_initialization(self):
+        """Test RiskAverseEnvironmentConfigsAPI initialization with different parameters."""
+        print("Testing RiskAverseEnvironmentConfigsAPI initialization...")
+        
+        # Test default initialization
+        api_default = RiskAverseEnvironmentConfigsAPI()
+        assert api_default.discount_factor == 0.95, f"Expected 0.95, got {api_default.discount_factor}"
+        assert api_default.debug == False, f"Expected False, got {api_default.debug}"
+        assert api_default.risk_aversion_factor == 0.5, f"Expected 0.5, got {api_default.risk_aversion_factor}"
+        
+        # Test custom initialization
+        api_custom = RiskAverseEnvironmentConfigsAPI(discount_factor=0.99, debug=True, risk_aversion_factor=0.8)
+        assert api_custom.discount_factor == 0.99, f"Expected 0.99, got {api_custom.discount_factor}"
+        assert api_custom.debug == True, f"Expected True, got {api_custom.debug}"
+        assert api_custom.risk_aversion_factor == 0.8, f"Expected 0.8, got {api_custom.risk_aversion_factor}"
+        
+        print("  ✓ RiskAverseEnvironmentConfigsAPI initialization test passed!")
     
     def test_all_configs_have_consistent_interface(self):
         """Test that all configuration methods return consistent types."""

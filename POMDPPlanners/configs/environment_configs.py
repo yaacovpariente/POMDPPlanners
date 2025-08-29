@@ -203,16 +203,10 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
         DISCOUNT_FACTOR = self.discount_factor
         STATE_TRANSITION_COV_MATRIX = np.eye(2) * 0.075  # Identity matrix for state transitions
         OBSERVATION_COV_MATRIX = np.array([[0.075, 0.01], [0.01, 0.075]])  # Anisotropic observation noise
-        BEACONS = np.array([
-            [1, 1, 4, 4], 
-            [1, 4, 4, 1]
-        ])  # Grid pattern
+        BEACONS = [(1, 1), (4, 4), (4, 1), (1, 4)]  # Grid pattern as list of tuples
         GOAL_STATE = np.array([4, 4])  # Goal at (4,4)
         START_STATE = np.array([1, 1])  # Start at (1,1)
-        OBSTACLES = np.array([
-            [3, 3, 4], 
-            [1, 2, 1]
-        ])  # Two obstacles
+        OBSTACLES = [(3, 3), (3, 4), (1, 2), (2, 1)]  # Two obstacles as list of tuples
         OBSTACLE_HIT_PROBABILITY = 0.2  # 20% chance of hitting obstacle
         OBSTACLE_REWARD = -10.0  # Penalty for hitting obstacle
         GOAL_REWARD = 10.0  # Reward for reaching goal
@@ -259,16 +253,10 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
         DISCOUNT_FACTOR = self.discount_factor
         STATE_TRANSITION_COV_MATRIX = np.eye(2) * 0.075  # Identity matrix for state transitions
         OBSERVATION_COV_MATRIX = np.array([[0.075, 0.01], [0.01, 0.075]])  # Anisotropic observation noise
-        BEACONS = np.array([
-            [1, 1, 4, 4], 
-            [1, 4, 4, 1]
-        ])  # Grid pattern
+        BEACONS = [(1, 1), (4, 4), (4, 1), (1, 4)]  # Grid pattern as list of tuples
         GOAL_STATE = np.array([4, 4])  # Goal at (4,4)
         START_STATE = np.array([1, 1])  # Start at (1,1)
-        OBSTACLES = np.array([
-            [3, 3, 4], 
-            [1, 2, 1]
-        ])  # Two obstacles
+        OBSTACLES = [(3, 3), (3, 4), (1, 2), (2, 1)]  # Two obstacles as list of tuples
         OBSTACLE_HIT_PROBABILITY = 0.2  # 20% chance of hitting obstacle
         OBSTACLE_REWARD = -10.0  # Penalty for hitting obstacle
         GOAL_REWARD = 10.0  # Reward for reaching goal
@@ -323,6 +311,21 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
             dangerous_area_penalty=5.0
         )
 
+        belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
+        return pomdp, belief
+
+    def push_pomdp_config(self, n_particles: int = 20) -> Tuple[Environment, WeightedParticleBelief]:
+        pomdp = PushPOMDP(
+            discount_factor=self.discount_factor,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            observation_noise=0.1,
+            obstacles=[(3.0, 4.0), (6.0, 7.0), (2.0, 8.0)],
+            obstacle_radius=0.5,
+            obstacle_penalty=-10.0,
+            name="PushPOMDP"
+        )
         belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
         return pomdp, belief
 
