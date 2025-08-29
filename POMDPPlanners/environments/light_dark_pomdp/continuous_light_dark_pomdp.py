@@ -26,7 +26,7 @@ Classes:
     ContinuousLightDarkPOMDPDiscreteActions: Discrete action variant
 """
 
-from typing import List, Any
+from typing import List, Any, Tuple
 from pathlib import Path
 from enum import Enum
 
@@ -165,10 +165,10 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         name: str = "ContinuousLightDarkPOMDP",
         state_transition_cov_matrix: np.ndarray = np.eye(2),
         observation_cov_matrix: np.ndarray = np.eye(2),
-        beacons: np.ndarray = np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]),
+        beacons: List[Tuple[float, float]] = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)],
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
-        obstacles: np.ndarray = np.array([[3, 7], [5, 5]]),
+        obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
         obstacle_hit_probability: float = 0.2,
         obstacle_reward: float = -10.0,
         goal_reward: float = 10.0,
@@ -248,40 +248,40 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         # Initialize reward model based on type
         if reward_model_type == RewardModelType.STANDARD:
             self.reward_model = ContinuousLightDarkRewardModel(
-                goal_state=goal_state,
-                obstacles=obstacles,
-                goal_state_radius=goal_state_radius,
-                obstacle_radius=obstacle_radius,
-                grid_size=grid_size,
-                obstacle_hit_probability=obstacle_hit_probability,
-                obstacle_reward=obstacle_reward,
-                goal_reward=goal_reward,
-                fuel_cost=fuel_cost,
+                goal_state=self.goal_state,
+                obstacles=self.obstacles,
+                goal_state_radius=self.goal_state_radius,
+                obstacle_radius=self.obstacle_radius,
+                grid_size=self.grid_size,
+                obstacle_hit_probability=self.obstacle_hit_probability,
+                obstacle_reward=self.obstacle_reward,
+                goal_reward=self.goal_reward,
+                fuel_cost=self.fuel_cost,
             )
         elif reward_model_type == RewardModelType.DECAYING_HIT_PROBABILITY:
             self.reward_model = ContinuousLightDarkDecayingHitProbabilityRewardModel(
-                goal_state=goal_state,
-                obstacles=obstacles,
-                goal_state_radius=goal_state_radius,
-                obstacle_radius=obstacle_radius,
-                grid_size=grid_size,
-                obstacle_hit_probability=obstacle_hit_probability,
-                obstacle_reward=obstacle_reward,
-                goal_reward=goal_reward,
-                fuel_cost=fuel_cost,
-                penalty_decay=penalty_decay,
+                goal_state=self.goal_state,
+                obstacles=self.obstacles,
+                goal_state_radius=self.goal_state_radius,
+                obstacle_radius=self.obstacle_radius,
+                grid_size=self.grid_size,
+                obstacle_hit_probability=self.obstacle_hit_probability,
+                obstacle_reward=self.obstacle_reward,
+                goal_reward=self.goal_reward,
+                fuel_cost=self.fuel_cost,
+                penalty_decay=self.penalty_decay,
             )
         elif reward_model_type == RewardModelType.DANGEROUS_STATES:
             self.reward_model = ContinuousLDDangerousStatesRewardModel(
-                goal_state=goal_state,
-                obstacles=obstacles,
-                goal_state_radius=goal_state_radius,
-                obstacle_radius=obstacle_radius,
-                grid_size=grid_size,
-                obstacle_hit_probability=obstacle_hit_probability,
-                obstacle_reward=obstacle_reward,
-                goal_reward=goal_reward,
-                fuel_cost=fuel_cost,
+                goal_state=self.goal_state,
+                obstacles=self.obstacles,
+                goal_state_radius=self.goal_state_radius,
+                obstacle_radius=self.obstacle_radius,
+                grid_size=self.grid_size,
+                obstacle_hit_probability=self.obstacle_hit_probability,
+                obstacle_reward=self.obstacle_reward,
+                goal_reward=self.goal_reward,
+                fuel_cost=self.fuel_cost,
             )
         else:
             raise ValueError(f"Unknown reward model type: {reward_model_type}")
@@ -469,10 +469,10 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
         beacon_radius: float = 1.0,
         obstacle_radius: float = 1.5,
         name: str = "ContinuousLightDarkPOMDPDiscreteActions",
-        beacons: np.ndarray = np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]),
+        beacons: List[Tuple[float, float]] = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)],
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
-        obstacles: np.ndarray = np.array([[3, 7], [5, 5]]),
+        obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
         reward_model_type: RewardModelType = RewardModelType.STANDARD,
         penalty_decay: float = 1.0,
         is_obstacle_hit_terminal: bool = True,

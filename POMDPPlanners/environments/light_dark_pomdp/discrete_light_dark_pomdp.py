@@ -1,4 +1,4 @@
-from typing import List, Any
+from typing import List, Any, Tuple
 from pathlib import Path
 import json
 import hashlib
@@ -71,12 +71,10 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         name: str = "DiscreteLightDarkPOMDP",
         transition_error_prob: float = 0.05,
         observation_error_prob: float = 0.05,
-        beacons: np.ndarray = np.array(
-            [[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]
-        ),
+        beacons: List[Tuple[float, float]] = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)],
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
-        obstacles: np.ndarray = np.array([[3, 7], [5, 5]]),
+        obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
         obstacle_hit_probability: float = 0.2,
         obstacle_reward: float = -10.0,
         goal_reward: float = 10.0,
