@@ -504,13 +504,11 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         ax.set_ylabel('Row')
         ax.set_title('RockSample POMDP Episode Visualization')
         
-        # Plot rocks with initial states (if any rocks exist)
-        initial_state = path[0]
+        # Initialize empty scatter plots for rocks (will be updated dynamically)
+        rock_scatters = []
         for i, rock_pos in enumerate(self.rock_positions):
-            if i < len(initial_state.rocks):
-                color = 'green' if initial_state.rocks[i] else 'red'
-                ax.scatter(rock_pos[1], rock_pos[0], s=200, c=color, marker='s', 
-                          alpha=0.7, label=f'Rock {i}')
+            scatter = ax.scatter([], [], s=200, marker='s', alpha=0.7, label=f'Rock {i}')
+            rock_scatters.append(scatter)
         
         # Plot dangerous areas as red circles
         danger_patches = []
@@ -552,10 +550,17 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         
         def animate(frame):
             if frame >= len(path):
-                return robot_scatter, path_line, arrow, action_text, sample_text
+                return tuple([robot_scatter, path_line, arrow, action_text, sample_text] + rock_scatters)
             
             state = path[frame]
             robot_pos = state.robot_pos
+            
+            # Update rock colors based on current state
+            for i, rock_pos in enumerate(self.rock_positions):
+                if i < len(state.rocks):
+                    color = 'green' if state.rocks[i] else 'red'
+                    rock_scatters[i].set_offsets([[rock_pos[1], rock_pos[0]]])
+                    rock_scatters[i].set_color(color)
             
             # Update robot position (handle terminal state)
             if robot_pos == (-1, -1):
@@ -632,7 +637,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
                 action_text.set_text(f'Step: {frame+1}/{len(path)}\nAction: Terminal')
                 sample_text.set_visible(False)
             
-            return robot_scatter, path_line, arrow, action_text, sample_text
+            return tuple([robot_scatter, path_line, arrow, action_text, sample_text] + rock_scatters)
         
         ani = animation.FuncAnimation(fig, animate, frames=len(path), 
                                     interval=1000, blit=False, repeat=False)
