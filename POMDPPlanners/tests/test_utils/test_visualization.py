@@ -324,21 +324,21 @@ def test_plot_policy_returns_discrete_light_dark_pomdp(temp_cache_dir):
     """
     # Setup - optimized for test performance
     env = DiscreteLightDarkPOMDP(
-        discount_factor=0.95,
-        transition_error_prob=0.05,
-        observation_error_prob=0.20,
-        beacons=np.array([[0, 0, 5, 5], [0, 5, 0, 5]]),  # Reduced beacons
-        goal_state=np.array([5, 2]),  # Smaller grid
-        start_state=np.array([0, 2]),
-        obstacles=np.array([[2], [2]]),  # Single obstacle at (2,2)
-        obstacle_reward=-16.0,
-        goal_reward=10.0,
-        obstacle_hit_probability=0.5,
-        beacon_radius=1.0,
-        fuel_cost=2.0,
-        grid_size=6,  # Reduced from 11 to 6
-        is_stochastic_reward=True
-    )
+            discount_factor=0.95,
+            transition_error_prob=0.05,
+            observation_error_prob=0.20,
+            beacons=[(0, 0), (0, 5), (5, 0), (5, 5)],  # Convert to list of tuples
+            goal_state=np.array([5, 2]),  # Smaller grid
+            start_state=np.array([0, 2]),
+            obstacles=[(2, 2)],  # Convert to list of tuples
+            obstacle_reward=-16.0,
+            goal_reward=10.0,
+            obstacle_hit_probability=0.5,
+            beacon_radius=1.0,
+            fuel_cost=2.0,
+            grid_size=6,  # Reduced from 11 to 6
+            is_stochastic_reward=True
+        )
     
     # Create simplified agent paths for testing
     agent_paths = [
@@ -391,22 +391,22 @@ def test_plot_policy_returns_continuous_light_dark_pomdp(temp_cache_dir):
     """
     # Setup
     env = ContinuousLightDarkPOMDPDiscreteActions(
-        discount_factor=0.95,
-        state_transition_cov_matrix=np.eye(2) * 0.1,
-        observation_cov_matrix=np.eye(2) * 0.1,
-        obstacle_hit_probability=0.2,
-        obstacle_reward=-10.0,
-        goal_reward=10.0,
-        fuel_cost=2.0,
-        grid_size=11,
-        goal_state_radius=1.5,
-        beacon_radius=1.0,
-        obstacle_radius=1.5,
-        beacons=np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]),
-        goal_state=np.array([10, 5]),
-        start_state=np.array([0, 5]),
-        obstacles=np.array([[3, 7], [5, 5]])
-    )
+            discount_factor=0.95,
+            state_transition_cov_matrix=np.eye(2) * 0.1,
+            observation_cov_matrix=np.eye(2) * 0.1,
+            obstacle_hit_probability=0.2,
+            obstacle_reward=-10.0,
+            goal_reward=10.0,
+            fuel_cost=2.0,
+            grid_size=11,
+            goal_state_radius=1.5,
+            beacon_radius=1.0,
+            obstacle_radius=1.5,
+            beacons=[(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)],  # Convert to list of tuples
+            goal_state=np.array([10, 5]),
+            start_state=np.array([0, 5]),
+            obstacles=[(3, 7), (5, 5)]  # Convert to list of tuples
+        )
     
     # Create agent paths for Continuous Light Dark POMDP
     agent_paths = [
