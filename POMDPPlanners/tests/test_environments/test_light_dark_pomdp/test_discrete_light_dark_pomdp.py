@@ -152,7 +152,7 @@ class TestDiscreteLightDarkPOMDPEquality:
             fuel_cost=2.0,
             grid_size=11,
             is_stochastic_reward=True,
-            beacons=np.array([[1, 1, 1, 6, 6, 6, 11, 11, 11], [1, 6, 11, 1, 6, 11, 1, 6, 11]]),  # Different beacons
+            beacons=[(1, 1), (1, 6), (1, 11), (6, 1), (6, 6), (6, 11), (11, 1), (11, 6), (11, 11)],  # Different beacons
         )
         assert base_light_dark_environment != other_env
     
@@ -177,7 +177,7 @@ class TestDiscreteLightDarkPOMDPEquality:
             fuel_cost=2.0,
             grid_size=11,
             is_stochastic_reward=True,
-            obstacles=np.array([[4, 8], [6, 6]]),  # Different obstacles
+            obstacles=[(4, 8), (6, 6)],  # Different obstacles
         )
         assert base_light_dark_environment != other_env
     
@@ -500,7 +500,7 @@ class TestDiscreteLightDarkPOMDPConfigId:
             fuel_cost=2.0,
             grid_size=11,
             is_stochastic_reward=True,
-            beacons=np.array([[1, 1, 1, 6, 6, 6, 11, 11, 11], [1, 6, 11, 1, 6, 11, 1, 6, 11]]),  # Different
+            beacons=[(1, 1), (1, 6), (1, 11), (6, 1), (6, 6), (6, 11), (11, 1), (11, 6), (11, 11)],  # Different
         )
         assert base_light_dark_environment.config_id != other_env.config_id
     
@@ -547,9 +547,9 @@ class TestDiscreteLightDarkPOMDPConfigId:
     Test type: configuration
     """
         # Create environment with same beacons but in different order
-        beacons_reordered = base_light_dark_environment.beacons.copy()
-        # Swap first and last beacon columns
-        beacons_reordered[:, [0, -1]] = beacons_reordered[:, [-1, 0]]
+        # Default beacons: [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)]
+        # Reorder by swapping first and last
+        beacons_reordered = [(10, 10), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (0, 0)]
         
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
@@ -566,9 +566,9 @@ class TestDiscreteLightDarkPOMDPConfigId:
         assert base_light_dark_environment.config_id == other_env.config_id
         
         # Create environment with same obstacles but in different order
-        obstacles_reordered = base_light_dark_environment.obstacles.copy()
-        # Swap the two obstacle positions
-        obstacles_reordered[:, [0, 1]] = obstacles_reordered[:, [1, 0]]
+        # Default obstacles: [(3, 7), (5, 5)]
+        # Reorder by swapping them
+        obstacles_reordered = [(5, 5), (3, 7)]
         
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
@@ -647,6 +647,173 @@ def test_initialization():
     # Check default obstacles
     expected_obstacles = np.array([[3, 7], [5, 5]])
     assert np.array_equal(env.obstacles, expected_obstacles)
+
+
+def test_beacons_and_obstacles_array_structure():
+    """Test that beacons and obstacles are numpy arrays with correct shapes after initialization.
+    
+    Purpose: Validates that DiscreteLightDarkPOMDP properly converts beacons and obstacles 
+    to numpy arrays with the expected dimensions
+    
+    Given: A DiscreteLightDarkPOMDP environment with default parameters
+    When: Environment is initialized with default beacons and obstacles
+    Then: 
+        - beacons is a 2xN numpy array where N is the number of beacons
+        - obstacles is an Nx2 numpy array where N is the number of obstacles
+        - Both arrays have the correct number of elements
+    
+    Test type: unit
+    """
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        obstacle_hit_probability=0.2,
+        obstacle_reward=-10.0,
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        is_stochastic_reward=True,
+    )
+    
+    # Test beacons structure
+    assert isinstance(env.beacons, np.ndarray), "beacons should be a numpy array"
+    assert env.beacons.ndim == 2, "beacons should be 2-dimensional"
+    assert env.beacons.shape[0] == 2, "beacons should have 2 rows (x and y coordinates)"
+    
+    # Default beacons: [(0,0), (0,5), (0,10), (5,0), (5,5), (5,10), (10,0), (10,5), (10,10)]
+    # So there should be 9 beacons
+    expected_num_beacons = 9
+    assert env.beacons.shape[1] == expected_num_beacons, f"beacons should have {expected_num_beacons} columns"
+    
+    # Test obstacles structure
+    assert isinstance(env.obstacles, np.ndarray), "obstacles should be a numpy array"
+    assert env.obstacles.ndim == 2, "obstacles should be 2-dimensional"
+    assert env.obstacles.shape[1] == 2, "obstacles should have 2 columns (x and y coordinates)"
+    
+    # Default obstacles: [(3,7), (5,5)]
+    # So there should be 2 obstacles
+    expected_num_obstacles = 2
+    assert env.obstacles.shape[0] == expected_num_obstacles, f"obstacles should have {expected_num_obstacles} rows"
+    
+    # Verify the coordinate structure
+    # Beacons: first row should be x coordinates, second row should be y coordinates
+    expected_beacon_x = [0, 0, 0, 5, 5, 5, 10, 10, 10]
+    expected_beacon_y = [0, 5, 10, 0, 5, 10, 0, 5, 10]
+    assert np.array_equal(env.beacons[0, :], expected_beacon_x), "beacons first row should contain x coordinates"
+    assert np.array_equal(env.beacons[1, :], expected_beacon_y), "beacons second row should contain y coordinates"
+    
+    # Obstacles: each row should be [x, y] coordinates
+    expected_obstacle_1 = [3, 7]
+    expected_obstacle_2 = [5, 5]
+    assert np.array_equal(env.obstacles[0, :], expected_obstacle_1), "first obstacle should be [3, 7]"
+    assert np.array_equal(env.obstacles[1, :], expected_obstacle_2), "second obstacle should be [5, 5]"
+
+
+def test_custom_beacons_and_obstacles_array_structure():
+    """Test that custom beacons and obstacles are properly converted to numpy arrays with correct shapes.
+    
+    Purpose: Validates that DiscreteLightDarkPOMDP properly handles custom beacon and obstacle 
+    configurations and converts them to the expected numpy array format
+    
+    Given: A DiscreteLightDarkPOMDP environment with custom beacons and obstacles
+    When: Environment is initialized with custom beacon and obstacle lists
+    Then: 
+        - Custom beacons are converted to 2xN numpy array format
+        - Custom obstacles are converted to Nx2 numpy array format
+        - Arrays contain the correct custom coordinates
+    
+    Test type: unit
+    """
+    custom_beacons = [(1, 1), (1, 6), (6, 1), (6, 6)]
+    custom_obstacles = [(2, 3), (4, 4), (7, 8)]
+    
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        obstacle_hit_probability=0.2,
+        obstacle_reward=-10.0,
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        is_stochastic_reward=True,
+        beacons=custom_beacons,
+        obstacles=custom_obstacles,
+    )
+    
+    # Test custom beacons structure
+    assert isinstance(env.beacons, np.ndarray), "custom beacons should be a numpy array"
+    assert env.beacons.ndim == 2, "custom beacons should be 2-dimensional"
+    assert env.beacons.shape[0] == 2, "custom beacons should have 2 rows (x and y coordinates)"
+    assert env.beacons.shape[1] == len(custom_beacons), f"custom beacons should have {len(custom_beacons)} columns"
+    
+    # Test custom obstacles structure
+    assert isinstance(env.obstacles, np.ndarray), "custom obstacles should be a numpy array"
+    assert env.obstacles.ndim == 2, "custom obstacles should be 2-dimensional"
+    assert env.obstacles.shape[1] == 2, "custom obstacles should have 2 columns (x and y coordinates)"
+    assert env.obstacles.shape[0] == len(custom_obstacles), f"custom obstacles should have {len(custom_obstacles)} rows"
+    
+    # Verify custom coordinate structure
+    # Beacons: first row should be x coordinates, second row should be y coordinates
+    expected_custom_beacon_x = [1, 1, 6, 6]
+    expected_custom_beacon_y = [1, 6, 1, 6]
+    assert np.array_equal(env.beacons[0, :], expected_custom_beacon_x), "custom beacons first row should contain x coordinates"
+    assert np.array_equal(env.beacons[1, :], expected_custom_beacon_y), "custom beacons second row should contain y coordinates"
+    
+    # Obstacles: each row should be [x, y] coordinates
+    expected_custom_obstacle_1 = [2, 3]
+    expected_custom_obstacle_2 = [4, 4]
+    expected_custom_obstacle_3 = [7, 8]
+    assert np.array_equal(env.obstacles[0, :], expected_custom_obstacle_1), "first custom obstacle should be [2, 3]"
+    assert np.array_equal(env.obstacles[1, :], expected_custom_obstacle_2), "second custom obstacle should be [4, 4]"
+    assert np.array_equal(env.obstacles[2, :], expected_custom_obstacle_3), "third custom obstacle should be [7, 8]"
+
+
+def test_empty_beacons_and_obstacles():
+    """Test that empty beacons and obstacles lists are properly handled.
+    
+    Purpose: Validates that DiscreteLightDarkPOMDP properly handles edge cases with empty 
+    beacon and obstacle configurations
+    
+    Given: A DiscreteLightDarkPOMDP environment with empty beacons and obstacles lists
+    When: Environment is initialized with empty lists
+    Then: 
+        - Empty beacons list results in 2x0 numpy array
+        - Empty obstacles list results in 0x2 numpy array
+        - Arrays are properly shaped for empty cases
+    
+    Test type: unit
+    """
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        obstacle_hit_probability=0.2,
+        obstacle_reward=-10.0,
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        is_stochastic_reward=True,
+        beacons=[],  # Empty beacons
+        obstacles=[],  # Empty obstacles
+    )
+    
+    # Test empty beacons structure
+    assert isinstance(env.beacons, np.ndarray), "empty beacons should be a numpy array"
+    assert env.beacons.ndim == 2, "empty beacons should be 2-dimensional"
+    assert env.beacons.shape[0] == 2, "empty beacons should have 2 rows"
+    assert env.beacons.shape[1] == 0, "empty beacons should have 0 columns"
+    
+    # Test empty obstacles structure
+    assert isinstance(env.obstacles, np.ndarray), "empty obstacles should be a numpy array"
+    assert env.obstacles.ndim == 2, "empty obstacles should be 2-dimensional"
+    assert env.obstacles.shape[0] == 0, "empty obstacles should have 0 rows"
+    assert env.obstacles.shape[1] == 2, "empty obstacles should have 2 columns"
+    
+    # Verify arrays are empty but properly shaped
+    assert env.beacons.size == 0, "empty beacons array should have size 0"
+    assert env.obstacles.size == 0, "empty obstacles array should have size 0"
 
 
 def test_state_transition_model():

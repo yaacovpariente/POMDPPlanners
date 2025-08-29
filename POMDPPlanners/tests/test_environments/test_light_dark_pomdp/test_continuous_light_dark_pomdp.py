@@ -228,6 +228,35 @@ def test_initialization():
     assert np.array_equal(env.obstacles, expected_obstacles)
 
 
+def test_beacons_and_obstacles_array_structure():
+    """Test that beacons and obstacles are numpy arrays with correct shapes after initialization."""
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2),
+        observation_cov_matrix=np.eye(2),
+        obstacle_hit_probability=0.2,
+        obstacle_reward=-10.0,
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        goal_state_radius=1.5,
+        beacon_radius=1.0,
+        obstacle_radius=1.5,
+    )
+    
+    # Test beacons structure
+    assert isinstance(env.beacons, np.ndarray), "beacons should be a numpy array"
+    assert env.beacons.ndim == 2, "beacons should be 2-dimensional"
+    assert env.beacons.shape[0] == 2, "beacons should have 2 rows (x and y coordinates)"
+    assert env.beacons.shape[1] == 9, "beacons should have 9 columns"
+    
+    # Test obstacles structure
+    assert isinstance(env.obstacles, np.ndarray), "obstacles should be a numpy array"
+    assert env.obstacles.ndim == 2, "obstacles should be 2-dimensional"
+    assert env.obstacles.shape[1] == 2, "obstacles should have 2 columns (x and y coordinates)"
+    assert env.obstacles.shape[0] == 2, "obstacles should have 2 rows"
+
+
 def test_state_transition_model(pomdp):
     # Test state transition
     state = np.array([0.0, 0.0])
@@ -644,6 +673,89 @@ def test_dangerous_states_reward_model():
     assert len(positive_rewards) > 0, "Should get some positive rewards"
     assert len(negative_rewards) > 0, "Should get some negative rewards"
     # Note: We do not check the mean reward, as the environment's reward structure includes other penalties.
+
+
+def test_single_obstacle_reward_behavior():
+    """Test reward behavior with a single obstacle and radius 1.
+    
+    Purpose: Validates that ContinuousLightDarkPOMDPDiscreteActions correctly applies obstacle rewards
+    based on obstacle radius when states are within or outside the obstacle range
+    
+    Given: A ContinuousLightDarkPOMDPDiscreteActions environment with one obstacle at (5,5) and radius 1.0
+    When: Reward is calculated for states at the obstacle center, within radius, and outside radius
+    Then: 
+        - States at obstacle center get high obstacle reward (negative)
+        - States within obstacle radius get obstacle reward (negative) 
+        - States outside obstacle radius get normal movement reward (lower than obstacle reward)
+    
+    Test type: unit
+    """
+    # Create environment with single obstacle at (5,5) and radius 1.0
+    single_obstacle = [(5, 5)]
+    
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2),
+        observation_cov_matrix=np.eye(2),
+        obstacle_hit_probability=1.0,  # Always hit obstacle when in range
+        obstacle_reward=-15.0,  # High negative reward for obstacle hits
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        goal_state_radius=1.5,
+        beacon_radius=1.0,
+        obstacle_radius=1.0,  # Radius of 1.0
+        obstacles=single_obstacle,
+    )
+    
+    # Test state exactly at obstacle center (5, 5)
+    obstacle_center_state = np.array([5.0, 5.0])
+    action = "up"  # Use "up" action which moves to (5,6) - still within obstacle radius
+    
+    # Calculate reward multiple times to account for stochasticity
+    obstacle_rewards = []
+    for _ in range(100):
+        reward = env.reward(obstacle_center_state, action)
+        obstacle_rewards.append(reward)
+    
+    # The reward should be consistently high (negative) when moving within obstacle radius
+    # Base reward: -fuel_cost - distance_to_goal + obstacle_reward
+    # Moving from (5,5) to (5,6): -2.0 - ||[5,6] - [10,5]|| + (-15.0) = -2.0 - 5.1 + (-15.0) ≈ -22.1
+    expected_obstacle_reward = -2.0 - np.linalg.norm(np.array([5.0, 6.0]) - np.array([10, 5])) + (-15.0)
+    assert all(abs(r - expected_obstacle_reward) < 0.1 for r in obstacle_rewards), \
+        f"Obstacle center rewards should be around {expected_obstacle_reward}, got {obstacle_rewards[:5]}"
+    
+    # Test state outside obstacle radius (7, 5) - distance 2 from center
+    outside_radius_state = np.array([7.0, 5.0])
+    outside_radius_rewards = []
+    for _ in range(100):
+        reward = env.reward(outside_radius_state, action)
+        outside_radius_rewards.append(reward)
+    
+    # Should get normal movement reward (no obstacle penalty)
+    expected_outside_radius_reward = -2.0 - np.linalg.norm(np.array([7.0, 6.0]) - np.array([10, 5]))
+    assert all(abs(r - expected_outside_radius_reward) < 0.1 for r in outside_radius_rewards), \
+        f"Outside radius rewards should be around {expected_outside_radius_reward}, got {outside_radius_rewards[:5]}"
+    
+    # Verify that obstacle rewards are lower (more negative) than normal movement rewards
+    avg_obstacle_reward = np.mean(obstacle_rewards)
+    avg_outside_reward = np.mean(outside_radius_rewards)
+    
+    assert avg_obstacle_reward < avg_outside_reward, \
+        f"Obstacle rewards ({avg_obstacle_reward:.2f}) should be lower than normal rewards ({avg_outside_reward:.2f})"
+    
+    # Verify the obstacle is properly positioned
+    assert env.obstacles.shape == (1, 2), "Should have 1 obstacle with 2 coordinates"
+    assert np.array_equal(env.obstacles[0], [5, 5]), "Obstacle should be at (5, 5)"
+    assert env.obstacle_radius == 1.0, "Obstacle radius should be 1.0"
+    
+    # Print debug information
+    print(f"Obstacle center rewards (first 5): {obstacle_rewards[:5]}")
+    print(f"Outside radius rewards (first 5): {outside_radius_rewards[:5]}")
+    print(f"Average obstacle reward: {avg_obstacle_reward:.2f}")
+    print(f"Average outside reward: {avg_outside_reward:.2f}")
+    print(f"Expected obstacle reward: {expected_obstacle_reward:.2f}")
+    print(f"Expected outside reward: {expected_outside_radius_reward:.2f}")
 
 
 class TestVisualizePath:
