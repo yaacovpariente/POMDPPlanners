@@ -222,7 +222,10 @@ class JoblibTaskManager(TaskManagerExternalDB):
             History: The simulation history
         """
         result = task.run()
-        self.cache_db.set(task.get_config_id(), result)
+        if result is not None:
+            self.cache_db.set(task.get_config_id(), result)
+        else:
+            self.logger.warning(f"Task {task.get_config_id()} returned None result")
         
         return result
     
