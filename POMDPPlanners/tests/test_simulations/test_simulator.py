@@ -1219,8 +1219,8 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(temp_c
         discount_factor=0.95,
         goal_state=np.array([3, 3]),
         start_state=np.array([1, 1]),
-        beacons=np.array([[1, 2], [1, 2]]),  # Beacons within grid
-        obstacles=np.array([[2], [1]]),  # Single obstacle within grid
+        beacons=[(1, 2), (1, 2)],  # Beacons as list of tuples
+        obstacles=[(2, 1)],  # Single obstacle as list of tuples
         grid_size=4,
         name="IntegrationTestEnv"
     )
@@ -1370,8 +1370,8 @@ def test_simulator_skips_visualization_caching_when_disabled(temp_cache_dir):
         discount_factor=0.95,
         goal_state=np.array([5, 5]),
         start_state=np.array([1, 1]),
-        beacons=np.array([[2, 4], [2, 4]]),  # Beacons within grid
-        obstacles=np.array([[3], [3]]),  # Single obstacle within grid
+        beacons=[(2, 4), (2, 4)],  # Beacons as list of tuples
+        obstacles=[(3, 3)],  # Single obstacle as list of tuples
         grid_size=6,
         name="TestLightDarkNoViz"
     )
@@ -1460,8 +1460,8 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
         discount_factor=0.95,
         goal_state=np.array([3, 3]),
         start_state=np.array([0, 0]),
-        beacons=np.array([[1, 2], [1, 2]]),  # Beacons within grid
-        obstacles=np.array([[2], [1]]),  # Single obstacle within grid
+        beacons=[(1, 2), (1, 2)],  # Beacons as list of tuples
+        obstacles=[(2, 1)],  # Single obstacle as list of tuples
         grid_size=4,
         name="DirectMethodTest"
     )
@@ -1591,8 +1591,8 @@ def test_simulator_visualization_error_handling_with_continuous_light_dark(temp_
         discount_factor=0.95,
         goal_state=np.array([3, 3]),
         start_state=np.array([0, 0]),
-        beacons=np.array([[1, 2], [1, 2]]),  # Beacons within grid
-        obstacles=np.array([[2], [1]]),  # Single obstacle within grid
+        beacons=[(1, 2), (1, 2)],  # Beacons as list of tuples
+        obstacles=[(2, 1)],  # Single obstacle as list of tuples
         grid_size=4,
         name="ErrorTestEnv"
     )

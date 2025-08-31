@@ -21,6 +21,12 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 import pandas as pd
 
+# Define InvalidPolicy at module level to avoid pickling issues
+class InvalidPolicy:
+    """Mock invalid policy class that accepts any arguments but fails to work properly"""
+    def __init__(self, **kwargs):
+        pass  # Accept any arguments to avoid str() parameter error
+
 from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
     optimize_and_evaluate_planners,
     HyperParamPlannerConfig,
@@ -1735,7 +1741,7 @@ class TestHyperParamRunnerUseCases:
         # Test with invalid policy class - this will fail during optimization, not during validation
         # The system will try to instantiate the policy and fail, which is the expected behavior
         invalid_config = HyperParamPlannerConfig(
-            policy_cls=str,  # Invalid policy class
+            policy_cls=InvalidPolicy,  # Invalid policy class that won't error on construction
             hyper_parameters=hyper_parameters,
             constant_parameters=constant_parameters
         )
