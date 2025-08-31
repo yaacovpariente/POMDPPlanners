@@ -686,7 +686,7 @@ class WeightedParticleBeliefStateUpdate(Belief):
             print(f"Sampled state: {sampled_state}")
     """
     
-    def __init__(self, particles: list = [], weights: list = []):
+    def __init__(self, particles: Optional[list] = None, weights: Optional[list] = None):
         """Initialize weighted particle belief.
         
         Creates a belief state with given particles and weights. Empty lists
@@ -704,6 +704,10 @@ class WeightedParticleBeliefStateUpdate(Belief):
             When weights is empty, weights_sum is automatically set to 0.
             This handles the case where an empty belief is initialized.
         """
+        if particles is None:
+            particles = []
+            weights = []
+
         if len(particles) != len(weights):
             raise ValueError("particles and weights must have the same length")
             

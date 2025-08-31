@@ -909,6 +909,31 @@ def test_weighted_particle_belief_state_update_initialization_empty():
     assert belief.weights_sum == 0
 
 
+def test_weighted_particle_belief_state_update_mutable_default_arguments():
+    """Test that WeightedParticleBeliefStateUpdate doesn't have mutable default argument issues.
+    
+    Purpose: Validates that multiple empty belief instances don't share references to the same list objects
+    
+    Given: Multiple WeightedParticleBeliefStateUpdate instances created with default empty initialization
+    When: Instances are created and their particle/weight lists are checked for reference sharing
+    Then: Each instance has its own separate empty lists, preventing mutable default argument issues
+    
+    Test type: unit
+    """
+    belief1 = WeightedParticleBeliefStateUpdate()
+    belief2 = WeightedParticleBeliefStateUpdate()
+    
+    # Verify that each instance has its own separate list objects
+    assert belief1.particles is not belief2.particles, "Particles lists should not share references"
+    assert belief1.weights is not belief2.weights, "Weights lists should not share references"
+    
+    # Both should still be empty
+    assert belief1.particles == []
+    assert belief1.weights == []
+    assert belief2.particles == []
+    assert belief2.weights == []
+
+
 def test_weighted_particle_belief_state_update_initialization_with_data():
     """Test WeightedParticleBeliefStateUpdate initialization with particles and weights."""
     particles = ["state1", "state2", "state3"]
