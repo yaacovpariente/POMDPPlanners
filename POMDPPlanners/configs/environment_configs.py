@@ -322,7 +322,7 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
             friction_coefficient=0.3,
             observation_noise=0.1,
             obstacles=[(3.0, 4.0), (6.0, 7.0), (2.0, 8.0)],
-            obstacle_radius=0.5,
+            obstacle_radius=1,
             obstacle_penalty=-10.0,
             name="PushPOMDP"
         )
