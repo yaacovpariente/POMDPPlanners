@@ -238,11 +238,23 @@ class PushObservation(ObservationModel):
             observations.append(observation)
         return observations
 
-    def probability(self, observation: np.ndarray) -> float:
-        # Calculate probability based on Gaussian noise model
-        object_pos_diff = observation[2:4] - self.object_pos
-        log_prob = -0.5 * np.sum(object_pos_diff**2) / (self.observation_noise**2)
-        return np.exp(log_prob)
+    def probability(self, observations: List[Any]) -> np.ndarray:
+        # Calculate probabilities based on Gaussian noise model for list of observations
+        probabilities = []
+        for observation in observations:
+            # Ensure observation is numpy array with correct shape
+            if not isinstance(observation, np.ndarray) or observation.size == 0:
+                raise ValueError(f"Expected non-empty numpy array observation, got {type(observation)} with shape {getattr(observation, 'shape', 'unknown')}")
+            
+            if observation.shape != (6,):
+                raise ValueError(f"Expected observation shape (6,), got {observation.shape}")
+            
+            object_pos_diff = observation[2:4] - self.object_pos
+            log_prob = -0.5 * np.sum(object_pos_diff**2) / (self.observation_noise**2)
+            prob = np.exp(log_prob)
+            probabilities.append(prob)
+        
+        return np.array(probabilities)
 
 
 class PushPOMDP(DiscreteActionsEnvironment):

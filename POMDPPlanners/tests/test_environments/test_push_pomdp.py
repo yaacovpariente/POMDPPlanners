@@ -527,4 +527,154 @@ class TestPushPOMDP:
             friction_coefficient=0.3,
             observation_noise=0.1,
         )
-        assert env1.config_id != env3.config_id 
+        assert env1.config_id != env3.config_id
+
+    def test_observation_model_empty_observation_error(self):
+        """Test that observation model properly handles invalid empty observations.
+        
+        Purpose: Validates that the observation probability method handles invalid inputs gracefully
+        
+        Given: A valid PushObservation model and an empty observation array
+        When: The probability method is called with an empty observation
+        Then: A descriptive error should be raised explaining the invalid observation format
+        
+        Test type: unit
+        """
+        # Create observation model
+        state = np.array([5.0, 5.0, 4.0, 5.0, 9.0, 9.0])
+        obs_model = PushObservation(
+            next_state=state,
+            action="right",
+            observation_noise=0.1,
+            grid_size=10,
+        )
+        
+        # Test with empty observation (this is the error case we're debugging)
+        empty_observation = np.array([])
+        
+        with pytest.raises(ValueError) as exc_info:
+            obs_model.probability([empty_observation])  # Now expects list
+        
+        # The error should mention expected array format
+        assert "Expected non-empty numpy array observation" in str(exc_info.value)
+
+    def test_observation_model_invalid_observation_shapes(self):
+        """Test observation model with various invalid observation shapes.
+        
+        Purpose: Validates that observation model handles all invalid observation shapes properly
+        
+        Given: A valid PushObservation model and observations with incorrect shapes
+        When: The probability method is called with malformed observations
+        Then: Appropriate errors should be raised for each invalid shape
+        
+        Test type: unit
+        """
+        # Create observation model
+        state = np.array([5.0, 5.0, 4.0, 5.0, 9.0, 9.0])
+        obs_model = PushObservation(
+            next_state=state,
+            action="right",
+            observation_noise=0.1,
+            grid_size=10,
+        )
+        
+        # Test with various invalid observation shapes
+        invalid_observations = [
+            np.array([]),  # Empty array (shape (0,))
+            np.array([1.0]),  # Too short (shape (1,))
+            np.array([1.0, 2.0, 3.0]),  # Too short (shape (3,))
+            np.array([1.0, 2.0, 3.0, 4.0, 5.0]),  # Too short (shape (5,))
+            np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0]),  # Too long (shape (7,))
+        ]
+        
+        for i, invalid_obs in enumerate(invalid_observations):
+            with pytest.raises(ValueError) as exc_info:
+                obs_model.probability([invalid_obs])  # Now expects list
+            
+            print(f"Invalid observation {i} shape {invalid_obs.shape} correctly raised: {type(exc_info.value).__name__}")
+
+    def test_observation_never_empty_from_sample(self):
+        """Test that observation model never produces empty observations from sample method.
+        
+        Purpose: Validates that the sample method always produces correctly shaped observations
+        
+        Given: A valid PushObservation model
+        When: Multiple observations are sampled
+        Then: All observations should have shape (6,) and valid content
+        
+        Test type: unit
+        """
+        # Create observation model
+        state = np.array([5.0, 5.0, 4.0, 5.0, 9.0, 9.0])
+        obs_model = PushObservation(
+            next_state=state,
+            action="right",
+            observation_noise=0.1,
+            grid_size=10,
+        )
+        
+        # Sample many observations to check consistency
+        for _ in range(20):
+            observations = obs_model.sample(n_samples=5)
+            
+            assert len(observations) == 5, "Should return requested number of observations"
+            
+            for obs in observations:
+                assert isinstance(obs, np.ndarray), "Each observation should be numpy array"
+                assert obs.shape == (6,), f"Expected shape (6,), got {obs.shape}"
+                assert len(obs) > 0, "Observation should not be empty"
+                assert np.all(np.isfinite(obs)), "All observation values should be finite"
+                
+                # Test that this observation can be used in probability calculation
+                try:
+                    probs = obs_model.probability([obs])  # Now expects list
+                    assert len(probs) == 1, "Should return one probability"
+                    prob = probs[0]
+                    assert np.isfinite(prob), "Probability should be finite"
+                    assert prob >= 0.0, "Probability should be non-negative"
+                except Exception as e:
+                    pytest.fail(f"Valid observation {obs} with shape {obs.shape} failed probability calculation: {e}")
+
+    def test_sample_next_step_observation_never_empty(self):
+        """Test that sample_next_step never produces empty observations.
+        
+        Purpose: Validates that the high-level sample_next_step method produces valid observations
+        
+        Given: A valid PushPOMDP environment and various states
+        When: sample_next_step is called multiple times
+        Then: All returned observations should be properly shaped and non-empty
+        
+        Test type: integration
+        """
+        # Test with various initial states
+        test_states = [
+            np.array([1.0, 1.0, 2.0, 2.0, 9.0, 9.0]),  # Normal state
+            np.array([0.0, 0.0, 1.0, 1.0, 9.0, 9.0]),  # Corner state
+            np.array([9.0, 9.0, 8.0, 8.0, 9.0, 9.0]),  # Near target
+            np.array([5.0, 5.0, 5.5, 5.5, 9.0, 9.0]),  # Close robot-object
+        ]
+        
+        actions = self.env.get_actions()
+        
+        for state in test_states:
+            for action in actions:
+                # Call sample_next_step multiple times to check consistency
+                for _ in range(5):
+                    next_state, observation, reward = self.env.sample_next_step(state, action)
+                    
+                    # Check observation properties
+                    assert isinstance(observation, np.ndarray), "Observation should be numpy array"
+                    assert observation.shape == (6,), f"Expected observation shape (6,), got {observation.shape}"
+                    assert len(observation) > 0, "Observation should not be empty"
+                    assert np.all(np.isfinite(observation)), "All observation values should be finite"
+                    
+                    # Verify observation can be used in probability calculation
+                    obs_model = self.env.observation_model(next_state, action)
+                    try:
+                        probs = obs_model.probability([observation])  # Now expects list
+                        assert len(probs) == 1, "Should return one probability"
+                        prob = probs[0]
+                        assert np.isfinite(prob), "Probability should be finite"
+                        assert prob >= 0.0, "Probability should be non-negative"
+                    except Exception as e:
+                        pytest.fail(f"sample_next_step produced invalid observation {observation} with shape {observation.shape}: {e}") 
