@@ -669,4 +669,206 @@ def test_initial_state_distribution(pomdp):
     dist = pomdp.initial_state_dist()
     state = dist.sample()[0]
     assert isinstance(state, np.ndarray)
-    assert state.shape == (4,) 
+    assert state.shape == (4,)
+
+def test_observation_model_empty_observation_error():
+    """Test that observation model properly handles invalid empty observations.
+    
+    Purpose: Validates that the observation probability method handles invalid inputs gracefully
+    
+    Given: A valid SafeAntVelocityObservation model and an empty observation array
+    When: The probability method is called with an empty observation
+    Then: A descriptive error should be raised explaining the invalid observation format
+    
+    Test type: unit
+    """
+    # Create observation model
+    state = np.array([0.5, -0.2, 1.0, 0.5])
+    obs_model = SafeAntVelocityObservation(
+        next_state=state,
+        action=1,
+        position_noise=0.1,
+        velocity_noise=0.2,
+    )
+    
+    # Test with empty observation (this is the error case we fixed)
+    empty_observation = np.array([])
+    
+    with pytest.raises(ValueError) as exc_info:
+        obs_model.probability([empty_observation])  # Now expects list
+    
+    # The error should mention expected array format
+    assert "Expected non-empty numpy array observation" in str(exc_info.value)
+
+def test_observation_model_invalid_observation_shapes():
+    """Test observation model with various invalid observation shapes.
+    
+    Purpose: Validates that observation model handles all invalid observation shapes properly
+    
+    Given: A valid SafeAntVelocityObservation model and observations with incorrect shapes
+    When: The probability method is called with malformed observations
+    Then: Appropriate errors should be raised for each invalid shape
+    
+    Test type: unit
+    """
+    # Create observation model
+    state = np.array([0.5, -0.2, 1.0, 0.5])
+    obs_model = SafeAntVelocityObservation(
+        next_state=state,
+        action=1,
+        position_noise=0.1,
+        velocity_noise=0.2,
+    )
+    
+    # Test with various invalid observation shapes
+    invalid_observations = [
+        np.array([]),  # Empty array (shape (0,))
+        np.array([1.0]),  # Too short (shape (1,))
+        np.array([1.0, 2.0]),  # Too short (shape (2,))
+        np.array([1.0, 2.0, 3.0]),  # Too short (shape (3,))
+        np.array([1.0, 2.0, 3.0, 4.0, 5.0]),  # Too long (shape (5,))
+        np.array([1.0, 2.0, 3.0, 4.0, 5.0, 6.0]),  # Too long (shape (6,))
+    ]
+    
+    for i, invalid_obs in enumerate(invalid_observations):
+        with pytest.raises(ValueError) as exc_info:
+            obs_model.probability([invalid_obs])  # Now expects list
+        
+        print(f"Invalid observation {i} shape {invalid_obs.shape} correctly raised: {type(exc_info.value).__name__}")
+
+def test_observation_never_empty_from_sample():
+    """Test that observation model never produces empty observations from sample method.
+    
+    Purpose: Validates that the sample method always produces correctly shaped observations
+    
+    Given: A valid SafeAntVelocityObservation model
+    When: Multiple observations are sampled
+    Then: All observations should have shape (4,) and valid content
+    
+    Test type: unit
+    """
+    # Create observation model
+    state = np.array([0.5, -0.2, 1.0, 0.5])
+    obs_model = SafeAntVelocityObservation(
+        next_state=state,
+        action=1,
+        position_noise=0.1,
+        velocity_noise=0.2,
+    )
+    
+    # Sample many observations to check consistency
+    for _ in range(20):
+        observations = obs_model.sample(n_samples=5)
+        
+        assert len(observations) == 5, "Should return requested number of observations"
+        
+        for obs in observations:
+            assert isinstance(obs, np.ndarray), "Each observation should be numpy array"
+            assert obs.shape == (4,), f"Expected shape (4,), got {obs.shape}"
+            assert len(obs) > 0, "Observation should not be empty"
+            assert np.all(np.isfinite(obs)), "All observation values should be finite"
+            
+            # Test that this observation can be used in probability calculation
+            try:
+                probs = obs_model.probability([obs])  # Now expects list
+                assert len(probs) == 1, "Should return one probability"
+                prob = probs[0]
+                assert np.isfinite(prob), "Probability should be finite"
+                assert prob >= 0.0, "Probability should be non-negative"
+            except Exception as e:
+                pytest.fail(f"Valid observation {obs} with shape {obs.shape} failed probability calculation: {e}")
+
+def test_sample_next_step_observation_never_empty():
+    """Test that sample_next_step never produces empty observations.
+    
+    Purpose: Validates that the high-level sample_next_step method produces valid observations
+    
+    Given: A valid SafeAntVelocityPOMDP environment and various states
+    When: sample_next_step is called multiple times
+    Then: All returned observations should be properly shaped and non-empty
+    
+    Test type: integration
+    """
+    env = SafeAntVelocityPOMDP(
+        discount_factor=0.95,
+        safe_velocity_threshold=2.0,
+        position_noise=0.1,
+        velocity_noise=0.2
+    )
+    
+    # Test with various initial states
+    test_states = [
+        np.array([0.0, 0.0, 0.0, 0.0]),  # Zero state
+        np.array([-0.5, 0.5, 1.0, -1.0]),  # Mixed positive/negative
+        np.array([0.8, -0.3, 1.5, 0.8]),  # Near safe threshold
+        np.array([0.1, 0.1, 0.1, 0.1]),  # Small values
+    ]
+    
+    actions = env.get_actions()
+    
+    for state in test_states:
+        for action in actions:
+            # Call sample_next_step multiple times to check consistency
+            for _ in range(5):
+                next_state, observation, reward = env.sample_next_step(state, action)
+                
+                # Check observation properties
+                assert isinstance(observation, np.ndarray), "Observation should be numpy array"
+                assert observation.shape == (4,), f"Expected observation shape (4,), got {observation.shape}"
+                assert len(observation) > 0, "Observation should not be empty"
+                assert np.all(np.isfinite(observation)), "All observation values should be finite"
+                
+                # Verify observation can be used in probability calculation
+                obs_model = env.observation_model(next_state, action)
+                try:
+                    probs = obs_model.probability([observation])  # Now expects list
+                    assert len(probs) == 1, "Should return one probability"
+                    prob = probs[0]
+                    assert np.isfinite(prob), "Probability should be finite"
+                    assert prob >= 0.0, "Probability should be non-negative"
+                except Exception as e:
+                    pytest.fail(f"sample_next_step produced invalid observation {observation} with shape {observation.shape}: {e}")
+
+def test_observation_probability_list_interface():
+    """Test that observation model probability method correctly handles list interface.
+    
+    Purpose: Validates that probability method works with lists of observations and returns arrays
+    
+    Given: A valid SafeAntVelocityObservation model and multiple valid observations
+    When: The probability method is called with list of observations
+    Then: Returns array of probabilities with correct length and finite values
+    
+    Test type: unit
+    """
+    # Create observation model
+    state = np.array([0.5, -0.2, 1.0, 0.5])
+    obs_model = SafeAntVelocityObservation(
+        next_state=state,
+        action=1,
+        position_noise=0.1,
+        velocity_noise=0.2,
+    )
+    
+    # Test single observation
+    obs1 = np.array([0.51, -0.19, 1.02, 0.48])  # Close to true state
+    probs = obs_model.probability([obs1])
+    
+    assert isinstance(probs, np.ndarray), "Should return numpy array"
+    assert len(probs) == 1, "Should return one probability for one observation"
+    assert np.isfinite(probs[0]), "Probability should be finite"
+    assert probs[0] >= 0.0, "Probability should be non-negative"
+    
+    # Test multiple observations
+    obs2 = np.array([0.49, -0.21, 0.98, 0.52])  # Also close to true state
+    obs3 = np.array([1.5, 1.8, 2.0, 2.5])       # Far from true state
+    
+    probs_multi = obs_model.probability([obs1, obs2, obs3])
+    
+    assert isinstance(probs_multi, np.ndarray), "Should return numpy array"
+    assert len(probs_multi) == 3, "Should return three probabilities for three observations"
+    assert np.all(np.isfinite(probs_multi)), "All probabilities should be finite"
+    assert np.all(probs_multi >= 0.0), "All probabilities should be non-negative"
+    
+    # Closer observations should have higher probability
+    assert probs_multi[0] > probs_multi[2], "Closer observation should have higher probability"
+    assert probs_multi[1] > probs_multi[2], "Closer observation should have higher probability" 

@@ -202,15 +202,27 @@ class SafeAntVelocityObservation(ObservationModel):
             observations.append(observation)
         return observations
 
-    def probability(self, observation: np.ndarray) -> float:
-        # Calculate probability based on Gaussian noise model
-        position_diff = observation[:2] - self.position
-        velocity_diff = observation[2:4] - self.velocity
+    def probability(self, observations: List[Any]) -> np.ndarray:
+        # Calculate probabilities based on Gaussian noise model for list of observations
+        probabilities = []
+        for observation in observations:
+            # Ensure observation is numpy array with correct shape
+            if not isinstance(observation, np.ndarray) or observation.size == 0:
+                raise ValueError(f"Expected non-empty numpy array observation, got {type(observation)} with shape {getattr(observation, 'shape', 'unknown')}")
+            
+            if observation.shape != (4,):
+                raise ValueError(f"Expected observation shape (4,), got {observation.shape}")
+            
+            position_diff = observation[:2] - self.position
+            velocity_diff = observation[2:4] - self.velocity
+            
+            position_log_prob = -0.5 * np.sum(position_diff**2) / (self.position_noise**2)
+            velocity_log_prob = -0.5 * np.sum(velocity_diff**2) / (self.velocity_noise**2)
+            
+            prob = np.exp(position_log_prob + velocity_log_prob)
+            probabilities.append(prob)
         
-        position_log_prob = -0.5 * np.sum(position_diff**2) / (self.position_noise**2)
-        velocity_log_prob = -0.5 * np.sum(velocity_diff**2) / (self.velocity_noise**2)
-        
-        return np.exp(position_log_prob + velocity_log_prob)
+        return np.array(probabilities)
 
 
 class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
