@@ -26,9 +26,13 @@ from POMDPPlanners.core.policy import Policy
 
 class InvalidPolicy(Policy):
     """Mock invalid policy class that accepts any arguments but fails to work properly"""
-    def __init__(self, **kwargs):
+    def __init__(self, environment=None, discount_factor=0.95, **kwargs):
         # Initialize with minimal Policy requirements
-        super().__init__(name="InvalidPolicy")
+        # Use dummy values if not provided
+        if environment is None:
+            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            environment = TigerPOMDP(discount_factor=discount_factor, name="DummyTiger")
+        super().__init__(environment=environment, discount_factor=discount_factor, name="InvalidPolicy")
     
     def action(self, belief):
         # This will fail during optimization as intended
