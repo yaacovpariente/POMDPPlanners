@@ -1334,8 +1334,8 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(temp_c
     # This is the key integration test - can the environment handle simulator's data?
     environment_compatible = False
     try:
-        # Test the exact interface the simulator uses
-        environment.cache_visualization(history=test_history, cache_path=test_cache_path)
+        # Test the exact interface the simulator uses (List[StepData])
+        environment.cache_visualization(history=test_history.history, cache_path=test_cache_path)
         environment_compatible = True
     except Exception as e:
         environment_error = str(e)

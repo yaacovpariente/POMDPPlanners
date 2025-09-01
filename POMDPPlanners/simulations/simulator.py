@@ -1131,7 +1131,7 @@ class POMDPSimulator(BaseSimulator):
             cache_path = viz_dir / file_name
             try:
                 environment.cache_visualization(
-                    history=history,
+                    history=history.history,  # Pass List[StepData] as per base Environment interface
                     cache_path=cache_path
                 )
             except Exception as e:
