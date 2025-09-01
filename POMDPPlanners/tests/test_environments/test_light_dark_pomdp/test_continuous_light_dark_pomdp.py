@@ -1599,7 +1599,7 @@ def test_risk_averse_environment_config_start_state_validity():
     from POMDPPlanners.configs.environment_configs import RiskAverseEnvironmentConfigsAPI
     
     # Test the configuration that was causing the issue in visualization example
-    env_configs = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, risk_aversion_factor=0.5)
+    env_configs = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95)
     light_dark_env, initial_belief = env_configs.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=50)
     
     # Check that start state is not terminal

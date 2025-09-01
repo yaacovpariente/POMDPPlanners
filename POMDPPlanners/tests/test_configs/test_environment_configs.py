@@ -212,7 +212,7 @@ class TestEnvironmentConfigs:
         print("Testing RiskAverseEnvironmentConfigsAPI push POMDP configuration...")
         
         # Create risk averse config API
-        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False, risk_aversion_factor=0.5)
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False)
         
         # Test initialization without errors
         pomdp, belief = risk_averse_api.push_pomdp_config(n_particles=self.test_n_particles)
@@ -224,7 +224,7 @@ class TestEnvironmentConfigs:
         print("Testing RiskAverseEnvironmentConfigsAPI rock sample POMDP configuration...")
         
         # Create risk averse config API
-        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False, risk_aversion_factor=0.5)
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False)
         
         # Test initialization without errors
         pomdp, belief = risk_averse_api.rock_sample_pomdp_config(n_particles=self.test_n_particles)
@@ -236,7 +236,7 @@ class TestEnvironmentConfigs:
         print("Testing RiskAverseEnvironmentConfigsAPI light dark discrete actions configuration...")
         
         # Create risk averse config API
-        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False, risk_aversion_factor=0.5)
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False)
         
         # Test initialization without errors
         pomdp, belief = risk_averse_api.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=self.test_n_particles)
@@ -248,7 +248,7 @@ class TestEnvironmentConfigs:
         print("Testing RiskAverseEnvironmentConfigsAPI light dark continuous actions configuration...")
         
         # Create risk averse config API
-        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False, risk_aversion_factor=0.5)
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False)
         
         # Test initialization without errors
         pomdp, belief = risk_averse_api.continuous_observations_continuous_actions_light_dark_pomdp_config(n_particles=self.test_n_particles)
@@ -279,13 +279,11 @@ class TestEnvironmentConfigs:
         api_default = RiskAverseEnvironmentConfigsAPI()
         assert api_default.discount_factor == 0.95, f"Expected 0.95, got {api_default.discount_factor}"
         assert api_default.debug == False, f"Expected False, got {api_default.debug}"
-        assert api_default.risk_aversion_factor == 0.5, f"Expected 0.5, got {api_default.risk_aversion_factor}"
         
         # Test custom initialization
-        api_custom = RiskAverseEnvironmentConfigsAPI(discount_factor=0.99, debug=True, risk_aversion_factor=0.8)
+        api_custom = RiskAverseEnvironmentConfigsAPI(discount_factor=0.99, debug=True)
         assert api_custom.discount_factor == 0.99, f"Expected 0.99, got {api_custom.discount_factor}"
         assert api_custom.debug == True, f"Expected True, got {api_custom.debug}"
-        assert api_custom.risk_aversion_factor == 0.8, f"Expected 0.8, got {api_custom.risk_aversion_factor}"
         
         print("  ✓ RiskAverseEnvironmentConfigsAPI initialization test passed!")
     
