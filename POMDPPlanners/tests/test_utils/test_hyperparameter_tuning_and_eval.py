@@ -22,10 +22,17 @@ from unittest.mock import Mock, patch
 import pandas as pd
 
 # Define InvalidPolicy at module level to avoid pickling issues
-class InvalidPolicy:
+from POMDPPlanners.core.policy import Policy
+
+class InvalidPolicy(Policy):
     """Mock invalid policy class that accepts any arguments but fails to work properly"""
     def __init__(self, **kwargs):
-        pass  # Accept any arguments to avoid str() parameter error
+        # Initialize with minimal Policy requirements
+        super().__init__(name="InvalidPolicy")
+    
+    def action(self, belief):
+        # This will fail during optimization as intended
+        raise NotImplementedError("Invalid policy cannot select actions")
 
 from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
     optimize_and_evaluate_planners,
