@@ -33,6 +33,15 @@ class InvalidPolicy(Policy):
     def action(self, belief):
         # This will fail during optimization as intended
         raise NotImplementedError("Invalid policy cannot select actions")
+    
+    @classmethod
+    def get_space_info(cls):
+        """Return space info for invalid policy - this will cause issues during optimization"""
+        from POMDPPlanners.core.policy import PolicySpaceInfo, SpaceType
+        return PolicySpaceInfo(
+            action_space_type=SpaceType.DISCRETE,
+            observation_space_type=SpaceType.DISCRETE
+        )
 
 from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
     optimize_and_evaluate_planners,
