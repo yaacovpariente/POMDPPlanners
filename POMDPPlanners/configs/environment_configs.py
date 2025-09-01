@@ -206,7 +206,7 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
         BEACONS = [(1, 1), (4, 4), (4, 1), (1, 4)]  # Grid pattern as list of tuples
         GOAL_STATE = np.array([4, 4])  # Goal at (4,4)
         START_STATE = np.array([1, 1])  # Start at (1,1)
-        OBSTACLES = [(3, 3), (3, 4), (1, 2), (2, 1)]  # Two obstacles as list of tuples
+        OBSTACLES = [(3, 1), (3, 2), (4, 1)]  # Two obstacles as list of tuples - moved away from start
         OBSTACLE_HIT_PROBABILITY = 0.2  # 20% chance of hitting obstacle
         OBSTACLE_REWARD = -10.0  # Penalty for hitting obstacle
         GOAL_REWARD = 10.0  # Reward for reaching goal
@@ -214,8 +214,8 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
         GRID_SIZE = 5  # Size of the grid
         GOAL_STATE_RADIUS = 1.5  # Radius around goal to consider as reached
         BEACON_RADIUS = 1.0  # Radius around beacons for observations
-        OBSTACLE_RADIUS = 1.5  # Radius around obstacles for collision
-        REWARD_MODEL_TYPE = RewardModelType.STANDARD  # Standard reward model
+        OBSTACLE_RADIUS = 1.2  # Radius around obstacles for collision
+        REWARD_MODEL_TYPE = RewardModelType.DANGEROUS_STATES  # Standard reward model
         PENALTY_DECAY = 1.0  # No decay in penalty
 
         pomdp = ContinuousLightDarkPOMDPDiscreteActions(
@@ -256,7 +256,7 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
         BEACONS = [(1, 1), (4, 4), (4, 1), (1, 4)]  # Grid pattern as list of tuples
         GOAL_STATE = np.array([4, 4])  # Goal at (4,4)
         START_STATE = np.array([1, 1])  # Start at (1,1)
-        OBSTACLES = [(3, 3), (3, 4), (1, 2), (2, 1)]  # Two obstacles as list of tuples
+        OBSTACLES = [(3, 1), (3, 2), (4, 1)]  # Two obstacles as list of tuples - moved away from start
         OBSTACLE_HIT_PROBABILITY = 0.2  # 20% chance of hitting obstacle
         OBSTACLE_REWARD = -10.0  # Penalty for hitting obstacle
         GOAL_REWARD = 10.0  # Reward for reaching goal
@@ -264,8 +264,8 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
         GRID_SIZE = 5  # Size of the grid
         GOAL_STATE_RADIUS = 1.5  # Radius around goal to consider as reached
         BEACON_RADIUS = 1.0  # Radius around beacons for observations
-        OBSTACLE_RADIUS = 1.5  # Radius around obstacles for collision
-        REWARD_MODEL_TYPE = RewardModelType.STANDARD  # Standard reward model
+        OBSTACLE_RADIUS = 1.2  # Radius around obstacles for collision
+        REWARD_MODEL_TYPE = RewardModelType.DANGEROUS_STATES  # Standard reward model
         PENALTY_DECAY = 1.0  # No decay in penalty
 
         pomdp = ContinuousLightDarkPOMDP(
