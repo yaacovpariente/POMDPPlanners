@@ -195,9 +195,8 @@ class EnvironmentConfigsAPI:
 
 
 class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
-    def __init__(self, discount_factor: float = 0.95, debug: bool = False, risk_aversion_factor: float = 0.5):
+    def __init__(self, discount_factor: float = 0.95, debug: bool = False):
         super().__init__(discount_factor=discount_factor, debug=debug)
-        self.risk_aversion_factor = risk_aversion_factor
 
     def continuous_observations_discrete_actions_light_dark_pomdp_config(self, n_particles: int = 20) -> Tuple[Environment, WeightedParticleBelief]:
         DISCOUNT_FACTOR = self.discount_factor
