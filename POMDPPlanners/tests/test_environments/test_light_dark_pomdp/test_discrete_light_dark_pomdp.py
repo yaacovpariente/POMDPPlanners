@@ -653,8 +653,8 @@ def test_initialization():
     )
     assert np.array_equal(env.beacons, expected_beacons)
 
-    # Check default obstacles
-    expected_obstacles = np.array([[3, 7], [5, 5]])
+    # Check default obstacles (now 2xN format like beacons)
+    expected_obstacles = np.array([[3, 5], [7, 5]])
     assert np.array_equal(env.obstacles, expected_obstacles)
 
 
@@ -668,7 +668,7 @@ def test_beacons_and_obstacles_array_structure():
     When: Environment is initialized with default beacons and obstacles
     Then: 
         - beacons is a 2xN numpy array where N is the number of beacons
-        - obstacles is an Nx2 numpy array where N is the number of obstacles
+        - obstacles is a 2xN numpy array where N is the number of obstacles (same format as beacons)
         - Both arrays have the correct number of elements
     
     Test type: unit
@@ -695,10 +695,10 @@ def test_beacons_and_obstacles_array_structure():
     expected_num_beacons = 9
     assert env.beacons.shape[1] == expected_num_beacons, f"beacons should have {expected_num_beacons} columns"
     
-    # Test obstacles structure
+    # Test obstacles structure (now 2xN format like beacons)
     assert isinstance(env.obstacles, np.ndarray), "obstacles should be a numpy array"
     assert env.obstacles.ndim == 2, "obstacles should be 2-dimensional"
-    assert env.obstacles.shape[1] == 2, "obstacles should have 2 columns (x and y coordinates)"
+    assert env.obstacles.shape[0] == 2, "obstacles should have 2 rows (x and y coordinates)"
     
     # Default obstacles: [(3,7), (5,5)]
     # So there should be 2 obstacles
@@ -712,11 +712,11 @@ def test_beacons_and_obstacles_array_structure():
     assert np.array_equal(env.beacons[0, :], expected_beacon_x), "beacons first row should contain x coordinates"
     assert np.array_equal(env.beacons[1, :], expected_beacon_y), "beacons second row should contain y coordinates"
     
-    # Obstacles: each row should be [x, y] coordinates
-    expected_obstacle_1 = [3, 7]
-    expected_obstacle_2 = [5, 5]
-    assert np.array_equal(env.obstacles[0, :], expected_obstacle_1), "first obstacle should be [3, 7]"
-    assert np.array_equal(env.obstacles[1, :], expected_obstacle_2), "second obstacle should be [5, 5]"
+    # Obstacles: now 2xN format like beacons (first row=x coords, second row=y coords)
+    expected_obstacle_x = [3, 5]  # x coordinates of obstacles (3,7) and (5,5)
+    expected_obstacle_y = [7, 5]  # y coordinates of obstacles (3,7) and (5,5)
+    assert np.array_equal(env.obstacles[0, :], expected_obstacle_x), "obstacles first row should contain x coordinates"
+    assert np.array_equal(env.obstacles[1, :], expected_obstacle_y), "obstacles second row should contain y coordinates"
 
 
 def test_custom_beacons_and_obstacles_array_structure():
@@ -757,11 +757,11 @@ def test_custom_beacons_and_obstacles_array_structure():
     assert env.beacons.shape[0] == 2, "custom beacons should have 2 rows (x and y coordinates)"
     assert env.beacons.shape[1] == len(custom_beacons), f"custom beacons should have {len(custom_beacons)} columns"
     
-    # Test custom obstacles structure
+    # Test custom obstacles structure (now 2xN format like beacons)
     assert isinstance(env.obstacles, np.ndarray), "custom obstacles should be a numpy array"
     assert env.obstacles.ndim == 2, "custom obstacles should be 2-dimensional"
-    assert env.obstacles.shape[1] == 2, "custom obstacles should have 2 columns (x and y coordinates)"
-    assert env.obstacles.shape[0] == len(custom_obstacles), f"custom obstacles should have {len(custom_obstacles)} rows"
+    assert env.obstacles.shape[0] == 2, "custom obstacles should have 2 rows (x and y coordinates)"
+    assert env.obstacles.shape[1] == len(custom_obstacles), f"custom obstacles should have {len(custom_obstacles)} columns"
     
     # Verify custom coordinate structure
     # Beacons: first row should be x coordinates, second row should be y coordinates
@@ -770,13 +770,11 @@ def test_custom_beacons_and_obstacles_array_structure():
     assert np.array_equal(env.beacons[0, :], expected_custom_beacon_x), "custom beacons first row should contain x coordinates"
     assert np.array_equal(env.beacons[1, :], expected_custom_beacon_y), "custom beacons second row should contain y coordinates"
     
-    # Obstacles: each row should be [x, y] coordinates
-    expected_custom_obstacle_1 = [2, 3]
-    expected_custom_obstacle_2 = [4, 4]
-    expected_custom_obstacle_3 = [7, 8]
-    assert np.array_equal(env.obstacles[0, :], expected_custom_obstacle_1), "first custom obstacle should be [2, 3]"
-    assert np.array_equal(env.obstacles[1, :], expected_custom_obstacle_2), "second custom obstacle should be [4, 4]"
-    assert np.array_equal(env.obstacles[2, :], expected_custom_obstacle_3), "third custom obstacle should be [7, 8]"
+    # Obstacles: now 2xN format like beacons (first row=x coords, second row=y coords)
+    expected_custom_obstacle_x = [2, 4, 7]  # x coordinates of obstacles (2,3), (4,4), (7,8)
+    expected_custom_obstacle_y = [3, 4, 8]  # y coordinates of obstacles (2,3), (4,4), (7,8)
+    assert np.array_equal(env.obstacles[0, :], expected_custom_obstacle_x), "custom obstacles first row should contain x coordinates"
+    assert np.array_equal(env.obstacles[1, :], expected_custom_obstacle_y), "custom obstacles second row should contain y coordinates"
 
 
 def test_empty_beacons_and_obstacles():
@@ -814,11 +812,11 @@ def test_empty_beacons_and_obstacles():
     assert env.beacons.shape[0] == 2, "empty beacons should have 2 rows"
     assert env.beacons.shape[1] == 0, "empty beacons should have 0 columns"
     
-    # Test empty obstacles structure
+    # Test empty obstacles structure (now 2xN format like beacons)
     assert isinstance(env.obstacles, np.ndarray), "empty obstacles should be a numpy array"
     assert env.obstacles.ndim == 2, "empty obstacles should be 2-dimensional"
-    assert env.obstacles.shape[0] == 0, "empty obstacles should have 0 rows"
-    assert env.obstacles.shape[1] == 2, "empty obstacles should have 2 columns"
+    assert env.obstacles.shape[0] == 2, "empty obstacles should have 2 rows"
+    assert env.obstacles.shape[1] == 0, "empty obstacles should have 0 columns"
     
     # Verify arrays are empty but properly shaped
     assert env.beacons.size == 0, "empty beacons array should have size 0"
@@ -907,9 +905,9 @@ def test_reward_function():
     assert reward == env.goal_reward - env.fuel_cost
 
     # Test obstacle hit reward
-    state = np.array([2, 5])
-    reward = env.reward(state, "right")  # Moves to [3, 5] which is obstacle
-    assert reward == -env.fuel_cost - np.linalg.norm(np.array([3, 5]) - env.goal_state) + env.obstacle_reward
+    state = np.array([4, 5])
+    reward = env.reward(state, "right")  # Moves to [5, 5] which is obstacle
+    assert reward == -env.fuel_cost - np.linalg.norm(np.array([5, 5]) - env.goal_state) + env.obstacle_reward
 
     # Test normal movement reward
     state = np.array([1, 1])
@@ -1098,12 +1096,12 @@ def test_compute_metrics():
             belief=create_test_belief(np.array([1, 5]))
         ),
         StepData(
-            state=np.array([3, 5]),
+            state=np.array([5, 5]),
             action="right",
-            next_state=np.array([3, 5]),
-            observation=np.array([3, 5]),
-            reward=-12.0,  # Obstacle state
-            belief=create_test_belief(np.array([3, 5]))
+            next_state=np.array([5, 5]),
+            observation=np.array([5, 5]),
+            reward=-12.0,  # Obstacle state at (5, 5)
+            belief=create_test_belief(np.array([5, 5]))
         ),
     ], discount_factor=0.95, average_state_sampling_time=0.0, average_action_time=0.0, average_observation_time=0.0, average_belief_update_time=0.0, average_reward_time=0.0, actual_num_steps=3, reach_terminal_state=True, policy_run_data=PolicyRunData(info_variables=[]))
     

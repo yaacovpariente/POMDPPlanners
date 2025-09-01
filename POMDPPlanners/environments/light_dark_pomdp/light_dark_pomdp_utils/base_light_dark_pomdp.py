@@ -14,8 +14,7 @@ from POMDPPlanners.core.environment import (
     SpaceType
 )
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
-from POMDPPlanners.core.simulation import History
-from POMDPPlanners.core.simulation import MetricValue
+from POMDPPlanners.core.simulation import History, StepData, MetricValue
 from POMDPPlanners.utils.statistics import confidence_interval
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.utils.config_to_id import config_to_id
@@ -88,19 +87,19 @@ class BaseLightDarkPOMDP(Environment, ABC):
         return coords_array
     
     def _convert_obstacles_to_array(self, obstacles_list: List[Tuple[float, float]]) -> np.ndarray:
-        """Convert list of (x, y) tuples to Nx2 numpy array format for obstacles.
+        """Convert list of (x, y) tuples to 2xN numpy array format for obstacles.
         
         Args:
             obstacles_list: List of (x, y) coordinate tuples
             
         Returns:
-            Nx2 numpy array where each row is [x, y] coordinates
+            2xN numpy array where first row is x coordinates, second row is y coordinates
         """
         if not obstacles_list:
-            return np.empty((0, 2))
+            return np.empty((2, 0))
         
-        # Convert list of tuples directly to numpy array (each tuple becomes a row)
-        coords_array = np.array(obstacles_list)  # Shape: (N, 2)
+        # Convert list of tuples to numpy array and transpose to get 2xN format (same as beacons)
+        coords_array = np.array(obstacles_list).T  # Shape: (2, N)
         return coords_array
         
     def __type_check(
@@ -244,16 +243,17 @@ class BaseLightDarkPOMDP(Environment, ABC):
             self.start_state[0], self.start_state[1], color="red", label="Start State"
         )
         # Plot circles around obstacles with transparent red background
-        for i in range(self.obstacles.shape[1]):
-            obstacle_x, obstacle_y = self.obstacles[0, i], self.obstacles[1, i]
+        for i in range(self.obstacles.shape[1]):  # obstacles.shape[1] is number of obstacles
+            obstacle_x, obstacle_y = self.obstacles[0, i], self.obstacles[1, i]  # obstacles[0,i] is x, obstacles[1,i] is y
             circle = plt.Circle((obstacle_x, obstacle_y), self.obstacle_radius, 
                               facecolor='red', edgecolor='none', alpha=0.3)
             ax.add_patch(circle)
         
         # Plot the obstacles
-        ax.scatter(
-            self.obstacles[0], self.obstacles[1], color="black", label="Obstacles"
-        )
+        if self.obstacles.size > 0:
+            ax.scatter(
+                self.obstacles[0], self.obstacles[1], color="black", label="Obstacles"
+            )
 
         # Initialize the agent's position and path line
         (agent,) = ax.plot([], [], "ro", markersize=10)
@@ -355,17 +355,17 @@ class BaseLightDarkPOMDP(Environment, ABC):
 
         plt.close()
 
-    def cache_visualization(self, history: History, cache_path: Path) -> None:
+    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Cache visualization of agent's path and belief.
         
         Args:
-            history: The history of states, actions, and observations
+            history: List of step data from an episode
             cache_path: Path where to save the visualization
             
         Raises:
             ValueError: If history is empty or contains invalid data
         """
-        if not history.history:
+        if not history:
             raise ValueError("Cannot visualize empty history")
             
         # Extract data with validation
@@ -373,7 +373,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         agent_belief_path = []
         actions = []
         
-        for step in history.history:
+        for step in history:
             if not hasattr(step, 'state') or not hasattr(step, 'belief') or not hasattr(step, 'action'):
                 raise ValueError(f"History step missing required attributes: {step}")
                 
@@ -413,9 +413,9 @@ class BaseLightDarkPOMDP(Environment, ABC):
                     sorted_array = np.sort(value.T, axis=0).T
                     config_dict[key] = sorted_array.tolist()
                 elif key == 'obstacles':
-                    # Obstacles are in Nx2 format: [[x1,y1], [x2,y2], ...]
-                    # Sort directly without transposing
-                    sorted_array = np.sort(value, axis=0)
+                    # Obstacles are in 2xN format: [[x1,x2,...], [y1,y2,...]]
+                    # Transpose to get Nx2 format, sort, then transpose back
+                    sorted_array = np.sort(value.T, axis=0).T
                     config_dict[key] = sorted_array.tolist()
                 else:
                     config_dict[key] = value.tolist()

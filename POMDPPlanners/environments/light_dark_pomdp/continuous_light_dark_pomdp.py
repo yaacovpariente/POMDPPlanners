@@ -342,9 +342,9 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         is_goal_state = np.linalg.norm(state - self.goal_state) <= self.goal_state_radius
 
         if self.is_obstacle_hit_terminal:
-            is_obstacle_hit = np.any(
-                np.linalg.norm(state.reshape(-1, 1) - self.obstacles, axis=0) <= self.obstacle_radius
-            )
+            # Calculate distance to each obstacle (obstacles are 2xN format)
+            distances = np.linalg.norm(state.reshape(-1, 1) - self.obstacles, axis=0)
+            is_obstacle_hit = np.any(distances <= self.obstacle_radius)
         else:
             is_obstacle_hit = False
 
@@ -368,9 +368,9 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                     goal_reached_in_history = True
                     break
                 
-                if np.any(
-                    np.linalg.norm(step.state.reshape(-1, 1) - self.obstacles, axis=0) <= self.obstacle_radius
-                ):
+                # Calculate distance to each obstacle (obstacles are 2xN format)
+                distances = np.linalg.norm(step.state.reshape(-1, 1) - self.obstacles, axis=0)
+                if np.any(distances <= self.obstacle_radius):
                     obstacle_hit_in_history = True
                     obstacle_hit_counter_in_history += 1
             
