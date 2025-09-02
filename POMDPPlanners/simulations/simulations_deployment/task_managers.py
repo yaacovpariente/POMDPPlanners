@@ -337,3 +337,71 @@ class JoblibTaskManager(TaskManagerExternalDB):
             
         except Exception as e:
             self.logger.warning(f"Could not log cache statistics: {str(e)}")
+
+
+class SequentialTaskManager(JoblibTaskManager):
+    """A task manager that uses sequential execution and caching."""
+    
+    def __init__(
+        self,
+        cache_db: DataBaseInterface,
+        cache_dir: Optional[str] = None,
+        clear_cache_on_start: bool = False,
+        verbose: int = 0,
+        logger_debug: bool = False
+    ):
+        """Initialize the sequential task manager.
+        
+        Args:
+            cache_db: The cache database to use
+            cache_dir: Directory for sequential cache (None for default)
+            clear_cache_on_start: If True, clears the cache at startup
+            verbose: Verbosity level for joblib
+            logger_debug: Whether to enable debug logging
+        """
+        super().__init__(
+            cache_db=cache_db, 
+            cache_dir=cache_dir, 
+            logger_debug=logger_debug, 
+            verbose=verbose, 
+            clear_cache_on_start=clear_cache_on_start
+        )
+    
+    def _run_tasks(self, tasks: List[SimulationTask]) -> list:
+        """Run tasks in sequential."""
+        import time
+        start_time = time.time()
+        
+        # Log system information
+        self._log_system_info()
+        
+        
+        # Run tasks with progress logging
+        try:
+            # Use tqdm with custom callback for logging
+            with tqdm(tasks, desc="Running tasks") as pbar:
+                results = []
+                for task in pbar:
+                    results.append(self._cached_run(task))
+                
+            end_time = time.time()
+            total_time = end_time - start_time
+            
+            # Log completion statistics
+            successful_results = [r for r in results if r is not None]
+            failed_count = len(results) - len(successful_results)
+            
+            self.logger.info(f"Sequential processing completed in {total_time:.2f}s")
+            self.logger.info(f"Results: {len(successful_results)} successful, {failed_count} failed")
+            
+            if failed_count > 0:
+                self.logger.warning(f"{failed_count} tasks failed during sequential processing")
+            
+            # Log cache statistics
+            self._log_cache_statistics()
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Error during sequential processing: {str(e)}")
+            raise e

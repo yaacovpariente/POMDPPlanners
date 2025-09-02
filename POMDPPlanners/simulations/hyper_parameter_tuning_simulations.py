@@ -114,7 +114,7 @@ from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
     NumericalHyperParameter,
 )
-from POMDPPlanners.simulations.simulations_deployment.task_managers import JoblibTaskManager
+from POMDPPlanners.simulations.simulations_deployment.task_managers import SequentialTaskManager
 from POMDPPlanners.utils.logger import get_logger
 from POMDPPlanners.simulations.simulations_deployment.tasks.hyper_parameter_tuning_simulation_task import HyperParameterTuningSimulationTask
 from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParameterRunParams, OptimizedPolicyResult
@@ -252,13 +252,12 @@ class HyperParameterOptimizer:
                 
         # Initialize cache database and task manager
         cache_db = DiskCacheDB(cache_dir=self.cache_dir_path / "task_manager_cache")
-        self.task_manager = JoblibTaskManager(
+        self.task_manager = SequentialTaskManager(
             cache_db=cache_db,
-            cache_dir=str(self.cache_dir_path / "task_manager_cache"),
+            cache_dir=self.cache_dir_path / "task_manager_cache",
             clear_cache_on_start=False,
             verbose=0,
             logger_debug=False,
-            n_jobs=1
         )
 
     def _create_tasks(self, configs: List[HyperParameterRunParams]) -> List[HyperParameterTuningSimulationTask]:
