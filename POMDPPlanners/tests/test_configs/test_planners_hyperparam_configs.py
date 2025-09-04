@@ -74,9 +74,9 @@ class TestPlannersHyperparamConfigs:
         assert config.policy_cls == PFT_DPW
 
         # Verify hyperparameters
-        assert len(config.hyper_parameters) == 7
+        assert len(config.hyper_parameters) == 6
         param_names = [param.name for param in config.hyper_parameters]
-        expected_params = ["exploration_constant", "time_out_in_seconds", "depth", "k_a", "alpha_a", "k_o", "alpha_o"]
+        expected_params = ["exploration_constant", "depth", "k_a", "alpha_a", "k_o", "alpha_o"]
         assert set(param_names) == set(expected_params)
 
         # Verify constant parameters
@@ -113,12 +113,10 @@ class TestPlannersHyperparamConfigs:
         assert exploration_param.high == expected_max
 
         # Check other parameters
-        assert param_dict["time_out_in_seconds"].low == 0.1
-        assert param_dict["time_out_in_seconds"].high == 15.0
         assert param_dict["depth"].low == 2
         assert param_dict["depth"].high == 15
-        assert param_dict["k_a"].low == 1.0
-        assert param_dict["k_a"].high == 8.0
+        assert param_dict["k_a"].low == 1
+        assert param_dict["k_a"].high == 10
 
     def test_pomcpow_config(self):
         """Test POMCPOW configuration creation.
@@ -139,7 +137,7 @@ class TestPlannersHyperparamConfigs:
 
         assert isinstance(config, HyperParamPlannerConfig)
         assert config.policy_cls == POMCPOW
-        assert len(config.hyper_parameters) == 7
+        assert len(config.hyper_parameters) == 6
 
         # Verify constant parameters
         assert config.constant_parameters["discount_factor"] == self.discount_factor
@@ -163,10 +161,10 @@ class TestPlannersHyperparamConfigs:
 
         assert isinstance(config, HyperParamPlannerConfig)
         assert config.policy_cls == SparsePFT
-        assert len(config.hyper_parameters) == 6
+        assert len(config.hyper_parameters) == 5
 
         param_names = [param.name for param in config.hyper_parameters]
-        expected_params = ["exploration_constant", "time_out_in_seconds", "depth", "c_ucb", "beta_ucb", "belief_child_num"]
+        expected_params = ["exploration_constant", "depth", "c_ucb", "beta_ucb", "belief_child_num"]
         assert set(param_names) == set(expected_params)
 
         # Check unique parameter "gamma" instead of "discount_factor"
