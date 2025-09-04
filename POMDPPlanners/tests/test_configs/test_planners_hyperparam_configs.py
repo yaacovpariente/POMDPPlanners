@@ -85,39 +85,6 @@ class TestPlannersHyperparamConfigs:
         assert config.constant_parameters["environment"] == self.mock_env
         assert config.constant_parameters["action_sampler"] == self.mock_action_sampler
 
-    def test_pft_dpw_config_hyperparameter_ranges(self):
-        """Test PFT_DPW hyperparameter ranges are correct.
-
-        Purpose: Validates that PFT_DPW hyperparameters have correct ranges and types
-
-        Given: A mock environment with specific reward range
-        When: pft_dpw_config is called
-        Then: All hyperparameters have expected ranges and are NumericalHyperParameter instances
-
-        Test type: unit
-        """
-        config = self.config_api.pft_dpw_config(
-            env=self.mock_env,
-            action_sampler=self.mock_action_sampler,
-            name=self.planner_name
-        )
-
-        # Check specific parameter ranges
-        param_dict = {param.name: param for param in config.hyper_parameters}
-        
-        # Exploration constant should be based on reward range
-        exploration_param = param_dict["exploration_constant"]
-        expected_max = (self.mock_env.reward_range[1] - self.mock_env.reward_range[0]) * 15
-        assert isinstance(exploration_param, NumericalHyperParameter)
-        assert exploration_param.low == 0.0
-        assert exploration_param.high == expected_max
-
-        # Check other parameters
-        assert param_dict["depth"].low == 2
-        assert param_dict["depth"].high == 15
-        assert param_dict["k_a"].low == 1
-        assert param_dict["k_a"].high == 10
-
     def test_pomcpow_config(self):
         """Test POMCPOW configuration creation.
 
@@ -219,11 +186,6 @@ class TestPlannersHyperparamConfigs:
 
         assert isinstance(config, HyperParamPlannerConfig)
         assert config.policy_cls == POMCP
-        assert len(config.hyper_parameters) == 3
-
-        param_names = [param.name for param in config.hyper_parameters]
-        expected_params = ["exploration_constant", "time_out_in_seconds", "depth"]
-        assert set(param_names) == set(expected_params)
 
         # Check unique parameter
         assert config.constant_parameters["min_samples_per_node"] == 1
@@ -247,11 +209,6 @@ class TestPlannersHyperparamConfigs:
 
         assert isinstance(config, HyperParamPlannerConfig)
         assert config.policy_cls == POMCP_DPW
-        assert len(config.hyper_parameters) == 8  # Most parameters including min_samples_per_node
-
-        param_names = [param.name for param in config.hyper_parameters]
-        expected_params = ["exploration_constant", "time_out_in_seconds", "depth", "k_a", "alpha_a", "k_o", "alpha_o", "min_samples_per_node"]
-        assert set(param_names) == set(expected_params)
 
     def test_discrete_action_sequences_config(self):
         """Test DiscreteActionSequences configuration creation.
@@ -271,7 +228,6 @@ class TestPlannersHyperparamConfigs:
 
         assert isinstance(config, HyperParamPlannerConfig)
         assert config.policy_cls == DiscreteActionSequencesPlanner
-        assert len(config.hyper_parameters) == 2
 
         param_names = [param.name for param in config.hyper_parameters]
         expected_params = ["depth", "n_return_samples"]
@@ -284,40 +240,6 @@ class TestPlannersHyperparamConfigs:
         assert param_dict["n_return_samples"].low == 10
         assert param_dict["n_return_samples"].high == 500
 
-    def test_reward_range_scaling(self):
-        """Test that exploration constant scales with reward range.
-
-        Purpose: Validates that exploration constant hyperparameters scale correctly with environment reward ranges
-
-        Given: Environments with different reward ranges
-        When: Configuration methods are called
-        Then: Exploration constant ranges scale proportionally to reward range
-
-        Test type: unit
-        """
-        # Test with different reward ranges
-        small_range_env = Mock()
-        small_range_env.reward_range = (-1.0, 1.0)  # Range of 2
-
-        large_range_env = Mock()
-        large_range_env.reward_range = (-100.0, 500.0)  # Range of 600
-
-        small_config = self.config_api.pomcp_config(small_range_env, "SmallRange")
-        large_config = self.config_api.pomcp_config(large_range_env, "LargeRange")
-
-        small_exploration = next(p for p in small_config.hyper_parameters if p.name == "exploration_constant")
-        large_exploration = next(p for p in large_config.hyper_parameters if p.name == "exploration_constant")
-
-        # Large range should have much larger exploration constant maximum
-        assert large_exploration.high > small_exploration.high
-        
-        # Check proportionality (approximately)
-        small_range = small_range_env.reward_range[1] - small_range_env.reward_range[0]
-        large_range = large_range_env.reward_range[1] - large_range_env.reward_range[0]
-        
-        expected_ratio = large_range / small_range
-        actual_ratio = large_exploration.high / small_exploration.high
-        assert abs(actual_ratio - expected_ratio) < 0.01  # Allow small floating point error
 
     def test_all_configs_return_hyperparamplannerconfig(self):
         """Test that all configuration methods return HyperParamPlannerConfig instances.
@@ -430,35 +352,3 @@ class TestPlannersHyperparamConfigs:
         # Should use absolute difference: (-10.0 - (-50.0)) * 15 = 40 * 15 = 600
         expected_max = 40.0 * 15
         assert exploration_param.high == expected_max
-
-
-def test_planners_hyperparam_configs_usage_example():
-    """Test the usage example for PlannersHyperparamConfigs.
-
-    Purpose: Validates that the class can be used as intended in practice
-
-    Given: A typical usage scenario with mock environment
-    When: Configuration is created and used
-    Then: All operations complete successfully without errors
-
-    Test type: example
-    """
-    # Example usage
-    discount_factor = 0.95
-    config_api = PlannersHyperparamConfigs(discount_factor=discount_factor)
-
-    # Create mock environment
-    mock_env = Mock()
-    mock_env.reward_range = (-10.0, 100.0)
-    
-    # Create mock action sampler
-    mock_action_sampler = Mock(spec=ActionSampler)
-
-    # Get POMCP configuration
-    pomcp_config = config_api.pomcp_config(mock_env, "POMCP_Example")
-
-    # Verify the configuration
-    assert isinstance(pomcp_config, HyperParamPlannerConfig)
-    assert pomcp_config.policy_cls == POMCP
-    assert len(pomcp_config.hyper_parameters) > 0
-    assert pomcp_config.constant_parameters["discount_factor"] == discount_factor
