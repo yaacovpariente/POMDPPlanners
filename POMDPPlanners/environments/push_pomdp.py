@@ -486,12 +486,17 @@ class PushPOMDP(DiscreteActionsEnvironment):
             ValueError: If history is empty or cache_path doesn't end with .gif
             TypeError: If cache_path is not a Path object
         """
+        if not isinstance(history, List):
+            raise TypeError("history must be a List object")
+        if not history:
+            raise ValueError("Cannot visualize empty history")
+        for step in history:
+            if not isinstance(step, StepData):
+                raise TypeError("history must be a List of StepData objects")
         if not isinstance(cache_path, Path):
             raise TypeError("cache_path must be a Path object")
         if not str(cache_path).endswith(".gif"):
             raise ValueError("cache_path must end with .gif")
-        if not history:
-            raise ValueError("Cannot visualize empty history")
             
         # Extract episode data
         states = [step.state for step in history]
