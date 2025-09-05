@@ -765,11 +765,6 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         avg_obstacle_collisions = np.mean(obstacle_collisions_per_episode)
         avg_dangerous_area_steps = np.mean(dangerous_area_steps_per_episode)
         
-        # Calculate totals
-        total_failed_tags = sum(failed_tags_per_episode)
-        total_obstacle_collisions = sum(obstacle_collisions_per_episode)
-        total_dangerous_area_steps = sum(dangerous_area_steps_per_episode)
-        
         # Calculate confidence intervals (handle single episode case)
         if total_episodes >= 2:
             success_ci = confidence_interval(data=success_indicators, confidence=0.95)
@@ -778,10 +773,6 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             obstacle_collisions_ci = confidence_interval(data=obstacle_collisions_per_episode, confidence=0.95)
             dangerous_area_steps_ci = confidence_interval(data=dangerous_area_steps_per_episode, confidence=0.95)
             
-            # Calculate confidence intervals for total metrics using raw per-episode counts
-            total_failed_tags_ci = confidence_interval(data=failed_tags_per_episode, confidence=0.95)
-            total_obstacle_collisions_ci = confidence_interval(data=obstacle_collisions_per_episode, confidence=0.95)
-            total_dangerous_area_steps_ci = confidence_interval(data=dangerous_area_steps_per_episode, confidence=0.95)
         else:
             # For single episode, confidence bounds equal the value (no statistical inference)
             success_ci = (-np.inf, np.inf)
@@ -790,11 +781,6 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             obstacle_collisions_ci = (-np.inf, np.inf)
             dangerous_area_steps_ci = (-np.inf, np.inf)
             
-            # For single episode, totals have no confidence interval variation
-            total_failed_tags_ci = (-np.inf, np.inf)
-            total_obstacle_collisions_ci = (-np.inf, np.inf)
-            total_dangerous_area_steps_ci = (-np.inf, np.inf)
-        
         return [
             MetricValue(
                 name="tag_success_rate",
@@ -826,24 +812,6 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 lower_confidence_bound=dangerous_area_steps_ci[0],
                 upper_confidence_bound=dangerous_area_steps_ci[1]
             ),
-            MetricValue(
-                name="total_failed_tag_attempts",
-                value=total_failed_tags,
-                lower_confidence_bound=total_failed_tags_ci[0],
-                upper_confidence_bound=total_failed_tags_ci[1]
-            ),
-            MetricValue(
-                name="total_obstacle_collisions",
-                value=total_obstacle_collisions,
-                lower_confidence_bound=total_obstacle_collisions_ci[0],
-                upper_confidence_bound=total_obstacle_collisions_ci[1]
-            ),
-            MetricValue(
-                name="total_dangerous_area_steps",
-                value=total_dangerous_area_steps,
-                lower_confidence_bound=total_dangerous_area_steps_ci[0],
-                upper_confidence_bound=total_dangerous_area_steps_ci[1]
-            )
         ]
     
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:

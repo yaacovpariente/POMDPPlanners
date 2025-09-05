@@ -642,18 +642,6 @@ class PacManPOMDP(DiscreteActionsEnvironment):
                     upper_confidence_bound=ci_high,
                 )
             )
-            
-            # Total collision encounters metric
-            total_collisions = sum(collision_encounters)
-            total_ci_low, total_ci_high = confidence_interval(collision_encounters)
-            metrics.append(
-                MetricValue(
-                    name="total_collision_encounters",
-                    value=total_collisions,
-                    lower_confidence_bound=total_ci_low * len(collision_encounters),
-                    upper_confidence_bound=total_ci_high * len(collision_encounters),
-                )
-            )
 
         return metrics
 
