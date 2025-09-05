@@ -30,7 +30,7 @@ def _run_single_episode(
     cache_path = cache_dir / f"{planner.name}_{episode_id}.gif"
     
     # Visualize the episode
-    environment.cache_visualization(history=episode_result, cache_path=cache_path)
+    environment.cache_visualization(history=episode_result.history, cache_path=cache_path)
 
 
 def visualize_planner_episode(
