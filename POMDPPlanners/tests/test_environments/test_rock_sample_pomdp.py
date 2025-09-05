@@ -1062,7 +1062,7 @@ class TestVisualization:
         with pytest.raises(ValueError, match="Cannot visualize empty history"):
             with tempfile.TemporaryDirectory() as temp_dir:
                 cache_path = Path(temp_dir) / "test.gif"
-                pomdp.cache_visualization(empty_history, cache_path)
+                pomdp.cache_visualization(empty_history.history, cache_path)
     
     @patch('matplotlib.pyplot.close')
     @patch('matplotlib.animation.FuncAnimation.save')
@@ -1117,7 +1117,7 @@ class TestVisualization:
             cache_path = Path(temp_dir) / "test.gif"
             
             # Should not raise any exceptions
-            pomdp.cache_visualization(history, cache_path)
+            pomdp.cache_visualization(history.history, cache_path)
             
             # Verify mocks were called
             mock_save.assert_called_once()

@@ -494,7 +494,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             raise TypeError("cache_path must be a Path object")
         if not str(cache_path).endswith(".gif"):
             raise ValueError("cache_path must end with .gif")
-        
+
         fig, ax = plt.subplots(figsize=(10, 8))
         ax.set_xlim(-0.5, self.map_size[1] - 0.5)
         ax.set_ylim(self.map_size[0] - 0.5, -0.5)  # Flip y-axis for standard grid display
@@ -651,14 +651,23 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         
         plt.close()
     
-    def cache_visualization(self, history: History, cache_path: Path) -> None:
+    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Cache visualization of episode history."""
-        if not history.history:
+        if not isinstance(history, List):
+            raise TypeError("history must be a List object")
+        if not history:
             raise ValueError("Cannot visualize empty history")
+        for step in history:
+            if not isinstance(step, StepData):
+                raise TypeError("history must be a List of StepData objects")
+        if not isinstance(cache_path, Path):
+            raise TypeError("cache_path must be a Path object")
+        if not str(cache_path).endswith(".gif"):
+            raise ValueError("cache_path must end with .gif")
         
         # Extract path and actions
-        path = [step.state for step in history.history]
-        actions = [step.action for step in history.history[:-1]]  # Last step has no action
+        path = [step.state for step in history]
+        actions = [step.action for step in history[:-1]]  # Last step has no action
         
         self.visualize_path(path, actions, cache_path)
 

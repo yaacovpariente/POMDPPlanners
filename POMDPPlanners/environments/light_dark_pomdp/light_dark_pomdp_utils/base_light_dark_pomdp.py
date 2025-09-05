@@ -365,8 +365,15 @@ class BaseLightDarkPOMDP(Environment, ABC):
         Raises:
             ValueError: If history is empty or contains invalid data
         """
+        if not isinstance(history, List):
+            raise TypeError("history must be a List object")
         if not history:
             raise ValueError("Cannot visualize empty history")
+        for step in history:
+            if not isinstance(step, StepData):
+                raise TypeError("history must be a List of StepData objects")
+        if not isinstance(cache_path, Path):
+            raise TypeError("cache_path must be a Path object")
             
         # Extract data with validation
         agent_path = []
