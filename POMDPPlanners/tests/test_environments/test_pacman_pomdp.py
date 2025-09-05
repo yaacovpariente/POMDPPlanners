@@ -22,6 +22,7 @@ from POMDPPlanners.environments.pacman_pomdp import (
 )
 from POMDPPlanners.core.environment import SpaceType, SpaceInfo
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import verify_metrics_within_confidence_intervals
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -395,6 +396,8 @@ class TestPacManObservationModel:
         """Set up test environment for each test."""
         self.pomdp = PacManPOMDP(
             maze_size=(5, 5),
+            walls={(1, 2), (2, 1), (3, 4)},  # Custom walls that don't conflict
+            initial_pellets=[(1, 1), (1, 3), (3, 1), (3, 3)],  # Valid for 5x5 maze
             observation_noise_factor=0.5,
             max_observation_noise=2.0,
             initial_pacman_pos=(0, 0),
@@ -853,6 +856,8 @@ class TestPacManPOMDP:
         # Test with custom parameters
         custom_pomdp = PacManPOMDP(
             maze_size=(5, 5),
+            walls={(1, 2), (2, 1), (3, 4)},  # Custom walls that don't conflict
+            initial_pellets=[(1, 1), (1, 3), (3, 1), (3, 3)],  # Valid for 5x5 maze
             initial_pacman_pos=(0, 0),
             initial_ghost_pos=(4, 4),  # Within 5x5 maze bounds
             pellet_reward=20.0,
@@ -915,7 +920,8 @@ class TestPacManPOMDPMetrics:
         """Set up test environment for metrics tests."""
         self.pomdp = PacManPOMDP(
             maze_size=(5, 5),
-            initial_pellets=[(1, 1), (2, 2)],
+            walls={(1, 2), (3, 1)},  # Custom walls that don't conflict with pellets
+            initial_pellets=[(1, 1), (3, 3)],  # Valid pellets not in walls
             initial_pacman_pos=(0, 0),
             initial_ghost_pos=(4, 4),
         )

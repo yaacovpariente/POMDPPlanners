@@ -4,6 +4,7 @@ import random
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import verify_metrics_within_confidence_intervals
 
 np.random.seed(42)
 random.seed(42)
@@ -568,3 +569,73 @@ class TestTigerPOMDPMetrics:
         # Should have 0 listens
         listens_metric = next(m for m in metrics if m.name == "average_listens")
         assert listens_metric.value == 0.0
+
+
+def test_metrics_confidence_intervals(tiger_pomdp):
+    """Test that metric values fall within their confidence intervals.
+    
+    Purpose: Validates that TigerPOMDP compute_metrics returns metric values within their confidence bounds
+    
+    Given: A TigerPOMDP environment and diverse performance histories
+    When: compute_metrics is called with the histories
+    Then: Each metric value falls within its lower_confidence_bound and upper_confidence_bound
+    
+    Test type: unit
+    """
+    from POMDPPlanners.core.simulation import History, StepData
+    
+    # Create diverse performance histories with different outcomes
+    histories = []
+    np.random.seed(42)  # For reproducible test
+    
+    for i in range(20):  # Use enough episodes for meaningful statistics
+        state = np.random.choice(["tiger_left", "tiger_right"])
+        steps = []
+        
+        # Vary number of listens (0-5)
+        num_listens = i % 6
+        for _ in range(num_listens):
+            steps.append(StepData(
+                state=state,
+                action="listen",
+                next_state=state,
+                observation="hear_nothing",
+                reward=-1.0,
+                belief=None
+            ))
+        
+        # Vary success rate: 70% success rate
+        if i % 10 < 7:  # 70% success
+            correct_action = "open_right" if state == "tiger_left" else "open_left"
+            reward = 10.0
+        else:  # 30% failure
+            correct_action = "open_left" if state == "tiger_left" else "open_right"
+            reward = -100.0
+            
+        steps.append(StepData(
+            state=state,
+            action=correct_action,
+            next_state=state,
+            observation="hear_nothing",
+            reward=reward,
+            belief=None
+        ))
+        
+        histories.append(History(
+            history=steps,
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            actual_num_steps=len(steps),
+            reach_terminal_state=True,
+            policy_run_data=PolicyRunData(info_variables=[])
+        ))
+    
+    # Compute metrics
+    metrics = tiger_pomdp.compute_metrics(histories)
+    
+    # Use generic confidence interval verification
+    verify_metrics_within_confidence_intervals(metrics)

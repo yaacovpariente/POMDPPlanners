@@ -25,6 +25,32 @@ from POMDPPlanners.environments.laser_tag_pomdp import (
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import verify_metrics_within_confidence_intervals
+from POMDPPlanners.simulations.episodes import run_episode
+from POMDPPlanners.utils.logger import get_logger
+from POMDPPlanners.core.policy import Policy
+
+
+class RandomPolicy(Policy):
+    """Simple random policy for testing purposes."""
+    
+    def __init__(self, environment, name="RandomPolicy"):
+        """Initialize random policy."""
+        super().__init__(
+            environment=environment,
+            discount_factor=environment.discount_factor,
+            name=name
+        )
+        self.actions = environment.get_actions()
+    
+    def action(self, belief):
+        """Return random action."""
+        action = np.random.choice(self.actions)
+        return [action], {"policy_type": "random", "action": action}
+    
+    def get_space_info(self):
+        """Return space info from environment."""
+        return self.environment.space_info
 
 
 class TestLaserTagState:
@@ -939,6 +965,72 @@ class TestLaserTagPOMDP:
             
         except Exception as e:
             pytest.fail(f"compute_metrics should handle None rewards gracefully, but raised: {e}")
+
+
+def test_metrics_confidence_intervals():
+    """Test that metric values fall within their confidence intervals using realistic episodes.
+    
+    Purpose: Validates that LaserTagPOMDP compute_metrics returns metric values within their confidence bounds
+    
+    Given: A LaserTagPOMDP environment and realistic episode histories generated using run_episode
+    When: compute_metrics is called with the histories
+    Then: Each metric value falls within its lower_confidence_bound and upper_confidence_bound
+    
+    Test type: integration
+    """
+    # Create a LaserTagPOMDP environment with smaller grid for faster testing
+    env = LaserTagPOMDP(
+        discount_factor=0.95,
+        floor_shape=(7, 7),  # Smaller grid for faster episodes
+        walls={(2, 2), (3, 4), (5, 1)},  # Some walls for variety
+        dangerous_areas=[(1, 3), (4, 4)]  # Some dangerous areas
+    )
+    
+    # Create random policy and initial belief
+    policy = RandomPolicy(env, name="TestRandomPolicy")
+    
+    # Create initial belief using particles from initial state distribution
+    initial_state = env.initial_state_dist().sample()[0]
+    particles = [initial_state] * 50  # Simple particle belief
+    log_weights = np.full(50, -np.log(50))  # Uniform weights
+    initial_belief = WeightedParticleBelief(
+        particles=particles, 
+        log_weights=log_weights,
+        resampling=False
+    )
+    
+    # Create logger for episode runs
+    logger = get_logger(name="confidence_test", debug=False)
+    
+    # Generate realistic episode histories using run_episode
+    histories = []
+    np.random.seed(42)  # For reproducible test
+    
+    for episode_idx in range(20):  # Use enough episodes for meaningful statistics
+        # Run episode with varying episode lengths
+        max_steps = 5 + (episode_idx % 8)  # Vary episode length 5-12 steps
+        
+        history = run_episode(
+            environment=env,
+            policy=policy,
+            initial_belief=initial_belief,
+            num_steps=max_steps,
+            logger=logger
+        )
+        
+        histories.append(history)
+    
+    # Ensure we have at least some histories
+    assert len(histories) > 0, "No histories were generated"
+    
+    # Compute metrics using the realistic histories
+    metrics = env.compute_metrics(histories)
+    
+    # Verify that metrics were computed
+    assert len(metrics) > 0, "No metrics were computed"
+    
+    # Use generic confidence interval verification
+    verify_metrics_within_confidence_intervals(metrics)
 
 
 if __name__ == "__main__":
