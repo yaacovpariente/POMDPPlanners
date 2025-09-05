@@ -784,16 +784,16 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             total_dangerous_area_steps_ci = confidence_interval(data=dangerous_area_steps_per_episode, confidence=0.95)
         else:
             # For single episode, confidence bounds equal the value (no statistical inference)
-            success_ci = (success_rate, success_rate)
-            episode_length_ci = (avg_episode_length, avg_episode_length)
-            failed_tags_ci = (avg_failed_tags, avg_failed_tags)
-            obstacle_collisions_ci = (avg_obstacle_collisions, avg_obstacle_collisions)
-            dangerous_area_steps_ci = (avg_dangerous_area_steps, avg_dangerous_area_steps)
+            success_ci = (-np.inf, np.inf)
+            episode_length_ci = (-np.inf, np.inf)
+            failed_tags_ci = (-np.inf, np.inf)
+            obstacle_collisions_ci = (-np.inf, np.inf)
+            dangerous_area_steps_ci = (-np.inf, np.inf)
             
             # For single episode, totals have no confidence interval variation
-            total_failed_tags_ci = (total_failed_tags, total_failed_tags)
-            total_obstacle_collisions_ci = (total_obstacle_collisions, total_obstacle_collisions)
-            total_dangerous_area_steps_ci = (total_dangerous_area_steps, total_dangerous_area_steps)
+            total_failed_tags_ci = (-np.inf, np.inf)
+            total_obstacle_collisions_ci = (-np.inf, np.inf)
+            total_dangerous_area_steps_ci = (-np.inf, np.inf)
         
         return [
             MetricValue(
@@ -846,7 +846,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             )
         ]
     
-    def cache_visualization(self, history: History, cache_path: Path) -> None:
+    def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Cache visualization of the LaserTag episode as an animated GIF.
         
         Creates an animated visualization showing:
@@ -866,13 +866,18 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             ValueError: If history is empty or contains invalid data
             TypeError: If cache_path is not a Path object or doesn't end with .gif
         """
+        if not isinstance(history, List):
+            raise TypeError("history must be a List object")
+        if not history:
+            raise ValueError("Cannot visualize empty history")
+        for step in history:
+            if not isinstance(step, StepData):
+                raise TypeError("history must be a List of StepData objects")
         if not isinstance(cache_path, Path):
             raise TypeError("cache_path must be a Path object")
         if not str(cache_path).endswith(".gif"):
             raise ValueError("cache_path must end with .gif")
-        if not history.history:
-            raise ValueError("Cannot visualize empty history")
-        
+
         # Create directory if it doesn't exist
         cache_path.parent.mkdir(parents=True, exist_ok=True)
         
@@ -882,7 +887,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         actions = []
         beliefs = []
         
-        for step in history.history:
+        for step in history:
             if not isinstance(step.state, LaserTagState):
                 raise ValueError(f"Expected LaserTagState, got {type(step.state)}")
             

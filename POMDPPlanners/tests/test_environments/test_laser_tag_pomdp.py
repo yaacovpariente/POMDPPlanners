@@ -639,7 +639,7 @@ class TestLaserTagPOMDP:
         
         try:
             # This should not raise an exception
-            env.cache_visualization(history, cache_path)
+            env.cache_visualization(history.history, cache_path)
             
             # Clean up if file was created
             if cache_path.exists():
@@ -675,17 +675,45 @@ class TestLaserTagPOMDP:
             policy_run_data={"policy_type": "test"}
         )
         
+        # Create non-empty history for cache_path tests
+        dummy_particles = [LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)]
+        dummy_log_weights = np.array([-0.1])
+        test_belief = WeightedParticleBelief(particles=dummy_particles, log_weights=dummy_log_weights)
+        
+        state = LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)
+        step = StepData(
+            state=state,
+            action=1,  # South
+            next_state=state,
+            observation=(6 + 0.1, 10.1, 1.0, 1.5, 2.0, 1.2, 0.8, 1.8),
+            reward=-1.0,
+            belief=test_belief
+        )
+        
+        non_empty_history = History(
+            history=[step],
+            discount_factor=0.95,
+            average_state_sampling_time=0.1,
+            average_action_time=0.1,
+            average_observation_time=0.1,
+            average_belief_update_time=0.1,
+            average_reward_time=0.1,
+            actual_num_steps=1,
+            reach_terminal_state=False,
+            policy_run_data={"policy_type": "test"}
+        )
+        
         # Test with non-Path cache_path
         with pytest.raises(TypeError, match="cache_path must be a Path object"):
-            env.cache_visualization(dummy_history, "invalid_path")
+            env.cache_visualization(non_empty_history.history, "invalid_path")
         
         # Test with non-gif extension
         with pytest.raises(ValueError, match="cache_path must end with .gif"):
-            env.cache_visualization(dummy_history, Path("test.png"))
+            env.cache_visualization(non_empty_history.history, Path("test.png"))
         
         # Test with empty history
         with pytest.raises(ValueError, match="Cannot visualize empty history"):
-            env.cache_visualization(dummy_history, Path("test.gif"))
+            env.cache_visualization(dummy_history.history, Path("test.gif"))
     
     def test_compute_metrics_with_simulator_generated_history(self):
         """Test compute_metrics with realistic history generated using environment simulation.
