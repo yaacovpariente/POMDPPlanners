@@ -145,7 +145,7 @@ class TestVisualizePlannerEpisode:
                 history_arg = call_args[1]['history']
                 cache_path_arg = call_args[1]['cache_path']
                 
-                assert history_arg == sample_episode_history
+                assert history_arg == sample_episode_history.history  # Pass the history list, not the History object
                 assert cache_path_arg == expected_cache_paths[i]
 
     def test_visualize_planner_episode_single_episode(self, test_planner, tiger_environment, test_belief, temp_cache_dir, sample_episode_history):
@@ -183,7 +183,7 @@ class TestVisualizePlannerEpisode:
             assert 'logger' in call_args
             
             tiger_environment.cache_visualization.assert_called_once_with(
-                history=sample_episode_history,
+                history=sample_episode_history.history,  # Pass the history list, not the History object
                 cache_path=temp_cache_dir / "TestPlanner_0.gif"
             )
 
@@ -310,9 +310,9 @@ class TestVisualizePlannerEpisode:
             cache_path_arg = call_args[1]['cache_path']
             assert cache_path_arg == expected_paths[i]
             
-            # Verify history is a valid History object
+            # Verify history is a valid list of StepData
             history_arg = call_args[1]['history']
-            assert isinstance(history_arg, History)  # Should be a History object
+            assert isinstance(history_arg, list)  # Should be a list of StepData
 
     def test_visualize_planner_episode_exception_handling(self, test_planner, tiger_environment, test_belief, temp_cache_dir):
         """Test exception handling when run_episode fails.
@@ -504,7 +504,7 @@ class TestVisualizePlannerEpisode:
                 # Verify cache path is constructed correctly
                 expected_cache_path = temp_path / "TestPlanner_0.gif"
                 tiger_environment.cache_visualization.assert_called_with(
-                    history=sample_episode_history,
+                    history=sample_episode_history.history,  # Pass the history list, not the History object
                     cache_path=expected_cache_path
                 )
 
