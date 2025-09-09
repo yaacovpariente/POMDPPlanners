@@ -469,7 +469,6 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         
         if dangerous_area_steps:
             avg_dangerous_steps = np.mean(dangerous_area_steps)
-            total_dangerous_steps = sum(dangerous_area_steps)
             ci_low, ci_high = confidence_interval(dangerous_area_steps)
             
             metrics.append(MetricValue(
@@ -477,13 +476,6 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
                 value=avg_dangerous_steps,
                 lower_confidence_bound=ci_low,
                 upper_confidence_bound=ci_high
-            ))
-            
-            metrics.append(MetricValue(
-                name="total_dangerous_area_steps",
-                value=total_dangerous_steps,
-                lower_confidence_bound=total_dangerous_steps,
-                upper_confidence_bound=total_dangerous_steps
             ))
         
         return metrics
