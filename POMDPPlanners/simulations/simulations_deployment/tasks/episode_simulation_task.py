@@ -70,7 +70,7 @@ class EpisodeSimulationTask(SimulationTask):
         
         # Log task creation
         temp_logger = get_logger(
-            name=f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}",
+            name=f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}.task_id.{self._cache_key}",
             debug=self.debug,
             output_dir=self.cache_dir / "logs" / "episodes" if self.cache_dir else None,
             console_output=self.console_output
