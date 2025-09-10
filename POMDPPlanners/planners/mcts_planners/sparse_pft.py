@@ -208,6 +208,7 @@ class SparsePFT(PathSimulationPolicy):
             name=name,
             n_simulations=n_simulations,
             time_out_in_seconds=None,
+            action_sampler=None,
             log_path=log_path,
             debug=debug
         )

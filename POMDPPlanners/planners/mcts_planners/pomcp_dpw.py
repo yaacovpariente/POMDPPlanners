@@ -181,6 +181,7 @@ class POMCP_DPW(PathSimulationPolicy):
             environment=environment,
             discount_factor=discount_factor,
             name=name,
+            action_sampler=action_sampler,
             n_simulations=n_simulations,
             time_out_in_seconds=time_out_in_seconds,
             log_path=log_path,

@@ -183,6 +183,7 @@ class POMCPOW(PathSimulationPolicy):
             name=name,
             n_simulations=n_simulations,
             time_out_in_seconds=time_out_in_seconds,
+            action_sampler=action_sampler,
             log_path=log_path,
             debug=debug
         )
