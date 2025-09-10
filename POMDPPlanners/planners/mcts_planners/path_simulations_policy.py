@@ -86,7 +86,12 @@ class PathSimulationPolicy(Policy):
         
         tree = self._learn_tree(belief=belief)
         tree_metrics = compute_tree_metrics(tree=tree)
-        action = get_optimal_action_reward_setting(belief_node=tree)
+
+        if tree.is_leaf:
+            action = self._sample_random_action(belief=belief)
+        else:
+            action = get_optimal_action_reward_setting(belief_node=tree)
+        
         return [action], PolicyRunData(info_variables=tree_metrics)
 
     def _sample_random_action(self, belief: Belief) -> Any:

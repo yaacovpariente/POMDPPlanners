@@ -16,7 +16,7 @@ from unittest.mock import Mock, patch
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.belief import Belief, WeightedParticleBelief, is_terminal_belief
-from POMDPPlanners.core.tree import BeliefNode
+from POMDPPlanners.core.tree import BeliefNode, ActionNode
 from POMDPPlanners.core.policy import PolicyRunData, PolicySpaceInfo, PolicyInfoVariable
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
@@ -88,8 +88,19 @@ class ConcretePathSimulationPolicy(PathSimulationPolicy):
         self.simulate_path_calls = []
     
     def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
-        """Mock implementation that records calls."""
+        """Mock implementation that records calls and creates action nodes."""
         self.simulate_path_calls.append((belief_node, depth))
+        
+        # Create action nodes if they don't exist
+        if belief_node.is_leaf:
+            for action in self.environment.get_actions():
+                action_node = ActionNode(action=action, parent=belief_node, children=tuple())
+                # Set Q-values so that action 1 has the highest value
+                if action == 1:
+                    action_node.q_value = 2.0
+                else:
+                    action_node.q_value = 1.0
+        
         return 1.0  # Mock reward
     
     @classmethod
