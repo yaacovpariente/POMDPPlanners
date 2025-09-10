@@ -190,6 +190,10 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
             PolicyInfoVariable(
                 name="actions_visit_count_entropy",
                 value=0,
+            ),
+            PolicyInfoVariable(
+                name="is_leaf",
+                value=1,
             )
         ]
     
@@ -229,4 +233,8 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
             name="tree_max_depth",
             value=tree.height - 1,
         ),
+        PolicyInfoVariable(
+            name="is_leaf",
+            value=0,
+        )
     ]    
