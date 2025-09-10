@@ -2,12 +2,14 @@ from abc import abstractmethod
 import time
 from typing import Any, List, Tuple, Optional
 from pathlib import Path
+import numpy as np
 
 from POMDPPlanners.core.policy import Policy, PolicyRunData
-from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.environment import Environment, SpaceType
+from POMDPPlanners.core.belief import Belief, is_terminal_belief
 from POMDPPlanners.core.tree import BeliefNode, get_optimal_action_reward_setting
 from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
+from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
 class PathSimulationPolicy(Policy):
     """Abstract base class for Monte Carlo Tree Search algorithms in POMDP planning.
@@ -56,6 +58,7 @@ class PathSimulationPolicy(Policy):
         name: str, 
         n_simulations: int, 
         time_out_in_seconds: int,
+        action_sampler: Optional[ActionSampler] = None,
         log_path: Optional[Path] = None,
         debug: bool = False
     ):
@@ -69,15 +72,28 @@ class PathSimulationPolicy(Policy):
 
         self.n_simulations = n_simulations
         self.time_out_in_seconds = time_out_in_seconds
+        self.action_sampler = action_sampler
         
         if n_simulations is not None and time_out_in_seconds is not None:
             raise ValueError("Cannot specify both n_simulations and time_out_in_seconds")
 
+        if self.action_sampler is None and self.environment.space_info.action_space == SpaceType.CONTINUOUS:
+            raise ValueError("Action sampler must be provided for continuous action spaces")
+
     def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
+        if is_terminal_belief(belief=belief, env=self.environment):
+            return [self._sample_random_action(belief=belief)], PolicyRunData(info_variables=[])
+        
         tree = self._learn_tree(belief=belief)
         tree_metrics = compute_tree_metrics(tree=tree)
         action = get_optimal_action_reward_setting(belief_node=tree)
         return [action], PolicyRunData(info_variables=tree_metrics)
+
+    def _sample_random_action(self, belief: Belief) -> Any:
+        if self.environment.space_info.action_space == SpaceType.DISCRETE:
+            return np.random.choice(self.environment.get_actions())
+        elif self.environment.space_info.action_space == SpaceType.CONTINUOUS:
+            return self.action_sampler.sample(belief_node=BeliefNode(belief=belief))
     
     def _learn_tree(self, belief: Belief) -> BeliefNode:
         tree = BeliefNode(belief=belief)
