@@ -1369,3 +1369,7 @@ def get_initial_belief(
     return WeightedParticleBelief(
         particles=particles, log_weights=log_weights, resampling=resampling
     )
+
+def is_terminal_belief(belief: Belief, env: Environment) -> bool:
+    """Check if the belief is terminal."""
+    return all(env.is_terminal(particle) for particle in belief.particles)
