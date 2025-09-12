@@ -331,7 +331,13 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
     def pacman_pomdp_config(self, n_particles: int = 20) -> Tuple[Environment, WeightedParticleBelief]:
         pomdp = PacManPOMDP(
             discount_factor=self.discount_factor,
-            name="PacManPOMDP"
+            name="PacManPOMDP",
+            max_observation_noise = 0.5,
+            ghost_collision_penalty=-50.,
+            pellet_reward=50.,
+            observation_noise_factor=0.1,
+            win_reward=100.,
+            num_ghosts=2,
         )
         belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
         return pomdp, belief
