@@ -11,7 +11,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
+from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler, DiscreteActionSampler
 from POMDPPlanners.core.tree import BeliefNode
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
@@ -615,3 +615,455 @@ class TestUsageExamples:
         # Should span most of the diameter in both dimensions
         assert x_range > 1.5  # Should span more than 75% of diameter
         assert y_range > 1.5  # Should span more than 75% of diameter
+
+
+class TestDiscreteActionSampler:
+    """Test cases for the DiscreteActionSampler class."""
+
+    def test_discrete_action_sampler_initialization(self):
+        """Test initialization of DiscreteActionSampler.
+
+        Purpose: Validates that DiscreteActionSampler initializes with correct parameters
+
+        Given: Different action lists
+        When: DiscreteActionSampler is instantiated
+        Then: Object is created with correct attributes
+
+        Test type: unit
+        """
+        # Test with string actions
+        string_actions = ["up", "down", "left", "right"]
+        sampler_strings = DiscreteActionSampler(actions=string_actions)
+        assert sampler_strings.actions == string_actions
+
+        # Test with integer actions
+        int_actions = [0, 1, 2, 3, 4]
+        sampler_ints = DiscreteActionSampler(actions=int_actions)
+        assert sampler_ints.actions == int_actions
+
+        # Test with mixed type actions
+        mixed_actions = [0, "up", 1.5, (1, 2)]
+        sampler_mixed = DiscreteActionSampler(actions=mixed_actions)
+        assert sampler_mixed.actions == mixed_actions
+
+        # Test with single action
+        single_action = ["only_action"]
+        sampler_single = DiscreteActionSampler(actions=single_action)
+        assert sampler_single.actions == single_action
+
+        # Test with empty list (edge case)
+        empty_actions = []
+        sampler_empty = DiscreteActionSampler(actions=empty_actions)
+        assert sampler_empty.actions == []
+
+    def test_discrete_action_sampler_basic_sampling(self):
+        """Test basic action sampling functionality.
+
+        Purpose: Validates that action sampling produces actions from the provided list
+
+        Given: DiscreteActionSampler with specific actions
+        When: Multiple actions are sampled
+        Then: All sampled actions are from the original action list
+
+        Test type: unit
+        """
+        actions = ["north", "south", "east", "west"]
+        sampler = DiscreteActionSampler(actions=actions)
+
+        # Sample multiple actions
+        num_samples = 100
+        sampled_actions = [sampler.sample() for _ in range(num_samples)]
+
+        for action in sampled_actions:
+            # Check that action is from the original list
+            assert action in actions
+
+        # Check that we get variety (not all the same action)
+        unique_actions = set(sampled_actions)
+        assert len(unique_actions) > 1  # Should have some variety
+
+    def test_discrete_action_sampler_uniform_distribution(self):
+        """Test that actions are sampled uniformly.
+
+        Purpose: Validates that actions are sampled with roughly uniform distribution
+
+        Given: DiscreteActionSampler with equal-probability actions
+        When: Large number of actions are sampled
+        Then: Each action appears roughly equally often
+
+        Test type: unit
+        """
+        actions = ["A", "B", "C", "D"]
+        sampler = DiscreteActionSampler(actions=actions)
+
+        # Sample large number of actions for statistical analysis
+        num_samples = 10000
+        sampled_actions = [sampler.sample() for _ in range(num_samples)]
+
+        # Count occurrences of each action
+        action_counts = {}
+        for action in sampled_actions:
+            action_counts[action] = action_counts.get(action, 0) + 1
+
+        # Each action should appear roughly equally often
+        expected_count = num_samples / len(actions)
+        tolerance = expected_count * 0.1  # 10% tolerance
+
+        for action in actions:
+            count = action_counts.get(action, 0)
+            assert abs(count - expected_count) < tolerance
+
+    def test_discrete_action_sampler_belief_node_parameter(self):
+        """Test that belief_node parameter is handled correctly.
+
+        Purpose: Validates that optional belief_node parameter doesn't affect sampling
+
+        Given: DiscreteActionSampler and real belief node
+        When: Sampler is called with and without belief_node parameter
+        Then: Both calls produce valid actions from the action list
+
+        Test type: unit
+        """
+        actions = [1, 2, 3, 4, 5]
+        sampler = DiscreteActionSampler(actions=actions)
+
+        # Create real belief node
+        particles = [np.array([0.0, 0.0]), np.array([1.0, 1.0])]
+        log_weights = np.array([-0.1, -0.2])
+        belief = WeightedParticleBelief(
+            particles=particles,
+            log_weights=log_weights,
+            resampling=False
+        )
+        belief_node = BeliefNode(belief=belief, observation=np.array([0.0, 0.0]))
+
+        # Sample without belief node
+        action1 = sampler.sample()
+
+        # Sample with belief node
+        action2 = sampler.sample(belief_node=belief_node)
+
+        # Both should be valid actions from the list
+        assert action1 in actions
+        assert action2 in actions
+
+    def test_discrete_action_sampler_single_action(self):
+        """Test edge case of single action sampling.
+
+        Purpose: Validates behavior when only one action is available
+
+        Given: DiscreteActionSampler with single action
+        When: Actions are sampled
+        Then: All sampled actions should be the same
+
+        Test type: unit
+        """
+        single_action = "only_choice"
+        sampler = DiscreteActionSampler(actions=[single_action])
+
+        # Sample multiple actions
+        actions = [sampler.sample() for _ in range(10)]
+
+        for action in actions:
+            assert action == single_action
+
+    def test_discrete_action_sampler_empty_actions(self):
+        """Test edge case of empty action list.
+
+        Purpose: Validates behavior when action list is empty
+
+        Given: DiscreteActionSampler with empty action list
+        When: Actions are sampled
+        Then: Should raise appropriate error
+
+        Test type: unit
+        """
+        sampler = DiscreteActionSampler(actions=[])
+
+        # Sampling from empty list should raise IndexError
+        with pytest.raises(IndexError):
+            sampler.sample()
+
+    def test_discrete_action_sampler_repeatability(self):
+        """Test action sampling reproducibility with fixed seed.
+
+        Purpose: Validates that sampling is reproducible when random seed is fixed
+
+        Given: Fixed random seed and DiscreteActionSampler
+        When: Actions are sampled multiple times with same seed
+        Then: Identical sequences of actions are produced
+
+        Test type: unit
+        """
+        actions = ["red", "green", "blue"]
+        sampler = DiscreteActionSampler(actions=actions)
+
+        # First sequence
+        random.seed(42)
+        actions1 = [sampler.sample() for _ in range(10)]
+
+        # Second sequence with same seed
+        random.seed(42)
+        actions2 = [sampler.sample() for _ in range(10)]
+
+        # Should be identical
+        assert actions1 == actions2
+
+    def test_discrete_action_sampler_serialization_pickle(self):
+        """Test serialization and deserialization using pickle.
+
+        Purpose: Validates that DiscreteActionSampler can be serialized and deserialized with pickle
+
+        Given: DiscreteActionSampler instance with specific actions
+        When: Object is pickled and unpickled
+        Then: Deserialized object has same actions and produces equivalent sampling
+
+        Test type: unit
+        """
+        # Create original sampler
+        original_actions = ["action1", "action2", "action3"]
+        original_sampler = DiscreteActionSampler(actions=original_actions)
+
+        # Serialize with pickle
+        pickled_data = pickle.dumps(original_sampler)
+
+        # Deserialize
+        deserialized_sampler = pickle.loads(pickled_data)
+
+        # Check that attributes are preserved
+        assert deserialized_sampler.actions == original_sampler.actions
+        assert type(deserialized_sampler) == type(original_sampler)
+
+        # Check that both samplers produce valid actions
+        random.seed(123)
+        original_action = original_sampler.sample()
+
+        random.seed(123)
+        deserialized_action = deserialized_sampler.sample()
+
+        # With same seed, should produce identical results
+        assert original_action == deserialized_action
+
+        # Both actions should be from the original list
+        assert original_action in original_actions
+        assert deserialized_action in original_actions
+
+    def test_discrete_action_sampler_serialization_file(self):
+        """Test serialization to file and loading.
+
+        Purpose: Validates that DiscreteActionSampler can be saved to and loaded from files
+
+        Given: DiscreteActionSampler instance and temporary file
+        When: Object is saved to file and loaded back
+        Then: Loaded object functions identically to original
+
+        Test type: unit
+        """
+        # Create original sampler
+        original_actions = ["move", "stay", "turn_left", "turn_right"]
+        original_sampler = DiscreteActionSampler(actions=original_actions)
+
+        # Use temporary file for serialization test
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pkl") as temp_file:
+            temp_path = Path(temp_file.name)
+
+            # Save to file
+            with open(temp_path, "wb") as f:
+                pickle.dump(original_sampler, f)
+
+            # Load from file
+            with open(temp_path, "rb") as f:
+                loaded_sampler = pickle.load(f)
+
+            # Clean up
+            temp_path.unlink()
+
+        # Verify loaded sampler
+        assert loaded_sampler.actions == original_actions
+        assert isinstance(loaded_sampler, DiscreteActionSampler)
+
+        # Test functionality
+        action = loaded_sampler.sample()
+        assert action in original_actions
+
+    def test_discrete_action_sampler_complex_action_types(self):
+        """Test sampling with complex action types.
+
+        Purpose: Validates that DiscreteActionSampler works with various complex action types
+
+        Given: DiscreteActionSampler with complex action objects
+        When: Actions are sampled
+        Then: Complex actions are sampled correctly
+
+        Test type: unit
+        """
+        # Test with tuples
+        tuple_actions = [(1, 0), (0, 1), (-1, 0), (0, -1)]
+        sampler_tuples = DiscreteActionSampler(actions=tuple_actions)
+        
+        sampled_tuple = sampler_tuples.sample()
+        assert sampled_tuple in tuple_actions
+        assert isinstance(sampled_tuple, tuple)
+
+        # Test with numpy arrays
+        array_actions = [np.array([1, 0]), np.array([0, 1]), np.array([-1, 0])]
+        sampler_arrays = DiscreteActionSampler(actions=array_actions)
+        
+        sampled_array = sampler_arrays.sample()
+        # Check that the sampled array matches one of the original arrays
+        assert any(np.array_equal(sampled_array, arr) for arr in array_actions)
+        assert isinstance(sampled_array, np.ndarray)
+
+        # Test with dictionaries
+        dict_actions = [{"x": 1, "y": 0}, {"x": 0, "y": 1}, {"x": -1, "y": 0}]
+        sampler_dicts = DiscreteActionSampler(actions=dict_actions)
+        
+        sampled_dict = sampler_dicts.sample()
+        assert sampled_dict in dict_actions
+        assert isinstance(sampled_dict, dict)
+
+    def test_discrete_action_sampler_duplicate_actions(self):
+        """Test behavior with duplicate actions in the list.
+
+        Purpose: Validates that duplicate actions are handled correctly
+
+        Given: DiscreteActionSampler with duplicate actions
+        When: Actions are sampled
+        Then: Duplicate actions appear with higher probability
+
+        Test type: unit
+        """
+        # List with duplicates
+        actions_with_duplicates = ["A", "B", "A", "C", "A"]
+        sampler = DiscreteActionSampler(actions=actions_with_duplicates)
+
+        # Sample many actions
+        num_samples = 10000
+        sampled_actions = [sampler.sample() for _ in range(num_samples)]
+
+        # Count occurrences
+        action_counts = {}
+        for action in sampled_actions:
+            action_counts[action] = action_counts.get(action, 0) + 1
+
+        # "A" should appear more often since it's in the list 3 times
+        assert action_counts["A"] > action_counts["B"]
+        assert action_counts["A"] > action_counts["C"]
+
+        # All sampled actions should be from the original list
+        for action in sampled_actions:
+            assert action in actions_with_duplicates
+
+    def test_discrete_action_sampler_performance_characteristics(self):
+        """Test performance characteristics of action sampling.
+
+        Purpose: Validates that action sampling performs efficiently for practical use
+
+        Given: DiscreteActionSampler with large action space
+        When: Large number of actions are sampled rapidly
+        Then: Sampling completes efficiently without memory issues
+
+        Test type: unit
+        """
+        # Create sampler with many actions
+        large_action_space = list(range(1000))  # 1000 different actions
+        sampler = DiscreteActionSampler(actions=large_action_space)
+
+        # Test that we can sample many actions quickly without issues
+        num_samples = 10000
+
+        # This should complete quickly and without memory issues
+        actions = [sampler.sample() for _ in range(num_samples)]
+
+        # Verify we got the expected number of valid actions
+        assert len(actions) == num_samples
+
+        # All actions should be from the original list
+        for action in actions:
+            assert action in large_action_space
+
+        # Should have good variety (not all the same)
+        unique_actions = set(actions)
+        assert len(unique_actions) > 100  # Should sample many different actions
+
+    def test_discrete_action_sampler_reduce_method(self):
+        """Test the __reduce__ method for pickle serialization.
+
+        Purpose: Validates that the __reduce__ method works correctly for serialization
+
+        Given: DiscreteActionSampler instance
+        When: Object is pickled using __reduce__ method
+        Then: Deserialized object is identical to original
+
+        Test type: unit
+        """
+        actions = ["test1", "test2", "test3"]
+        sampler = DiscreteActionSampler(actions=actions)
+
+        # Test __reduce__ method directly
+        reduce_result = sampler.__reduce__()
+        
+        # Should return tuple with class and constructor arguments
+        assert isinstance(reduce_result, tuple)
+        assert len(reduce_result) == 2
+        assert reduce_result[0] == DiscreteActionSampler
+        assert reduce_result[1] == (actions,)
+
+        # Test reconstruction
+        reconstructed_sampler = reduce_result[0](*reduce_result[1])
+        assert reconstructed_sampler.actions == actions
+        assert isinstance(reconstructed_sampler, DiscreteActionSampler)
+
+        # Test that reconstructed sampler works
+        action = reconstructed_sampler.sample()
+        assert action in actions
+
+    def test_discrete_action_sampler_immutability(self):
+        """Test that the action list is properly stored as immutable.
+
+        Purpose: Validates that changes to the original action list don't affect the sampler
+
+        Given: DiscreteActionSampler and original action list
+        When: Original action list is modified
+        Then: Sampler continues to use the original list
+
+        Test type: unit
+        """
+        original_actions = ["A", "B", "C"]
+        sampler = DiscreteActionSampler(actions=original_actions)
+
+        # Modify the original list
+        original_actions.append("D")
+        original_actions.remove("A")
+
+        # Sampler should still use the original list (before modification)
+        sampled_actions = [sampler.sample() for _ in range(100)]
+        
+        # All sampled actions should be from the original list (A, B, C)
+        for action in sampled_actions:
+            assert action in ["A", "B", "C"]
+            assert action not in ["D"]  # Should not sample the added action
+
+    def test_discrete_action_sampler_none_action(self):
+        """Test behavior with None as an action.
+
+        Purpose: Validates that None can be used as a valid action
+
+        Given: DiscreteActionSampler with None as one of the actions
+        When: Actions are sampled
+        Then: None can be sampled as a valid action
+
+        Test type: unit
+        """
+        actions = ["action1", None, "action3"]
+        sampler = DiscreteActionSampler(actions=actions)
+
+        # Sample multiple actions
+        sampled_actions = [sampler.sample() for _ in range(100)]
+
+        # Should be able to sample None
+        assert None in sampled_actions
+
+        # All sampled actions should be from the original list
+        for action in sampled_actions:
+            assert action in actions

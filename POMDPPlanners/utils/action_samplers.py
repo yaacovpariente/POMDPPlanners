@@ -1,5 +1,6 @@
 import numpy as np
-from typing import Any
+from typing import Any, List, Optional
+import random
 from POMDPPlanners.core.tree import BeliefNode
 from POMDPPlanners.planners.mcts_planners.pft_dpw import ActionSampler
 
@@ -158,3 +159,33 @@ class UnitCircleActionSampler(ActionSampler):
         y = r * np.sin(theta)
         
         return np.array([x, y])
+
+class DiscreteActionSampler(ActionSampler):
+    """Simple action sampler for discrete action spaces.
+    
+    This class is designed to be fully serializable for use in parallel
+    processing environments like joblib.
+    """
+    
+    def __init__(self, actions: List[Any]):
+        """Initialize the sampler with a list of discrete actions.
+        
+        Args:
+            actions: List of discrete actions to sample from
+        """
+        self.actions = list(actions)
+    
+    def sample(self, belief_node: Optional[Any] = None) -> Any:
+        """Sample a random action from the discrete action space.
+        
+        Args:
+            belief_node: Optional belief node (unused in this implementation)
+            
+        Returns:
+            Randomly sampled action from the action space
+        """
+        return random.choice(self.actions)
+    
+    def __reduce__(self):
+        """Support for pickle serialization via __reduce__."""
+        return (self.__class__, (self.actions,))
