@@ -25,7 +25,7 @@ class PlannersHyperparamConfigs:
     def pft_dpw_config(
         self, env: Environment, action_sampler: ActionSampler, name: str, time_out_in_seconds: float = 3.
     ) -> HyperParamPlannerConfig:
-        max_depth_for_tuning = 15
+        max_depth_for_tuning = 10
         hyper_parameters = [
             NumericalHyperParameter(
                 0.0, (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning, "exploration_constant"
@@ -62,7 +62,7 @@ class PlannersHyperparamConfigs:
     def pomcpow_config(
         self, env: Environment, action_sampler: ActionSampler, name: str, time_out_in_seconds: float = 3
     ) -> HyperParamPlannerConfig:
-        max_depth_for_tuning = 15
+        max_depth_for_tuning = 10
         hyper_parameters = [
             NumericalHyperParameter(
                 0.0, (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning, "exploration_constant"
@@ -97,7 +97,7 @@ class PlannersHyperparamConfigs:
         )
 
     def sparse_pft_config(self, env: Environment, name: str, time_out_in_seconds: float = 3) -> HyperParamPlannerConfig:
-        max_depth_for_tuning = 15
+        max_depth_for_tuning = 10
         exploration_constant_max = (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning
         hyper_parameters = [
             NumericalHyperParameter(
@@ -154,7 +154,7 @@ class PlannersHyperparamConfigs:
         )
 
     def pomcp_config(self, env: Environment, name: str, time_out_in_seconds: float = 3) -> HyperParamPlannerConfig:
-        max_depth_for_tuning = 15
+        max_depth_for_tuning = 10
         hyper_parameters = [
             NumericalHyperParameter(
                 0.0, (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning, "exploration_constant"
@@ -179,7 +179,7 @@ class PlannersHyperparamConfigs:
     def pomcp_dpw_config(
         self, env: Environment, action_sampler: ActionSampler, name: str, time_out_in_seconds: float = 3
     ) -> HyperParamPlannerConfig:
-        max_depth_for_tuning = 15
+        max_depth_for_tuning = 10
         hyper_parameters = [
             NumericalHyperParameter(
                 0.0, (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning, "exploration_constant"
