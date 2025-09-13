@@ -197,8 +197,8 @@ class SparsePFT(PathSimulationPolicy):
         c_ucb: float, 
         beta_ucb: float, 
         belief_child_num: int, 
-        n_simulations: int, 
-        time_out_in_seconds: int,
+        time_out_in_seconds: Optional[int] = None,
+        n_simulations: Optional[int] = None, 
         name: str = "SparsePFT", 
         log_path: Optional[Path] = None, 
         debug: bool = False
@@ -228,8 +228,6 @@ class SparsePFT(PathSimulationPolicy):
             raise TypeError("beta_ucb must be a float")
         if not isinstance(belief_child_num, int):
             raise TypeError("belief_child_num must be an int")
-        if not isinstance(n_simulations, int):
-            raise TypeError("n_simulations must be an int")
         if not (1 >= discount_factor >= 0):
             raise ValueError("discount_factor must be between 0 and 1")
         
