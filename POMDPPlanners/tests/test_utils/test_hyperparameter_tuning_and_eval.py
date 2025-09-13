@@ -1064,11 +1064,11 @@ class TestHelperFunctions:
             assert key in defaults
 
         # Check that values are reasonable for fast execution
-        assert defaults["optimization_episodes"] == 3
-        assert defaults["optimization_steps"] == 6
-        assert defaults["n_trials"] == 3
-        assert defaults["evaluation_episodes"] == 10
-        assert defaults["evaluation_steps"] == 8
+        assert defaults["optimization_episodes"] == 2
+        assert defaults["optimization_steps"] == 1
+        assert defaults["n_trials"] == 1
+        assert defaults["evaluation_episodes"] == 1
+        assert defaults["evaluation_steps"] == 1
         assert defaults["optimization_n_jobs"] == -1
         assert defaults["evaluation_n_jobs"] == 1
         assert defaults["confidence_interval_level"] == 0.95
