@@ -349,6 +349,6 @@ class TestPlannersHyperparamConfigs:
         config = self.config_api.pomcp_config(negative_env, "Negative")
         exploration_param = next(p for p in config.hyper_parameters if p.name == "exploration_constant")
         
-        # Should use absolute difference: (-10.0 - (-50.0)) * 15 = 40 * 15 = 600
-        expected_max = 40.0 * 15
+        # Should use absolute difference: (-10.0 - (-50.0)) * max_depth_for_tuning = 40 * 10 = 400
+        expected_max = 40.0 * 10
         assert exploration_param.high == expected_max
