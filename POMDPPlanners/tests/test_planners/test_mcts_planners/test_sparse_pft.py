@@ -72,7 +72,8 @@ def planner(environment, discount_factor, depth, c_ucb, beta_ucb, belief_child_n
         c_ucb=c_ucb,
         beta_ucb=beta_ucb,
         belief_child_num=belief_child_num,
-        n_simulations=n_simulations
+        n_simulations=n_simulations,
+        time_out_in_seconds=None
     )
 
 
@@ -445,7 +446,8 @@ def test_sanity_pomdp_action_selection():
         c_ucb=1.0,
         beta_ucb=1.0,
         belief_child_num=3,  # More belief children for better exploration
-        n_simulations=1000  # More simulations for better accuracy
+        n_simulations=1000,  # More simulations for better accuracy
+        time_out_in_seconds=None
     )
     
     # Get initial belief
@@ -492,7 +494,8 @@ def test_sanity_pomdp_belief_children():
         c_ucb=1.0,
         beta_ucb=1.0,
         belief_child_num=3,
-        n_simulations=10
+        n_simulations=10,
+        time_out_in_seconds=None
     )
     
     # Get initial belief and create nodes
@@ -543,6 +546,7 @@ def test_sparse_pft_config_id_consistency_identical_parameters():
         beta_ucb=2.0,
         belief_child_num=5,
         n_simulations=100,
+        time_out_in_seconds=None,
         name="SparsePFT_Test1",
     )
 
@@ -555,6 +559,7 @@ def test_sparse_pft_config_id_consistency_identical_parameters():
         beta_ucb=2.0,
         belief_child_num=5,
         n_simulations=100,
+        time_out_in_seconds=None,
         name="SparsePFT_Test1",  # Same name
     )
 
@@ -589,6 +594,7 @@ def test_sparse_pft_config_id_different_c_ucb():
         beta_ucb=2.0,
         belief_child_num=5,
         n_simulations=100,
+        time_out_in_seconds=None,
         name="SparsePFT_Test",
     )
 
@@ -601,6 +607,7 @@ def test_sparse_pft_config_id_different_c_ucb():
         beta_ucb=2.0,
         belief_child_num=5,
         n_simulations=100,
+        time_out_in_seconds=None,
         name="SparsePFT_Test",
     )
 
@@ -632,6 +639,7 @@ def test_sparse_pft_config_id_different_belief_child_num():
         beta_ucb=2.0,
         belief_child_num=5,
         n_simulations=100,
+        time_out_in_seconds=None,
         name="SparsePFT_Test",
     )
 
@@ -644,6 +652,7 @@ def test_sparse_pft_config_id_different_belief_child_num():
         beta_ucb=2.0,
         belief_child_num=10,  # Different belief_child_num
         n_simulations=100,
+        time_out_in_seconds=None,
         name="SparsePFT_Test",
     )
 
@@ -675,6 +684,7 @@ def test_sparse_pft_config_id_consistency_across_evaluations():
         beta_ucb=2.0,
         belief_child_num=3,  # Reduced for testing
         n_simulations=10,  # Reduced for testing
+        time_out_in_seconds=None,
         name="SparsePFT_Consistency_Test",
     )
 
@@ -725,6 +735,7 @@ def test_sparse_pft_config_id_hash_properties():
         beta_ucb=2.0,
         belief_child_num=5,
         n_simulations=100,
+        time_out_in_seconds=None,
         name="SparsePFT_Hash_Test",
     )
 

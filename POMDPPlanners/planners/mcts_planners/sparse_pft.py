@@ -198,6 +198,7 @@ class SparsePFT(PathSimulationPolicy):
         beta_ucb: float, 
         belief_child_num: int, 
         n_simulations: int, 
+        time_out_in_seconds: int,
         name: str = "SparsePFT", 
         log_path: Optional[Path] = None, 
         debug: bool = False
@@ -207,7 +208,7 @@ class SparsePFT(PathSimulationPolicy):
             discount_factor=discount_factor,
             name=name,
             n_simulations=n_simulations,
-            time_out_in_seconds=None,
+            time_out_in_seconds=time_out_in_seconds,
             action_sampler=None,
             log_path=log_path,
             debug=debug
