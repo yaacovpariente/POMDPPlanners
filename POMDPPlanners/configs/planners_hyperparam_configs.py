@@ -100,22 +100,20 @@ class PlannersHyperparamConfigs:
         max_depth_for_tuning = 10
         exploration_constant_max = (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning
         hyper_parameters = [
-            NumericalHyperParameter(
-                0.0, exploration_constant_max, "exploration_constant"
-            ),  # UCB1 exploration
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
             NumericalHyperParameter(
                 0.0, exploration_constant_max, "c_ucb"
-            ),  # Action progressive widening coefficient
+            ),  # UCB exploration constant
             NumericalHyperParameter(
                 0.0, exploration_constant_max, "beta_ucb"
-            ),  # Action progressive widening exponent
+            ),  # UCB beta parameter
             NumericalHyperParameter(
                 3, 15, "belief_child_num"
-            ),  # Observation progressive widening coefficient
+            ),  # Number of belief children per action
         ]
 
         constant_parameters = {
+            "discount_factor": self.discount_factor,
             "gamma": self.discount_factor,
             "name": name,
             "environment": env,

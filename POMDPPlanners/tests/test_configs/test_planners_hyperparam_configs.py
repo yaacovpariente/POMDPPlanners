@@ -7,9 +7,16 @@ including tests for all planner configuration methods and their hyperparameter r
 import pytest
 import numpy as np
 from unittest.mock import Mock
+from pathlib import Path
+import tempfile
+import shutil
 
 from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
-from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
+from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
+    HyperParamPlannerConfig, 
+    optimize_and_evaluate_planners,
+    get_fast_optimization_defaults
+)
 from POMDPPlanners.core.simulation import NumericalHyperParameter, CategoricalHyperParameter
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
@@ -19,6 +26,9 @@ from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.mcts_planners.pomcp_dpw import POMCP_DPW
 from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import DiscreteActionSequencesPlanner
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.core.belief import get_initial_belief
+from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParameterOptimizationDirection
 
 
 class TestPlannersHyperparamConfigs:
@@ -128,10 +138,10 @@ class TestPlannersHyperparamConfigs:
 
         assert isinstance(config, HyperParamPlannerConfig)
         assert config.policy_cls == SparsePFT
-        assert len(config.hyper_parameters) == 5
+        assert len(config.hyper_parameters) == 4
 
         param_names = [param.name for param in config.hyper_parameters]
-        expected_params = ["exploration_constant", "depth", "c_ucb", "beta_ucb", "belief_child_num"]
+        expected_params = ["depth", "c_ucb", "beta_ucb", "belief_child_num"]
         assert set(param_names) == set(expected_params)
 
         # Check unique parameter "gamma" instead of "discount_factor"
@@ -352,3 +362,258 @@ class TestPlannersHyperparamConfigs:
         # Should use absolute difference: (-10.0 - (-50.0)) * max_depth_for_tuning = 40 * 10 = 400
         expected_max = 40.0 * 10
         assert exploration_param.high == expected_max
+
+    def test_pomcp_config_with_hyperparameter_tuning(self):
+        """Test POMCP configuration with actual hyperparameter tuning.
+
+        Purpose: Validates that POMCP configuration works with optimize_and_evaluate_planners
+
+        Given: A real Tiger POMDP environment and POMCP configuration
+        When: optimize_and_evaluate_planners is called with minimal parameters
+        Then: Optimization completes without errors and returns valid results
+
+        Test type: integration
+        """
+        # Create a real environment for testing
+        env = TigerPOMDP(discount_factor=0.95, name="TestTiger")
+        initial_belief = get_initial_belief(env, n_particles=50)
+        
+        # Create POMCP configuration using the config API
+        pomcp_config = self.config_api.pomcp_config(env, "TestPOMCP")
+        
+        # Create temporary directory for results
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_dir = Path(temp_dir)
+            
+            # Run optimization with minimal parameters for fast execution
+            results = optimize_and_evaluate_planners(
+                environment=env,
+                initial_belief=initial_belief,
+                planner_configs=[pomcp_config],
+                cache_dir=cache_dir,
+                optimization_direction=HyperParameterOptimizationDirection.MAXIMIZE,
+                parameter_to_optimize="average_return",
+                experiment_name="test_pomcp_optimization",
+                # Use minimal parameters for fast execution
+                optimization_episodes=2,
+                optimization_steps=1,
+                n_trials=1,
+                evaluation_episodes=2,
+                evaluation_steps=1,
+                optimization_n_jobs=1,
+                evaluation_n_jobs=1,
+                debug=False,
+                verbose=False
+            )
+            
+            # Verify results structure
+            assert 'optimization_results' in results
+            assert 'evaluation_results' in results
+            assert 'evaluation_statistics' in results
+            assert 'cache_paths' in results
+            assert 'summary' in results
+            
+            # Verify optimization results
+            optimization_results = results['optimization_results']
+            assert len(optimization_results) == 1
+            assert optimization_results[0].policy.name == "TestPOMCP"
+            assert optimization_results[0].chosen_hyper_parameters is not None
+            
+            # Verify evaluation results
+            evaluation_results = results['evaluation_results']
+            assert env.name in evaluation_results
+            assert "TestPOMCP" in evaluation_results[env.name]
+            
+            # Verify summary
+            summary = results['summary']
+            assert summary['num_planners'] == 1
+            assert summary['environment_name'] == env.name
+
+    def test_sparse_pft_config_with_hyperparameter_tuning(self):
+        """Test SparsePFT configuration with actual hyperparameter tuning.
+
+        Purpose: Validates that SparsePFT configuration works with optimize_and_evaluate_planners
+
+        Given: A real Tiger POMDP environment and SparsePFT configuration
+        When: optimize_and_evaluate_planners is called with minimal parameters
+        Then: Optimization completes without errors and returns valid results
+
+        Test type: integration
+        """
+        # Create a real environment for testing
+        env = TigerPOMDP(discount_factor=0.95, name="TestTiger")
+        initial_belief = get_initial_belief(env, n_particles=50)
+        
+        # Create SparsePFT configuration using the config API
+        sparse_pft_config = self.config_api.sparse_pft_config(env, "TestSparsePFT")
+        
+        # Create temporary directory for results
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_dir = Path(temp_dir)
+            
+            # Run optimization with minimal parameters for fast execution
+            results = optimize_and_evaluate_planners(
+                environment=env,
+                initial_belief=initial_belief,
+                planner_configs=[sparse_pft_config],
+                cache_dir=cache_dir,
+                optimization_direction=HyperParameterOptimizationDirection.MAXIMIZE,
+                parameter_to_optimize="average_return",
+                experiment_name="test_sparse_pft_optimization",
+                # Use minimal parameters for fast execution
+                optimization_episodes=2,
+                optimization_steps=1,
+                n_trials=1,
+                evaluation_episodes=2,
+                evaluation_steps=1,
+                optimization_n_jobs=1,
+                evaluation_n_jobs=1,
+                debug=False,
+                verbose=False
+            )
+            
+            # Verify results structure
+            assert 'optimization_results' in results
+            assert 'evaluation_results' in results
+            assert 'evaluation_statistics' in results
+            assert 'cache_paths' in results
+            assert 'summary' in results
+            
+            # Verify optimization results
+            optimization_results = results['optimization_results']
+            assert len(optimization_results) == 1
+            assert optimization_results[0].policy.name == "TestSparsePFT"
+            assert optimization_results[0].chosen_hyper_parameters is not None
+            
+            # Verify evaluation results
+            evaluation_results = results['evaluation_results']
+            assert env.name in evaluation_results
+            assert "TestSparsePFT" in evaluation_results[env.name]
+
+    def test_multiple_configs_with_hyperparameter_tuning(self):
+        """Test multiple planner configurations with hyperparameter tuning.
+
+        Purpose: Validates that multiple planner configurations work together with optimize_and_evaluate_planners
+
+        Given: Multiple planner configurations (POMCP and SparsePFT)
+        When: optimize_and_evaluate_planners is called with all configurations
+        Then: Optimization completes for all planners without errors
+
+        Test type: integration
+        """
+        # Create a real environment for testing
+        env = TigerPOMDP(discount_factor=0.95, name="TestTiger")
+        initial_belief = get_initial_belief(env, n_particles=50)
+        
+        # Create multiple configurations
+        pomcp_config = self.config_api.pomcp_config(env, "TestPOMCP")
+        sparse_pft_config = self.config_api.sparse_pft_config(env, "TestSparsePFT")
+        
+        planner_configs = [pomcp_config, sparse_pft_config]
+        
+        # Create temporary directory for results
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_dir = Path(temp_dir)
+            
+            # Run optimization with minimal parameters for fast execution
+            results = optimize_and_evaluate_planners(
+                environment=env,
+                initial_belief=initial_belief,
+                planner_configs=planner_configs,
+                cache_dir=cache_dir,
+                optimization_direction=HyperParameterOptimizationDirection.MAXIMIZE,
+                parameter_to_optimize="average_return",
+                experiment_name="test_multiple_optimization",
+                # Use minimal parameters for fast execution
+                optimization_episodes=2,
+                optimization_steps=1,
+                n_trials=1,
+                evaluation_episodes=2,
+                evaluation_steps=1,
+                optimization_n_jobs=1,
+                evaluation_n_jobs=1,
+                debug=False,
+                verbose=False
+            )
+            
+            # Verify results structure
+            assert 'optimization_results' in results
+            assert 'evaluation_results' in results
+            assert 'evaluation_statistics' in results
+            assert 'cache_paths' in results
+            assert 'summary' in results
+            
+            # Verify optimization results for both planners
+            optimization_results = results['optimization_results']
+            assert len(optimization_results) == 2
+            
+            planner_names = [result.policy.name for result in optimization_results]
+            assert "TestPOMCP" in planner_names
+            assert "TestSparsePFT" in planner_names
+            
+            # Verify all results have chosen hyperparameters
+            for result in optimization_results:
+                assert result.chosen_hyper_parameters is not None
+            
+            # Verify evaluation results for both planners
+            evaluation_results = results['evaluation_results']
+            assert env.name in evaluation_results
+            assert "TestPOMCP" in evaluation_results[env.name]
+            assert "TestSparsePFT" in evaluation_results[env.name]
+            
+            # Verify summary
+            summary = results['summary']
+            assert summary['num_planners'] == 2
+            assert summary['environment_name'] == env.name
+
+    def test_config_with_fast_optimization_defaults(self):
+        """Test configuration using fast optimization defaults.
+
+        Purpose: Validates that configurations work with the fast optimization defaults helper function
+
+        Given: A planner configuration and fast optimization defaults
+        When: optimize_and_evaluate_planners is called with fast defaults
+        Then: Optimization completes without errors using the predefined fast parameters
+
+        Test type: integration
+        """
+        # Create a real environment for testing
+        env = TigerPOMDP(discount_factor=0.95, name="TestTiger")
+        initial_belief = get_initial_belief(env, n_particles=50)
+        
+        # Create POMCP configuration
+        pomcp_config = self.config_api.pomcp_config(env, "TestPOMCPFast")
+        
+        # Get fast optimization defaults
+        fast_defaults = get_fast_optimization_defaults()
+        
+        # Create temporary directory for results
+        with tempfile.TemporaryDirectory() as temp_dir:
+            cache_dir = Path(temp_dir)
+            
+            # Run optimization using fast defaults
+            results = optimize_and_evaluate_planners(
+                environment=env,
+                initial_belief=initial_belief,
+                planner_configs=[pomcp_config],
+                cache_dir=cache_dir,
+                optimization_direction=HyperParameterOptimizationDirection.MAXIMIZE,
+                parameter_to_optimize="average_return",
+                experiment_name="test_fast_optimization",
+                **fast_defaults,  # Use fast defaults
+                debug=False,
+                verbose=False
+            )
+            
+            # Verify results structure
+            assert 'optimization_results' in results
+            assert 'evaluation_results' in results
+            assert 'evaluation_statistics' in results
+            assert 'cache_paths' in results
+            assert 'summary' in results
+            
+            # Verify optimization results
+            optimization_results = results['optimization_results']
+            assert len(optimization_results) == 1
+            assert optimization_results[0].policy.name == "TestPOMCPFast"
+            assert optimization_results[0].chosen_hyper_parameters is not None

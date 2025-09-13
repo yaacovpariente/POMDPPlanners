@@ -883,11 +883,11 @@ def get_fast_optimization_defaults() -> Dict[str, Any]:
         logger.debug("Getting fast optimization defaults")
     
     return {
-        'optimization_episodes': 3,
-        'optimization_steps': 6,
-        'n_trials': 3,
-        'evaluation_episodes': 10,
-        'evaluation_steps': 8,
+        'optimization_episodes': 2,
+        'optimization_steps': 1,
+        'n_trials': 1,
+        'evaluation_episodes': 1,
+        'evaluation_steps': 1,
         'optimization_n_jobs': -1,
         'evaluation_n_jobs': 1,
         'confidence_interval_level': 0.95,
