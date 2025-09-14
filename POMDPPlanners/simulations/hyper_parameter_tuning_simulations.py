@@ -119,7 +119,9 @@ from POMDPPlanners.utils.logger import get_logger
 from POMDPPlanners.simulations.simulations_deployment.tasks.hyper_parameter_tuning_simulation_task import HyperParameterTuningSimulationTask
 from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParameterRunParams, OptimizedPolicyResult
 from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
-
+from POMDPPlanners.simulations.simulator import POMDPSimulator
+from POMDPPlanners.simulations.simulator import TaskManagerType
+from POMDPPlanners.core.simulation import EnvironmentRunParams
 
 logger = get_logger(__name__)
 
@@ -570,25 +572,35 @@ class HyperParameterOptimizer:
         all_params: dict,
         original_index: int
     ) -> None:
-        # For testing purposes, skip the final evaluation simulation
-        # In a real implementation, this would run the final evaluation
-        # final_histories, final_statistics = self.simulation(
-        #     environment=config.environment,
-        #     policy=optimization_result.policy,
-        #     initial_belief=config.belief,
-        #     num_episodes=config.num_episodes,
-        #     num_steps=config.num_steps,
-        #     alpha=self.alpha,
-        # )
-        
-        # Create placeholder statistics for testing
-        from POMDPPlanners.core.simulation import MetricValue
-        final_statistics = [
-            MetricValue("average_return", -2.8525, -3.0, -2.5),
-            MetricValue("total_cost", 3.0, 2.5, 3.5)
+        simulator = POMDPSimulator(
+            cache_dir_path=None,
+            experiment_name=f"optimization_results_config_{original_index+1}", 
+            task_manager_type=TaskManagerType.JOBLIB,
+            n_jobs=self.n_jobs,
+        )
+
+        env_run_params = [
+            EnvironmentRunParams(
+                environment=config.environment,
+                belief=config.belief,
+                policies=[optimization_result.policy],
+                num_episodes=config.num_episodes,
+                num_steps=config.num_steps,
+            )
         ]
         
-        # Log final evaluation metrics
+        # Use the simulator's _run_simulations_and_compute_metrics method
+        results, metrics = simulator._run_simulations_and_compute_metrics(
+            environment_run_params=env_run_params,
+            alpha=self.alpha,
+            confidence_interval_level=self.confidence_interval_level,
+            n_jobs=self.n_jobs,
+        )
+        
+        # Extract final statistics from metrics
+        final_statistics = metrics[config.environment.name][optimization_result.policy.name]
+        
+        # Log final evaluation metrics with final_ prefix to distinguish from optimization metrics
         for metric in final_statistics:
             mlflow.log_metric(f"final_{metric.name}", metric.value)
             mlflow.log_metric(f"final_{metric.name}_lower_ci", metric.lower_confidence_bound)

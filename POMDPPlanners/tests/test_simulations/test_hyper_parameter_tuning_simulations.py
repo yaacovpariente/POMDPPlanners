@@ -723,7 +723,8 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             
             # Verify final evaluation metrics were logged
             assert 'metrics.final_average_return' in config_run
-            assert 'metrics.final_total_cost' in config_run
+            assert 'metrics.final_success_rate' in config_run
+            assert 'metrics.final_average_listens' in config_run
 
     def test_numerical_hyperparameter_constructor_order_validation(self, temp_cache_dir, real_environment, real_belief):
         """Test that NumericalHyperParameter constructor parameter order is validated.
@@ -945,7 +946,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
                 
                 # Final evaluation metrics
                 expected_final_metrics = [
-                    'final_average_return', 'final_total_cost'
+                    'final_average_return', 'final_success_rate', 'final_average_listens'
                 ]
                 for metric in expected_final_metrics:
                     assert f'metrics.{metric}' in config_run.index, f"Missing final evaluation metric: {metric}"
