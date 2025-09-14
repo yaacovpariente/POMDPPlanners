@@ -481,8 +481,59 @@ class HyperParameterOptimizer:
             elif isinstance(param, NumericalHyperParameter):
                 param_ranges_info[f"param_range_{param.name}"] = f"{param.low}-{param.high}"
         
+        # Log constant parameters (non-optimized policy parameters)
+        constant_params = {
+            f"constant_{key}": value
+            for key, value in config.constant_parameters.items()
+            if isinstance(value, (int, float, str, bool))
+        }
+        
         # Combine all parameters
-        return {**config_params, **env_params, **param_ranges_info}
+        return {**config_params, **env_params, **param_ranges_info, **constant_params}
+
+    def _extract_all_policy_parameters(self, optimization_result: 'OptimizedPolicyResult') -> dict:
+        """Extract all parameters from the optimized policy for comprehensive MLflow logging.
+        
+        This method extracts all policy parameters including:
+        - Policy name and type
+        - All policy attributes (instance variables)
+        - Constant parameters that were used during policy creation
+        - Environment reference information
+        
+        Args:
+            optimization_result: The OptimizedPolicyResult containing the optimized policy
+            
+        Returns:
+            dict: Dictionary of all policy parameters suitable for MLflow logging
+        """
+        policy = optimization_result.policy
+        policy_params = {}
+        
+        # Log policy basic information
+        policy_params["policy_name"] = getattr(policy, 'name', 'unnamed')
+        policy_params["policy_class"] = policy.__class__.__name__
+        
+        # Log all policy attributes (instance variables)
+        for attr_name, attr_value in policy.__dict__.items():
+            # Skip private attributes and complex objects
+            if not attr_name.startswith('_') and isinstance(attr_value, (int, float, str, bool)):
+                policy_params[f"policy_{attr_name}"] = attr_value
+            elif not attr_name.startswith('_') and isinstance(attr_value, (list, tuple)):
+                # Log simple lists/tuples as strings
+                if all(isinstance(item, (int, float, str, bool)) for item in attr_value):
+                    policy_params[f"policy_{attr_name}"] = str(attr_value)
+        
+        # Log environment information
+        env = optimization_result.environment
+        policy_params["env_name"] = getattr(env, 'name', 'unnamed')
+        policy_params["env_class"] = env.__class__.__name__
+        
+        # Log environment attributes that are simple types
+        for attr_name, attr_value in env.__dict__.items():
+            if not attr_name.startswith('_') and isinstance(attr_value, (int, float, str, bool)):
+                policy_params[f"env_{attr_name}"] = attr_value
+        
+        return policy_params
 
     def _log_optimization_results(
         self, 
@@ -490,8 +541,12 @@ class HyperParameterOptimizer:
         task: 'HyperParameterTuningSimulationTask'
     ) -> None:
         if optimization_result is not None:
-            # Log optimization results
+            # Log optimization results (best hyperparameters)
             mlflow.log_params({f"best_{k}": v for k, v in optimization_result.chosen_hyper_parameters.items()})
+            
+            # Log all policy parameters (including constant parameters and policy attributes)
+            all_policy_params = self._extract_all_policy_parameters(optimization_result)
+            mlflow.log_params(all_policy_params)
             
             # Get additional metadata from the task if available
             task_metadata = task.get_optimization_metadata()
@@ -574,7 +629,14 @@ class HyperParameterOptimizer:
             "environment_type": config.environment.__class__.__name__,
             "optimization_direction": config.direction.value,
             "parameter_to_optimize": config.parameter_to_optimize,
-            "best_value": task_metadata['best_value'] if task_metadata else "unknown"
+            "best_value": task_metadata['best_value'] if task_metadata else "unknown",
+            "all_policy_parameters": self._extract_all_policy_parameters(optimization_result),
+            "policy_creation_params": {
+                "policy_name": getattr(optimization_result.policy, 'name', 'unnamed'),
+                "policy_class": optimization_result.policy.__class__.__name__,
+                "environment_name": getattr(optimization_result.environment, 'name', 'unnamed'),
+                "environment_class": optimization_result.environment.__class__.__name__
+            }
         }
         mlflow.log_dict(planner_config, f"planner_chosen_config_{original_index+1}.json")
 
