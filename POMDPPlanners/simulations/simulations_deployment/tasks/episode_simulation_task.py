@@ -67,18 +67,12 @@ class EpisodeSimulationTask(SimulationTask):
         
         # Generate cache key after all attributes are set
         self._cache_key = self._generate_cache_key()
-        
-        # Log task creation
-        temp_logger = get_logger(
-            name=f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}.task_id.{self._cache_key}",
-            debug=self.debug,
-            output_dir=self.cache_dir / "logs" / "episodes" if self.cache_dir else None,
-            console_output=self.console_output
-        )
-        temp_logger.debug(f"Creating EpisodeSimulationTask with episode_id={self.episode_id}, episode_number={self.episode_number}")
-        temp_logger.debug(f"Task parameters: num_steps={self.num_steps}, seed={self.seed}, discount_factor={self.discount_factor}")
-        temp_logger.debug(f"Cache directory: {self.cache_dir}")
-        temp_logger.debug(f"Generated cache key: {self._cache_key}")
+
+        # Log task creation using the logger property
+        self.logger.debug(f"Creating EpisodeSimulationTask with episode_id={self.episode_id}, episode_number={self.episode_number}")
+        self.logger.debug(f"Task parameters: num_steps={self.num_steps}, seed={self.seed}, discount_factor={self.discount_factor}")
+        self.logger.debug(f"Cache directory: {self.cache_dir}")
+        self.logger.debug(f"Generated cache key: {self._cache_key}")
     
     @property
     def logger(self) -> logging.Logger:
@@ -135,6 +129,23 @@ class EpisodeSimulationTask(SimulationTask):
         """Create a SimulationTask instance from a dictionary."""
         return cls(**data)
     
+    def cleanup_logger(self) -> None:
+        """Clean up logger resources to prevent file handle leaks.
+
+        This method closes all file handlers associated with the task's logger
+        to ensure proper cleanup of file descriptors in multiprocessing scenarios.
+        """
+        try:
+            logger = logging.getLogger(f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}")
+            # Close and remove all file handlers
+            for handler in logger.handlers[:]:
+                if isinstance(handler, logging.FileHandler):
+                    handler.close()
+                    logger.removeHandler(handler)
+        except Exception as e:
+            # Don't let cleanup errors affect the main task
+            pass
+
     def run(self) -> Union[History, None]:
         """Run the simulation task.
         
@@ -195,12 +206,15 @@ class EpisodeSimulationTask(SimulationTask):
             self.logger.debug("Restoring random state")
             np.random.set_state(state)
             self.logger.debug("Random state restored")
-            
+
             # Log total execution time
             end_time = time.time()
             execution_time = end_time - start_time
             self.logger.info(f"Episode {self.episode_id} execution completed in {execution_time:.4f} seconds")
-            
+
+            # Clean up logger resources
+            self.cleanup_logger()
+
         return result
     
     def __eq__(self, other: 'EpisodeSimulationTask') -> bool:
