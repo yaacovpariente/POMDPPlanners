@@ -82,7 +82,7 @@ class EpisodeSimulationTask(SimulationTask):
             output_dir = self.cache_dir / "logs" / "episodes"
         
         return get_logger(
-            name=f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}",
+            name=f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}_task_id.{self._cache_key}",
             debug=self.debug,
             output_dir=output_dir,
             console_output=self.console_output
@@ -136,7 +136,7 @@ class EpisodeSimulationTask(SimulationTask):
         to ensure proper cleanup of file descriptors in multiprocessing scenarios.
         """
         try:
-            logger = logging.getLogger(f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}")
+            logger = logging.getLogger(f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}_task_id.{self._cache_key}")
             # Close and remove all file handlers
             for handler in logger.handlers[:]:
                 if isinstance(handler, logging.FileHandler):
