@@ -311,7 +311,14 @@ def get_queue_logger_manager() -> QueueLoggerManager:
     return _queue_logger_manager
 
 
-def get_logger(name: str, level: int = logging.INFO, output_dir: Optional[Path] = None, debug: bool = False, console_output: bool = True, use_queue: bool = False) -> logging.Logger:
+def get_logger(
+    name: str,
+    level: int = logging.INFO,
+    output_dir: Optional[Path] = None,
+    debug: bool = False,
+    console_output: bool = True,
+    use_queue: bool = False
+) -> logging.Logger:
     """Get a configured logger for POMDP experiments and algorithm execution.
 
     This utility creates standardized loggers for tracking experimental progress,
@@ -573,3 +580,38 @@ def cleanup_all_loggers():
     if _queue_logger_manager is not None:
         _queue_logger_manager.stop()
         _queue_logger_manager = None
+
+def reset_logger_state():
+    """Reset the global logger state for testing.
+
+    This function ensures clean state between test runs by:
+    - Stopping any running queue manager
+    - Clearing the global singleton
+    - Removing all Python loggers created by this module
+    """
+    global _queue_logger_manager
+
+    # Stop and clear the queue manager
+    if _queue_logger_manager is not None:
+        _queue_logger_manager.stop()
+        _queue_logger_manager = None
+
+    # Clear all loggers that start with "queue." to reset state
+    import logging
+    loggers_to_clear = []
+    for name in logging.Logger.manager.loggerDict.keys():
+        if name.startswith('queue.'):
+            loggers_to_clear.append(name)
+
+    for name in loggers_to_clear:
+        logger = logging.getLogger(name)
+        # Remove all handlers
+        for handler in logger.handlers[:]:
+            try:
+                handler.close()
+                logger.removeHandler(handler)
+            except:
+                pass
+        # Remove from manager
+        if name in logging.Logger.manager.loggerDict:
+            del logging.Logger.manager.loggerDict[name]

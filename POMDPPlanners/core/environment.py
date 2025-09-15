@@ -218,11 +218,12 @@ class Environment(ABC):
         debug: Flag to enable debug logging
     """
     
-    def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo, 
+    def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo,
                  reward_range: Optional[Tuple[float, float]] = None,
-                 output_dir: Optional[Path] = None, debug: bool = False):
+                 output_dir: Optional[Path] = None, debug: bool = False,
+                 use_queue_logger: bool = False):
         """Initialize the POMDP environment.
-        
+
         Args:
             discount_factor: Discount factor for future rewards (0 < discount_factor <= 1)
             name: Unique identifier for the environment
@@ -231,6 +232,7 @@ class Environment(ABC):
                 Defaults to None. If provided, will be validated.
             output_dir: Optional directory for logging output. Defaults to None.
             debug: Enable debug logging. Defaults to False.
+            use_queue_logger: Whether to use queue-based logging. Defaults to True.
         """
         self.discount_factor = discount_factor
         self.name = name
@@ -238,6 +240,7 @@ class Environment(ABC):
         self.reward_range = self._validate_reward_range(reward_range)
         self.output_dir = output_dir
         self.debug = debug
+        self.use_queue_logger = use_queue_logger
         
         self.logger.info(f"Initializing {self.name} environment with discount factor {self.discount_factor}")
         self.logger.debug(f"Space info: action_space={self.space_info.action_space}, observation_space={self.space_info.observation_space}")
@@ -296,7 +299,8 @@ class Environment(ABC):
         return get_logger(
             name=f"environment.{self.name}",
             output_dir=self.output_dir,
-            debug=self.debug
+            debug=self.debug,
+            use_queue=self.use_queue_logger
         )
 
     def __eq__(self, other):
@@ -548,9 +552,10 @@ class DiscreteActionsEnvironment(Environment):
         the get_actions() method.
     """
     
-    def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo, 
+    def __init__(self, discount_factor: float, name: str, space_info: SpaceInfo,
                  reward_range: Optional[Tuple[float, float]] = None,
-                 output_dir: Optional[Path] = None, debug: bool = False):
+                 output_dir: Optional[Path] = None, debug: bool = False,
+                 use_queue_logger: bool = False):
         """Initialize the discrete actions environment.
         
         Args:
@@ -562,8 +567,9 @@ class DiscreteActionsEnvironment(Environment):
             output_dir: Optional directory for logging output. Defaults to None.
             debug: Enable debug logging. Defaults to False.
         """
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
-                        reward_range=reward_range, output_dir=output_dir, debug=debug)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info,
+                        reward_range=reward_range, output_dir=output_dir, debug=debug,
+                        use_queue_logger=use_queue_logger)
         self.logger.debug("Initialized DiscreteActionsEnvironment")
 
     @abstractmethod

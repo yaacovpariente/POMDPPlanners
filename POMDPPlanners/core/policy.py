@@ -86,12 +86,13 @@ class Policy(ABC):
     """
     
     def __init__(
-        self, 
-        environment: "Environment", 
-        discount_factor: float, 
+        self,
+        environment: "Environment",
+        discount_factor: float,
         name: str,
         log_path: Optional[Path] = None,
-        debug: bool = False
+        debug: bool = False,
+        use_queue_logger: bool = False
     ):
         """Initialize the POMDP policy.
         
@@ -107,6 +108,7 @@ class Policy(ABC):
         self.name = name
         self.log_path = log_path
         self.debug = debug
+        self.use_queue_logger = use_queue_logger
         
         # Initialize logger with the policy's name and user-specified settings
         self.logger.info(f"Initialized policy: {self.name} (debug={self.debug})")
@@ -125,7 +127,8 @@ class Policy(ABC):
             name=f"policy.{self.name}",
             level=logging.INFO,
             output_dir=self.log_path,
-            debug=self.debug
+            debug=self.debug,
+            use_queue=self.use_queue_logger
         )
 
     @property
