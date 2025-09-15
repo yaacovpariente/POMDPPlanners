@@ -238,7 +238,7 @@ class HyperParameterOptimizer:
                 If None (default), uses cache_dir_path/mlruns for local file storage.
                 If provided, must be a Path object pointing to the desired MLflow
                 tracking directory on the local filesystem.
-
+            use_queue_logger: Whether to use queue-based logging. Defaults to True.
         Raises:
             TypeError: If cache_dir_path is not a Path object
         """
