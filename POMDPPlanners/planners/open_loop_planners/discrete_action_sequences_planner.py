@@ -123,8 +123,18 @@ class DiscreteActionSequencesPlanner(Policy):
         - Environments where open-loop planning is reasonable
         - Baseline for comparing more sophisticated algorithms
     """
-    def __init__(self, environment: DiscreteActionsEnvironment, discount_factor: float, name: str, depth: int, n_return_samples: int, log_path: Optional[Path] = None, debug: bool = False):
-        super().__init__(environment=environment, discount_factor=discount_factor, name=name, log_path=log_path, debug=debug)
+    def __init__(
+        self, 
+        environment: DiscreteActionsEnvironment, 
+        discount_factor: float, 
+        name: str, 
+        depth: int, 
+        n_return_samples: int, 
+        log_path: Optional[Path] = None, 
+        debug: bool = False, 
+        use_queue_logger: bool = False
+    ):
+        super().__init__(environment=environment, discount_factor=discount_factor, name=name, log_path=log_path, debug=debug, use_queue_logger=use_queue_logger)
 
         if depth <= 0:
             raise ValueError("depth must be greater than 0")

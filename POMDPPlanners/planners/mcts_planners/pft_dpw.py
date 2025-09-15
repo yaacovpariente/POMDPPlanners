@@ -179,7 +179,8 @@ class PFT_DPW(PathSimulationPolicy):
         min_samples_per_node: int = 10, 
         min_visit_count_per_action: int = 1,
         log_path: Optional[Path] = None,
-        debug: bool = False
+        debug: bool = False,
+        use_queue_logger: bool = False
     ):
         super().__init__(
             environment=environment, 
@@ -189,7 +190,8 @@ class PFT_DPW(PathSimulationPolicy):
             time_out_in_seconds=time_out_in_seconds,
             action_sampler=action_sampler,
             log_path=log_path,
-            debug=debug
+            debug=debug,
+            use_queue_logger=use_queue_logger
         )
         
         self.__type_check_inputs(

@@ -153,7 +153,8 @@ class POMCPOW(PathSimulationPolicy):
         n_simulations: int = None, 
         min_samples_per_node: int = 10, 
         log_path: Optional[Path] = None, 
-        debug: bool = False
+        debug: bool = False,
+        use_queue_logger: bool = False
     ):
         """Initialize POMCPOW planner with double progressive widening parameters.
         
@@ -185,7 +186,8 @@ class POMCPOW(PathSimulationPolicy):
             time_out_in_seconds=time_out_in_seconds,
             action_sampler=action_sampler,
             log_path=log_path,
-            debug=debug
+            debug=debug,
+            use_queue_logger=use_queue_logger
         )
         
         self.depth = depth

@@ -60,14 +60,16 @@ class PathSimulationPolicy(Policy):
         time_out_in_seconds: int,
         action_sampler: Optional[ActionSampler] = None,
         log_path: Optional[Path] = None,
-        debug: bool = False
+        debug: bool = False,
+        use_queue_logger: bool = False
     ):
         super().__init__(
             environment=environment, 
             discount_factor=discount_factor, 
             name=name,
             log_path=log_path,
-            debug=debug
+            debug=debug,
+            use_queue_logger=use_queue_logger
         )
 
         self.n_simulations = n_simulations

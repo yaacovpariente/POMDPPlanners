@@ -98,8 +98,9 @@ class POMCP(PathSimulationPolicy):
         time_out_in_seconds: int = None, 
         n_simulations: int = None, 
         min_samples_per_node: int = 10,
-        log_path: Optional[Path] = None,
-        debug: bool = False
+        log_path: Optional[Path] = None,    
+        debug: bool = False,
+        use_queue_logger: bool = False
     ):
         combination1 = time_out_in_seconds is not None and n_simulations is None
         combination2 = time_out_in_seconds is None and n_simulations is not None
@@ -113,7 +114,8 @@ class POMCP(PathSimulationPolicy):
             n_simulations=n_simulations,
             time_out_in_seconds=time_out_in_seconds,
             log_path=log_path,
-            debug=debug
+            debug=debug,
+            use_queue_logger=use_queue_logger
         )
         
         self.depth = depth

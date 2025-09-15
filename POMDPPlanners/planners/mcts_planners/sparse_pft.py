@@ -201,7 +201,8 @@ class SparsePFT(PathSimulationPolicy):
         n_simulations: Optional[int] = None, 
         name: str = "SparsePFT", 
         log_path: Optional[Path] = None, 
-        debug: bool = False
+        debug: bool = False,
+        use_queue_logger: bool = False
     ):
         super().__init__(
             environment=environment,
@@ -211,7 +212,8 @@ class SparsePFT(PathSimulationPolicy):
             time_out_in_seconds=time_out_in_seconds,
             action_sampler=None,
             log_path=log_path,
-            debug=debug
+            debug=debug,
+            use_queue_logger=use_queue_logger
         )
         
         if not isinstance(environment, DiscreteActionsEnvironment):
