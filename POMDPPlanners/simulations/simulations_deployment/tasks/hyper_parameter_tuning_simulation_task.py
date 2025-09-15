@@ -57,13 +57,16 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.seed = seed
 
         # Import locally to avoid circular imports
-        from POMDPPlanners.simulations.simulator import POMDPSimulator, TaskManagerType
+        from POMDPPlanners.simulations.simulator import POMDPSimulator
+        from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
+        
+        # Create task manager config for joblib
+        task_manager_config = JoblibConfig(n_jobs=n_jobs)
         
         self.simulator = POMDPSimulator(
+            task_manager_config=task_manager_config,
             cache_dir_path=None,
             experiment_name=None, 
-            task_manager_type=TaskManagerType.JOBLIB,
-            n_jobs=n_jobs,
             debug=debug  # Keep episode-level logging minimal for optimization
         )
 
