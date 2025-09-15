@@ -117,7 +117,7 @@ from POMDPPlanners.core.simulation import (
 from POMDPPlanners.simulations.simulations_deployment.task_managers import (
     SequentialTaskManager,
 )
-from POMDPPlanners.utils.logger import get_logger
+from POMDPPlanners.utils.logger import get_logger, cleanup_all_loggers
 from POMDPPlanners.simulations.simulations_deployment.tasks.hyper_parameter_tuning_simulation_task import (
     HyperParameterTuningSimulationTask,
 )
@@ -210,6 +210,7 @@ class HyperParameterOptimizer:
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         mlflow_tracking_uri: Optional[Path] = None,
+        use_queue_logger: bool = False,
     ):
         """Initialize the hyperparameter optimizer.
 
@@ -247,6 +248,7 @@ class HyperParameterOptimizer:
         self.confidence_interval_level = confidence_interval_level
         self.mlflow_tracking_uri = mlflow_tracking_uri
         self.alpha = alpha
+        self.use_queue_logger = use_queue_logger
         # Set up MLFlow tracking
         if mlflow_tracking_uri is None:
             # Use local file storage in cache_dir_path/mlruns
@@ -270,6 +272,37 @@ class HyperParameterOptimizer:
             verbose=0,
             logger_debug=False,
         )
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit with proper cleanup."""
+        self.cleanup()
+
+    def cleanup(self):
+        """Clean up resources including loggers and task managers."""
+        # Clean up task manager
+        if hasattr(self, "task_manager"):
+            try:
+                self.task_manager.__exit__(None, None, None)
+            except Exception:
+                pass
+
+        # Clean up any active MLflow runs
+        try:
+            import mlflow
+            if mlflow.active_run() is not None:
+                mlflow.end_run()
+        except Exception:
+            pass
+
+        # Clean up logger resources to prevent hanging
+        try:
+            cleanup_all_loggers()
+        except Exception:
+            pass
 
     def _create_tasks(
         self, configs: List[HyperParameterRunParams]

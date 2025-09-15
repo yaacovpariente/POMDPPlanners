@@ -35,7 +35,7 @@ from POMDPPlanners.utils.visualization import (
     plot_discounted_returns_histogram_multiple_policies,
     plot_policies_comparison_on_environment,
 )
-from POMDPPlanners.utils.logger import get_logger
+from POMDPPlanners.utils.logger import get_logger, cleanup_all_loggers
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     TaskManagerConfig,
@@ -125,6 +125,7 @@ class BaseSimulator(ABC):
         debug: bool = False,
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
+        use_queue_logger: bool = False,
     ):
         """Initialize the simulator.
 
@@ -142,9 +143,11 @@ class BaseSimulator(ABC):
         self.enable_profiling = enable_profiling
         self.profiling_output_limit = profiling_output_limit
         self.profiler = None
+        self.use_queue_logger = use_queue_logger
 
         self.logger = get_logger(
-            name=f"simulator.{experiment_name}", debug=debug, output_dir=cache_dir_path
+            name=f"simulator.{experiment_name}", debug=debug, output_dir=cache_dir_path,
+            use_queue=use_queue_logger
         )
 
         # Create task manager using configuration
@@ -195,6 +198,13 @@ class BaseSimulator(ABC):
         # Clean up task manager
         if hasattr(self, "task_manager"):
             self.task_manager.__exit__(exc_type, exc_val, exc_tb)
+
+        # Clean up logger resources to prevent hanging
+        try:
+            cleanup_all_loggers()
+        except Exception:
+            # Ignore any errors during logger cleanup
+            pass
 
     def compare_multiple_environments_policies(
         self,
@@ -897,6 +907,7 @@ class POMDPSimulator(BaseSimulator):
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
         task_console_output: bool = False,
+        use_queue_logger: bool = False,
     ):
         """Initialize the POMDP simulator.
 
@@ -918,6 +929,7 @@ class POMDPSimulator(BaseSimulator):
             debug=debug,
             enable_profiling=enable_profiling,
             profiling_output_limit=profiling_output_limit,
+            use_queue_logger=use_queue_logger,
         )
         self.task_console_output = task_console_output
 

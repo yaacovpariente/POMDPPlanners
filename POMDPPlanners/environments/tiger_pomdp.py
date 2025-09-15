@@ -199,27 +199,28 @@ class TigerPOMDP(DiscreteActionsEnvironment):
             is_done = tiger.is_terminal(state)
     """
     
-    def __init__(self, discount_factor: float, name: str = "TigerPOMDP", output_dir: Optional[Path] = None, debug: bool = False):
+    def __init__(self, discount_factor: float, name: str = "TigerPOMDP", output_dir: Optional[Path] = None, debug: bool = False, use_queue_logger: bool = False):
         """Initialize the Tiger POMDP environment.
-        
+
         Args:
             discount_factor: Discount factor for future rewards (0 < discount_factor <= 1)
             name: Name identifier for this environment instance. Defaults to "TigerPOMDP".
             output_dir: Optional directory for logging output. Defaults to None.
             debug: Enable debug logging. Defaults to False.
-            
+            use_queue_logger: Whether to use queue-based logging. Defaults to True.
+
         Raises:
             ValueError: If discount_factor is not in valid range [0, 1]
         """
         if not (0.0 <= discount_factor <= 1.0):
             raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
-        
+
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,  # Actions are discrete: listen, open_left, open_right
             observation_space=SpaceType.DISCRETE,  # Observations are discrete: hear_left, hear_right, hear_nothing
         )
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
-                        reward_range=(-100.0, 10.0), output_dir=output_dir, debug=debug)
+        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info,
+                        reward_range=(-100.0, 10.0), output_dir=output_dir, debug=debug, use_queue_logger=use_queue_logger)
         self.states = STATES
         self.actions = ACTIONS
         self.observations = OBSERVATIONS
