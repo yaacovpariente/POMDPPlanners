@@ -44,8 +44,8 @@ class ActionNode(BaseNode):
         print_tree(self)
 
     def sample_child_node(self) -> 'BeliefNode':
-        child_visit_counts = np.array([child.visit_count for child in self.children])
-        weights = child_visit_counts / sum(child_visit_counts)
+        child_weights = np.array([child.weight for child in self.children])
+        weights = child_weights / sum(child_weights)
         return np.random.choice(self.children, p=weights)
 
     def get_belief_node_child(self, observation: Any, environment: Environment) -> Union['BeliefNode', None]:
@@ -56,13 +56,14 @@ class ActionNode(BaseNode):
         return None
 
 class BeliefNode(BaseNode):
-    def __init__(self, belief: Belief, observation: Any = None, parent=None, children=tuple(), data: Any = None):
+    def __init__(self, belief: Belief, observation: Any = None, weight: float = 1.0, parent=None, children=tuple(), data: Any = None):
         if not isinstance(belief, Belief):
             raise TypeError("belief must be a Belief instance")
         super().__init__(parent=parent, children=children, data=data)
 
         self.belief = belief
         self.observation = observation
+        self.weight = weight
         self.v_value = 0.
         
     @property
@@ -71,6 +72,7 @@ class BeliefNode(BaseNode):
                 observation: {self.observation}
                 v_value: {self.v_value}
                 visit_count: {self.visit_count}
+                weight: {self.weight}
                 lower_confidence_bound: {self.lower_confidence_bound}
                 upper_confidence_bound: {self.upper_confidence_bound}
                 depth: {self.depth}"""
