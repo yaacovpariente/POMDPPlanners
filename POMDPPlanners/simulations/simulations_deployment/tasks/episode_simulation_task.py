@@ -29,7 +29,8 @@ class EpisodeSimulationTask(SimulationTask):
         episode_number: int = 0,
         cache_dir: Optional[Path] = None,
         debug: bool = False,
-        console_output: bool = True
+        console_output: bool = True,
+        use_queue_logger: bool = False
     ):
         """Initialize a simulation task.
         
@@ -46,7 +47,7 @@ class EpisodeSimulationTask(SimulationTask):
             debug: Whether to enable debug logging
             console_output: Whether to enable console output (default: True).
                           Set to False to disable console output while keeping file logging.
-            
+            use_queue_logger: Whether to use queue-based logging. Defaults to True.
         Raises:
             ValueError: If num_steps is not positive
         """
@@ -64,7 +65,7 @@ class EpisodeSimulationTask(SimulationTask):
         self.debug = debug
         self.console_output = console_output
         self.cache_dir = cache_dir
-        
+        self.use_queue_logger = use_queue_logger
         # Generate cache key after all attributes are set
         self._cache_key = self._generate_cache_key()
 
@@ -85,7 +86,8 @@ class EpisodeSimulationTask(SimulationTask):
             name=self._get_logger_name(),
             debug=self.debug,
             output_dir=output_dir,
-            console_output=self.console_output
+            console_output=self.console_output,
+            use_queue=self.use_queue_logger
         )
 
     def _get_logger_name(self) -> str:
@@ -103,7 +105,8 @@ class EpisodeSimulationTask(SimulationTask):
             'episode_number': self.episode_number,
             'num_steps': self.num_steps,
             'seed': self.seed,
-            'discount_factor': self.discount_factor
+            'discount_factor': self.discount_factor,
+            'use_queue_logger': self.use_queue_logger
         }
         return config_to_id(components)
     
@@ -125,7 +128,8 @@ class EpisodeSimulationTask(SimulationTask):
             'episode_id': self.episode_id,
             'seed': self.seed,
             'discount_factor': self.discount_factor,
-            'episode_number': self.episode_number
+            'episode_number': self.episode_number,
+            'use_queue_logger': self.use_queue_logger
         }
     
     @classmethod

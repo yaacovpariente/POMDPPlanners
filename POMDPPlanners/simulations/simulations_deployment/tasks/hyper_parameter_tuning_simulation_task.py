@@ -35,7 +35,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         n_jobs: int = 1,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.1,
-        seed: int = 42
+        seed: int = 42,
+        use_queue_logger: bool = False
     ):
         self.environment = environment
         self.belief = belief
@@ -55,7 +56,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.confidence_interval_level = confidence_interval_level
         self.alpha = alpha
         self.seed = seed
-
+        self.use_queue_logger = use_queue_logger
         # Import locally to avoid circular imports
         from POMDPPlanners.simulations.simulator import POMDPSimulator
         from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
@@ -67,7 +68,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             task_manager_config=task_manager_config,
             cache_dir_path=None,
             experiment_name=None, 
-            debug=debug  # Keep episode-level logging minimal for optimization
+            debug=debug,  # Keep episode-level logging minimal for optimization
+            use_queue_logger=use_queue_logger
         )
 
     @property
@@ -81,7 +83,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             name=f"task.{self.environment.name}.{self.policy_cls.__name__}",
             debug=self.debug,
             output_dir=output_dir,
-            console_output=self.console_output
+            console_output=self.console_output,
+            use_queue=self.use_queue_logger
         )
 
     def run(self) -> Union[OptimizedPolicyResult, None]:
@@ -536,7 +539,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             "direction": self.direction.value,
             "parameter_to_optimize": self.parameter_to_optimize,
             "n_trials": self.n_trials,
-            "seed": self.seed
+            "seed": self.seed,
+            "use_queue_logger": self.use_queue_logger
         }
     
     def __eq__(self, other: 'HyperParameterTuningSimulationTask') -> bool:
