@@ -283,8 +283,7 @@ class PFT_DPW(PathSimulationPolicy):
     
     def sample_existing_belief_node(self, belief_node: BeliefNode, action_node: ActionNode) -> Tuple[BeliefNode, float]:
         immediate_reward = -belief_node.immediate_cost
-        random_idx = np.random.randint(0, len(action_node.children))
-        next_belief_node = action_node.children[random_idx]
+        next_belief_node = action_node.sample_child_node()
         return next_belief_node, immediate_reward
 
     def _update_node_statistics(self, belief_node: BeliefNode, action_node: ActionNode, total: float):
