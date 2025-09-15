@@ -709,6 +709,7 @@ def test_pomdp_simulator_mlflow_tracking_configures_experiment_directory(
 
     # ACT: Initialize simulator with MLflow configuration
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir, experiment_name=experiment_name, debug=True
     )
     current_tracking_uri = mlflow.get_tracking_uri()
@@ -739,6 +740,7 @@ def test_context_manager_functionality(temp_cache_dir):
     Test type: unit
     """
     with POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir, experiment_name="ContextManagerTest", debug=True
     ) as simulator:
         assert isinstance(simulator, POMDPSimulator)
@@ -761,6 +763,7 @@ def test_profiling_enabled_initialization(temp_cache_dir):
     Test type: unit
     """
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir,
         experiment_name="ProfilingTest",
         debug=True,
@@ -1032,6 +1035,7 @@ def test_simulator_error_handling_invalid_cache_dir():
 
     try:
         simulator = POMDPSimulator(
+            task_manager_config=JoblibConfig(n_jobs=1),
             cache_dir_path=invalid_path, experiment_name="ErrorTest", debug=True
         )
         # If no exception is raised, that's also acceptable behavior
@@ -1054,6 +1058,7 @@ def test_simulator_writes_files_to_output_directory(temp_cache_dir):
     """
     # ARRANGE: Setup simulator with output directory and enable all file writing features
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir,
         experiment_name="FileWriteTest",
         debug=True,
@@ -1197,6 +1202,7 @@ def test_simulator_mlflow_directory_structure_is_correct(temp_cache_dir):
     # ARRANGE: Setup simulator with specific experiment name
     experiment_name = "MLflowStructureTest"
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir, experiment_name=experiment_name, debug=True
     )
 
@@ -1312,6 +1318,7 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
     """
     # ARRANGE: Setup simulator and environment for integration testing
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir,
         experiment_name="LightDarkVisualizationIntegrationTest",
         debug=True,
@@ -1487,6 +1494,7 @@ def test_simulator_skips_visualization_caching_when_disabled(temp_cache_dir):
     """
     # ARRANGE: Setup simulator without visualization caching
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir, experiment_name="NoVisualizationTest", debug=True
     )
 
@@ -1588,6 +1596,7 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
     """
     # ARRANGE: Setup simulator and environment
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir,
         experiment_name="CacheVisualizationMethodTest",
         debug=True,
@@ -1739,6 +1748,7 @@ def test_simulator_visualization_error_handling_with_continuous_light_dark(
     from unittest.mock import patch
 
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir,
         experiment_name="VisualizationErrorTest",
         debug=True,
@@ -1831,6 +1841,7 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
     """
     # ARRANGE: Setup simulator and test environment
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir, experiment_name="CacheDirectoryTest", debug=True
     )
 
@@ -1955,6 +1966,7 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
     """
     # ARRANGE: Setup simulator with multiple environments
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir,
         experiment_name="ParallelVisualizationTest",
         debug=True,
@@ -2113,6 +2125,7 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
     """
     # ARRANGE: Setup simulator with MLflow tracking
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir,
         experiment_name="MLflowVisualizationTest",
         debug=True,
@@ -2238,6 +2251,7 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
     """
     # ARRANGE: Setup simulator
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir, experiment_name="CacheCleanupTest", debug=True
     )
 
@@ -2340,6 +2354,7 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
     """
     # ARRANGE: Setup simulator
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir, experiment_name="DisabledCachingTest", debug=True
     )
 
@@ -2444,6 +2459,7 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
     from unittest.mock import patch
 
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir, experiment_name="ErrorHandlingTest", debug=True
     )
 
@@ -2551,6 +2567,7 @@ def test_create_and_log_environment_visualizations_empty_results(temp_cache_dir)
     """
     # ARRANGE: Setup simulator
     simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
         cache_dir_path=temp_cache_dir, experiment_name="EmptyResultsTest", debug=True
     )
 

@@ -160,6 +160,94 @@ class SimulationsAPI:
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run POMDP simulations locally using Joblib for parallel execution.
+
+        This method executes POMDP simulations on a single machine using Joblib
+        for parallel processing. It's ideal for development, testing, and small to
+        medium-scale experiments that can be completed on a single workstation.
+
+        Args:
+            environment_run_params: List of environment configurations for simulation.
+                Each configuration specifies an environment, belief state, policies,
+                number of episodes, and number of steps per episode.
+            alpha: Statistical significance level for confidence intervals (e.g., 0.05 for 95% CI).
+                Used for computing risk metrics like Conditional Value at Risk (CVaR).
+            confidence_interval_level: Confidence level for statistical analysis (e.g., 0.95).
+                Determines the width of confidence intervals for performance metrics.
+            experiment_name: Name for the experiment and MLflow tracking. Used to organize
+                results and enable comparison across different experimental runs.
+            debug: Whether to enable debug-level logging output. When True, provides
+                detailed information about simulation progress and internal operations.
+            n_jobs: Number of parallel jobs for execution. Use -1 to use all available
+                CPU cores, or specify a positive integer for a specific number of cores.
+            cache_dir_path: Optional path for storing simulation results, logs, and artifacts.
+                If None, results are stored in the current working directory.
+            clear_cache_on_start: Whether to clear existing cache before starting simulation.
+                Useful for ensuring clean runs when debugging or testing.
+            enable_profiling: Whether to enable performance profiling using cProfile.
+                Generates detailed timing information for optimization analysis.
+            profiling_output_limit: Maximum number of profiling entries to display
+                when profiling is enabled. Helps focus on the most time-consuming operations.
+
+        Returns:
+            Tuple containing:
+                - Dict[str, Dict[str, list]]: Raw simulation results organized by environment
+                  name, then policy name, containing lists of History objects for each episode.
+                - pd.DataFrame: Statistical summary with confidence intervals, performance
+                  metrics, and policy configuration details for analysis and comparison.
+
+        Example:
+            Running a local simulation with multiple environments and policies::
+
+                from pathlib import Path
+                from POMDPPlanners.simulations.simulations_api import SimulationsAPI
+                from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+                from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+                from POMDPPlanners.core.belief import get_initial_belief
+                from POMDPPlanners.core.simulation import EnvironmentRunParams
+
+                # Initialize the API
+                api = SimulationsAPI(
+                    cache_dir_path=Path("./local_results"),
+                    debug=True
+                )
+
+                # Create environment and policies
+                tiger = TigerPOMDP(discount_factor=0.95)
+                policies = [
+                    POMCP(
+                        environment=tiger,
+                        discount_factor=0.95,
+                        depth=10,
+                        exploration_constant=1.0,
+                        name="POMCP_Local",
+                        n_simulations=1000
+                    )
+                ]
+
+                # Configure simulation parameters
+                environment_run_params = [
+                    EnvironmentRunParams(
+                        environment=tiger,
+                        belief=get_initial_belief(tiger, n_particles=1000),
+                        policies=policies,
+                        num_episodes=100,
+                        num_steps=20
+                    )
+                ]
+
+                # Run local simulation
+                results, statistics_df = api.run_multiple_environments_and_policies_local_run(
+                    environment_run_params=environment_run_params,
+                    alpha=0.05,
+                    confidence_interval_level=0.95,
+                    experiment_name="Local_Tiger_Study",
+                    n_jobs=4,  # Use 4 CPU cores
+                    enable_profiling=True
+                )
+
+                print(f"Simulation completed with {len(statistics_df)} configurations")
+        """
         self.logger.info(
             f"Starting simulation run with {len(environment_run_params)} environment configurations"
         )
@@ -204,6 +292,97 @@ class SimulationsAPI:
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run POMDP simulations remotely using Dask for distributed execution.
+
+        This method executes POMDP simulations across multiple machines using Dask
+        for distributed computing. It's ideal for large-scale experiments that require
+        significant computational resources and can benefit from distributed processing.
+
+        Args:
+            environment_run_params: List of environment configurations for simulation.
+                Each configuration specifies an environment, belief state, policies,
+                number of episodes, and number of steps per episode.
+            alpha: Statistical significance level for confidence intervals (e.g., 0.05 for 95% CI).
+                Used for computing risk metrics like Conditional Value at Risk (CVaR).
+            confidence_interval_level: Confidence level for statistical analysis (e.g., 0.95).
+                Determines the width of confidence intervals for performance metrics.
+            experiment_name: Name for the experiment and MLflow tracking. Used to organize
+                results and enable comparison across different experimental runs.
+            debug: Whether to enable debug-level logging output. When True, provides
+                detailed information about simulation progress and internal operations.
+            scheduler_address: Address of the Dask scheduler for distributed execution.
+                If None, creates a local Dask cluster. Format: "tcp://scheduler-ip:port".
+            n_jobs: Number of worker processes for distributed execution. Use -1 to use
+                all available workers, or specify a positive integer for a specific number.
+            cache_dir_path: Optional path for storing simulation results, logs, and artifacts.
+                If None, results are stored in the current working directory.
+            clear_cache_on_start: Whether to clear existing cache before starting simulation.
+                Useful for ensuring clean runs when debugging or testing.
+            enable_profiling: Whether to enable performance profiling using cProfile.
+                Generates detailed timing information for optimization analysis.
+            profiling_output_limit: Maximum number of profiling entries to display
+                when profiling is enabled. Helps focus on the most time-consuming operations.
+
+        Returns:
+            Tuple containing:
+                - Dict[str, Dict[str, list]]: Raw simulation results organized by environment
+                  name, then policy name, containing lists of History objects for each episode.
+                - pd.DataFrame: Statistical summary with confidence intervals, performance
+                  metrics, and policy configuration details for analysis and comparison.
+
+        Example:
+            Running a distributed simulation with a remote Dask cluster::
+
+                from pathlib import Path
+                from POMDPPlanners.simulations.simulations_api import SimulationsAPI
+                from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+                from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+                from POMDPPlanners.core.belief import get_initial_belief
+                from POMDPPlanners.core.simulation import EnvironmentRunParams
+
+                # Initialize the API
+                api = SimulationsAPI(
+                    cache_dir_path=Path("./distributed_results"),
+                    debug=False
+                )
+
+                # Create environment and policies
+                tiger = TigerPOMDP(discount_factor=0.95)
+                policies = [
+                    POMCP(
+                        environment=tiger,
+                        discount_factor=0.95,
+                        depth=15,
+                        exploration_constant=1.0,
+                        name="POMCP_Distributed",
+                        n_simulations=2000
+                    )
+                ]
+
+                # Configure simulation parameters for distributed execution
+                environment_run_params = [
+                    EnvironmentRunParams(
+                        environment=tiger,
+                        belief=get_initial_belief(tiger, n_particles=2000),
+                        policies=policies,
+                        num_episodes=500,  # Large number for distributed processing
+                        num_steps=30
+                    )
+                ]
+
+                # Run distributed simulation
+                results, statistics_df = api.run_multiple_environments_and_policies_remote_run(
+                    environment_run_params=environment_run_params,
+                    alpha=0.01,  # 99% confidence intervals
+                    confidence_interval_level=0.99,
+                    experiment_name="Distributed_Tiger_Study",
+                    scheduler_address="tcp://192.168.1.100:8786",  # Remote scheduler
+                    n_jobs=8,  # Use 8 workers
+                    enable_profiling=True
+                )
+
+                print(f"Distributed simulation completed with {len(statistics_df)} configurations")
+        """
         self.logger.info(
             f"Starting simulation run with {len(environment_run_params)} environment configurations"
         )
@@ -248,6 +427,99 @@ class SimulationsAPI:
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run POMDP simulations with an initial debug run for validation.
+
+        This method executes POMDP simulations in two phases: first a quick debug run
+        with reduced episodes and steps to validate the configuration, followed by the
+        full simulation run. This approach helps catch configuration errors early and
+        provides confidence that the full simulation will complete successfully.
+
+        The debug run uses the same environment and policy configurations but with
+        significantly reduced computational requirements (2 episodes, 2 steps each).
+        Both runs are tracked separately in MLflow for comparison and analysis.
+
+        Args:
+            environment_run_params: List of environment configurations for simulation.
+                Each configuration specifies an environment, belief state, policies,
+                number of episodes, and number of steps per episode.
+            alpha: Statistical significance level for confidence intervals (e.g., 0.05 for 95% CI).
+                Used for computing risk metrics like Conditional Value at Risk (CVaR).
+            confidence_interval_level: Confidence level for statistical analysis (e.g., 0.95).
+                Determines the width of confidence intervals for performance metrics.
+            experiment_name: Name for the main experiment and MLflow tracking. The debug
+                run will use "{experiment_name}_debug_run" as its experiment name.
+            n_jobs: Number of parallel jobs for execution. Use -1 to use all available
+                CPU cores, or specify a positive integer for a specific number of cores.
+            cache_dir_path: Optional path for storing simulation results, logs, and artifacts.
+                If None, results are stored in the current working directory.
+            clear_cache_on_start: Whether to clear existing cache before starting simulation.
+                Useful for ensuring clean runs when debugging or testing.
+            enable_profiling: Whether to enable performance profiling using cProfile.
+                Generates detailed timing information for optimization analysis.
+            profiling_output_limit: Maximum number of profiling entries to display
+                when profiling is enabled. Helps focus on the most time-consuming operations.
+
+        Returns:
+            Tuple containing:
+                - Dict[str, Dict[str, list]]: Raw simulation results from the main run,
+                  organized by environment name, then policy name, containing lists of
+                  History objects for each episode.
+                - pd.DataFrame: Statistical summary with confidence intervals, performance
+                  metrics, and policy configuration details for analysis and comparison.
+
+        Example:
+            Running a simulation with initial debug validation::
+
+                from pathlib import Path
+                from POMDPPlanners.simulations.simulations_api import SimulationsAPI
+                from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+                from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+                from POMDPPlanners.core.belief import get_initial_belief
+                from POMDPPlanners.core.simulation import EnvironmentRunParams
+
+                # Initialize the API
+                api = SimulationsAPI(
+                    cache_dir_path=Path("./debug_validated_results"),
+                    debug=True
+                )
+
+                # Create environment and policies
+                tiger = TigerPOMDP(discount_factor=0.95)
+                policies = [
+                    POMCP(
+                        environment=tiger,
+                        discount_factor=0.95,
+                        depth=10,
+                        exploration_constant=1.0,
+                        name="POMCP_DebugValidated",
+                        n_simulations=1000
+                    )
+                ]
+
+                # Configure simulation parameters
+                environment_run_params = [
+                    EnvironmentRunParams(
+                        environment=tiger,
+                        belief=get_initial_belief(tiger, n_particles=1000),
+                        policies=policies,
+                        num_episodes=200,  # Full simulation episodes
+                        num_steps=25       # Full simulation steps
+                    )
+                ]
+
+                # Run simulation with debug validation
+                results, statistics_df = api.run_multiple_environments_and_policies_local_run_with_initial_debug_run(
+                    environment_run_params=environment_run_params,
+                    alpha=0.05,
+                    confidence_interval_level=0.95,
+                    experiment_name="Debug_Validated_Tiger_Study",
+                    n_jobs=4,
+                    enable_profiling=True
+                )
+
+                print(f"Debug-validated simulation completed with {len(statistics_df)} configurations")
+                print("Check MLflow for both debug and main experiment results")
+        """
         self.logger.info("Starting simulation run with initial debug run")
         self.logger.debug(
             f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}"
