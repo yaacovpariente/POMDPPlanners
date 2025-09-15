@@ -27,8 +27,8 @@ import numpy as np
 from pathlib import Path
 
 from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, PolicyRunData
-from POMDPPlanners.core.environment import Environment, SpaceType
-from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.environment import SpaceType, DiscreteActionsEnvironment
+from POMDPPlanners.core.belief import Belief, UnweightedParticleBeliefStateUpdate
 from POMDPPlanners.core.tree import ActionNode, get_optimal_action_reward_setting, BeliefNode
 from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
@@ -90,7 +90,7 @@ class POMCP(PathSimulationPolicy):
     
     def __init__(
         self, 
-        environment: Environment, 
+        environment: DiscreteActionsEnvironment, 
         discount_factor: float, 
         depth: int, 
         exploration_constant: float,
@@ -122,9 +122,9 @@ class POMCP(PathSimulationPolicy):
 
     def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
         state = belief_node.belief.sample()
-        self.simulate(state=state, belief_node=belief_node, depth=depth)
+        self._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
     
-    def simulate(self, state: Any, belief_node: BeliefNode, depth: int) -> float:
+    def _simulate_state_path(self, state: Any, belief_node: BeliefNode, depth: int) -> float:
         if depth > self.depth: 
             belief_node.parent = None  # remove the node from the tree
             return 0
@@ -152,16 +152,16 @@ class POMCP(PathSimulationPolicy):
                 break
 
         if next_belief_node is None:
-            next_belief_node = BeliefNode(belief=belief_node.belief, observation=next_observation, parent=action_node, children=tuple())
-            next_belief_node.update_belief(action=action_node.action, observation=next_observation, pomdp=self.environment)
-            
-        return_sample = reward + self.discount_factor * self.simulate(
+            belief = UnweightedParticleBeliefStateUpdate(particles=[next_state])
+            next_belief_node = BeliefNode(belief=belief, observation=next_observation, parent=action_node, children=tuple())
+        
+        return_sample = reward + self.discount_factor * self._simulate_state_path(
             state=next_state, 
             belief_node=next_belief_node, 
             depth=depth + 1
         )
         
-        self.update_nodes(belief_node=belief_node, action_node=action_node, return_sample=return_sample)
+        self.update_nodes(belief_node=belief_node, action_node=action_node, return_sample=return_sample, state=state)
             
         return return_sample
         
@@ -188,7 +188,10 @@ class POMCP(PathSimulationPolicy):
         
         return reward + self.discount_factor * self.random_rollout(state=next_state, depth=depth + 1)
         
-    def update_nodes(self, belief_node: BeliefNode, action_node: ActionNode, return_sample: float):
+    def update_nodes(self, belief_node: BeliefNode, action_node: ActionNode, return_sample: float, state: Any):
+        if belief_node.parent is not None: # prevents updating the initial belief.
+            belief_node.belief.inplace_update(action=None, observation=None, pomdp=self.environment, state=state)
+        
         belief_node.visit_count += 1
         action_node.visit_count += 1
         action_node.q_value += (return_sample - action_node.q_value) / action_node.visit_count
