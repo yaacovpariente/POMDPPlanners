@@ -322,6 +322,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         name: str = "PushPOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,
+        use_queue_logger: bool = False
     ):
         self.grid_size = grid_size
         self.push_threshold = push_threshold
@@ -347,8 +348,15 @@ class PushPOMDP(DiscreteActionsEnvironment):
         min_reward = -max_distance  # Worst case: maximum distance to target
         max_reward = 100.0  # Best case: at target with bonus reward
         
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
-                        reward_range=(min_reward, max_reward), output_dir=output_dir, debug=debug)
+        super().__init__(
+            discount_factor=discount_factor, 
+            name=name, 
+            space_info=space_info, 
+            reward_range=(min_reward, max_reward), 
+            output_dir=output_dir, 
+            debug=debug, 
+            use_queue_logger=use_queue_logger
+        )
 
     def _is_colliding_with_obstacle(self, position: np.ndarray) -> bool:
         """Check if a position collides with any obstacle.

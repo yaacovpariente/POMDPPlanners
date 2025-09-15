@@ -290,6 +290,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         name: str = "SafeVelocityPOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,
+        use_queue_logger: bool = False
     ):
         self.safe_velocity_threshold = safe_velocity_threshold
         self.max_force = max_force
@@ -316,7 +317,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             observation_space=SpaceType.CONTINUOUS  # Observation space is positions and velocities with noise
         )
         super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
-                        reward_range=(min_reward, max_reward), output_dir=output_dir, debug=debug)
+                        reward_range=(min_reward, max_reward), output_dir=output_dir, debug=debug, use_queue_logger=use_queue_logger)
 
     def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
         return SafeAntVelocityStateTransition(

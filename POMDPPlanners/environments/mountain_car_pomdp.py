@@ -216,7 +216,14 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             is_done = mountain_car.is_terminal(state)
     """
     
-    def __init__(self, discount_factor: float, name: str = "MountainCarPOMDP", output_dir: Optional[Path] = None, debug: bool = False):
+    def __init__(
+        self, 
+        discount_factor: float, 
+        name: str = "MountainCarPOMDP", 
+        output_dir: Optional[Path] = None, 
+        debug: bool = False, 
+        use_queue_logger: bool = False
+    ):
         self.min_position = -1.2
         self.max_position = 0.6
         self.max_speed = 0.07
@@ -241,7 +248,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             observation_space=SpaceType.CONTINUOUS  # Observation space is position and velocity
         )
         super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
-                        reward_range=(-1.0, 0.0), output_dir=output_dir, debug=debug)
+                        reward_range=(-1.0, 0.0), output_dir=output_dir, debug=debug, use_queue_logger=use_queue_logger)
 
     def state_transition_model(
         self, state: Tuple[float, float], action: int

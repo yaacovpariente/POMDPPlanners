@@ -509,7 +509,8 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                  dangerous_area_radius: float = 1.0,
                  dangerous_area_penalty: float = 5.0,
                  output_dir: Optional[Path] = None,
-                 debug: bool = False):
+                 debug: bool = False,
+                 use_queue_logger: bool = False):
         """Initialize the LaserTag POMDP environment.
         
         Args:
@@ -545,7 +546,8 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             space_info=space_info,
             reward_range=(-tag_penalty, tag_reward),
             output_dir=output_dir,
-            debug=debug
+            debug=debug,
+            use_queue_logger=use_queue_logger
         )
         
         self.floor_shape: Tuple[int, int] = floor_shape

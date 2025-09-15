@@ -272,7 +272,15 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             is_done = cartpole.is_terminal(state)
     """
     
-    def __init__(self, discount_factor: float, noise_cov: np.ndarray, name: str = "CartPolePOMDP", output_dir: Optional[Path] = None, debug: bool = False):
+    def __init__(
+        self, 
+        discount_factor: float, 
+        noise_cov: np.ndarray, 
+        name: str = "CartPolePOMDP", 
+        output_dir: Optional[Path] = None, 
+        debug: bool = False, 
+        use_queue_logger: bool = False
+    ):
         # Set all configuration parameters first
         self.noise_cov = noise_cov
         self.gravity = 9.8
@@ -299,8 +307,14 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         )
         
         # Call parent's __init__ last, which will generate the config_id
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
-                        reward_range=(0.0, 1.0), output_dir=output_dir, debug=debug)
+        super().__init__(
+            discount_factor=discount_factor, 
+            name=name, space_info=space_info, 
+            reward_range=(0.0, 1.0), 
+            output_dir=output_dir, 
+            debug=debug,
+            use_queue_logger=use_queue_logger
+        )
 
     def state_transition_model(
         self, state: np.ndarray, action: int

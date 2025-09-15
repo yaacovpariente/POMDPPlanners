@@ -241,7 +241,8 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         discount_factor: float = 0.95,
         name: str = "RockSample",
         output_dir: Optional[Path] = None,
-        debug: bool = False
+        debug: bool = False,
+        use_queue_logger: bool = False
     ):
         """Initialize RockSample POMDP.
         
@@ -278,7 +279,8 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             space_info=space_info,
             reward_range=(min_reward, max_reward),
             output_dir=output_dir,
-            debug=debug
+            debug=debug,
+            use_queue_logger=use_queue_logger
         )
         
         self.map_size = map_size

@@ -251,7 +251,7 @@ class SanityPOMDP(DiscreteActionsEnvironment):
             observation = obs_model.sample()[0]  # Should be 0
     """
     
-    def __init__(self, discount_factor: float = 0.95, output_dir: Optional[Path] = None, debug: bool = False):
+    def __init__(self, discount_factor: float = 0.95, output_dir: Optional[Path] = None, debug: bool = False, use_queue_logger: bool = False):
         """Initialize the Sanity POMDP environment.
         
         Args:
@@ -264,7 +264,7 @@ class SanityPOMDP(DiscreteActionsEnvironment):
             observation_space=SpaceType.DISCRETE  # Binary observation space
         )
         super().__init__(discount_factor=discount_factor, name="SanityPOMDP", space_info=space_info, 
-                        reward_range=(0.0, 1.0), output_dir=output_dir, debug=debug)
+                        reward_range=(0.0, 1.0), output_dir=output_dir, debug=debug, use_queue_logger=use_queue_logger)
         
     def state_transition_model(self, state: int, action: int) -> SanityStateTransitionModel:
         return SanityStateTransitionModel(state, action)
