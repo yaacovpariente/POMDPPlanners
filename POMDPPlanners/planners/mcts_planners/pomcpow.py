@@ -256,7 +256,9 @@ class POMCPOW(PathSimulationPolicy):
         if len(action_node.children) <= self.k_o * action_node.visit_count ** self.alpha_o:
             next_belief_node = action_node.get_belief_node_child(observation=next_observation, environment=self.environment)
             if next_belief_node is None:
-                next_belief_node = BeliefNode(belief=WeightedParticleBeliefStateUpdate(), observation=next_observation, parent=action_node)
+                next_belief_node = BeliefNode(belief=WeightedParticleBeliefStateUpdate(), observation=next_observation, parent=action_node, weight=0)
+            
+            next_belief_node.weight += 1
         else:
             next_belief_node = action_node.sample_child_node()
         

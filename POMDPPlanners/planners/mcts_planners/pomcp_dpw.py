@@ -258,10 +258,11 @@ class POMCP_DPW(PathSimulationPolicy):
 
             next_belief_node = action_node.get_belief_node_child(observation=next_observation, environment=self.environment)
             if next_belief_node is None:
-                next_belief_node = BeliefNode(belief=UnweightedParticleBeliefStateUpdate(), observation=next_observation, parent=action_node)
+                next_belief_node = BeliefNode(belief=UnweightedParticleBeliefStateUpdate(), observation=next_observation, parent=action_node, weight=0)
             
             next_belief_node.belief.inplace_update(action=None, observation=None, pomdp=self.environment, state=next_state)
-
+            next_belief_node.weight += 1
+            
             if next_belief_node.visit_count == 0:
                 next_belief_node.visit_count += 1
                 total = reward + self.discount_factor * random_rollout_action_sampler(state=next_state, depth=depth + 1, action_sampler=self.action_sampler, environment=self.environment, discount_factor=self.discount_factor)
