@@ -369,7 +369,49 @@ class JoblibTaskManager(TaskManagerExternalDB):
 
 
 class PBSTaskManager(DaskTaskManager):
-    """A task manager that uses Dask with PBS cluster for distributed computing."""
+    """A task manager that uses Dask with PBS cluster for distributed computing.
+
+    This task manager submits jobs to a PBS (Portable Batch System) cluster and
+    provides an optional Dask dashboard for monitoring job execution, resource
+    utilization, and performance metrics.
+
+    The dashboard is enabled by default and provides real-time visualization of:
+    - Task progress and execution status
+    - Resource utilization across PBS nodes
+    - Task graphs and dependencies
+    - Performance metrics and bottlenecks
+
+    Example:
+        Basic usage with default dashboard::
+
+            with PBSTaskManager(queue="gpu_queue", n_workers=4) as manager:
+                futures = manager.submit_tasks(tasks)
+                print(f"Dashboard: {manager.get_dashboard_url()}")
+                results = manager.gather_results(futures)
+
+        Custom dashboard configuration::
+
+            manager = PBSTaskManager(
+                queue="compute_queue",
+                n_workers=8,
+                dashboard_port=8888,
+                dashboard_address="0.0.0.0",
+                enable_dashboard=True
+            )
+
+        Disable dashboard::
+
+            manager = PBSTaskManager(
+                queue="batch_queue",
+                enable_dashboard=False
+            )
+
+    Note:
+        The dashboard requires network access to the specified port. In PBS
+        environments, ensure the dashboard port is accessible through firewalls
+        and security policies. The dashboard will automatically shut down when
+        the task manager context exits.
+    """
 
     def __init__(
         self,
@@ -382,6 +424,10 @@ class PBSTaskManager(DaskTaskManager):
         job_extra: Optional[List[str]] = None,
         cache_size: int = 2e9,
         clear_cache_on_start: bool = False,
+        enable_dashboard: bool = True,
+        dashboard_address: str = "0.0.0.0",
+        dashboard_port: int = 8787,
+        dashboard_prefix: Optional[str] = None,
     ):
         """Initialize the PBS task manager.
 
@@ -395,6 +441,10 @@ class PBSTaskManager(DaskTaskManager):
             job_extra: Additional PBS directives as list of strings
             cache_size: Size of cache in bytes
             clear_cache_on_start: If True, clears the cache at startup
+            enable_dashboard: If True, enables the Dask dashboard
+            dashboard_address: Address to bind the dashboard to
+            dashboard_port: Port for the Dask dashboard
+            dashboard_prefix: URL prefix for dashboard (useful with reverse proxies)
         """
         self.queue = queue
         self.cores = cores
@@ -402,6 +452,12 @@ class PBSTaskManager(DaskTaskManager):
         self.processes = processes
         self.walltime = walltime
         self.job_extra = job_extra or []
+
+        # Dashboard configuration
+        self.enable_dashboard = enable_dashboard
+        self.dashboard_address = dashboard_address
+        self.dashboard_port = dashboard_port
+        self.dashboard_prefix = dashboard_prefix
 
         # Initialize parent attributes without calling _initialize_client
         self.scheduler_address = None  # Will be set by PBS cluster
@@ -411,6 +467,7 @@ class PBSTaskManager(DaskTaskManager):
         self.client = None
         self.cache = None
         self.cache_registered = False
+        self.cluster = None  # Store cluster reference for dashboard access
 
     def _initialize_client(self):
         """Initialize Dask client with PBS cluster."""
@@ -422,8 +479,17 @@ class PBSTaskManager(DaskTaskManager):
                 "Install with: pip install dask-jobqueue"
             )
 
+        # Prepare dashboard configuration
+        dashboard_kwargs = {}
+        if self.enable_dashboard:
+            dashboard_kwargs.update({
+                "dashboard_address": f"{self.dashboard_address}:{self.dashboard_port}"
+            })
+            if self.dashboard_prefix:
+                dashboard_kwargs["dashboard_prefix"] = self.dashboard_prefix
+
         # Create PBS cluster configuration
-        cluster = PBSCluster(
+        self.cluster = PBSCluster(
             queue=self.queue,
             cores=self.cores,
             memory=self.memory,
@@ -431,17 +497,105 @@ class PBSTaskManager(DaskTaskManager):
             walltime=self.walltime,
             job_extra=self.job_extra,
             local_directory="./dask-pbs-space",
+            **dashboard_kwargs,
         )
 
         # Scale cluster to desired number of workers
-        cluster.scale(jobs=self.n_workers)
+        self.cluster.scale(jobs=self.n_workers)
 
         # Create client
-        self.client = Client(cluster)
+        self.client = Client(self.cluster)
+
+        # Log dashboard information if enabled
+        if self.enable_dashboard:
+            dashboard_url = self.get_dashboard_url()
+            if dashboard_url:
+                print(f"Dask dashboard available at: {dashboard_url}")
+            else:
+                print("Dashboard was enabled but URL could not be determined")
 
         # Initialize cache but don't register it by default
         self.cache = Cache(self.cache_size)
         self.cache_registered = False
+
+    def get_dashboard_url(self) -> Optional[str]:
+        """Get the URL for the Dask dashboard.
+
+        Returns:
+            Dashboard URL if available, None otherwise.
+        """
+        if not self.enable_dashboard or not self.client:
+            return None
+
+        try:
+            # Try to get dashboard URL from client
+            if hasattr(self.client, 'dashboard_link'):
+                return self.client.dashboard_link
+
+            # Fallback: construct URL from configuration
+            if self.cluster and hasattr(self.cluster, 'scheduler_address'):
+                scheduler_address = self.cluster.scheduler_address
+                if scheduler_address:
+                    # Extract host from scheduler address
+                    host = scheduler_address.split(':')[0] if ':' in scheduler_address else scheduler_address
+                    base_url = f"http://{host}:{self.dashboard_port}"
+                    if self.dashboard_prefix:
+                        return f"{base_url}/{self.dashboard_prefix.lstrip('/')}"
+                    return base_url
+
+        except Exception:
+            # Silently handle any exceptions in URL construction
+            pass
+
+        return None
+
+    def is_dashboard_running(self) -> bool:
+        """Check if the Dask dashboard is running.
+
+        Returns:
+            True if dashboard is running, False otherwise.
+        """
+        if not self.enable_dashboard or not self.client:
+            return False
+
+        try:
+            # Simple check - if we can get the dashboard URL, it's likely running
+            return self.get_dashboard_url() is not None
+        except Exception:
+            return False
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit with proper cluster cleanup."""
+        # Close the client first
+        if self.client:
+            try:
+                print("Closing Dask client...")
+                self.client.close()
+            except Exception as e:
+                print(f"Warning: Error closing Dask client: {e}")
+            finally:
+                self.client = None
+
+        # Close the cluster (this will stop the dashboard)
+        if self.cluster:
+            try:
+                print("Closing PBS cluster and dashboard...")
+                self.cluster.close()
+            except Exception as e:
+                print(f"Warning: Error closing PBS cluster: {e}")
+            finally:
+                self.cluster = None
+
+        # Clean up cache
+        if self.cache and self.cache_registered:
+            try:
+                self.cache.unregister()
+            except Exception as e:
+                print(f"Warning: Error unregistering cache: {e}")
+            finally:
+                self.cache = None
+
+        print("PBS task manager cleanup completed.")
 
 
 class SequentialTaskManager(JoblibTaskManager):

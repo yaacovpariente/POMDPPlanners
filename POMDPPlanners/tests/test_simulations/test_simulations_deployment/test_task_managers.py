@@ -1096,3 +1096,266 @@ def test_pbs_task_manager_context_manager():
     except Exception as e:
         # Should not raise any exceptions during context manager setup
         pytest.fail(f"Context manager should not raise exceptions during setup: {e}")
+
+
+# Tests for PBSTaskManager Dashboard Functionality
+def test_pbs_task_manager_dashboard_initialization_defaults():
+    """Test PBSTaskManager dashboard initialization with default parameters.
+
+    Purpose: Validates that PBSTaskManager initializes with correct default dashboard parameters
+
+    Given: PBSTaskManager constructor with only required queue parameter
+    When: PBSTaskManager is instantiated with minimal parameters
+    Then: Task manager uses expected default values for all dashboard parameters
+
+    Test type: unit
+    """
+    manager = PBSTaskManager(queue="batch")
+
+    assert manager.enable_dashboard is True
+    assert manager.dashboard_address == "0.0.0.0"
+    assert manager.dashboard_port == 8787
+    assert manager.dashboard_prefix is None
+
+
+def test_pbs_task_manager_dashboard_initialization_custom():
+    """Test PBSTaskManager dashboard initialization with custom parameters.
+
+    Purpose: Validates that PBSTaskManager correctly stores custom dashboard configuration
+
+    Given: PBSTaskManager constructor with custom dashboard parameters
+    When: PBSTaskManager is instantiated with specific dashboard settings
+    Then: Task manager stores all custom dashboard parameters correctly
+
+    Test type: unit
+    """
+    manager = PBSTaskManager(
+        queue="gpu_queue",
+        enable_dashboard=True,
+        dashboard_address="192.168.1.100",
+        dashboard_port=8888,
+        dashboard_prefix="/my-dashboard"
+    )
+
+    assert manager.enable_dashboard is True
+    assert manager.dashboard_address == "192.168.1.100"
+    assert manager.dashboard_port == 8888
+    assert manager.dashboard_prefix == "/my-dashboard"
+
+
+def test_pbs_task_manager_dashboard_disabled():
+    """Test PBSTaskManager with dashboard disabled.
+
+    Purpose: Validates that PBSTaskManager can be configured with dashboard disabled
+
+    Given: PBSTaskManager constructor with enable_dashboard=False
+    When: PBSTaskManager is instantiated with dashboard disabled
+    Then: Task manager has dashboard disabled and other parameters are still stored
+
+    Test type: unit
+    """
+    manager = PBSTaskManager(
+        queue="batch_queue",
+        enable_dashboard=False,
+        dashboard_port=9999
+    )
+
+    assert manager.enable_dashboard is False
+    assert manager.dashboard_port == 9999  # Should still store the parameter
+
+
+def test_pbs_task_manager_get_dashboard_url_disabled():
+    """Test get_dashboard_url when dashboard is disabled.
+
+    Purpose: Validates that get_dashboard_url returns None when dashboard is disabled
+
+    Given: PBSTaskManager instance with dashboard disabled
+    When: get_dashboard_url() method is called
+    Then: Returns None indicating dashboard is not available
+
+    Test type: unit
+    """
+    manager = PBSTaskManager(queue="default", enable_dashboard=False)
+
+    dashboard_url = manager.get_dashboard_url()
+    assert dashboard_url is None
+
+
+def test_pbs_task_manager_get_dashboard_url_no_client():
+    """Test get_dashboard_url when client is not initialized.
+
+    Purpose: Validates that get_dashboard_url returns None when no client exists
+
+    Given: PBSTaskManager instance with dashboard enabled but no client
+    When: get_dashboard_url() method is called
+    Then: Returns None indicating dashboard is not available yet
+
+    Test type: unit
+    """
+    manager = PBSTaskManager(queue="default", enable_dashboard=True)
+
+    # Client is None before initialization
+    assert manager.client is None
+    dashboard_url = manager.get_dashboard_url()
+    assert dashboard_url is None
+
+
+def test_pbs_task_manager_is_dashboard_running_disabled():
+    """Test is_dashboard_running when dashboard is disabled.
+
+    Purpose: Validates that is_dashboard_running returns False when dashboard is disabled
+
+    Given: PBSTaskManager instance with dashboard disabled
+    When: is_dashboard_running() method is called
+    Then: Returns False indicating dashboard is not running
+
+    Test type: unit
+    """
+    manager = PBSTaskManager(queue="default", enable_dashboard=False)
+
+    is_running = manager.is_dashboard_running()
+    assert is_running is False
+
+
+def test_pbs_task_manager_is_dashboard_running_no_client():
+    """Test is_dashboard_running when client is not initialized.
+
+    Purpose: Validates that is_dashboard_running returns False when no client exists
+
+    Given: PBSTaskManager instance with dashboard enabled but no client
+    When: is_dashboard_running() method is called
+    Then: Returns False indicating dashboard is not running yet
+
+    Test type: unit
+    """
+    manager = PBSTaskManager(queue="default", enable_dashboard=True)
+
+    # Client is None before initialization
+    assert manager.client is None
+    is_running = manager.is_dashboard_running()
+    assert is_running is False
+
+
+def test_pbs_task_manager_dashboard_helper_methods_exist():
+    """Test that PBSTaskManager has all dashboard helper methods.
+
+    Purpose: Validates that PBSTaskManager implements all expected dashboard helper methods
+
+    Given: PBSTaskManager instance
+    When: Instance methods are checked
+    Then: All dashboard helper methods are available on PBSTaskManager instance
+
+    Test type: unit
+    """
+    manager = PBSTaskManager(queue="default")
+
+    # Check that dashboard helper methods are available
+    assert hasattr(manager, "get_dashboard_url")
+    assert hasattr(manager, "is_dashboard_running")
+    assert callable(manager.get_dashboard_url)
+    assert callable(manager.is_dashboard_running)
+
+
+def test_pbs_task_manager_dashboard_port_validation():
+    """Test PBSTaskManager accepts various dashboard port values.
+
+    Purpose: Validates that PBSTaskManager accepts different valid port numbers
+
+    Given: PBSTaskManager constructor with different port values
+    When: PBSTaskManager is instantiated with various valid ports
+    Then: Task manager stores the correct port values
+
+    Test type: unit
+    """
+    # Test common port values
+    test_ports = [8787, 8888, 9999, 8080, 3000]
+
+    for port in test_ports:
+        manager = PBSTaskManager(queue="default", dashboard_port=port)
+        assert manager.dashboard_port == port
+
+
+def test_pbs_task_manager_dashboard_address_validation():
+    """Test PBSTaskManager accepts various dashboard address values.
+
+    Purpose: Validates that PBSTaskManager accepts different valid address formats
+
+    Given: PBSTaskManager constructor with different address values
+    When: PBSTaskManager is instantiated with various valid addresses
+    Then: Task manager stores the correct address values
+
+    Test type: unit
+    """
+    # Test common address values
+    test_addresses = ["0.0.0.0", "127.0.0.1", "192.168.1.100", "localhost"]
+
+    for address in test_addresses:
+        manager = PBSTaskManager(queue="default", dashboard_address=address)
+        assert manager.dashboard_address == address
+
+
+def test_pbs_task_manager_dashboard_prefix_validation():
+    """Test PBSTaskManager accepts various dashboard prefix values.
+
+    Purpose: Validates that PBSTaskManager accepts different dashboard prefix formats
+
+    Given: PBSTaskManager constructor with different prefix values
+    When: PBSTaskManager is instantiated with various valid prefixes
+    Then: Task manager stores the correct prefix values
+
+    Test type: unit
+    """
+    # Test common prefix values
+    test_prefixes = [None, "/dashboard", "/my-app", "/cluster-monitor", "api/v1"]
+
+    for prefix in test_prefixes:
+        manager = PBSTaskManager(queue="default", dashboard_prefix=prefix)
+        assert manager.dashboard_prefix == prefix
+
+
+def test_pbs_task_manager_context_manager_with_dashboard():
+    """Test that PBSTaskManager context manager works with dashboard settings.
+
+    Purpose: Validates that PBSTaskManager context manager properly handles dashboard configuration
+
+    Given: PBSTaskManager instance with custom dashboard settings
+    When: Used as a context manager (with statement)
+    Then: Context manager protocol works and preserves dashboard settings during entry and exit
+
+    Test type: unit
+    """
+    # Test that context manager works with dashboard configuration
+    try:
+        with PBSTaskManager(
+            queue="default",
+            enable_dashboard=True,
+            dashboard_port=8888,
+            dashboard_address="127.0.0.1"
+        ) as manager:
+            assert manager.queue == "default"
+            assert manager.enable_dashboard is True
+            assert manager.dashboard_port == 8888
+            assert manager.dashboard_address == "127.0.0.1"
+            assert manager.client is None  # Not initialized yet
+            assert manager.cluster is None  # Not initialized yet
+    except Exception as e:
+        # Should not raise any exceptions during context manager setup
+        pytest.fail(f"Context manager with dashboard should not raise exceptions during setup: {e}")
+
+
+def test_pbs_task_manager_cluster_storage():
+    """Test that PBSTaskManager stores cluster reference for dashboard access.
+
+    Purpose: Validates that PBSTaskManager has cluster attribute for dashboard functionality
+
+    Given: PBSTaskManager instance
+    When: Instance is created
+    Then: Task manager has cluster attribute initialized to None
+
+    Test type: unit
+    """
+    manager = PBSTaskManager(queue="default")
+
+    # Check that cluster attribute exists and is initially None
+    assert hasattr(manager, "cluster")
+    assert manager.cluster is None
