@@ -17,6 +17,7 @@ optuna>=2.0.0
 pyyaml>=6.0.0
 dask>=2023.3.0
 distributed>=2023.3.0
+dask_jobqueue>=0.8.0
 cachey>=0.2.1
 # Profiling packages
 line_profiler>=4.0.0
