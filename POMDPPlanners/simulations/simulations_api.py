@@ -719,6 +719,7 @@ class SimulationsAPI:
             debug=debug,
             enable_profiling=enable_profiling,
             profiling_output_limit=profiling_output_limit,
+            use_queue_logger=True,
         ) as simulator:
             self.logger.info("Running PBS cluster simulation comparison")
             results = simulator.compare_multiple_environments_policies(

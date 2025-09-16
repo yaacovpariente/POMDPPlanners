@@ -2596,3 +2596,154 @@ def test_create_and_log_environment_visualizations_empty_results(temp_cache_dir)
 
     # Verify function completed successfully
     assert True, "Function should complete successfully with empty results"
+
+
+def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
+    """Test that environment-policy pair log files are created correctly.
+
+    Purpose: Validates that the simulator creates one log file per environment-policy combination
+
+    Given: A simulator with cache directory and multiple episodes using different environment-policy pairs
+    When: Simulation episodes are run with different environments and policies
+    Then: Exactly one log file is created per unique environment-policy combination
+
+    Test type: integration
+    """
+    # ARRANGE: Set up simulator with logging enabled
+    simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
+        cache_dir_path=temp_cache_dir,
+        experiment_name="EnvPolicyLogTest",
+        debug=True,
+    )
+
+    # Create three different environments to test multiple environment-policy combinations
+    env1 = TigerPOMDP(discount_factor=0.95, name="TigerEnv1")
+    env2 = TigerPOMDP(discount_factor=0.95, name="TigerEnv2")
+    env3 = TigerPOMDP(discount_factor=0.95, name="TigerEnv3")
+
+    # Create three different policies
+    policy1 = POMCP(
+        environment=env1,
+        discount_factor=0.95,
+        depth=10,
+        exploration_constant=1.0,
+        n_simulations=10,
+        name="POMCP1"
+    )
+    policy2 = POMCP(
+        environment=env2,
+        discount_factor=0.95,
+        depth=10,
+        exploration_constant=2.0,
+        n_simulations=10,
+        name="POMCP2"
+    )
+    policy3 = POMCP(
+        environment=env3,
+        discount_factor=0.95,
+        depth=10,
+        exploration_constant=1.5,
+        n_simulations=10,
+        name="POMCP3"
+    )
+
+    # Set up run parameters for different environment-policy combinations
+    env_run_params = [
+        # Combination 1: TigerEnv1 + POMCP1 (2 episodes)
+        EnvironmentRunParams(
+            environment=env1,
+            policies=[policy1],
+            belief=get_initial_belief(env1, n_particles=100),
+            num_episodes=2,
+            num_steps=5,
+        ),
+        # Combination 2: TigerEnv2 + POMCP2 (2 episodes)
+        EnvironmentRunParams(
+            environment=env2,
+            policies=[policy2],
+            belief=get_initial_belief(env2, n_particles=100),
+            num_episodes=2,
+            num_steps=5,
+        ),
+        # Combination 3: TigerEnv3 + POMCP3 (1 episode)
+        EnvironmentRunParams(
+            environment=env3,
+            policies=[policy3],
+            belief=get_initial_belief(env3, n_particles=100),
+            num_episodes=1,
+            num_steps=5,
+        ),
+    ]
+
+    # ACT: Run simulations with context manager for proper cleanup
+    with simulator:
+        results = simulator.simulate_multiple_environments_and_policies_parallel(
+            environment_run_params=env_run_params,
+            alpha=0.05,
+            confidence_interval_level=0.95,
+            n_jobs=1,
+        )
+
+    # ASSERT: Check that log files are created correctly
+    logs_dir = temp_cache_dir / "logs" / "env_policy"
+
+    # Verify log directory exists
+    assert logs_dir.exists(), f"Environment-policy logs directory should exist at {logs_dir}"
+
+    # Get all log files
+    log_files = list(logs_dir.glob("*.log"))
+
+    # Expected unique environment-policy combinations:
+    # 1. TigerEnv1 + POMCP1
+    # 2. TigerEnv2 + POMCP2
+    # 3. TigerEnv3 + POMCP3
+    expected_combinations = 3
+
+    # Verify exactly 3 log files are created (one per environment-policy combination)
+    assert len(log_files) == expected_combinations, (
+        f"Expected {expected_combinations} log files, but found {len(log_files)}. "
+        f"Files: {[f.name for f in log_files]}"
+    )
+
+    # Verify log file naming follows environment-policy pattern
+    expected_log_names = {
+        "env_policy.TigerEnv1.POMCP1.log",
+        "env_policy.TigerEnv2.POMCP2.log",
+        "env_policy.TigerEnv3.POMCP3.log"
+    }
+
+    actual_log_names = {f.name for f in log_files}
+    assert actual_log_names == expected_log_names, (
+        f"Expected log file names {expected_log_names}, but found {actual_log_names}"
+    )
+
+    # Verify log files contain expected episode information
+    for log_file in log_files:
+        with open(log_file, 'r') as f:
+            content = f.read()
+
+        # Each log file should contain episode logging with proper formatting
+        assert "[EPISODE_" in content, f"Log file {log_file.name} should contain episode logs"
+        assert "Starting episode simulation" in content, f"Log file {log_file.name} should contain episode start logs"
+
+        # Verify structured logging format is used
+        if "TigerEnv1.POMCP1" in log_file.name:
+            # This combination has 2 episodes
+            assert "[EPISODE_001]" in content and "[EPISODE_002]" in content, (
+                f"Log file {log_file.name} should contain episodes 001 and 002"
+            )
+        elif "TigerEnv2.POMCP2" in log_file.name:
+            # This combination has 2 episodes
+            assert "[EPISODE_001]" in content and "[EPISODE_002]" in content, (
+                f"Log file {log_file.name} should contain episodes 001 and 002"
+            )
+        elif "TigerEnv3.POMCP3" in log_file.name:
+            # This combination has 1 episode
+            assert "[EPISODE_001]" in content, (
+                f"Log file {log_file.name} should contain episode 001"
+            )
+
+    # Verify simulation results are valid
+    assert results is not None, "Simulation should return valid results"
+    assert len(results) > 0, "Simulation should return non-empty results"
