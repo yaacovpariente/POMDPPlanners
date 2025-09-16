@@ -2,7 +2,7 @@ import os
 import importlib
 import inspect
 from pathlib import Path
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Optional
 
 import pandas as pd
 
@@ -606,6 +606,10 @@ class SimulationsAPI:
         clear_cache_on_start: bool = False,
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
+        enable_dashboard: bool = True,
+        dashboard_address: str = "0.0.0.0",
+        dashboard_port: int = 8787,
+        dashboard_prefix: Optional[str] = None,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         """Run simulations using PBS cluster computing.
 
@@ -630,6 +634,10 @@ class SimulationsAPI:
             clear_cache_on_start: Whether to clear cache before starting simulation
             enable_profiling: Whether to enable performance profiling
             profiling_output_limit: Maximum number of profiling entries to display
+            enable_dashboard: Whether to enable the Dask dashboard for monitoring
+            dashboard_address: Address to bind the dashboard to (e.g., "0.0.0.0", "127.0.0.1")
+            dashboard_port: Port for the Dask dashboard (default: 8787)
+            dashboard_prefix: URL prefix for dashboard (useful with reverse proxies)
 
         Returns:
             Tuple containing:
@@ -686,7 +694,10 @@ class SimulationsAPI:
                     memory="16GB",  # 16GB per job
                     walltime="04:00:00",  # 4 hour time limit
                     job_extra=["#PBS -l feature=gpu", "#PBS -m ae"],  # GPU nodes, email notifications
-                    enable_profiling=True
+                    enable_profiling=True,
+                    enable_dashboard=True,  # Enable dashboard for monitoring
+                    dashboard_port=8888,  # Custom dashboard port
+                    dashboard_address="0.0.0.0"  # Dashboard accessible from any IP
                 )
 
                 print(f"Cluster simulation completed with {len(statistics_df)} configurations")
@@ -710,6 +721,10 @@ class SimulationsAPI:
             walltime=walltime,
             job_extra=job_extra,
             clear_cache_on_start=clear_cache_on_start,
+            enable_dashboard=enable_dashboard,
+            dashboard_address=dashboard_address,
+            dashboard_port=dashboard_port,
+            dashboard_prefix=dashboard_prefix,
         )
 
         with POMDPSimulator(

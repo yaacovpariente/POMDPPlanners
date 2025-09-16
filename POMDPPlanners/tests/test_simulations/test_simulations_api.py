@@ -273,6 +273,11 @@ class TestSimulationsAPI:
         assert task_manager_config.processes == 1
         assert task_manager_config.walltime == "02:00:00"
         assert task_manager_config.job_extra == ["#PBS -l feature=gpu"]
+        # Default dashboard values
+        assert task_manager_config.enable_dashboard is True
+        assert task_manager_config.dashboard_address == "0.0.0.0"
+        assert task_manager_config.dashboard_port == 8787
+        assert task_manager_config.dashboard_prefix is None
 
         # Check other simulator parameters
         assert call_args[1]["cache_dir_path"] == temp_cache_dir
@@ -328,6 +333,11 @@ class TestSimulationsAPI:
         assert task_manager_config.walltime == "01:00:00"  # Default
         assert task_manager_config.job_extra is None  # Default
         assert task_manager_config.clear_cache_on_start is False  # Default
+        # Default dashboard values
+        assert task_manager_config.enable_dashboard is True  # Default
+        assert task_manager_config.dashboard_address == "0.0.0.0"  # Default
+        assert task_manager_config.dashboard_port == 8787  # Default
+        assert task_manager_config.dashboard_prefix is None  # Default
 
         assert call_args[1]["experiment_name"] == "POMDP_Planning_Comparison"  # Default
         assert call_args[1]["debug"] is False  # Default
@@ -408,3 +418,95 @@ class TestSimulationsAPI:
         assert "#PBS -l feature=gpu" in task_manager_config.job_extra
         assert "#PBS -m ae" in task_manager_config.job_extra
         assert "#PBS -M user@example.com" in task_manager_config.job_extra
+
+    @patch("POMDPPlanners.simulations.simulations_api.POMDPSimulator")
+    def test_run_multiple_environments_and_policies_pbs_run_custom_dashboard(
+        self, mock_simulator, temp_cache_dir, sample_environment_run_params
+    ):
+        """Test PBS run with custom dashboard parameters.
+
+        Purpose: Validates that PBS function correctly handles custom dashboard configuration
+
+        Given: Custom dashboard parameters including enabled dashboard, custom port, address, and prefix
+        When: run_multiple_environments_and_policies_pbs_run is called with dashboard parameters
+        Then: PBSConfig includes all specified dashboard settings
+
+        Test type: unit
+        """
+        # Mock the simulator
+        mock_simulator_instance = MagicMock()
+        mock_simulator_instance.__enter__.return_value = mock_simulator_instance
+        mock_simulator_instance.__exit__.return_value = None
+
+        mock_results = ({"test_tiger": {"test_sparse_pft": []}}, pd.DataFrame())
+        mock_simulator_instance.compare_multiple_environments_policies.return_value = (
+            mock_results
+        )
+        mock_simulator.return_value = mock_simulator_instance
+
+        api = SimulationsAPI()
+        results, stats_df = api.run_multiple_environments_and_policies_pbs_run(
+            environment_run_params=sample_environment_run_params,
+            alpha=0.05,
+            confidence_interval_level=0.95,
+            queue="gpu_queue",
+            enable_dashboard=True,
+            dashboard_address="192.168.1.100",
+            dashboard_port=9999,
+            dashboard_prefix="/cluster-monitor",
+            cache_dir_path=temp_cache_dir,
+        )
+
+        # Verify dashboard parameters are properly passed
+        call_args = mock_simulator.call_args
+        task_manager_config = call_args[1]["task_manager_config"]
+
+        assert task_manager_config.enable_dashboard is True
+        assert task_manager_config.dashboard_address == "192.168.1.100"
+        assert task_manager_config.dashboard_port == 9999
+        assert task_manager_config.dashboard_prefix == "/cluster-monitor"
+
+    @patch("POMDPPlanners.simulations.simulations_api.POMDPSimulator")
+    def test_run_multiple_environments_and_policies_pbs_run_dashboard_disabled(
+        self, mock_simulator, temp_cache_dir, sample_environment_run_params
+    ):
+        """Test PBS run with dashboard disabled.
+
+        Purpose: Validates that PBS function correctly handles disabled dashboard configuration
+
+        Given: Dashboard disabled (enable_dashboard=False) with custom port and address
+        When: run_multiple_environments_and_policies_pbs_run is called with dashboard disabled
+        Then: PBSConfig shows dashboard disabled but other dashboard parameters are stored
+
+        Test type: unit
+        """
+        # Mock the simulator
+        mock_simulator_instance = MagicMock()
+        mock_simulator_instance.__enter__.return_value = mock_simulator_instance
+        mock_simulator_instance.__exit__.return_value = None
+
+        mock_results = ({"test_tiger": {"test_sparse_pft": []}}, pd.DataFrame())
+        mock_simulator_instance.compare_multiple_environments_policies.return_value = (
+            mock_results
+        )
+        mock_simulator.return_value = mock_simulator_instance
+
+        api = SimulationsAPI()
+        results, stats_df = api.run_multiple_environments_and_policies_pbs_run(
+            environment_run_params=sample_environment_run_params,
+            alpha=0.05,
+            confidence_interval_level=0.95,
+            queue="batch_queue",
+            enable_dashboard=False,
+            dashboard_port=8888,
+            dashboard_address="127.0.0.1",
+            cache_dir_path=temp_cache_dir,
+        )
+
+        # Verify dashboard is disabled but parameters are stored
+        call_args = mock_simulator.call_args
+        task_manager_config = call_args[1]["task_manager_config"]
+
+        assert task_manager_config.enable_dashboard is False
+        assert task_manager_config.dashboard_port == 8888  # Should still store the parameter
+        assert task_manager_config.dashboard_address == "127.0.0.1"  # Should still store the parameter
