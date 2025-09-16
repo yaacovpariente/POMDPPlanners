@@ -329,7 +329,7 @@ def test_episode_simulation_task_value_error_logging(caplog, environment, policy
         assert result is None
         
         # Verify that some error was logged (the exact message may vary)
-        assert "Error running episode 1:" in caplog.text
+        assert "[EPISODE_001] Error running episode:" in caplog.text
 
 def test_episode_simulation_task_runtime_error_logging(caplog, environment, policy):
     """Test that EpisodeSimulationTask logs RuntimeError exceptions properly.
@@ -371,7 +371,7 @@ def test_episode_simulation_task_runtime_error_logging(caplog, environment, poli
         assert result is None
         
         # Verify that some error was logged (the exact message may vary)
-        assert "Error running episode 1:" in caplog.text
+        assert "[EPISODE_001] Error running episode:" in caplog.text
 
 def test_episode_simulation_task_type_error_logging(caplog, environment, policy):
     """Test that EpisodeSimulationTask logs TypeError exceptions properly.
@@ -413,7 +413,7 @@ def test_episode_simulation_task_type_error_logging(caplog, environment, policy)
         assert result is None
         
         # Verify that some error was logged (the exact message may vary)
-        assert "Error running episode 1:" in caplog.text
+        assert "[EPISODE_001] Error running episode:" in caplog.text
 
 def test_episode_simulation_task_custom_exception_logging(caplog, environment, policy):
     """Test that EpisodeSimulationTask logs custom exceptions properly.
@@ -459,7 +459,7 @@ def test_episode_simulation_task_custom_exception_logging(caplog, environment, p
         assert result is None
         
         # Verify that some error was logged (the exact message may vary)
-        assert "Error running episode 1:" in caplog.text
+        assert "[EPISODE_001] Error running episode:" in caplog.text
 
 def test_episode_simulation_task_logging_includes_traceback(caplog, environment, policy):
     """Test that EpisodeSimulationTask logs include full traceback information.
@@ -501,7 +501,7 @@ def test_episode_simulation_task_logging_includes_traceback(caplog, environment,
         assert result is None
         
         # Verify that some error was logged (the exact message may vary)
-        assert "Error running episode 1:" in caplog.text
+        assert "[EPISODE_001] Error running episode:" in caplog.text
         
         # Verify that traceback information was logged
         assert "Full exception details:" in caplog.text

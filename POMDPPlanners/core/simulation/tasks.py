@@ -38,17 +38,19 @@ class TaskManager(ABC):
         pass
     
 class TaskManagerExternalDB(TaskManager):
-    def __init__(self, cache_db: DataBaseInterface, cache_dir: Optional[Path] = None, logger_debug: bool = False):
+    def __init__(self, cache_db: DataBaseInterface, cache_dir: Optional[Path] = None, logger_debug: bool = False, use_queue_logger: bool = False):
         self.cache_db = cache_db
         self.cache_dir = cache_dir
         self.logger_debug = logger_debug
-    
+        self.use_queue_logger = use_queue_logger
+        
     @property
     def logger(self) -> logging.Logger:
         return get_logger(
             name=f"task_manager",
             debug=self.logger_debug,
-            output_dir=self.cache_dir
+            output_dir=self.cache_dir,
+            use_queue=self.use_queue_logger
         )
     
     @abstractmethod

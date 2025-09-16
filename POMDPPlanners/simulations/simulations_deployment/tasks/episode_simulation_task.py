@@ -47,7 +47,9 @@ class EpisodeSimulationTask(SimulationTask):
             debug: Whether to enable debug logging
             console_output: Whether to enable console output (default: True).
                           Set to False to disable console output while keeping file logging.
-            use_queue_logger: Whether to use queue-based logging. Defaults to True.
+            use_queue_logger: Whether to use queue-based logging. Defaults to False.
+                With the environment-policy pair logging design, multiple tasks
+                using the same environment and policy share the same logger.
         Raises:
             ValueError: If num_steps is not positive
         """
@@ -77,22 +79,31 @@ class EpisodeSimulationTask(SimulationTask):
     
     @property
     def logger(self) -> logging.Logger:
-        """All tasks should remain pickable and therefore the logger should be a property"""
+        """Get shared logger for this environment-policy combination.
+
+        Uses one logger per environment-policy pair instead of per task for better
+        performance and resource management. All episodes using the same environment
+        and policy will share the same log file.
+        """
         output_dir = None
         if self.cache_dir is not None:
-            output_dir = self.cache_dir / "logs" / "episodes"
-        
+            output_dir = self.cache_dir / "logs" / "env_policy"
+
         return get_logger(
-            name=self._get_logger_name(),
+            name=self._get_env_policy_logger_name(),
             debug=self.debug,
             output_dir=output_dir,
             console_output=self.console_output,
             use_queue=self.use_queue_logger
         )
 
+    def _get_env_policy_logger_name(self) -> str:
+        """Get the shared logger name for this environment-policy combination."""
+        return f"env_policy.{self.environment.name}.{self.policy.name}"
+
     def _get_logger_name(self) -> str:
-        """Get the name of the logger for this task."""
-        return f"task.{self.environment.name}.{self.policy.name}.{self.episode_id}_task_id.{self._cache_key}"
+        """Get the name of the logger for this task (legacy method for compatibility)."""
+        return self._get_env_policy_logger_name()
     
     def _generate_cache_key(self) -> str:
         """Generate a unique cache key for this task."""
@@ -140,16 +151,17 @@ class EpisodeSimulationTask(SimulationTask):
     def cleanup_logger(self) -> None:
         """Clean up logger resources to prevent file handle leaks.
 
-        This method closes all file handlers associated with the task's logger
-        to ensure proper cleanup of file descriptors in multiprocessing scenarios.
+        Note: With shared env-policy loggers, cleanup is less critical since
+        multiple tasks share the same logger. This method is kept for compatibility
+        but now only flushes handlers instead of closing them to avoid affecting
+        other tasks using the same logger.
         """
         try:
-            logger = logging.getLogger(self._get_logger_name())
-            # Close and remove all file handlers
-            for handler in logger.handlers[:]:
-                if isinstance(handler, logging.FileHandler):
-                    handler.close()
-                    logger.removeHandler(handler)
+            logger = logging.getLogger(self._get_env_policy_logger_name())
+            # Flush handlers instead of closing them (other tasks may still be using them)
+            for handler in logger.handlers:
+                if hasattr(handler, 'flush'):
+                    handler.flush()
         except Exception as e:
             # Don't let cleanup errors affect the main task
             pass
@@ -162,28 +174,44 @@ class EpisodeSimulationTask(SimulationTask):
         """
         # Start timing
         start_time = time.time()
-        self.logger.info(f"Starting episode {self.episode_id} (episode_number: {self.episode_number})")
-        
-        # Log task configuration
-        self.logger.info(f"Environment: {self.environment.name} (config_id: {self.environment.config_id})")
-        self.logger.info(f"Policy: {self.policy.name} (config_id: {self.policy.config_id})")
-        self.logger.info(f"Initial belief: {self.initial_belief.config_id}")
-        self.logger.info(f"Configuration: num_steps={self.num_steps}, seed={self.seed}, discount_factor={self.discount_factor}")
-        self.logger.info(f"Debug mode: {self.debug}, Console output: {self.console_output}")
-        if self.cache_dir:
-            self.logger.info(f"Cache directory: {self.cache_dir}")
-        self.logger.info(f"Cache key: {self._cache_key}")
+
+        # Create episode context for structured logging
+        episode_context = {
+            'episode_id': self.episode_id,
+            'episode_number': self.episode_number,
+            'num_steps': self.num_steps,
+            'seed': self.seed,
+            'discount_factor': self.discount_factor,
+            'cache_key': self._cache_key
+        }
+
+        # Use structured logging with episode context
+        self.logger.info(
+            f"[EPISODE_{self.episode_id:03d}] Starting episode simulation "
+            f"(num={self.episode_number}, steps={self.num_steps}, seed={self.seed})"
+        )
+
+        # Log detailed configuration in debug mode
+        if self.debug:
+            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Environment: {self.environment.name} (config_id: {self.environment.config_id})")
+            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Policy: {self.policy.name} (config_id: {self.policy.config_id})")
+            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Initial belief: {self.initial_belief.config_id}")
+            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Configuration: discount_factor={self.discount_factor}")
+            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Debug mode: {self.debug}, Console output: {self.console_output}")
+            if self.cache_dir:
+                self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Cache directory: {self.cache_dir}")
+            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Cache key: {self._cache_key}")
         
         # Log random state setup
-        self.logger.debug(f"Setting random seed to {self.seed}")
+        self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Setting random seed to {self.seed}")
         state = np.random.get_state()
-        
+
         random.seed(self.seed)
         np.random.seed(self.seed)
-        
+
         try:
             # Run simulation with seed parameter
-            self.logger.info("Starting episode simulation...")
+            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Starting episode simulation...")
             result = run_episode(
                 environment=self.environment,
                 policy=self.policy,
@@ -191,36 +219,50 @@ class EpisodeSimulationTask(SimulationTask):
                 num_steps=self.num_steps,
                 logger=self.logger
             )
-            
+
             if result is not None:
-                self.logger.info(f"Episode {self.episode_id} completed successfully")
-                self.logger.debug(f"Episode result type: {type(result)}")
+                # Calculate total reward from history
+                total_reward = 0
+                actual_steps = 0
+                reached_terminal = False
+
                 if hasattr(result, 'history') and result.history:
-                    self.logger.debug(f"Episode had {len(result.history)} steps")
-                    # Calculate total reward from history
+                    actual_steps = len(result.history)
                     total_reward = sum(step.reward for step in result.history if step.reward is not None)
-                    self.logger.info(f"Total episode reward: {total_reward}")
-                    self.logger.debug(f"Episode reached terminal state: {result.reach_terminal_state}")
-                    self.logger.debug(f"Actual steps taken: {result.actual_num_steps}")
+
+                if hasattr(result, 'reach_terminal_state'):
+                    reached_terminal = result.reach_terminal_state
+
+                if hasattr(result, 'actual_num_steps'):
+                    actual_steps = result.actual_num_steps
+
+                # Structured success log with key metrics
+                self.logger.info(
+                    f"[EPISODE_{self.episode_id:03d}] Completed successfully "
+                    f"(reward={total_reward:.4f}, steps={actual_steps}, terminal={reached_terminal})"
+                )
+
+                if self.debug:
+                    self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Result type: {type(result)}")
             else:
-                self.logger.warning(f"Episode {self.episode_id} returned None result")
+                self.logger.warning(f"[EPISODE_{self.episode_id:03d}] Episode returned None result")
                 
         except Exception as e:
-            self.logger.error(f"Error running episode {self.episode_id}: {e}")
-            self.logger.exception("Full exception details:")
+            self.logger.error(f"[EPISODE_{self.episode_id:03d}] Error running episode: {e}")
+            self.logger.exception(f"[EPISODE_{self.episode_id:03d}] Full exception details:")
             result = None
         finally:
             # Restore random state
-            self.logger.debug("Restoring random state")
+            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Restoring random state")
             np.random.set_state(state)
-            self.logger.debug("Random state restored")
+            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Random state restored")
 
             # Log total execution time
             end_time = time.time()
             execution_time = end_time - start_time
-            self.logger.info(f"Episode {self.episode_id} execution completed in {execution_time:.4f} seconds")
+            self.logger.info(f"[EPISODE_{self.episode_id:03d}] Execution completed in {execution_time:.4f} seconds")
 
-            # Clean up logger resources
+            # Clean up logger resources (flush only, don't close shared logger)
             self.cleanup_logger()
 
         return result
