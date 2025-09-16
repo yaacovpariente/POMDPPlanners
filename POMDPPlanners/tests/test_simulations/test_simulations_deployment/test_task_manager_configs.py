@@ -187,6 +187,11 @@ class TestPBSConfig:
         assert config.job_extra is None
         assert config.cache_size == int(2e9)
         assert config.clear_cache_on_start is False
+        # Dashboard default values
+        assert config.enable_dashboard is True
+        assert config.dashboard_address == "0.0.0.0"
+        assert config.dashboard_port == 8787
+        assert config.dashboard_prefix is None
 
     def test_pbs_config_custom_initialization(self):
         """Test PBSConfig initialization with custom values.
@@ -210,6 +215,10 @@ class TestPBSConfig:
             job_extra=job_extra,
             cache_size=int(5e9),
             clear_cache_on_start=True,
+            enable_dashboard=True,
+            dashboard_address="127.0.0.1",
+            dashboard_port=9999,
+            dashboard_prefix="/my-cluster",
         )
 
         assert config.queue == "gpu"
@@ -221,6 +230,11 @@ class TestPBSConfig:
         assert config.job_extra == job_extra
         assert config.cache_size == int(5e9)
         assert config.clear_cache_on_start is True
+        # Dashboard custom values
+        assert config.enable_dashboard is True
+        assert config.dashboard_address == "127.0.0.1"
+        assert config.dashboard_port == 9999
+        assert config.dashboard_prefix == "/my-cluster"
 
     @patch(
         "POMDPPlanners.simulations.simulations_deployment.task_manager_configs.TaskManagerFactory"
@@ -250,6 +264,10 @@ class TestPBSConfig:
             job_extra=job_extra,
             cache_size=int(4e9),
             clear_cache_on_start=False,
+            enable_dashboard=True,
+            dashboard_address="192.168.1.100",
+            dashboard_port=8888,
+            dashboard_prefix="/cluster-dashboard",
         )
 
         result = config.create_task_manager(cache_dir="/test/cache")
@@ -264,8 +282,63 @@ class TestPBSConfig:
             job_extra=job_extra,
             cache_size=int(4e9),
             clear_cache_on_start=False,
+            enable_dashboard=True,
+            dashboard_address="192.168.1.100",
+            dashboard_port=8888,
+            dashboard_prefix="/cluster-dashboard",
         )
         assert result == mock_task_manager
+
+    def test_pbs_config_dashboard_disabled_initialization(self):
+        """Test PBSConfig initialization with dashboard disabled.
+
+        Purpose: Validates that PBSConfig can be configured with dashboard disabled
+
+        Given: PBSConfig with enable_dashboard=False
+        When: Creating a PBSConfig instance with dashboard disabled
+        Then: Dashboard is disabled but other dashboard parameters are still stored
+
+        Test type: unit
+        """
+        config = PBSConfig(
+            queue="batch",
+            enable_dashboard=False,
+            dashboard_port=9999,
+            dashboard_address="10.0.0.1"
+        )
+
+        assert config.enable_dashboard is False
+        assert config.dashboard_port == 9999  # Should still store the parameter
+        assert config.dashboard_address == "10.0.0.1"  # Should still store the parameter
+
+    def test_pbs_config_dashboard_parameter_validation(self):
+        """Test PBSConfig accepts various dashboard parameter values.
+
+        Purpose: Validates that PBSConfig accepts different valid dashboard configurations
+
+        Given: PBSConfig with various dashboard parameter combinations
+        When: Creating PBSConfig instances with different dashboard settings
+        Then: All valid parameter combinations are accepted and stored correctly
+
+        Test type: unit
+        """
+        # Test various port values
+        test_ports = [8787, 8888, 9999, 8080, 3000]
+        for port in test_ports:
+            config = PBSConfig(queue="test", dashboard_port=port)
+            assert config.dashboard_port == port
+
+        # Test various address values
+        test_addresses = ["0.0.0.0", "127.0.0.1", "192.168.1.100", "localhost"]
+        for address in test_addresses:
+            config = PBSConfig(queue="test", dashboard_address=address)
+            assert config.dashboard_address == address
+
+        # Test various prefix values
+        test_prefixes = [None, "/dashboard", "/my-app", "/cluster-monitor", "api/v1"]
+        for prefix in test_prefixes:
+            config = PBSConfig(queue="test", dashboard_prefix=prefix)
+            assert config.dashboard_prefix == prefix
 
     def test_pbs_config_is_task_manager_config(self):
         """Test that PBSConfig is instance of TaskManagerConfig.

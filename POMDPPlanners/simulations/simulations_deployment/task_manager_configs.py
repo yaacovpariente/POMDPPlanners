@@ -46,6 +46,10 @@ class PBSConfig(TaskManagerConfig):
     job_extra: Optional[List[str]] = None
     cache_size: int = int(2e9)
     clear_cache_on_start: bool = False
+    enable_dashboard: bool = True
+    dashboard_address: str = "0.0.0.0"
+    dashboard_port: int = 8787
+    dashboard_prefix: Optional[str] = None
 
     def create_task_manager(self, cache_dir: Optional[str] = None) -> TaskManager:
         return TaskManagerFactory.create_pbs(
@@ -58,6 +62,10 @@ class PBSConfig(TaskManagerConfig):
             job_extra=self.job_extra,
             cache_size=self.cache_size,
             clear_cache_on_start=self.clear_cache_on_start,
+            enable_dashboard=self.enable_dashboard,
+            dashboard_address=self.dashboard_address,
+            dashboard_port=self.dashboard_port,
+            dashboard_prefix=self.dashboard_prefix,
         )
 
 
