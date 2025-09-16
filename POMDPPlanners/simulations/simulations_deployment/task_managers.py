@@ -8,6 +8,7 @@ from dask.distributed import Future
 from dask.distributed import Client, LocalCluster
 from dask.cache import Cache
 from joblib import Parallel, delayed, Memory
+from dask_jobqueue import PBSCluster
 
 from POMDPPlanners.core.simulation import (
     TaskManager,
@@ -479,14 +480,12 @@ class PBSTaskManager(DaskTaskManager):
                 "Install with: pip install dask-jobqueue"
             )
 
-        # Prepare dashboard configuration
-        dashboard_kwargs = {}
+        # Prepare scheduler options for dashboard configuration
+        scheduler_options = {}
         if self.enable_dashboard:
-            dashboard_kwargs.update({
-                "dashboard_address": f"{self.dashboard_address}:{self.dashboard_port}"
-            })
+            scheduler_options["dashboard_address"] = f"{self.dashboard_address}:{self.dashboard_port}"
             if self.dashboard_prefix:
-                dashboard_kwargs["dashboard_prefix"] = self.dashboard_prefix
+                scheduler_options["dashboard_prefix"] = self.dashboard_prefix
 
         # Create PBS cluster configuration
         self.cluster = PBSCluster(
@@ -497,7 +496,7 @@ class PBSTaskManager(DaskTaskManager):
             walltime=self.walltime,
             job_extra=self.job_extra,
             local_directory="./dask-pbs-space",
-            **dashboard_kwargs,
+            scheduler_options=scheduler_options if scheduler_options else None,
         )
 
         # Scale cluster to desired number of workers

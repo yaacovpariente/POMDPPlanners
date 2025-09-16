@@ -1047,11 +1047,21 @@ def test_pbs_task_manager_missing_dependency():
 
     Test type: unit
     """
+    from unittest.mock import patch, MagicMock
+
     manager = PBSTaskManager(queue="default")
 
-    # Test that the dependency check works correctly
-    with pytest.raises(RuntimeError, match="dask-jobqueue is required for PBS support"):
-        manager._initialize_client()
+    # Create a mock that raises ImportError when importing dask_jobqueue
+    def mock_import(name, *args, **kwargs):
+        if name == 'dask_jobqueue':
+            raise ImportError("No module named 'dask_jobqueue'")
+        # For other imports, use the real import
+        return __import__(name, *args, **kwargs)
+
+    # Mock the local import inside _initialize_client to raise ImportError
+    with patch('builtins.__import__', side_effect=mock_import):
+        with pytest.raises(RuntimeError, match="dask-jobqueue is required for PBS support"):
+            manager._initialize_client()
 
 
 def test_pbs_task_manager_inheritance():
