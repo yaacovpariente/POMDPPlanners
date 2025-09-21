@@ -2686,7 +2686,7 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
         )
 
     # ASSERT: Check that log files are created correctly
-    logs_dir = temp_cache_dir / "logs" / "env_policy"
+    logs_dir = temp_cache_dir / "env_policy" / "logs"
 
     # Verify log directory exists
     assert logs_dir.exists(), f"Environment-policy logs directory should exist at {logs_dir}"
@@ -2707,16 +2707,19 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
     )
 
     # Verify log file naming follows environment-policy pattern
-    expected_log_names = {
-        "env_policy.TigerEnv1.POMCP1.log",
-        "env_policy.TigerEnv2.POMCP2.log",
-        "env_policy.TigerEnv3.POMCP3.log"
+    # Files are named with underscores instead of dots and include timestamps
+    expected_log_patterns = {
+        "env_policy_TigerEnv1_POMCP1_",
+        "env_policy_TigerEnv2_POMCP2_",
+        "env_policy_TigerEnv3_POMCP3_"
     }
 
     actual_log_names = {f.name for f in log_files}
-    assert actual_log_names == expected_log_names, (
-        f"Expected log file names {expected_log_names}, but found {actual_log_names}"
-    )
+    
+    # Check that each expected pattern has a matching file
+    for pattern in expected_log_patterns:
+        matching_files = [f for f in actual_log_names if f.startswith(pattern) and f.endswith('.log')]
+        assert len(matching_files) == 1, f"Expected exactly one file matching pattern '{pattern}', found {len(matching_files)}: {matching_files}"
 
     # Verify log files contain expected episode information
     for log_file in log_files:

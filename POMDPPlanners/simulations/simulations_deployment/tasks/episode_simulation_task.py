@@ -87,7 +87,9 @@ class EpisodeSimulationTask(SimulationTask):
         """
         output_dir = None
         if self.cache_dir is not None:
-            output_dir = self.cache_dir / "logs" / "env_policy"
+            # Note: get_logger automatically creates a 'logs' subdirectory,
+            # so we only need to specify the parent directory
+            output_dir = self.cache_dir / "env_policy"
 
         return get_logger(
             name=self._get_env_policy_logger_name(),
