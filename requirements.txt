@@ -22,4 +22,5 @@ cachey>=0.2.1
 # Profiling packages
 line_profiler>=4.0.0
 memory_profiler>=0.60.0
-psutil>=5.8.0 
+psutil>=5.8.0
+bokeh>=3.0.0
