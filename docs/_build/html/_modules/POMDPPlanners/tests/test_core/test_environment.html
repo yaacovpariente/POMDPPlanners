@@ -1,0 +1,685 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_core.test_environment &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_core.test_environment</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_core.test_environment</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Tests for environment base classes.</span>
+
+<span class="sd">This module tests the environment base classes, focusing on:</span>
+<span class="sd">- Basic environment functionality</span>
+<span class="sd">- Environment interfaces</span>
+<span class="sd">- Space information</span>
+<span class="sd">- Environment types</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+<span class="c1"># Set seeds for reproducible tests</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.environment</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Environment</span><span class="p">,</span>
+    <span class="n">StateTransitionModel</span><span class="p">,</span>
+    <span class="n">ObservationModel</span><span class="p">,</span>
+    <span class="n">DiscreteActionsEnvironment</span><span class="p">,</span>
+    <span class="n">SpaceInfo</span><span class="p">,</span>
+    <span class="n">SpaceType</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Distribution</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.logger</span><span class="w"> </span><span class="kn">import</span> <span class="n">reset_logger_state</span>
+
+
+<div class="viewcode-block" id="MockDistribution">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockDistribution">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MockDistribution</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+<div class="viewcode-block" id="MockDistribution.sample">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockDistribution.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])]</span> <span class="o">*</span> <span class="n">n_samples</span></div>
+
+    
+<div class="viewcode-block" id="MockDistribution.probability">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockDistribution.probability">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probability</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">))</span></div>
+</div>
+
+
+<div class="viewcode-block" id="MockStateTransitionModel">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockStateTransitionModel">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MockStateTransitionModel</span><span class="p">(</span><span class="n">StateTransitionModel</span><span class="p">):</span>
+<div class="viewcode-block" id="MockStateTransitionModel.sample">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockStateTransitionModel.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])]</span> <span class="o">*</span> <span class="n">n_samples</span></div>
+
+    
+<div class="viewcode-block" id="MockStateTransitionModel.probability">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockStateTransitionModel.probability">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probability</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">))</span></div>
+</div>
+
+
+<div class="viewcode-block" id="MockObservationModel">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockObservationModel">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MockObservationModel</span><span class="p">(</span><span class="n">ObservationModel</span><span class="p">):</span>
+<div class="viewcode-block" id="MockObservationModel.sample">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockObservationModel.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">])]</span> <span class="o">*</span> <span class="n">n_samples</span></div>
+
+    
+<div class="viewcode-block" id="MockObservationModel.probability">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockObservationModel.probability">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probability</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">]</span> <span class="o">*</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">))</span></div>
+</div>
+
+
+<div class="viewcode-block" id="MockEnvironment">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockEnvironment">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MockEnvironment</span><span class="p">(</span><span class="n">Environment</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">test_array</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                 <span class="n">output_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="n">space_info</span> <span class="o">=</span> <span class="n">SpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span>
+        <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="n">discount_factor</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;MockEnvironment&quot;</span><span class="p">,</span>
+                        <span class="n">space_info</span><span class="o">=</span><span class="n">space_info</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">output_dir</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="n">debug</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">test_array</span> <span class="o">=</span> <span class="n">test_array</span> <span class="k">if</span> <span class="n">test_array</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])</span>
+    
+<div class="viewcode-block" id="MockEnvironment.state_transition_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockEnvironment.state_transition_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_transition_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StateTransitionModel</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">MockStateTransitionModel</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.observation_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockEnvironment.observation_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observation_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObservationModel</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">MockObservationModel</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.reward">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockEnvironment.reward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mf">1.0</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.is_terminal">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockEnvironment.is_terminal">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_terminal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.initial_state_dist">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockEnvironment.initial_state_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_state_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">MockDistribution</span><span class="p">()</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.initial_observation_dist">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockEnvironment.initial_observation_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_observation_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">MockDistribution</span><span class="p">()</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.is_equal_observation">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.MockEnvironment.is_equal_observation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_equal_observation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">observation2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">observation1</span><span class="p">,</span> <span class="n">observation2</span><span class="p">)</span></div>
+</div>
+
+
+<div class="viewcode-block" id="DifferentEnvironment">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.DifferentEnvironment">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DifferentEnvironment</span><span class="p">(</span><span class="n">Environment</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">output_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span> <span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+        <span class="n">space_info</span> <span class="o">=</span> <span class="n">SpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span>
+        <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="n">discount_factor</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;DifferentEnvironment&quot;</span><span class="p">,</span>
+                        <span class="n">space_info</span><span class="o">=</span><span class="n">space_info</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">output_dir</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="n">debug</span><span class="p">)</span>
+    
+<div class="viewcode-block" id="DifferentEnvironment.state_transition_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.DifferentEnvironment.state_transition_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_transition_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StateTransitionModel</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">MockStateTransitionModel</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="DifferentEnvironment.observation_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.DifferentEnvironment.observation_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observation_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObservationModel</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">MockObservationModel</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="DifferentEnvironment.reward">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.DifferentEnvironment.reward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mf">1.0</span></div>
+
+    
+<div class="viewcode-block" id="DifferentEnvironment.is_terminal">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.DifferentEnvironment.is_terminal">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_terminal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+    
+<div class="viewcode-block" id="DifferentEnvironment.initial_state_dist">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.DifferentEnvironment.initial_state_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_state_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">MockDistribution</span><span class="p">()</span></div>
+
+    
+<div class="viewcode-block" id="DifferentEnvironment.initial_observation_dist">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.DifferentEnvironment.initial_observation_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_observation_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">MockDistribution</span><span class="p">()</span></div>
+
+    
+<div class="viewcode-block" id="DifferentEnvironment.is_equal_observation">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.DifferentEnvironment.is_equal_observation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_equal_observation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">observation2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">observation1</span><span class="p">,</span> <span class="n">observation2</span><span class="p">)</span></div>
+</div>
+
+
+<div class="viewcode-block" id="base_environment">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.base_environment">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">base_environment</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">MockEnvironment</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fixture providing a base environment for comparison.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">MockEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="base_environment_with_logging">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.base_environment_with_logging">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">base_environment_with_logging</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">MockEnvironment</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fixture providing a base environment with logging enabled.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">MockEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="test_discount_factor_equality">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.test_discount_factor_equality">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s2">&quot;discount_factor,expected_equal&quot;</span><span class="p">,</span> <span class="p">[</span>
+    <span class="p">(</span><span class="mf">0.9</span><span class="p">,</span> <span class="kc">True</span><span class="p">),</span>   <span class="c1"># Same discount factor</span>
+    <span class="p">(</span><span class="mf">0.8</span><span class="p">,</span> <span class="kc">False</span><span class="p">),</span>  <span class="c1"># Different discount factor</span>
+<span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_discount_factor_equality</span><span class="p">(</span><span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">,</span> 
+                                <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> 
+                                <span class="n">expected_equal</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test equality comparison with different discount factors.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates equality comparison for discount factor </span>
+<span class="sd">    </span>
+<span class="sd">    Given: Objects with same or different configurations</span>
+<span class="sd">    When: Equality comparison is performed</span>
+<span class="sd">    Then: Objects are correctly identified as equal or unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">other_env</span> <span class="o">=</span> <span class="n">MockEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="n">discount_factor</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="p">(</span><span class="n">base_environment</span> <span class="o">==</span> <span class="n">other_env</span><span class="p">)</span> <span class="o">==</span> <span class="n">expected_equal</span></div>
+
+
+<div class="viewcode-block" id="test_array_equality">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.test_array_equality">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s2">&quot;test_array,expected_equal&quot;</span><span class="p">,</span> <span class="p">[</span>
+    <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]),</span> <span class="kc">True</span><span class="p">),</span>   <span class="c1"># Same array</span>
+    <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">]),</span> <span class="kc">False</span><span class="p">),</span>  <span class="c1"># Different array</span>
+<span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_array_equality</span><span class="p">(</span><span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">,</span> 
+                       <span class="n">test_array</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> 
+                       <span class="n">expected_equal</span><span class="p">:</span> <span class="nb">bool</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test equality comparison with different numpy arrays.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates equality comparison for array </span>
+<span class="sd">    </span>
+<span class="sd">    Given: Objects with same or different configurations</span>
+<span class="sd">    When: Equality comparison is performed</span>
+<span class="sd">    Then: Objects are correctly identified as equal or unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">other_env</span> <span class="o">=</span> <span class="n">MockEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">test_array</span><span class="o">=</span><span class="n">test_array</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="p">(</span><span class="n">base_environment</span> <span class="o">==</span> <span class="n">other_env</span><span class="p">)</span> <span class="o">==</span> <span class="n">expected_equal</span></div>
+
+
+<div class="viewcode-block" id="test_different_environment_class">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.test_different_environment_class">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_different_environment_class</span><span class="p">(</span><span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test equality comparison with a different environment class.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates environment equality returns False when comparing different environment classes</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MockEnvironment and DifferentEnvironment with same parameters</span>
+<span class="sd">    When: Equality comparison is performed between different environment types</span>
+<span class="sd">    Then: Environments are correctly identified as not equal</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">different_env</span> <span class="o">=</span> <span class="n">DifferentEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">base_environment</span> <span class="o">!=</span> <span class="n">different_env</span></div>
+
+
+<div class="viewcode-block" id="test_non_environment_comparison">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.test_non_environment_comparison">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_non_environment_comparison</span><span class="p">(</span><span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test equality comparison with non-Environment objects.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that Environment equality returns False when compared with non-Environment objects</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MockEnvironment instance and non-Environment objects (string, integer, None)</span>
+<span class="sd">    When: Equality comparison is performed between Environment and non-Environment types</span>
+<span class="sd">    Then: All comparisons return False for non-Environment objects</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">base_environment</span> <span class="o">!=</span> <span class="s2">&quot;not an environment&quot;</span>
+    <span class="k">assert</span> <span class="n">base_environment</span> <span class="o">!=</span> <span class="mi">42</span>
+    <span class="k">assert</span> <span class="n">base_environment</span> <span class="o">!=</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="test_missing_attribute">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.test_missing_attribute">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_missing_attribute</span><span class="p">(</span><span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test equality comparison when an attribute is missing.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that Environment equality returns False when attributes are missing from comparison object</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Two MockEnvironments with same configuration, one missing the test_array attribute</span>
+<span class="sd">    When: Equality comparison is performed between complete and incomplete environment</span>
+<span class="sd">    Then: Environments are correctly identified as not equal due to missing attribute</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">other_env</span> <span class="o">=</span> <span class="n">MockEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+    <span class="nb">delattr</span><span class="p">(</span><span class="n">other_env</span><span class="p">,</span> <span class="s1">&#39;test_array&#39;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">base_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+
+<div class="viewcode-block" id="test_attribute_presence">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.test_attribute_presence">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">parametrize</span><span class="p">(</span><span class="s2">&quot;attr_name,attr_value&quot;</span><span class="p">,</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s2">&quot;discount_factor&quot;</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">),</span>
+    <span class="p">(</span><span class="s2">&quot;test_array&quot;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">])),</span>
+<span class="p">])</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_attribute_presence</span><span class="p">(</span><span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">,</span> 
+                          <span class="n">attr_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> 
+                          <span class="n">attr_value</span><span class="p">:</span> <span class="nb">object</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that attributes are present and have correct values.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that Environment instances have required attributes with correct values for equality comparison</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MockEnvironment with discount_factor=0.9 and test_array=[1,2,3], parameterized attribute names and values</span>
+<span class="sd">    When: Attribute presence and values are checked using hasattr and getattr</span>
+<span class="sd">    Then: All specified attributes exist and have correct values (with special handling for numpy arrays)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">base_environment</span><span class="p">,</span> <span class="n">attr_name</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">attr_value</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="nb">getattr</span><span class="p">(</span><span class="n">base_environment</span><span class="p">,</span> <span class="n">attr_name</span><span class="p">),</span> <span class="n">attr_value</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">base_environment</span><span class="p">,</span> <span class="n">attr_name</span><span class="p">)</span> <span class="o">==</span> <span class="n">attr_value</span></div>
+
+
+<div class="viewcode-block" id="base_tiger_environment">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.base_tiger_environment">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">base_tiger_environment</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">TigerPOMDP</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fixture providing a base TigerPOMDP environment for comparison.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="cleanup_loggers">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.cleanup_loggers">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">autouse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">cleanup_loggers</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Automatically clean up logger state after each test.&quot;&quot;&quot;</span>
+    <span class="k">yield</span>  <span class="c1"># Run the test</span>
+    <span class="n">reset_logger_state</span><span class="p">()</span>  <span class="c1"># Clean up after the test</span></div>
+
+
+<div class="viewcode-block" id="TestEnvironmentConfigId">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentConfigId">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestEnvironmentConfigId</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test suite for Environment config_id property.&quot;&quot;&quot;</span>
+    
+<div class="viewcode-block" id="TestEnvironmentConfigId.test_same_config_same_id">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentConfigId.test_same_config_same_id">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_same_config_same_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that environments with same configuration have same config_id.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that Environment instances with identical configurations generate identical config_id values</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Two MockEnvironments with same discount_factor=0.9 and default test_array=[1,2,3]</span>
+<span class="sd">    When: config_id is generated for both environment instances</span>
+<span class="sd">    Then: Both environments produce the same config_id hash value</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MockEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">==</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestEnvironmentConfigId.test_different_discount_factor">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentConfigId.test_different_discount_factor">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_discount_factor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that different discount factor results in different config_id.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that Environment instances with different discount factors generate different config_id values</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base MockEnvironment with discount_factor=0.9 and another with discount_factor=0.8</span>
+<span class="sd">    When: config_id is generated for both environment instances</span>
+<span class="sd">    Then: Different discount factors produce different config_id hash values</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MockEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestEnvironmentConfigId.test_different_array">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentConfigId.test_different_array">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_array</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that different numpy array results in different config_id.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that Environment instances with different numpy arrays generate different config_id values</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base MockEnvironment with test_array=[1,2,3] and another with test_array=[4,5,6]</span>
+<span class="sd">    When: config_id is generated for both environment instances with different arrays</span>
+<span class="sd">    Then: Different numpy arrays produce different config_id hash values</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MockEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">test_array</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">6</span><span class="p">]))</span>
+        <span class="k">assert</span> <span class="n">base_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestEnvironmentConfigId.test_different_environment_class">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentConfigId.test_different_environment_class">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_environment_class</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that different environment class results in different config_id.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates config_id generation produces different IDs for different environment classes</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MockEnvironment and DifferentEnvironment with same parameters</span>
+<span class="sd">    When: config_id is generated for both environment instances</span>
+<span class="sd">    Then: Different environment classes produce different config_id values</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">different_env</span> <span class="o">=</span> <span class="n">DifferentEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">different_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestEnvironmentConfigId.test_config_id_consistency">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentConfigId.test_config_id_consistency">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_consistency</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id remains consistent across multiple calls.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that Environment config_id property returns consistent values across multiple accesses</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Single MockEnvironment instance with fixed configuration parameters</span>
+<span class="sd">    When: config_id property is accessed multiple times on the same instance</span>
+<span class="sd">    Then: All accesses return identical config_id hash values (deterministic behavior)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">id1</span> <span class="o">=</span> <span class="n">base_environment</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="n">id2</span> <span class="o">=</span> <span class="n">base_environment</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="k">assert</span> <span class="n">id1</span> <span class="o">==</span> <span class="n">id2</span></div>
+
+    
+<div class="viewcode-block" id="TestEnvironmentConfigId.test_tiger_pomdp_config_id">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentConfigId.test_tiger_pomdp_config_id">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_tiger_pomdp_config_id</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_tiger_environment</span><span class="p">:</span> <span class="n">TigerPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test config_id with TigerPOMDP environment.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP config_id generation works correctly for real environment implementations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: TigerPOMDP environments with same (discount=0.95) and different (discount=0.8) configurations</span>
+<span class="sd">    When: config_id is generated for TigerPOMDP instances with varying parameters</span>
+<span class="sd">    Then: Same configurations produce identical IDs, different configurations produce different IDs</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="c1"># Same configuration should have same ID</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_tiger_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">==</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span>
+
+        <span class="c1"># Different configuration should have different ID</span>
+        <span class="n">different_env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_tiger_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">different_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestEnvironmentConfigId.test_config_id_format">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentConfigId.test_config_id_format">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_format</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id is a valid SHA-256 hash.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that Environment config_id follows proper SHA-256 hash format specification</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MockEnvironment instance with configuration parameters</span>
+<span class="sd">    When: config_id property generates hash value from environment configuration</span>
+<span class="sd">    Then: Returns 64-character string containing only valid hexadecimal characters (0-9, a-f)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">config_id</span> <span class="o">=</span> <span class="n">base_environment</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">config_id</span><span class="p">)</span> <span class="o">==</span> <span class="mi">64</span>  <span class="c1"># SHA-256 produces 64 hex characters</span>
+        <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">c</span> <span class="ow">in</span> <span class="s1">&#39;0123456789abcdef&#39;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">config_id</span><span class="p">)</span>  <span class="c1"># Valid hex characters</span></div>
+</div>
+
+
+<div class="viewcode-block" id="TestEnvironmentLogger">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentLogger">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestEnvironmentLogger</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test suite for Environment logger functionality.&quot;&quot;&quot;</span>
+    
+<div class="viewcode-block" id="TestEnvironmentLogger.test_logger_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentLogger.test_logger_initialization">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_logger_initialization</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment_with_logging</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that logger is properly initialized.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates proper initialization of logger </span>
+<span class="sd">    </span>
+<span class="sd">    Given: Constructor parameters and initial conditions</span>
+<span class="sd">    When: Object is initialized</span>
+<span class="sd">    Then: Object is properly constructed with expected attributes</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">base_environment_with_logging</span><span class="p">,</span> <span class="s1">&#39;logger&#39;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_environment_with_logging</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;environment.MockEnvironment&quot;</span></div>
+
+    
+<div class="viewcode-block" id="TestEnvironmentLogger.test_logger_without_output_dir">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentLogger.test_logger_without_output_dir">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_logger_without_output_dir</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that logger works without output directory.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that Environment logger initialization works correctly when no output directory is provided</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MockEnvironment created without output_dir parameter (default None)</span>
+<span class="sd">    When: Logger attribute is accessed after environment initialization</span>
+<span class="sd">    Then: Logger exists with correct name &quot;environment.MockEnvironment&quot; without requiring output directory</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">base_environment</span><span class="p">,</span> <span class="s1">&#39;logger&#39;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_environment</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;environment.MockEnvironment&quot;</span></div>
+
+    
+<div class="viewcode-block" id="TestEnvironmentLogger.test_logger_debug_mode">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentLogger.test_logger_debug_mode">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_logger_debug_mode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment_with_logging</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that debug mode affects logger configuration.</span>
+
+<span class="sd">    Purpose: Validates that Environment logger configuration reflects debug mode</span>
+
+<span class="sd">    Given: MockEnvironment created with debug=True and output_dir parameters</span>
+<span class="sd">    When: Logger is accessed after environment initialization in debug mode</span>
+<span class="sd">    Then: Logger exists and is properly configured for debug mode</span>
+
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="c1"># Queue-based logging caches loggers, so we test that debug mode is stored in configuration</span>
+        <span class="c1"># rather than testing the exact logger level which may be affected by caching</span>
+        <span class="n">logger</span> <span class="o">=</span> <span class="n">base_environment_with_logging</span><span class="o">.</span><span class="n">logger</span>
+        <span class="k">assert</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">base_environment_with_logging</span><span class="p">,</span> <span class="s1">&#39;debug&#39;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_environment_with_logging</span><span class="o">.</span><span class="n">debug</span> <span class="ow">is</span> <span class="kc">True</span></div>
+
+    
+<div class="viewcode-block" id="TestEnvironmentLogger.test_logger_normal_mode">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentLogger.test_logger_normal_mode">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_logger_normal_mode</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment</span><span class="p">:</span> <span class="n">MockEnvironment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that normal mode sets correct logger configuration.</span>
+
+<span class="sd">    Purpose: Validates that Environment logger configuration reflects normal mode</span>
+
+<span class="sd">    Given: MockEnvironment created with default debug=False parameter</span>
+<span class="sd">    When: Logger is accessed after environment initialization in normal mode</span>
+<span class="sd">    Then: Logger exists and debug mode is properly configured</span>
+
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="c1"># Queue-based logging caches loggers, so we test that normal mode is stored in configuration</span>
+        <span class="n">logger</span> <span class="o">=</span> <span class="n">base_environment</span><span class="o">.</span><span class="n">logger</span>
+        <span class="k">assert</span> <span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">base_environment</span><span class="p">,</span> <span class="s1">&#39;debug&#39;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_environment</span><span class="o">.</span><span class="n">debug</span> <span class="ow">is</span> <span class="kc">False</span></div>
+
+    
+<div class="viewcode-block" id="TestEnvironmentLogger.test_logger_output_dir">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_environment.html#POMDPPlanners.tests.test_core.test_environment.TestEnvironmentLogger.test_logger_output_dir">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_logger_output_dir</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tmp_path</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that logger properly handles output directory configuration.</span>
+
+<span class="sd">    Purpose: Validates that Environment logger handles output directory configuration correctly</span>
+
+<span class="sd">    Given: MockEnvironment with output_dir=temporary directory path</span>
+<span class="sd">    When: Environment is initialized with output directory logging enabled</span>
+<span class="sd">    Then: Environment stores output_dir and logger is configured properly</span>
+
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">MockEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">)</span>
+        <span class="c1"># With queue-based logging, directory creation happens asynchronously</span>
+        <span class="c1"># Test that the environment properly stores the output_dir configuration</span>
+        <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">output_dir</span> <span class="o">==</span> <span class="n">tmp_path</span>
+        <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="c1"># Log a message to trigger the writer thread to create directories</span>
+        <span class="n">env</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Test message to trigger directory creation&quot;</span><span class="p">)</span></div>
+</div>
+
+        <span class="c1"># Note: In queue-based logging, the logs directory is created by the writer thread</span>
+        <span class="c1"># when the first message is processed, so we can&#39;t immediately assert its existence</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

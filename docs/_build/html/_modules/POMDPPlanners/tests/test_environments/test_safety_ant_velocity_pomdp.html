@@ -1,0 +1,1038 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Tests for Safety Ant Velocity POMDP environment.</span>
+
+<span class="sd">This module tests the Safety Ant Velocity POMDP environment, focusing on:</span>
+<span class="sd">- Basic environment functionality</span>
+<span class="sd">- State transitions and observations</span>
+<span class="sd">- Reward calculations</span>
+<span class="sd">- Terminal conditions</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+<span class="c1"># Set seeds for reproducible tests</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.safety_ant_velocity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">SafeAntVelocityPOMDP</span><span class="p">,</span>
+    <span class="n">SafeAntVelocityStateTransition</span><span class="p">,</span>
+    <span class="n">SafeAntVelocityObservation</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">StepData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">PolicyRunData</span><span class="p">,</span> <span class="n">PolicyInfoVariable</span>
+
+
+<div class="viewcode-block" id="pomdp">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.pomdp">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">pomdp</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="test_safe_velocity_pomdp_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_safe_velocity_pomdp_initialization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_safe_velocity_pomdp_initialization</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test safe velocity pomdp initialization.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates proper initialization of safe velocity pomdp </span>
+<span class="sd">    </span>
+<span class="sd">    Given: Constructor parameters and initial conditions</span>
+<span class="sd">    When: Object is initialized</span>
+<span class="sd">    Then: Object is properly constructed with expected attributes</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test basic initialization</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">max_force</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">mass</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">damping</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">safety_violation_penalty</span><span class="o">=-</span><span class="mf">100.0</span><span class="p">,</span>
+        <span class="n">movement_reward_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">discount_factor</span> <span class="o">==</span> <span class="mf">0.95</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">==</span> <span class="mf">2.0</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">max_force</span> <span class="o">==</span> <span class="mf">1.0</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">dt</span> <span class="o">==</span> <span class="mf">0.1</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">mass</span> <span class="o">==</span> <span class="mf">1.0</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">damping</span> <span class="o">==</span> <span class="mf">0.1</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">position_noise</span> <span class="o">==</span> <span class="mf">0.1</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">velocity_noise</span> <span class="o">==</span> <span class="mf">0.2</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">safety_violation_penalty</span> <span class="o">==</span> <span class="o">-</span><span class="mf">100.0</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">movement_reward_scale</span> <span class="o">==</span> <span class="mf">1.0</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="test_state_transition">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_state_transition">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_state_transition</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test state transition model with force application.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that state transitions correctly update position and velocity when force is applied</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A SafeAntVelocityStateTransition model with state [0.0, 0.0, 1.0, 1.0] and maximum force action 3</span>
+<span class="sd">    When: State transition is sampled</span>
+<span class="sd">    Then: Next state has correct 4D shape, position changes due to velocity, and velocity changes due to applied force</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test state transition with known parameters</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>  <span class="c1"># [pos_x, pos_y, vel_x, vel_y]</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="mi">3</span>  <span class="c1"># Maximum force</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="mf">0.1</span>
+    <span class="n">mass</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="n">damping</span> <span class="o">=</span> <span class="mf">0.1</span>
+    <span class="n">max_force</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+    <span class="n">transition</span> <span class="o">=</span> <span class="n">SafeAntVelocityStateTransition</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span>
+        <span class="n">mass</span><span class="o">=</span><span class="n">mass</span><span class="p">,</span>
+        <span class="n">damping</span><span class="o">=</span><span class="n">damping</span><span class="p">,</span>
+        <span class="n">max_force</span><span class="o">=</span><span class="n">max_force</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">next_state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="c1"># Verify state dimensions</span>
+    <span class="k">assert</span> <span class="n">next_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">4</span><span class="p">,)</span>
+    
+    <span class="c1"># Verify position changed due to velocity</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">next_state</span><span class="p">[:</span><span class="mi">2</span><span class="p">],</span> <span class="n">state</span><span class="p">[:</span><span class="mi">2</span><span class="p">])</span>
+    
+    <span class="c1"># Verify velocity changed due to force</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">next_state</span><span class="p">[</span><span class="mi">2</span><span class="p">:],</span> <span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:])</span></div>
+
+
+<div class="viewcode-block" id="test_state_transition_no_force">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_state_transition_no_force">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_state_transition_no_force</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test state transition model without force application.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that state transitions correctly handle damping when no force is applied</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A SafeAntVelocityStateTransition model with state [0.0, 0.0, 1.0, 1.0] and no-force action 0</span>
+<span class="sd">    When: State transition is sampled</span>
+<span class="sd">    Then: Velocity decreases due to damping effects while maintaining correct state dimensions</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test state transition with no force</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># No force</span>
+    <span class="n">dt</span> <span class="o">=</span> <span class="mf">0.1</span>
+    <span class="n">mass</span> <span class="o">=</span> <span class="mf">1.0</span>
+    <span class="n">damping</span> <span class="o">=</span> <span class="mf">0.1</span>
+    <span class="n">max_force</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+    <span class="n">transition</span> <span class="o">=</span> <span class="n">SafeAntVelocityStateTransition</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="n">dt</span><span class="p">,</span>
+        <span class="n">mass</span><span class="o">=</span><span class="n">mass</span><span class="p">,</span>
+        <span class="n">damping</span><span class="o">=</span><span class="n">damping</span><span class="p">,</span>
+        <span class="n">max_force</span><span class="o">=</span><span class="n">max_force</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">next_state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+
+    <span class="c1"># Verify velocity decreased due to damping</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">next_state</span><span class="p">[</span><span class="mi">2</span><span class="p">:])</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:])</span></div>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_observation_model</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test observation model with noise addition.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that observation model correctly adds noise to position and velocity measurements</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A SafeAntVelocityObservation model with state [0.0, 0.0, 1.0, 1.0] and noise parameters</span>
+<span class="sd">    When: Observation is sampled</span>
+<span class="sd">    Then: Observation has correct 4D shape and contains noise in both position and velocity components</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test observation model</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">position_noise</span> <span class="o">=</span> <span class="mf">0.1</span>
+    <span class="n">velocity_noise</span> <span class="o">=</span> <span class="mf">0.2</span>
+
+    <span class="n">observation_model</span> <span class="o">=</span> <span class="n">SafeAntVelocityObservation</span><span class="p">(</span>
+        <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="n">position_noise</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="n">velocity_noise</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">observation</span> <span class="o">=</span> <span class="n">observation_model</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="c1"># Verify observation dimensions</span>
+    <span class="k">assert</span> <span class="n">observation</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">4</span><span class="p">,)</span>
+    
+    <span class="c1"># Verify position has noise</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">observation</span><span class="p">[:</span><span class="mi">2</span><span class="p">],</span> <span class="n">state</span><span class="p">[:</span><span class="mi">2</span><span class="p">])</span>
+    
+    <span class="c1"># Verify velocity has noise</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">observation</span><span class="p">[</span><span class="mi">2</span><span class="p">:],</span> <span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:])</span>
+
+<div class="viewcode-block" id="test_reward_function">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_reward_function">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_reward_function</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test reward function for safe and unsafe velocity states.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that reward function correctly penalizes safety violations and rewards safe movement</span>
+<span class="sd">    </span>
+<span class="sd">    Given: SafeAntVelocityPOMDP environment with safe_velocity_threshold=2.0 and safety_violation_penalty=-100.0</span>
+<span class="sd">    When: Reward is calculated for safe velocity state [0.0, 0.0, 1.0, 1.0] and unsafe velocity state [0.0, 0.0, 2.0, 2.0]</span>
+<span class="sd">    Then: Safe state receives positive reward, unsafe state receives negative penalty</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">safety_violation_penalty</span><span class="o">=-</span><span class="mf">100.0</span><span class="p">,</span>
+        <span class="n">movement_reward_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Test reward for safe velocity</span>
+    <span class="n">state_safe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>  <span class="c1"># Speed = sqrt(2) ≈ 1.4</span>
+    <span class="n">reward_safe</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state_safe</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">reward_safe</span> <span class="o">&gt;</span> <span class="mi">0</span>  <span class="c1"># Positive reward for movement within safe limits</span>
+    
+    <span class="c1"># Test reward for unsafe velocity</span>
+    <span class="n">state_unsafe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">])</span>  <span class="c1"># Speed = 2*sqrt(2) ≈ 2.8</span>
+    <span class="n">reward_unsafe</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state_unsafe</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">reward_unsafe</span> <span class="o">&lt;</span> <span class="mi">0</span>  <span class="c1"># Negative reward due to safety violation</span></div>
+
+
+<div class="viewcode-block" id="test_terminal_state">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_terminal_state">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_terminal_state</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test terminal state detection based on velocity threshold.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that environment correctly identifies terminal states when velocity exceeds safety threshold</span>
+<span class="sd">    </span>
+<span class="sd">    Given: SafeAntVelocityPOMDP environment with safe_velocity_threshold=2.0</span>
+<span class="sd">    When: is_terminal is called for safe velocity state [0.0, 0.0, 1.0, 1.0] and unsafe velocity state [0.0, 0.0, 3.0, 3.0]</span>
+<span class="sd">    Then: Safe state returns False, unsafe state returns True indicating terminal condition</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Test non-terminal state (safe velocity)</span>
+    <span class="n">state_safe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>  <span class="c1"># Speed = sqrt(2) ≈ 1.4</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">env</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">state_safe</span><span class="p">)</span>
+    
+    <span class="c1"># Test terminal state (very unsafe velocity)</span>
+    <span class="n">state_unsafe</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">])</span>  <span class="c1"># Speed = 3*sqrt(2) ≈ 4.2</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">state_unsafe</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_reward_range">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_reward_range">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_reward_range</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that reward range is correctly calculated.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that SafeAntVelocityPOMDP reward range is properly calculated based on environment parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A SafeAntVelocityPOMDP environment with specific safety parameters</span>
+<span class="sd">    When: Environment reward_range attribute is checked</span>
+<span class="sd">    Then: Returns range based on min_reward (no movement + safety penalty) and max_reward (max safe speed * movement scale)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">safety_violation_penalty</span><span class="o">=-</span><span class="mf">50.0</span><span class="p">,</span>
+        <span class="n">movement_reward_scale</span><span class="o">=</span><span class="mf">1.5</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Expected calculations from SafeAntVelocityPOMDP constructor:</span>
+    <span class="c1"># min_reward = 0.0 + safety_violation_penalty = 0.0 + (-50.0) = -50.0</span>
+    <span class="c1"># max_reward = safe_velocity_threshold * 1.5 * movement_reward_scale = 2.0 * 1.5 * 1.5 = 4.5</span>
+    <span class="n">expected_min</span> <span class="o">=</span> <span class="mf">0.0</span> <span class="o">+</span> <span class="p">(</span><span class="o">-</span><span class="mf">50.0</span><span class="p">)</span>  <span class="c1"># -50.0</span>
+    <span class="n">expected_max</span> <span class="o">=</span> <span class="mf">2.0</span> <span class="o">*</span> <span class="mf">1.5</span> <span class="o">*</span> <span class="mf">1.5</span>  <span class="c1"># 4.5</span>
+    
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">reward_range</span> <span class="o">==</span> <span class="p">(</span><span class="n">expected_min</span><span class="p">,</span> <span class="n">expected_max</span><span class="p">)</span>
+    
+    <span class="c1"># Test with different parameters</span>
+    <span class="n">env2</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span>
+        <span class="n">safety_violation_penalty</span><span class="o">=-</span><span class="mf">100.0</span><span class="p">,</span>
+        <span class="n">movement_reward_scale</span><span class="o">=</span><span class="mf">2.0</span>
+    <span class="p">)</span>
+    
+    <span class="n">expected_min2</span> <span class="o">=</span> <span class="mf">0.0</span> <span class="o">+</span> <span class="p">(</span><span class="o">-</span><span class="mf">100.0</span><span class="p">)</span>  <span class="c1"># -100.0</span>
+    <span class="n">expected_max2</span> <span class="o">=</span> <span class="mf">3.0</span> <span class="o">*</span> <span class="mf">1.5</span> <span class="o">*</span> <span class="mf">2.0</span>  <span class="c1"># 9.0</span>
+    
+    <span class="k">assert</span> <span class="n">env2</span><span class="o">.</span><span class="n">reward_range</span> <span class="o">==</span> <span class="p">(</span><span class="n">expected_min2</span><span class="p">,</span> <span class="n">expected_max2</span><span class="p">)</span></div>
+
+
+<span class="k">def</span><span class="w"> </span><span class="nf">test_initial_state_distribution</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test initial state distribution sampling and bounds.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that initial state distribution generates valid states within expected bounds</span>
+<span class="sd">    </span>
+<span class="sd">    Given: SafeAntVelocityPOMDP environment with default parameters</span>
+<span class="sd">    When: Initial state distribution is sampled multiple times</span>
+<span class="sd">    Then: All samples have 4D shape, position components are within [-1, 1] bounds, and velocity components are zero</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="n">initial_dist</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">initial_state_dist</span><span class="p">()</span>
+    
+    <span class="c1"># Test multiple samples</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">initial_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        
+        <span class="c1"># Verify state dimensions</span>
+        <span class="k">assert</span> <span class="n">state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">4</span><span class="p">,)</span>
+        
+        <span class="c1"># Verify position bounds</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">state</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">state</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">)</span>
+        
+        <span class="c1"># Verify zero initial velocity</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:],</span> <span class="mi">0</span><span class="p">)</span>
+
+<div class="viewcode-block" id="test_get_actions">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_get_actions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_get_actions</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test action space retrieval.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that environment provides correct discrete action space</span>
+<span class="sd">    </span>
+<span class="sd">    Given: SafeAntVelocityPOMDP environment with default configuration</span>
+<span class="sd">    When: get_actions method is called</span>
+<span class="sd">    Then: Returns list of 4 actions [0, 1, 2, 3] representing different force levels from no force to maximum force</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="n">actions</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">get_actions</span><span class="p">()</span>
+    
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span>
+    <span class="k">assert</span> <span class="mi">0</span> <span class="ow">in</span> <span class="n">actions</span>  <span class="c1"># No force</span>
+    <span class="k">assert</span> <span class="mi">3</span> <span class="ow">in</span> <span class="n">actions</span>  <span class="c1"># Maximum force</span></div>
+
+
+<div class="viewcode-block" id="test_is_equal_observation">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_is_equal_observation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_is_equal_observation</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test observation equality comparison.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that observation equality comparison works correctly for identical and different observations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: SafeAntVelocityPOMDP environment and observation pairs</span>
+<span class="sd">    When: is_equal_observation is called for identical observations [0.0, 0.0, 1.0, 1.0] and different observations [0.1, 0.0, 1.0, 1.0]</span>
+<span class="sd">    Then: Returns True for identical observations, False for different observations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    
+    <span class="c1"># Test equal observations</span>
+    <span class="n">obs1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
+    <span class="n">obs2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">is_equal_observation</span><span class="p">(</span><span class="n">obs1</span><span class="p">,</span> <span class="n">obs2</span><span class="p">)</span>
+    
+    <span class="c1"># Test different observations</span>
+    <span class="n">obs3</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">env</span><span class="o">.</span><span class="n">is_equal_observation</span><span class="p">(</span><span class="n">obs1</span><span class="p">,</span> <span class="n">obs3</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="test_sample_next_step">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_sample_next_step">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_sample_next_step</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test complete environment step simulation.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that sample_next_step correctly simulates state transitions, observations, and rewards</span>
+<span class="sd">    </span>
+<span class="sd">    Given: SafeAntVelocityPOMDP environment, initial state [0.0, 0.0, 1.0, 1.0], and action 2 (medium force)</span>
+<span class="sd">    When: sample_next_step is called</span>
+<span class="sd">    Then: Returns valid next_state, observation, and reward with correct types, shapes, and state changes due to force application</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="mi">2</span>  <span class="c1"># Medium force</span>
+    
+    <span class="n">next_state</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">reward</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">sample_next_step</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+    
+    <span class="c1"># Verify return types and shapes</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reward</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">next_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">4</span><span class="p">,)</span>
+    <span class="k">assert</span> <span class="n">observation</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">4</span><span class="p">,)</span>
+    
+    <span class="c1"># Verify state transition</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">next_state</span><span class="p">[:</span><span class="mi">2</span><span class="p">],</span> <span class="n">state</span><span class="p">[:</span><span class="mi">2</span><span class="p">])</span>  <span class="c1"># Position changed</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">next_state</span><span class="p">[</span><span class="mi">2</span><span class="p">:],</span> <span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:])</span>  <span class="c1"># Velocity changed</span>
+    
+    <span class="c1"># Verify observation has noise</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">next_state</span><span class="p">)</span>
+    
+    <span class="c1"># Verify reward is calculated (using np.isclose for float comparison)</span>
+    <span class="n">expected_reward</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">reward</span><span class="p">,</span> <span class="n">expected_reward</span><span class="p">,</span> <span class="n">rtol</span><span class="o">=</span><span class="mf">1e-10</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="test_compute_metrics">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_compute_metrics">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_compute_metrics</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test safety metrics computation from simulation histories.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that environment correctly computes safety violation rates and critical violation rates from episode histories</span>
+<span class="sd">    </span>
+<span class="sd">    Given: SafeAntVelocityPOMDP environment and test histories with different velocity scenarios (safe, mixed safety violations, critical violations)</span>
+<span class="sd">    When: compute_metrics is called with the histories</span>
+<span class="sd">    Then: Returns correct safety_violation_rate and critical_violation_rate metrics with proper confidence intervals</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Create test histories with different velocity scenarios</span>
+    <span class="n">histories</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c1"># History 1: All safe velocities</span>
+    <span class="n">safe_steps</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">]),</span>
+            <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">),</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">1.2</span><span class="p">,</span> <span class="mf">1.2</span><span class="p">]),</span>
+            <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">histories</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span>
+        <span class="n">history</span><span class="o">=</span><span class="n">safe_steps</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">average_state_sampling_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">average_action_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">average_observation_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">average_belief_update_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">average_reward_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">actual_num_steps</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">safe_steps</span><span class="p">),</span>
+        <span class="n">reach_terminal_state</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">policy_run_data</span><span class="o">=</span><span class="n">PolicyRunData</span><span class="p">(</span><span class="n">info_variables</span><span class="o">=</span><span class="p">[])</span>
+    <span class="p">))</span>
+
+    <span class="c1"># History 2: Some safety violations</span>
+    <span class="n">mixed_steps</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">,</span> <span class="mf">1.1</span><span class="p">]),</span>
+            <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">),</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">2.1</span><span class="p">,</span> <span class="mf">2.1</span><span class="p">]),</span>  <span class="c1"># Only this state has unsafe velocity</span>
+            <span class="n">action</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">2.1</span><span class="p">,</span> <span class="mf">2.1</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">100.0</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">1.2</span><span class="p">,</span> <span class="mf">1.2</span><span class="p">]),</span>  <span class="c1"># Back to safe velocity</span>
+            <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">histories</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span>
+        <span class="n">history</span><span class="o">=</span><span class="n">mixed_steps</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">average_state_sampling_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">average_action_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">average_observation_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">average_belief_update_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">average_reward_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">actual_num_steps</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">mixed_steps</span><span class="p">),</span>
+        <span class="n">reach_terminal_state</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">policy_run_data</span><span class="o">=</span><span class="n">PolicyRunData</span><span class="p">(</span><span class="n">info_variables</span><span class="o">=</span><span class="p">[])</span>
+    <span class="p">))</span>
+
+    <span class="c1"># History 3: Critical violation</span>
+    <span class="n">critical_steps</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">3.1</span><span class="p">,</span> <span class="mf">3.1</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">3.1</span><span class="p">,</span> <span class="mf">3.1</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">100.0</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">3.2</span><span class="p">,</span> <span class="mf">3.2</span><span class="p">]),</span>
+            <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">),</span>
+    <span class="p">]</span>
+    <span class="n">histories</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span>
+        <span class="n">history</span><span class="o">=</span><span class="n">critical_steps</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">average_state_sampling_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">average_action_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">average_observation_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">average_belief_update_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">average_reward_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">actual_num_steps</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">critical_steps</span><span class="p">),</span>
+        <span class="n">reach_terminal_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">policy_run_data</span><span class="o">=</span><span class="n">PolicyRunData</span><span class="p">(</span><span class="n">info_variables</span><span class="o">=</span><span class="p">[])</span>
+    <span class="p">))</span>
+
+    <span class="c1"># Compute metrics</span>
+    <span class="n">metrics</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">compute_metrics</span><span class="p">(</span><span class="n">histories</span><span class="p">)</span>
+
+    <span class="c1"># Convert metrics to dictionary for easier access</span>
+    <span class="n">metrics_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">m</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metrics</span><span class="p">}</span>
+
+    <span class="c1"># Calculate expected rates</span>
+    <span class="n">total_steps</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">safe_steps</span><span class="p">)</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">mixed_steps</span><span class="p">)</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">critical_steps</span><span class="p">)</span>
+    <span class="n">safety_violations</span> <span class="o">=</span> <span class="mi">0</span> <span class="o">+</span> <span class="mi">1</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># One violation in mixed_steps, one in critical_steps</span>
+    <span class="n">critical_violations</span> <span class="o">=</span> <span class="mi">0</span> <span class="o">+</span> <span class="mi">0</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># One violation in critical_steps</span>
+    <span class="n">expected_safety_rate</span> <span class="o">=</span> <span class="n">safety_violations</span> <span class="o">/</span> <span class="n">total_steps</span>
+    <span class="n">expected_critical_rate</span> <span class="o">=</span> <span class="n">critical_violations</span> <span class="o">/</span> <span class="n">total_steps</span>
+
+    <span class="c1"># Verify metrics</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">metrics_dict</span><span class="p">[</span><span class="s2">&quot;safety_violation_rate&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">expected_safety_rate</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">metrics_dict</span><span class="p">[</span><span class="s2">&quot;critical_violation_rate&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">,</span> <span class="n">expected_critical_rate</span><span class="p">)</span>
+
+    <span class="c1"># Verify confidence intervals</span>
+    <span class="k">assert</span> <span class="n">metrics_dict</span><span class="p">[</span><span class="s2">&quot;safety_violation_rate&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">lower_confidence_bound</span> <span class="o">&lt;=</span> <span class="n">metrics_dict</span><span class="p">[</span><span class="s2">&quot;safety_violation_rate&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+    <span class="k">assert</span> <span class="n">metrics_dict</span><span class="p">[</span><span class="s2">&quot;safety_violation_rate&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">upper_confidence_bound</span> <span class="o">&gt;=</span> <span class="n">metrics_dict</span><span class="p">[</span><span class="s2">&quot;safety_violation_rate&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+    <span class="k">assert</span> <span class="n">metrics_dict</span><span class="p">[</span><span class="s2">&quot;critical_violation_rate&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">lower_confidence_bound</span> <span class="o">&lt;=</span> <span class="n">metrics_dict</span><span class="p">[</span><span class="s2">&quot;critical_violation_rate&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+    <span class="k">assert</span> <span class="n">metrics_dict</span><span class="p">[</span><span class="s2">&quot;critical_violation_rate&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">upper_confidence_bound</span> <span class="o">&gt;=</span> <span class="n">metrics_dict</span><span class="p">[</span><span class="s2">&quot;critical_violation_rate&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">value</span></div>
+
+
+<div class="viewcode-block" id="test_environment_equality">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_environment_equality">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_environment_equality</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test environment equality comparison.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that environment equality comparison works correctly for identical and different configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Two SafeAntVelocityPOMDP environments with identical parameters and one with different discount factor</span>
+<span class="sd">    When: Equality comparison is performed</span>
+<span class="sd">    Then: Identical environments are equal, environments with different parameters are not equal</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create two identical environments</span>
+    <span class="n">env1</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">max_force</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">mass</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">damping</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">safety_violation_penalty</span><span class="o">=-</span><span class="mf">100.0</span><span class="p">,</span>
+        <span class="n">movement_reward_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">env2</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">max_force</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">mass</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">damping</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">safety_violation_penalty</span><span class="o">=-</span><span class="mf">100.0</span><span class="p">,</span>
+        <span class="n">movement_reward_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Test equality</span>
+    <span class="k">assert</span> <span class="n">env1</span> <span class="o">==</span> <span class="n">env2</span>
+    
+    <span class="c1"># Test inequality with different parameters</span>
+    <span class="n">env3</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>  <span class="c1"># Different discount factor</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">max_force</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">mass</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">damping</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">safety_violation_penalty</span><span class="o">=-</span><span class="mf">100.0</span><span class="p">,</span>
+        <span class="n">movement_reward_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="n">env1</span> <span class="o">!=</span> <span class="n">env3</span></div>
+
+
+<div class="viewcode-block" id="test_config_id">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_config_id">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_config_id</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test configuration ID generation and consistency.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that config_id generates consistent identifiers for identical environments and different identifiers for different configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: SafeAntVelocityPOMDP environments with same and different parameters</span>
+<span class="sd">    When: Config IDs are generated and compared</span>
+<span class="sd">    Then: Identical environments have same config_id, different environments have different config_ids</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create two environments with same parameters</span>
+    <span class="n">env1</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">max_force</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">mass</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">damping</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">safety_violation_penalty</span><span class="o">=-</span><span class="mf">100.0</span><span class="p">,</span>
+        <span class="n">movement_reward_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">env2</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">max_force</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">mass</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">damping</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">safety_violation_penalty</span><span class="o">=-</span><span class="mf">100.0</span><span class="p">,</span>
+        <span class="n">movement_reward_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Test same config_id for identical environments</span>
+    <span class="k">assert</span> <span class="n">env1</span><span class="o">.</span><span class="n">config_id</span> <span class="o">==</span> <span class="n">env2</span><span class="o">.</span><span class="n">config_id</span>
+    
+    <span class="c1"># Test different config_id for different environments</span>
+    <span class="n">env3</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>  <span class="c1"># Different discount factor</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">max_force</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">mass</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">damping</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">safety_violation_penalty</span><span class="o">=-</span><span class="mf">100.0</span><span class="p">,</span>
+        <span class="n">movement_reward_scale</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="n">env1</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">env3</span><span class="o">.</span><span class="n">config_id</span></div>
+
+
+<div class="viewcode-block" id="test_state_transition_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_state_transition_model">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_state_transition_model</span><span class="p">(</span><span class="n">pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test state transition model creation and sampling.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that environment correctly creates state transition models for different actions</span>
+<span class="sd">    </span>
+<span class="sd">    Given: SafeAntVelocityPOMDP environment and test states with actions 0 and 1</span>
+<span class="sd">    When: state_transition_model is called and next states are sampled</span>
+<span class="sd">    Then: Returns valid state transition models that produce correctly shaped next states</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test state transition</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">transition</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+    <span class="n">next_state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">next_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">4</span><span class="p">,)</span>
+
+    <span class="c1"># Test with different action</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">transition</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+    <span class="n">next_state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">next_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">4</span><span class="p">,)</span></div>
+
+
+
+<div class="viewcode-block" id="test_observation_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_observation_model">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_observation_model</span><span class="p">(</span><span class="n">pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test observation model creation and sampling.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that environment correctly creates observation models that generate noisy observations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: SafeAntVelocityPOMDP environment and test state [0.0, 0.0, 0.0, 0.0] with action 0</span>
+<span class="sd">    When: observation_model is called and observation is sampled</span>
+<span class="sd">    Then: Returns valid observation model that produces correctly shaped observations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test observation model</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">observation</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+    <span class="n">obs</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">obs</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">4</span><span class="p">,)</span></div>
+
+
+
+<div class="viewcode-block" id="test_initial_state_distribution">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_initial_state_distribution">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_initial_state_distribution</span><span class="p">(</span><span class="n">pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test initial state distribution creation and sampling.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that environment correctly creates initial state distribution</span>
+<span class="sd">    </span>
+<span class="sd">    Given: SafeAntVelocityPOMDP environment</span>
+<span class="sd">    When: initial_state_dist is called and state is sampled</span>
+<span class="sd">    Then: Returns valid initial state distribution that produces correctly shaped states</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test initial state distribution</span>
+    <span class="n">dist</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">initial_state_dist</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">4</span><span class="p">,)</span></div>
+
+
+<div class="viewcode-block" id="test_observation_model_empty_observation_error">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_observation_model_empty_observation_error">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_observation_model_empty_observation_error</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that observation model properly handles invalid empty observations.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that the observation probability method handles invalid inputs gracefully</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A valid SafeAntVelocityObservation model and an empty observation array</span>
+<span class="sd">    When: The probability method is called with an empty observation</span>
+<span class="sd">    Then: A descriptive error should be raised explaining the invalid observation format</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create observation model</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">])</span>
+    <span class="n">obs_model</span> <span class="o">=</span> <span class="n">SafeAntVelocityObservation</span><span class="p">(</span>
+        <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Test with empty observation (this is the error case we fixed)</span>
+    <span class="n">empty_observation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
+    
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc_info</span><span class="p">:</span>
+        <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="n">empty_observation</span><span class="p">])</span>  <span class="c1"># Now expects list</span>
+    
+    <span class="c1"># The error should mention expected array format</span>
+    <span class="k">assert</span> <span class="s2">&quot;Expected non-empty numpy array observation&quot;</span> <span class="ow">in</span> <span class="nb">str</span><span class="p">(</span><span class="n">exc_info</span><span class="o">.</span><span class="n">value</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="test_observation_model_invalid_observation_shapes">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_observation_model_invalid_observation_shapes">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_observation_model_invalid_observation_shapes</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test observation model with various invalid observation shapes.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that observation model handles all invalid observation shapes properly</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A valid SafeAntVelocityObservation model and observations with incorrect shapes</span>
+<span class="sd">    When: The probability method is called with malformed observations</span>
+<span class="sd">    Then: Appropriate errors should be raised for each invalid shape</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create observation model</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">])</span>
+    <span class="n">obs_model</span> <span class="o">=</span> <span class="n">SafeAntVelocityObservation</span><span class="p">(</span>
+        <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Test with various invalid observation shapes</span>
+    <span class="n">invalid_observations</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([]),</span>  <span class="c1"># Empty array (shape (0,))</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">]),</span>  <span class="c1"># Too short (shape (1,))</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">]),</span>  <span class="c1"># Too short (shape (2,))</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">]),</span>  <span class="c1"># Too short (shape (3,))</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">]),</span>  <span class="c1"># Too long (shape (5,))</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">,</span> <span class="mf">6.0</span><span class="p">]),</span>  <span class="c1"># Too long (shape (6,))</span>
+    <span class="p">]</span>
+    
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">invalid_obs</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">invalid_observations</span><span class="p">):</span>
+        <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">)</span> <span class="k">as</span> <span class="n">exc_info</span><span class="p">:</span>
+            <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="n">invalid_obs</span><span class="p">])</span>  <span class="c1"># Now expects list</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Invalid observation </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> shape </span><span class="si">{</span><span class="n">invalid_obs</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> correctly raised: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">exc_info</span><span class="o">.</span><span class="n">value</span><span class="p">)</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="test_observation_never_empty_from_sample">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_observation_never_empty_from_sample">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_observation_never_empty_from_sample</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that observation model never produces empty observations from sample method.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that the sample method always produces correctly shaped observations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A valid SafeAntVelocityObservation model</span>
+<span class="sd">    When: Multiple observations are sampled</span>
+<span class="sd">    Then: All observations should have shape (4,) and valid content</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create observation model</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">])</span>
+    <span class="n">obs_model</span> <span class="o">=</span> <span class="n">SafeAntVelocityObservation</span><span class="p">(</span>
+        <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Sample many observations to check consistency</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">20</span><span class="p">):</span>
+        <span class="n">observations</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+        
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="o">==</span> <span class="mi">5</span><span class="p">,</span> <span class="s2">&quot;Should return requested number of observations&quot;</span>
+        
+        <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="n">observations</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="s2">&quot;Each observation should be numpy array&quot;</span>
+            <span class="k">assert</span> <span class="n">obs</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">4</span><span class="p">,),</span> <span class="sa">f</span><span class="s2">&quot;Expected shape (4,), got </span><span class="si">{</span><span class="n">obs</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Observation should not be empty&quot;</span>
+            <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">obs</span><span class="p">)),</span> <span class="s2">&quot;All observation values should be finite&quot;</span>
+            
+            <span class="c1"># Test that this observation can be used in probability calculation</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">probs</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="n">obs</span><span class="p">])</span>  <span class="c1"># Now expects list</span>
+                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">probs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Should return one probability&quot;</span>
+                <span class="n">prob</span> <span class="o">=</span> <span class="n">probs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">prob</span><span class="p">),</span> <span class="s2">&quot;Probability should be finite&quot;</span>
+                <span class="k">assert</span> <span class="n">prob</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">&quot;Probability should be non-negative&quot;</span>
+            <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                <span class="n">pytest</span><span class="o">.</span><span class="n">fail</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Valid observation </span><span class="si">{</span><span class="n">obs</span><span class="si">}</span><span class="s2"> with shape </span><span class="si">{</span><span class="n">obs</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2"> failed probability calculation: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="test_sample_next_step_observation_never_empty">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_sample_next_step_observation_never_empty">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_sample_next_step_observation_never_empty</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that sample_next_step never produces empty observations.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that the high-level sample_next_step method produces valid observations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A valid SafeAntVelocityPOMDP environment and various states</span>
+<span class="sd">    When: sample_next_step is called multiple times</span>
+<span class="sd">    Then: All returned observations should be properly shaped and non-empty</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: integration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">SafeAntVelocityPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">safe_velocity_threshold</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Test with various initial states</span>
+    <span class="n">test_states</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>  <span class="c1"># Zero state</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">]),</span>  <span class="c1"># Mixed positive/negative</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.8</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.3</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">]),</span>  <span class="c1"># Near safe threshold</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">]),</span>  <span class="c1"># Small values</span>
+    <span class="p">]</span>
+    
+    <span class="n">actions</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">get_actions</span><span class="p">()</span>
+    
+    <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">test_states</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions</span><span class="p">:</span>
+            <span class="c1"># Call sample_next_step multiple times to check consistency</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>
+                <span class="n">next_state</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">reward</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">sample_next_step</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+                
+                <span class="c1"># Check observation properties</span>
+                <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="s2">&quot;Observation should be numpy array&quot;</span>
+                <span class="k">assert</span> <span class="n">observation</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">4</span><span class="p">,),</span> <span class="sa">f</span><span class="s2">&quot;Expected observation shape (4,), got </span><span class="si">{</span><span class="n">observation</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Observation should not be empty&quot;</span>
+                <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">observation</span><span class="p">)),</span> <span class="s2">&quot;All observation values should be finite&quot;</span>
+                
+                <span class="c1"># Verify observation can be used in probability calculation</span>
+                <span class="n">obs_model</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">probs</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="n">observation</span><span class="p">])</span>  <span class="c1"># Now expects list</span>
+                    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">probs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Should return one probability&quot;</span>
+                    <span class="n">prob</span> <span class="o">=</span> <span class="n">probs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+                    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">prob</span><span class="p">),</span> <span class="s2">&quot;Probability should be finite&quot;</span>
+                    <span class="k">assert</span> <span class="n">prob</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">&quot;Probability should be non-negative&quot;</span>
+                <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+                    <span class="n">pytest</span><span class="o">.</span><span class="n">fail</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;sample_next_step produced invalid observation </span><span class="si">{</span><span class="n">observation</span><span class="si">}</span><span class="s2"> with shape </span><span class="si">{</span><span class="n">observation</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="test_observation_probability_list_interface">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.html#POMDPPlanners.tests.test_environments.test_safety_ant_velocity_pomdp.test_observation_probability_list_interface">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_observation_probability_list_interface</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that observation model probability method correctly handles list interface.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that probability method works with lists of observations and returns arrays</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A valid SafeAntVelocityObservation model and multiple valid observations</span>
+<span class="sd">    When: The probability method is called with list of observations</span>
+<span class="sd">    Then: Returns array of probabilities with correct length and finite values</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create observation model</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">])</span>
+    <span class="n">obs_model</span> <span class="o">=</span> <span class="n">SafeAntVelocityObservation</span><span class="p">(</span>
+        <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+        <span class="n">action</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Test single observation</span>
+    <span class="n">obs1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.51</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.19</span><span class="p">,</span> <span class="mf">1.02</span><span class="p">,</span> <span class="mf">0.48</span><span class="p">])</span>  <span class="c1"># Close to true state</span>
+    <span class="n">probs</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="n">obs1</span><span class="p">])</span>
+    
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">probs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="s2">&quot;Should return numpy array&quot;</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">probs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Should return one probability for one observation&quot;</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">probs</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="s2">&quot;Probability should be finite&quot;</span>
+    <span class="k">assert</span> <span class="n">probs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">,</span> <span class="s2">&quot;Probability should be non-negative&quot;</span>
+    
+    <span class="c1"># Test multiple observations</span>
+    <span class="n">obs2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.49</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.21</span><span class="p">,</span> <span class="mf">0.98</span><span class="p">,</span> <span class="mf">0.52</span><span class="p">])</span>  <span class="c1"># Also close to true state</span>
+    <span class="n">obs3</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.5</span><span class="p">,</span> <span class="mf">1.8</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">])</span>       <span class="c1"># Far from true state</span>
+    
+    <span class="n">probs_multi</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="n">obs1</span><span class="p">,</span> <span class="n">obs2</span><span class="p">,</span> <span class="n">obs3</span><span class="p">])</span>
+    
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">probs_multi</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="s2">&quot;Should return numpy array&quot;</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">probs_multi</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;Should return three probabilities for three observations&quot;</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">probs_multi</span><span class="p">)),</span> <span class="s2">&quot;All probabilities should be finite&quot;</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">probs_multi</span> <span class="o">&gt;=</span> <span class="mf">0.0</span><span class="p">),</span> <span class="s2">&quot;All probabilities should be non-negative&quot;</span>
+    
+    <span class="c1"># Closer observations should have higher probability</span>
+    <span class="k">assert</span> <span class="n">probs_multi</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">probs_multi</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s2">&quot;Closer observation should have higher probability&quot;</span>
+    <span class="k">assert</span> <span class="n">probs_multi</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">probs_multi</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s2">&quot;Closer observation should have higher probability&quot;</span> </div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

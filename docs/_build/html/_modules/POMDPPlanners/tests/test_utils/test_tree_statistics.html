@@ -1,0 +1,217 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_utils.test_tree_statistics &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_utils.test_tree_statistics</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_utils.test_tree_statistics</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">BeliefNode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBelief</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.tree_statistics</span><span class="w"> </span><span class="kn">import</span> <span class="n">compute_tree_metrics</span>
+
+
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="test_belief">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_tree_statistics.html#POMDPPlanners.tests.test_utils.test_tree_statistics.test_belief">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_belief</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test belief.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Provides WeightedParticleBelief fixture for tree statistics testing</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Two integer particles (1, 2) with non-uniform weights (0.6, 0.4)</span>
+<span class="sd">    When: Fixture is used in test functions</span>
+<span class="sd">    Then: Returns WeightedParticleBelief with specified particles and log-transformed weights</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create a simple particle belief with two particles</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>  <span class="c1"># Simple integer particles</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.6</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">]))</span>  <span class="c1"># Convert to log weights</span>
+    <span class="k">return</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_compute_tree_metrics_single_node">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_tree_statistics.html#POMDPPlanners.tests.test_utils.test_tree_statistics.test_compute_tree_metrics_single_node">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_compute_tree_metrics_single_node</span><span class="p">(</span><span class="n">test_belief</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test metrics computation for a tree with a single node (leaf).</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that tree metrics computation correctly handles leaf nodes with no action children</span>
+<span class="sd">    </span>
+<span class="sd">    Given: BeliefNode with test_belief and visit_count=5 but no action children (leaf node)</span>
+<span class="sd">    When: compute_tree_metrics is called on the single node tree</span>
+<span class="sd">    Then: Returns metrics with min_actions_visit_count=0, max_actions_visit_count=0, and actions_visit_count_entropy=0</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">tree</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">test_belief</span><span class="p">)</span>
+    <span class="n">tree</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">=</span> <span class="mi">5</span>
+    
+    <span class="n">metrics</span> <span class="o">=</span> <span class="n">compute_tree_metrics</span><span class="p">(</span><span class="n">tree</span><span class="p">)</span>
+    
+    <span class="c1"># Check min visits</span>
+    <span class="n">min_visits</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metrics</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;min_actions_visit_count&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">min_visits</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mf">0.0</span>
+    
+    <span class="c1"># Check max visits</span>
+    <span class="n">max_visits</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metrics</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;max_actions_visit_count&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">max_visits</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mf">0.0</span>
+    
+    <span class="c1"># Check entropy (should be 0 for single node)</span>
+    <span class="n">entropy</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metrics</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;actions_visit_count_entropy&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">entropy</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mf">0.0</span></div>
+
+
+
+<div class="viewcode-block" id="test_compute_tree_metrics_uniform_visits">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_tree_statistics.html#POMDPPlanners.tests.test_utils.test_tree_statistics.test_compute_tree_metrics_uniform_visits">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">&quot;compute_tree_metrics only supports leaf/single-node case in current implementation.&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_compute_tree_metrics_uniform_visits</span><span class="p">(</span><span class="n">test_belief</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test compute tree metrics uniform visits.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that tree metrics correctly compute statistics for trees with uniformly distributed action visits</span>
+<span class="sd">    </span>
+<span class="sd">    Given: BeliefNode with multiple action children having equal visit counts</span>
+<span class="sd">    When: compute_tree_metrics analyzes the uniform visit distribution</span>
+<span class="sd">    Then: Entropy should be maximized, min and max visits should be equal, indicating balanced exploration</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="test_compute_tree_metrics_skewed_visits">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_tree_statistics.html#POMDPPlanners.tests.test_utils.test_tree_statistics.test_compute_tree_metrics_skewed_visits">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">&quot;compute_tree_metrics only supports leaf/single-node case in current implementation.&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_compute_tree_metrics_skewed_visits</span><span class="p">(</span><span class="n">test_belief</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test compute tree metrics skewed visits.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that tree metrics correctly identify highly skewed visit distributions across action children</span>
+<span class="sd">    </span>
+<span class="sd">    Given: BeliefNode with action children having highly unequal visit counts (e.g., one action visited many times, others rarely)</span>
+<span class="sd">    When: compute_tree_metrics analyzes the skewed visit distribution</span>
+<span class="sd">    Then: Large difference between min and max visits, low entropy indicating concentrated exploration on few actions</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="test_compute_tree_metrics_empty_tree">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_tree_statistics.html#POMDPPlanners.tests.test_utils.test_tree_statistics.test_compute_tree_metrics_empty_tree">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">mark</span><span class="o">.</span><span class="n">skip</span><span class="p">(</span><span class="n">reason</span><span class="o">=</span><span class="s2">&quot;compute_tree_metrics only supports leaf/single-node case in current implementation.&quot;</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_compute_tree_metrics_empty_tree</span><span class="p">(</span><span class="n">test_belief</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test compute tree metrics empty tree.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that tree metrics computation handles edge case of completely empty tree structure</span>
+<span class="sd">    </span>
+<span class="sd">    Given: BeliefNode with zero visit count and no action children (empty/uninitialized tree)</span>
+<span class="sd">    When: compute_tree_metrics processes the empty tree structure</span>
+<span class="sd">    Then: Returns appropriate default metrics values without errors, handling the empty tree gracefully</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">pass</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

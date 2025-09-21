@@ -1,0 +1,274 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils package &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="POMDPPlanners.tests.test_planners package" href="POMDPPlanners.tests.test_planners.html" />
+    <link rel="prev" title="POMDPPlanners.tests.test_environments.test_light_dark_pomdp package" href="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="POMDPPlanners.html">POMDPPlanners package</a></li>
+          <li class="breadcrumb-item"><a href="POMDPPlanners.tests.html">POMDPPlanners.tests package</a></li>
+          <li class="breadcrumb-item"><a href="POMDPPlanners.tests.test_environments.html">POMDPPlanners.tests.test_environments package</a></li>
+          <li class="breadcrumb-item"><a href="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.html">POMDPPlanners.tests.test_environments.test_light_dark_pomdp package</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils">
+<span id="pomdpplanners-tests-test-environments-test-light-dark-pomdp-light-dark-pomdp-utils-package"></span><h1>POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils package<a class="headerlink" href="#module-POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils" title="Link to this heading"></a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="module-POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models">
+<span id="pomdpplanners-tests-test-environments-test-light-dark-pomdp-light-dark-pomdp-utils-test-light-dark-reward-models-module"></span><h2>POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models module<a class="headerlink" href="#module-POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models" title="Link to this heading"></a></h2>
+<p>Tests for Light Dark POMDP reward models.</p>
+<p>This module tests the reward models from light_dark_reward_models.py, focusing on:
+- Base reward model functionality
+- Continuous light dark reward model with obstacles
+- Dangerous states reward model with high variance
+- Decaying hit probability reward model</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestBaseLightDarkRewardModel">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.</span></span><span class="sig-name descname"><span class="pre">TestBaseLightDarkRewardModel</span></span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestBaseLightDarkRewardModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestBaseLightDarkRewardModel" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test cases for base reward model.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestBaseLightDarkRewardModel.test_abstract_class_cannot_be_instantiated">
+<span class="sig-name descname"><span class="pre">test_abstract_class_cannot_be_instantiated</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestBaseLightDarkRewardModel.test_abstract_class_cannot_be_instantiated"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestBaseLightDarkRewardModel.test_abstract_class_cannot_be_instantiated" title="Link to this definition"></a></dt>
+<dd><p>Test that abstract base class cannot be instantiated.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestBaseLightDarkRewardModel.test_input_validation">
+<span class="sig-name descname"><span class="pre">test_input_validation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestBaseLightDarkRewardModel.test_input_validation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestBaseLightDarkRewardModel.test_input_validation" title="Link to this definition"></a></dt>
+<dd><p>Test input validation for state and action shapes.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLDDangerousStatesRewardModel">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.</span></span><span class="sig-name descname"><span class="pre">TestContinuousLDDangerousStatesRewardModel</span></span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLDDangerousStatesRewardModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLDDangerousStatesRewardModel" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test cases for dangerous states reward model.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLDDangerousStatesRewardModel.setup_method">
+<span class="sig-name descname"><span class="pre">setup_method</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLDDangerousStatesRewardModel.setup_method"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLDDangerousStatesRewardModel.setup_method" title="Link to this definition"></a></dt>
+<dd><p>Set up test environment before each test method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLDDangerousStatesRewardModel.test_inheritance_from_base">
+<span class="sig-name descname"><span class="pre">test_inheritance_from_base</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLDDangerousStatesRewardModel.test_inheritance_from_base"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLDDangerousStatesRewardModel.test_inheritance_from_base" title="Link to this definition"></a></dt>
+<dd><p>Test that dangerous states model inherits correctly from base.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLDDangerousStatesRewardModel.test_obstacle_reward_high_variance">
+<span class="sig-name descname"><span class="pre">test_obstacle_reward_high_variance</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLDDangerousStatesRewardModel.test_obstacle_reward_high_variance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLDDangerousStatesRewardModel.test_obstacle_reward_high_variance" title="Link to this definition"></a></dt>
+<dd><p>Test that obstacle rewards have high variance (penalty or bonus).</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLDDangerousStatesRewardModel.test_obstacle_reward_probability_distribution">
+<span class="sig-name descname"><span class="pre">test_obstacle_reward_probability_distribution</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLDDangerousStatesRewardModel.test_obstacle_reward_probability_distribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLDDangerousStatesRewardModel.test_obstacle_reward_probability_distribution" title="Link to this definition"></a></dt>
+<dd><p>Test that obstacle rewards follow 50/50 probability distribution.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.</span></span><span class="sig-name descname"><span class="pre">TestContinuousLightDarkDecayingHitProbabilityRewardModel</span></span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkDecayingHitProbabilityRewardModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test cases for decaying hit probability reward model.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel.setup_method">
+<span class="sig-name descname"><span class="pre">setup_method</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkDecayingHitProbabilityRewardModel.setup_method"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel.setup_method" title="Link to this definition"></a></dt>
+<dd><p>Set up test environment before each test method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_decaying_obstacle_probability">
+<span class="sig-name descname"><span class="pre">test_decaying_obstacle_probability</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_decaying_obstacle_probability"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_decaying_obstacle_probability" title="Link to this definition"></a></dt>
+<dd><p>Test that obstacle hit probability decreases with distance.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_inheritance_and_overrides">
+<span class="sig-name descname"><span class="pre">test_inheritance_and_overrides</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_inheritance_and_overrides"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_inheritance_and_overrides" title="Link to this definition"></a></dt>
+<dd><p>Test that decaying model inherits correctly and overrides methods.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_obstacle_distance_calculation">
+<span class="sig-name descname"><span class="pre">test_obstacle_distance_calculation</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_obstacle_distance_calculation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_obstacle_distance_calculation" title="Link to this definition"></a></dt>
+<dd><p>Test that obstacle distance calculation works correctly.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_penalty_decay_parameter_effect">
+<span class="sig-name descname"><span class="pre">test_penalty_decay_parameter_effect</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_penalty_decay_parameter_effect"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_penalty_decay_parameter_effect" title="Link to this definition"></a></dt>
+<dd><p>Test that penalty_decay parameter affects probability decay rate.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_reward_structure">
+<span class="sig-name descname"><span class="pre">test_reward_structure</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_reward_structure"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkDecayingHitProbabilityRewardModel.test_reward_structure" title="Link to this definition"></a></dt>
+<dd><p>Test that reward structure includes all expected components.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.</span></span><span class="sig-name descname"><span class="pre">TestContinuousLightDarkRewardModel</span></span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkRewardModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test cases for continuous light dark reward model.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.setup_method">
+<span class="sig-name descname"><span class="pre">setup_method</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkRewardModel.setup_method"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.setup_method" title="Link to this definition"></a></dt>
+<dd><p>Set up test environment before each test method.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_goal_detection_logic">
+<span class="sig-name descname"><span class="pre">test_goal_detection_logic</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkRewardModel.test_goal_detection_logic"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_goal_detection_logic" title="Link to this definition"></a></dt>
+<dd><p>Test that goal detection logic works correctly.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_goal_state_reward">
+<span class="sig-name descname"><span class="pre">test_goal_state_reward</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkRewardModel.test_goal_state_reward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_goal_state_reward" title="Link to this definition"></a></dt>
+<dd><p>Test reward when next state is in goal region.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_grid_boundary_detection_logic">
+<span class="sig-name descname"><span class="pre">test_grid_boundary_detection_logic</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkRewardModel.test_grid_boundary_detection_logic"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_grid_boundary_detection_logic" title="Link to this definition"></a></dt>
+<dd><p>Test that grid boundary detection logic works correctly.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_normal_movement_reward">
+<span class="sig-name descname"><span class="pre">test_normal_movement_reward</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkRewardModel.test_normal_movement_reward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_normal_movement_reward" title="Link to this definition"></a></dt>
+<dd><p>Test reward for normal movement without special conditions.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_obstacle_collision_reward">
+<span class="sig-name descname"><span class="pre">test_obstacle_collision_reward</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkRewardModel.test_obstacle_collision_reward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_obstacle_collision_reward" title="Link to this definition"></a></dt>
+<dd><p>Test reward when next state collides with obstacle.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_obstacle_detection_logic">
+<span class="sig-name descname"><span class="pre">test_obstacle_detection_logic</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkRewardModel.test_obstacle_detection_logic"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_obstacle_detection_logic" title="Link to this definition"></a></dt>
+<dd><p>Test that obstacle detection logic works correctly.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_out_of_grid_reward">
+<span class="sig-name descname"><span class="pre">test_out_of_grid_reward</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/light_dark_pomdp_utils/test_light_dark_reward_models.html#TestContinuousLightDarkRewardModel.test_out_of_grid_reward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.test_light_dark_reward_models.TestContinuousLightDarkRewardModel.test_out_of_grid_reward" title="Link to this definition"></a></dt>
+<dd><p>Test reward when next state is out of grid.</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.html" class="btn btn-neutral float-left" title="POMDPPlanners.tests.test_environments.test_light_dark_pomdp package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="POMDPPlanners.tests.test_planners.html" class="btn btn-neutral float-right" title="POMDPPlanners.tests.test_planners package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,522 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>&lt;no title&gt; &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">&lt;no title&gt;</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <p id="module-POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp">Tests for Continuous Light Dark POMDP environment.</p>
+<p>This module tests the Continuous Light Dark POMDP environment, focusing on:
+- Basic environment functionality
+- State transitions and observations
+- Reward calculations
+- Terminal conditions</p>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestContinuousLightDarkPOMDPEquality">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">TestContinuousLightDarkPOMDPEquality</span></span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestContinuousLightDarkPOMDPEquality"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestContinuousLightDarkPOMDPEquality" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test suite for ContinuousLightDarkPOMDP equality comparisons.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestContinuousLightDarkPOMDPEquality.test_different_covariance_matrices">
+<span class="sig-name descname"><span class="pre">test_different_covariance_matrices</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestContinuousLightDarkPOMDPEquality.test_different_covariance_matrices"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestContinuousLightDarkPOMDPEquality.test_different_covariance_matrices" title="Link to this definition"></a></dt>
+<dd><p>Test that ContinuousLightDarkPOMDPs with different covariance matrices are not equal.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>base_light_dark_environment</strong> (<a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions" title="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions"><em>ContinuousLightDarkPOMDPDiscreteActions</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestContinuousLightDarkPOMDPEquality.test_different_discount_factor">
+<span class="sig-name descname"><span class="pre">test_different_discount_factor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestContinuousLightDarkPOMDPEquality.test_different_discount_factor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestContinuousLightDarkPOMDPEquality.test_different_discount_factor" title="Link to this definition"></a></dt>
+<dd><p>Test that ContinuousLightDarkPOMDPs with different discount factors are not equal.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>base_light_dark_environment</strong> (<a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions" title="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions"><em>ContinuousLightDarkPOMDPDiscreteActions</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestContinuousLightDarkPOMDPEquality.test_different_radii">
+<span class="sig-name descname"><span class="pre">test_different_radii</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestContinuousLightDarkPOMDPEquality.test_different_radii"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestContinuousLightDarkPOMDPEquality.test_different_radii" title="Link to this definition"></a></dt>
+<dd><p>Test that ContinuousLightDarkPOMDPs with different radii are not equal.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>base_light_dark_environment</strong> (<a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions" title="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions"><em>ContinuousLightDarkPOMDPDiscreteActions</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestContinuousLightDarkPOMDPEquality.test_same_discount_factor">
+<span class="sig-name descname"><span class="pre">test_same_discount_factor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestContinuousLightDarkPOMDPEquality.test_same_discount_factor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestContinuousLightDarkPOMDPEquality.test_same_discount_factor" title="Link to this definition"></a></dt>
+<dd><p>Test that ContinuousLightDarkPOMDPs with same discount factor are equal.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>base_light_dark_environment</strong> (<a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions" title="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions"><em>ContinuousLightDarkPOMDPDiscreteActions</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">TestVisualizePath</span></span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestVisualizePath"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test suite for visualize_path function.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_belief_particles_with_zero_probabilities">
+<span class="sig-name descname"><span class="pre">test_visualize_path_belief_particles_with_zero_probabilities</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestVisualizePath.test_visualize_path_belief_particles_with_zero_probabilities"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_belief_particles_with_zero_probabilities" title="Link to this definition"></a></dt>
+<dd><p>Test visualize_path with belief distributions containing zero probabilities.</p>
+<p>Purpose: Validates handling of belief particles with zero or very small probabilities</p>
+<p>Given: A light-dark environment with belief distributions containing zero probabilities
+When: visualize_path is called with zero-probability particles
+Then: Visualization handles zero probabilities correctly without errors</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_cache_directory_creation">
+<span class="sig-name descname"><span class="pre">test_visualize_path_cache_directory_creation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestVisualizePath.test_visualize_path_cache_directory_creation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_cache_directory_creation" title="Link to this definition"></a></dt>
+<dd><p>Test that visualize_path requires parent directories to exist.</p>
+<p>Purpose: Validates that visualization requires existing parent directories</p>
+<p>Given: A light-dark environment and cache path with non-existent parent directories
+When: visualize_path is called with nested cache path
+Then: FileNotFoundError is raised due to missing parent directories</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_caching_behavior">
+<span class="sig-name descname"><span class="pre">test_visualize_path_caching_behavior</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestVisualizePath.test_visualize_path_caching_behavior"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_caching_behavior" title="Link to this definition"></a></dt>
+<dd><p>Test that visualize_path caching works correctly by overwriting existing files.</p>
+<p>Purpose: Validates that visualization caching works properly by overwriting files</p>
+<p>Given: A light-dark environment and an existing GIF file at the cache path
+When: visualize_path is called multiple times with the same cache path
+Then: File is successfully overwritten each time and contains different content</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_creates_gif_file">
+<span class="sig-name descname"><span class="pre">test_visualize_path_creates_gif_file</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestVisualizePath.test_visualize_path_creates_gif_file"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_creates_gif_file" title="Link to this definition"></a></dt>
+<dd><p>Test that visualize_path creates a GIF file at the specified cache path.</p>
+<p>Purpose: Validates that visualize_path successfully creates a GIF animation file</p>
+<p>Given: A light-dark environment, simple agent path, belief path, actions, and valid cache path
+When: visualize_path is called with the test data
+Then: A GIF file is created at the specified cache path and has non-zero size</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_preserves_existing_cache_structure">
+<span class="sig-name descname"><span class="pre">test_visualize_path_preserves_existing_cache_structure</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestVisualizePath.test_visualize_path_preserves_existing_cache_structure"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_preserves_existing_cache_structure" title="Link to this definition"></a></dt>
+<dd><p>Test that visualize_path preserves existing cache directory structure.</p>
+<p>Purpose: Validates that caching doesn’t interfere with existing directory structure</p>
+<p>Given: A light-dark environment and existing cache directory with other files
+When: visualize_path is called to save in existing directory
+Then: New GIF is saved without affecting other files in the cache directory</p>
+<p>Test type: integration</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_with_complex_belief_distributions">
+<span class="sig-name descname"><span class="pre">test_visualize_path_with_complex_belief_distributions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestVisualizePath.test_visualize_path_with_complex_belief_distributions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_with_complex_belief_distributions" title="Link to this definition"></a></dt>
+<dd><p>Test visualize_path with complex belief distributions containing multiple particles.</p>
+<p>Purpose: Validates visualization handles complex belief states with many particles</p>
+<p>Given: A light-dark environment with path and belief distributions having many particles
+When: visualize_path is called with complex belief data
+Then: GIF file is created successfully and belief particles are properly visualized</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_with_continuous_actions">
+<span class="sig-name descname"><span class="pre">test_visualize_path_with_continuous_actions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_continuous_light_dark_pomdp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestVisualizePath.test_visualize_path_with_continuous_actions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_with_continuous_actions" title="Link to this definition"></a></dt>
+<dd><p>Test visualize_path with continuous actions (numpy arrays).</p>
+<p>Purpose: Validates visualization works with continuous action spaces</p>
+<p>Given: A continuous light-dark environment with numpy array actions
+When: visualize_path is called with continuous actions
+Then: GIF file is created successfully with proper action arrows</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_with_empty_path">
+<span class="sig-name descname"><span class="pre">test_visualize_path_with_empty_path</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestVisualizePath.test_visualize_path_with_empty_path"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_with_empty_path" title="Link to this definition"></a></dt>
+<dd><p>Test that visualize_path handles empty path gracefully.</p>
+<p>Purpose: Validates robustness when provided with empty input data</p>
+<p>Given: A light-dark environment with empty path, belief_path, and actions
+When: visualize_path is called with empty data
+Then: IndexError is raised due to matplotlib limitation with empty frames</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_with_invalid_cache_path_extension">
+<span class="sig-name descname"><span class="pre">test_visualize_path_with_invalid_cache_path_extension</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestVisualizePath.test_visualize_path_with_invalid_cache_path_extension"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_with_invalid_cache_path_extension" title="Link to this definition"></a></dt>
+<dd><p>Test that visualize_path raises ValueError for non-GIF cache path.</p>
+<p>Purpose: Validates proper error handling when cache_path doesn’t end with .gif</p>
+<p>Given: A light-dark environment and cache_path without .gif extension
+When: visualize_path is called with invalid file extension
+Then: ValueError is raised with appropriate error message</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_with_invalid_cache_path_type">
+<span class="sig-name descname"><span class="pre">test_visualize_path_with_invalid_cache_path_type</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestVisualizePath.test_visualize_path_with_invalid_cache_path_type"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_with_invalid_cache_path_type" title="Link to this definition"></a></dt>
+<dd><p>Test that visualize_path raises TypeError for invalid cache_path type.</p>
+<p>Purpose: Validates proper error handling when cache_path is not a Path object</p>
+<p>Given: A light-dark environment and cache_path as string instead of Path object
+When: visualize_path is called with invalid cache_path type
+Then: TypeError is raised with appropriate error message</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_with_mismatched_lengths">
+<span class="sig-name descname"><span class="pre">test_visualize_path_with_mismatched_lengths</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_light_dark_environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tmp_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#TestVisualizePath.test_visualize_path_with_mismatched_lengths"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.TestVisualizePath.test_visualize_path_with_mismatched_lengths" title="Link to this definition"></a></dt>
+<dd><p>Test visualize_path behavior with mismatched path, belief_path, and actions lengths.</p>
+<p>Purpose: Validates robustness when input arrays have different lengths</p>
+<p>Given: A light-dark environment with path, belief_path, and actions of different lengths
+When: visualize_path is called with mismatched array lengths
+Then: Function completes without error, handling missing data gracefully</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.base_continuous_light_dark_pomdp">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">base_continuous_light_dark_pomdp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#base_continuous_light_dark_pomdp"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.base_continuous_light_dark_pomdp" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP" title="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP"><code class="xref py py-class docutils literal notranslate"><span class="pre">ContinuousLightDarkPOMDP</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.base_light_dark_environment">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">base_light_dark_environment</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#base_light_dark_environment"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.base_light_dark_environment" title="Link to this definition"></a></dt>
+<dd><p>Fixture providing a base ContinuousLightDarkPOMDP environment for comparison.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions" title="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions"><code class="xref py py-class docutils literal notranslate"><span class="pre">ContinuousLightDarkPOMDPDiscreteActions</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.pomdp">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">pomdp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#pomdp"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.pomdp" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_beacon_proximity_observation_covariance_changes">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_beacon_proximity_observation_covariance_changes</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_beacon_proximity_observation_covariance_changes"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_beacon_proximity_observation_covariance_changes" title="Link to this definition"></a></dt>
+<dd><p>Test that observation covariance matrix changes when agent is near a beacon.</p>
+<p>Purpose: Validates that observation covariance is reduced when agent is within beacon radius</p>
+<p>Given: A continuous light-dark POMDP environment with beacons and beacon radius
+When: Observation model is created for states near vs far from beacons
+Then: Near-beacon states have reduced covariance matrix (multiplied by 0.5)</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_beacon_proximity_with_multiple_beacons">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_beacon_proximity_with_multiple_beacons</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_beacon_proximity_with_multiple_beacons"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_beacon_proximity_with_multiple_beacons" title="Link to this definition"></a></dt>
+<dd><p>Test beacon proximity detection with multiple beacons.</p>
+<p>Purpose: Validates that proximity detection works correctly with multiple beacons</p>
+<p>Given: A continuous light-dark environment with multiple beacons at different positions
+When: Observation model is created for states near different beacons
+Then: Proximity is detected correctly for any beacon within radius</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_beacons_and_obstacles_array_structure">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_beacons_and_obstacles_array_structure</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_beacons_and_obstacles_array_structure"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_beacons_and_obstacles_array_structure" title="Link to this definition"></a></dt>
+<dd><p>Test that beacons and obstacles are numpy arrays with correct shapes after initialization.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_compute_metrics">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_compute_metrics</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_compute_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_compute_metrics" title="Link to this definition"></a></dt>
+<dd><p>Test computation of metrics for different simulation histories</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_continuous_light_dark_pomdp_compute_metrics">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_continuous_light_dark_pomdp_compute_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_continuous_light_dark_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_continuous_light_dark_pomdp_compute_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_continuous_light_dark_pomdp_compute_metrics" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_continuous_light_dark_pomdp_initialization">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_continuous_light_dark_pomdp_initialization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_continuous_light_dark_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_continuous_light_dark_pomdp_initialization"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_continuous_light_dark_pomdp_initialization" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_continuous_light_dark_pomdp_is_terminal">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_continuous_light_dark_pomdp_is_terminal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_continuous_light_dark_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_continuous_light_dark_pomdp_is_terminal"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_continuous_light_dark_pomdp_is_terminal" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_continuous_light_dark_pomdp_observation_model">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_continuous_light_dark_pomdp_observation_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_continuous_light_dark_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_continuous_light_dark_pomdp_observation_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_continuous_light_dark_pomdp_observation_model" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_continuous_light_dark_pomdp_reward">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_continuous_light_dark_pomdp_reward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_continuous_light_dark_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_continuous_light_dark_pomdp_reward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_continuous_light_dark_pomdp_reward" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_continuous_light_dark_pomdp_state_transition_model">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_continuous_light_dark_pomdp_state_transition_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">base_continuous_light_dark_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_continuous_light_dark_pomdp_state_transition_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_continuous_light_dark_pomdp_state_transition_model" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_dangerous_states_reward_model">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_dangerous_states_reward_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_dangerous_states_reward_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_dangerous_states_reward_model" title="Link to this definition"></a></dt>
+<dd><p>Test that the environment uses the dangerous states reward model when specified.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_decaying_hit_probability_reward_model">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_decaying_hit_probability_reward_model</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_decaying_hit_probability_reward_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_decaying_hit_probability_reward_model" title="Link to this definition"></a></dt>
+<dd><p>Test that the environment uses the decaying hit probability reward model when specified.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_environment_configuration_obstacle_placement">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_environment_configuration_obstacle_placement</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_environment_configuration_obstacle_placement"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_environment_configuration_obstacle_placement" title="Link to this definition"></a></dt>
+<dd><p>Test that environment configurations have reasonable obstacle placement.</p>
+<p>Purpose: Validates that obstacles don’t block all paths or create impossible scenarios</p>
+<p>Given: Various continuous light-dark POMDP environment configurations
+When: Environment is initialized with different parameters
+Then: Start and goal states are accessible and obstacles don’t create impossible scenarios</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_initial_state_distribution">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_initial_state_distribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_initial_state_distribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_initial_state_distribution" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_initialization">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_initialization</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_initialization"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_initialization" title="Link to this definition"></a></dt>
+<dd><p>Test initialization with default parameters</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_is_terminal">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_is_terminal</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_is_terminal"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_is_terminal" title="Link to this definition"></a></dt>
+<dd><p>Test terminal state detection</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_observation_model">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_observation_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_observation_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_observation_model" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_observation_model_probability_edge_cases">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_observation_model_probability_edge_cases</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_observation_model_probability_edge_cases"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_observation_model_probability_edge_cases" title="Link to this definition"></a></dt>
+<dd><p>Test observation model probability function with edge cases.</p>
+<p>Purpose: Validates robust handling of edge cases in probability calculation</p>
+<p>Given: An observation model and various edge case inputs
+When: Probability is calculated for edge cases
+Then: Function handles edge cases gracefully without errors</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_observation_model_probability_function">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_observation_model_probability_function</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_observation_model_probability_function"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_observation_model_probability_function" title="Link to this definition"></a></dt>
+<dd><p>Test the probability function of the observation model.</p>
+<p>Purpose: Validates that observation model correctly calculates probability densities</p>
+<p>Given: A continuous light-dark observation model with specific next_state and covariance
+When: Probability is calculated for various observation values
+Then: Probabilities match expected multivariate normal distribution values</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_observation_model_probability_with_beacon_proximity">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_observation_model_probability_with_beacon_proximity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_observation_model_probability_with_beacon_proximity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_observation_model_probability_with_beacon_proximity" title="Link to this definition"></a></dt>
+<dd><p>Test observation model probability function with reduced covariance near beacons.</p>
+<p>Purpose: Validates that probability calculations use reduced covariance when near beacons</p>
+<p>Given: Observation models near and far from beacons with different covariance matrices
+When: Probability is calculated for the same observation values
+Then: Near-beacon model has higher probability density due to reduced covariance</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_reward_function">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_reward_function</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_reward_function"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_reward_function" title="Link to this definition"></a></dt>
+<dd><p>Test reward function</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_reward_range">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_reward_range</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_reward_range"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_reward_range" title="Link to this definition"></a></dt>
+<dd><p>Test that reward range is correctly calculated.</p>
+<p>Purpose: Validates that ContinuousLightDarkPOMDPDiscreteActions calculates reward range based on environment parameters</p>
+<p>Given: A ContinuousLightDarkPOMDPDiscreteActions environment with specific parameters
+When: Environment reward_range attribute is checked
+Then: Returns calculated range based on maximum distance to goal and reward parameters</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_risk_averse_environment_config_start_state_validity">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_risk_averse_environment_config_start_state_validity</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_risk_averse_environment_config_start_state_validity"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_risk_averse_environment_config_start_state_validity" title="Link to this definition"></a></dt>
+<dd><p>Test that RiskAverseEnvironmentConfigsAPI doesn’t create invalid start states.</p>
+<p>Purpose: Validates that environment configuration APIs create valid non-terminal start states</p>
+<p>Given: A RiskAverseEnvironmentConfigsAPI configuration
+When: Continuous light-dark POMDP environment is created
+Then: Start state is not within obstacle radius and episode can proceed</p>
+<p>Test type: integration</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_sample_next_step">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_sample_next_step</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_sample_next_step"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_sample_next_step" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_single_obstacle_reward_behavior">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_single_obstacle_reward_behavior</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_single_obstacle_reward_behavior"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_single_obstacle_reward_behavior" title="Link to this definition"></a></dt>
+<dd><p>Test reward behavior with a single obstacle and radius 1.</p>
+<p>Purpose: Validates that ContinuousLightDarkPOMDPDiscreteActions correctly applies obstacle rewards
+based on obstacle radius when states are within or outside the obstacle range</p>
+<p>Given: A ContinuousLightDarkPOMDPDiscreteActions environment with one obstacle at (5,5) and radius 1.0
+When: Reward is calculated for states at the obstacle center, within radius, and outside radius
+Then:</p>
+<blockquote>
+<div><ul class="simple">
+<li><p>States at obstacle center get high obstacle reward (negative)</p></li>
+<li><p>States within obstacle radius get obstacle reward (negative)</p></li>
+<li><p>States outside obstacle radius get normal movement reward (lower than obstacle reward)</p></li>
+</ul>
+</div></blockquote>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_start_state_not_in_obstacle_radius">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_start_state_not_in_obstacle_radius</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_start_state_not_in_obstacle_radius"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_start_state_not_in_obstacle_radius" title="Link to this definition"></a></dt>
+<dd><p>Test that start state is not within obstacle radius causing immediate termination.</p>
+<p>Purpose: Validates that environment configurations don’t place start state within obstacle radius</p>
+<p>Given: A continuous light-dark POMDP environment with obstacles and start state
+When: Environment is initialized with default or configured parameters
+Then: Start state is not within obstacle radius of any obstacle (not terminal at start)</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_state_transition_model">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_state_transition_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_light_dark_pomdp/test_continuous_light_dark_pomdp.html#test_state_transition_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp.test_state_transition_model" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

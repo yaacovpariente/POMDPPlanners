@@ -1,0 +1,249 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>&lt;no title&gt; &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">&lt;no title&gt;</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.utils.config_loader.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <dl class="py function" id="module-POMDPPlanners.utils.config_loader">
+<dt class="sig sig-object py" id="POMDPPlanners.utils.config_loader.load_config">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.utils.config_loader.</span></span><span class="sig-name descname"><span class="pre">load_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/utils/config_loader.html#load_config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.utils.config_loader.load_config" title="Link to this definition"></a></dt>
+<dd><p>Load and parse YAML configuration files for POMDP experiments.</p>
+<p>This utility function provides a standardized way to load experimental
+configurations from YAML files. It’s commonly used to configure
+environments, planners, and simulation parameters for reproducible
+experiments.</p>
+<p>The function uses PyYAML’s safe_load to prevent execution of arbitrary
+Python code, making it secure for loading untrusted configuration files.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config_path</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – Path to the YAML configuration file (absolute or relative)</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Dictionary containing the parsed configuration parameters</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#FileNotFoundError" title="(in Python v3.13)"><strong>FileNotFoundError</strong></a> – If the configuration file doesn’t exist</p></li>
+<li><p><strong>yaml.YAMLError</strong> – If the file contains invalid YAML syntax</p></li>
+</ul>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<p>Loading experiment configuration:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.config_loader</span><span class="w"> </span><span class="kn">import</span> <span class="n">load_config</span>
+
+<span class="c1"># Load experiment configuration</span>
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_config</span><span class="p">(</span><span class="s2">&quot;experiments/tiger_pomdp_study.yaml&quot;</span><span class="p">)</span>
+
+<span class="c1"># Access configuration sections</span>
+<span class="n">env_config</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;environment&#39;</span><span class="p">]</span>
+<span class="n">planner_configs</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;planners&#39;</span><span class="p">]</span>
+<span class="n">simulation_config</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;simulation&#39;</span><span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Environment: </span><span class="si">{</span><span class="n">env_config</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Planners: </span><span class="si">{</span><span class="p">[</span><span class="n">p</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="n">p</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="n">planner_configs</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Episodes per run: </span><span class="si">{</span><span class="n">simulation_config</span><span class="p">[</span><span class="s1">&#39;episodes_per_run&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p class="rubric">Example</p>
+<p>Using with environment configuration:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Example YAML content (tiger_config.yaml):</span>
+<span class="c1"># environment:</span>
+<span class="c1">#   name: &quot;TigerPOMDP&quot;</span>
+<span class="c1">#   discount_factor: 0.95</span>
+<span class="c1">#   observation_accuracy: 0.85</span>
+<span class="c1"># planners:</span>
+<span class="c1">#   - name: &quot;POMCP&quot;</span>
+<span class="c1">#     n_simulations: 1000</span>
+<span class="c1">#     depth: 20</span>
+<span class="c1">#     exploration_constant: 1.0</span>
+<span class="c1">#   - name: &quot;PFT_DPW&quot;</span>
+<span class="c1">#     n_simulations: 500</span>
+<span class="c1">#     depth: 15</span>
+<span class="c1">#     k_a: 2.0</span>
+<span class="c1"># simulation:</span>
+<span class="c1">#   episodes_per_run: 100</span>
+<span class="c1">#   num_runs: 10</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_config</span><span class="p">(</span><span class="s2">&quot;tiger_config.yaml&quot;</span><span class="p">)</span>
+
+<span class="c1"># Create environment from config</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="n">config</span><span class="p">[</span><span class="s1">&#39;environment&#39;</span><span class="p">][</span><span class="s1">&#39;discount_factor&#39;</span><span class="p">])</span>
+
+<span class="c1"># Create planners from config</span>
+<span class="n">planners</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">planner_config</span> <span class="ow">in</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;planners&#39;</span><span class="p">]:</span>
+    <span class="k">if</span> <span class="n">planner_config</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s1">&#39;POMCP&#39;</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.pomcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">POMCP</span>
+        <span class="n">planner</span> <span class="o">=</span> <span class="n">POMCP</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">discount_factor</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="n">planner_config</span><span class="p">[</span><span class="s1">&#39;n_simulations&#39;</span><span class="p">],</span>
+            <span class="n">depth</span><span class="o">=</span><span class="n">planner_config</span><span class="p">[</span><span class="s1">&#39;depth&#39;</span><span class="p">],</span>
+            <span class="n">exploration_constant</span><span class="o">=</span><span class="n">planner_config</span><span class="p">[</span><span class="s1">&#39;exploration_constant&#39;</span><span class="p">],</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">planner_config</span><span class="p">[</span><span class="s1">&#39;name&#39;</span><span class="p">]</span>
+        <span class="p">)</span>
+        <span class="n">planners</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">planner</span><span class="p">)</span>
+</pre></div>
+</div>
+<p class="rubric">Example</p>
+<p>Handling configuration hierarchies and defaults:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Example YAML with nested configuration:</span>
+<span class="c1"># defaults:</span>
+<span class="c1">#   simulation:</span>
+<span class="c1">#     episodes: 50</span>
+<span class="c1">#     particles: 100</span>
+<span class="c1"># experiments:</span>
+<span class="c1">#   quick_test:</span>
+<span class="c1">#     environment: &quot;SanityPOMDP&quot;</span>
+<span class="c1">#     planners: [&quot;POMCP&quot;]</span>
+<span class="c1">#   full_study:</span>
+<span class="c1">#     environment: &quot;TigerPOMDP&quot;</span>
+<span class="c1">#     planners: [&quot;POMCP&quot;, &quot;PFT_DPW&quot;, &quot;SparsePFT&quot;]</span>
+<span class="c1">#     simulation:</span>
+<span class="c1">#       episodes: 200</span>
+<span class="c1">#       particles: 500</span>
+
+<span class="n">config</span> <span class="o">=</span> <span class="n">load_config</span><span class="p">(</span><span class="s2">&quot;multi_experiment_config.yaml&quot;</span><span class="p">)</span>
+
+<span class="c1"># Access different experiment configurations</span>
+<span class="n">defaults</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;defaults&#39;</span><span class="p">]</span>
+<span class="n">quick_config</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiments&#39;</span><span class="p">][</span><span class="s1">&#39;quick_test&#39;</span><span class="p">]</span>
+<span class="n">full_config</span> <span class="o">=</span> <span class="n">config</span><span class="p">[</span><span class="s1">&#39;experiments&#39;</span><span class="p">][</span><span class="s1">&#39;full_study&#39;</span><span class="p">]</span>
+
+<span class="c1"># Merge defaults with specific configuration</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">merge_config</span><span class="p">(</span><span class="n">base_config</span><span class="p">,</span> <span class="n">specific_config</span><span class="p">):</span>
+    <span class="n">merged</span> <span class="o">=</span> <span class="n">base_config</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
+    <span class="n">merged</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">specific_config</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">merged</span>
+
+<span class="n">full_simulation_config</span> <span class="o">=</span> <span class="n">merge_config</span><span class="p">(</span>
+    <span class="n">defaults</span><span class="p">[</span><span class="s1">&#39;simulation&#39;</span><span class="p">],</span>
+    <span class="n">full_config</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;simulation&#39;</span><span class="p">,</span> <span class="p">{})</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Full study episodes: </span><span class="si">{</span><span class="n">full_simulation_config</span><span class="p">[</span><span class="s1">&#39;episodes&#39;</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl>
+<dt>Configuration Best Practices:</dt><dd><p><strong>File Organization</strong>:
+- Use descriptive filenames (e.g., <cite>pomcp_tiger_baseline.yaml</cite>)
+- Organize configs by environment or study type
+- Include version information in complex configurations</p>
+<p><strong>Parameter Naming</strong>:
+- Use consistent naming conventions across configurations
+- Group related parameters under sections
+- Include comments explaining non-obvious parameters</p>
+<p><strong>Default Handling</strong>:
+- Define sensible defaults for optional parameters
+- Use inheritance or merging for parameter variants
+- Validate required parameters after loading</p>
+</dd>
+<dt>Security Considerations:</dt><dd><ul class="simple">
+<li><p>Uses <cite>yaml.safe_load()</cite> to prevent code execution</p></li>
+<li><p>Suitable for loading user-provided configuration files</p></li>
+<li><p>Automatically handles standard YAML data types safely</p></li>
+<li><p>Does not support custom Python object instantiation</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

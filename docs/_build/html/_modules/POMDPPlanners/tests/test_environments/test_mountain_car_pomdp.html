@@ -1,0 +1,785 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_environments.test_mountain_car_pomdp &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_environments.test_mountain_car_pomdp</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_environments.test_mountain_car_pomdp</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Tests for MountainCar POMDP environment.</span>
+
+<span class="sd">This module tests the MountainCar POMDP environment, focusing on:</span>
+<span class="sd">- Basic environment functionality</span>
+<span class="sd">- State transitions and observations</span>
+<span class="sd">- Reward calculations</span>
+<span class="sd">- Terminal conditions</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.mountain_car_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">MountainCarPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">StepData</span>
+
+<span class="c1"># Set seeds for reproducible tests</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="test_mountain_car_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.test_mountain_car_initialization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_mountain_car_initialization</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test mountain car initialization.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates proper initialization of mountain car </span>
+<span class="sd">    </span>
+<span class="sd">    Given: Constructor parameters and initial conditions</span>
+<span class="sd">    When: Object is initialized</span>
+<span class="sd">    Then: Object is properly constructed with expected attributes</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pomdp</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">min_position</span> <span class="o">==</span> <span class="o">-</span><span class="mf">1.2</span>
+    <span class="k">assert</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">max_position</span> <span class="o">==</span> <span class="mf">0.6</span>
+    <span class="k">assert</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">max_speed</span> <span class="o">==</span> <span class="mf">0.07</span>
+    <span class="k">assert</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">goal_position</span> <span class="o">==</span> <span class="mf">0.5</span>
+    <span class="k">assert</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">power</span> <span class="o">==</span> <span class="mf">0.001</span>
+    <span class="k">assert</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">gravity</span> <span class="o">==</span> <span class="mf">0.0025</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">pomdp</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+    <span class="k">assert</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">in</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">actions</span>
+    <span class="k">assert</span> <span class="mi">0</span> <span class="ow">in</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">actions</span>
+    <span class="k">assert</span> <span class="mi">1</span> <span class="ow">in</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">actions</span></div>
+
+
+
+<div class="viewcode-block" id="test_state_transition_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.test_state_transition_model">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_state_transition_model</span><span class="p">(</span><span class="n">base_mountain_car_environment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test state transition model for different actions.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that state transition model correctly updates car position and velocity for different actions</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MountainCarPOMDP environment and test state [0.0, 0.0] with actions -1, 0, and 1</span>
+<span class="sd">    When: State transition model is called and next states are sampled</span>
+<span class="sd">    Then: All next states have correct 2D shape representing [position, velocity] and change based on applied action</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test state transition</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">transition</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+    <span class="n">new_state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">new_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">new_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+
+    <span class="c1"># Test with different action</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">transition</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+    <span class="n">new_state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">new_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">new_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+
+    <span class="c1"># Test with negative action</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="n">transition</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+    <span class="n">new_state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">new_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">new_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span></div>
+
+
+
+<div class="viewcode-block" id="test_observation_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.test_observation_model">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_observation_model</span><span class="p">(</span><span class="n">base_mountain_car_environment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test observation model with noise addition.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that observation model correctly adds noise to position and velocity measurements</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MountainCarPOMDP environment and test state [0.0, 0.0] with action 0</span>
+<span class="sd">    When: Observation model is called and observations are sampled</span>
+<span class="sd">    Then: All observations have correct 2D shape and contain noise in both position and velocity components</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test observation model</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">observation</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+    <span class="n">obs</span> <span class="o">=</span> <span class="n">observation</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">obs</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+
+    <span class="c1"># Test multiple observations</span>
+    <span class="n">observations</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">observations</span><span class="p">)</span> <span class="o">==</span> <span class="mi">100</span>
+    <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="ow">and</span> <span class="n">obs</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span> <span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="n">observations</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_initial_state_distribution">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.test_initial_state_distribution">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_initial_state_distribution</span><span class="p">(</span><span class="n">base_mountain_car_environment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test initial state distribution sampling.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that initial state distribution generates valid 2D states</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MountainCarPOMDP environment</span>
+<span class="sd">    When: Initial state distribution is sampled</span>
+<span class="sd">    Then: Returns valid initial state with correct 2D shape representing [position, velocity]</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test initial state distribution</span>
+    <span class="n">dist</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">initial_state_dist</span><span class="p">()</span>
+    <span class="n">initial_state</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">initial_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">initial_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span></div>
+
+
+
+<div class="viewcode-block" id="test_initial_observation_distribution">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.test_initial_observation_distribution">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_initial_observation_distribution</span><span class="p">(</span><span class="n">base_mountain_car_environment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test initial observation distribution sampling.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that initial observation distribution generates valid 2D observations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MountainCarPOMDP environment</span>
+<span class="sd">    When: Initial observation distribution is sampled</span>
+<span class="sd">    Then: Returns valid initial observation with correct 2D shape representing [position, velocity]</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test initial observation distribution</span>
+    <span class="n">dist</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">initial_observation_dist</span><span class="p">()</span>
+    <span class="n">initial_observation</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">initial_observation</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">initial_observation</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span></div>
+
+
+
+<div class="viewcode-block" id="test_sample_next_step">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.test_sample_next_step">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_sample_next_step</span><span class="p">(</span><span class="n">base_mountain_car_environment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test complete environment step simulation.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that sample_next_step correctly simulates car dynamics, observations, and rewards</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MountainCarPOMDP environment, initial state [0.0, 0.0], and different actions (-1, 0, 1)</span>
+<span class="sd">    When: sample_next_step is called for each action</span>
+<span class="sd">    Then: Returns valid next_state, observation, and reward with correct types, shapes, and physics-based state changes</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test sample_next_step method</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">next_state</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">reward</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">sample_next_step</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+    
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">next_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">observation</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reward</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+
+    <span class="c1"># Test with different action</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">next_state</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">reward</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">sample_next_step</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+    
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">next_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">observation</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reward</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span>
+
+    <span class="c1"># Test with negative action</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="n">next_state</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">reward</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">sample_next_step</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+    
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">next_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">observation</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reward</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_mountain_car_reward">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.test_mountain_car_reward">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_mountain_car_reward</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test reward function for different car positions.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that reward function correctly penalizes non-goal positions and rewards goal achievement</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MountainCarPOMDP environment with goal_position=0.5</span>
+<span class="sd">    When: Reward is calculated for positions below goal (0.0), at goal (0.5), and past goal (0.6)</span>
+<span class="sd">    Then: Below goal returns -1.0, at goal returns 0.0, past goal returns 0.0</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pomdp</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+    <span class="c1"># Test reward when not at goal</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">reward</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">reward</span> <span class="o">==</span> <span class="o">-</span><span class="mf">1.0</span>
+
+    <span class="c1"># Test reward when at goal</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="p">(</span><span class="n">pomdp</span><span class="o">.</span><span class="n">goal_position</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">reward</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">reward</span> <span class="o">==</span> <span class="mf">0.0</span>
+
+    <span class="c1"># Test reward when past goal</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="p">(</span><span class="n">pomdp</span><span class="o">.</span><span class="n">goal_position</span> <span class="o">+</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">reward</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">reward</span> <span class="o">==</span> <span class="mf">0.0</span></div>
+
+
+
+<div class="viewcode-block" id="test_mountain_car_terminal">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.test_mountain_car_terminal">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_mountain_car_terminal</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test terminal state detection based on goal position.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that environment correctly identifies terminal states when car reaches or passes goal</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MountainCarPOMDP environment with goal_position=0.5</span>
+<span class="sd">    When: is_terminal is called for positions below goal (0.0), at goal (0.5), and past goal (0.6)</span>
+<span class="sd">    Then: Below goal returns False, at goal returns True, past goal returns True</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pomdp</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+    <span class="c1"># Test non-terminal state</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+
+    <span class="c1"># Test terminal state</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="p">(</span><span class="n">pomdp</span><span class="o">.</span><span class="n">goal_position</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+
+    <span class="c1"># Test state past goal</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="p">(</span><span class="n">pomdp</span><span class="o">.</span><span class="n">goal_position</span> <span class="o">+</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">state</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_mountain_car_actions">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.test_mountain_car_actions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_mountain_car_actions</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test action space retrieval.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that environment provides correct discrete action space for car control</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MountainCarPOMDP environment</span>
+<span class="sd">    When: get_actions method is called</span>
+<span class="sd">    Then: Returns list of 3 actions [-1, 0, 1] representing left, no action, and right respectively</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pomdp</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="n">actions</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">get_actions</span><span class="p">()</span>
+
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+    <span class="k">assert</span> <span class="o">-</span><span class="mi">1</span> <span class="ow">in</span> <span class="n">actions</span>
+    <span class="k">assert</span> <span class="mi">0</span> <span class="ow">in</span> <span class="n">actions</span>
+    <span class="k">assert</span> <span class="mi">1</span> <span class="ow">in</span> <span class="n">actions</span></div>
+
+
+
+<div class="viewcode-block" id="test_reward_range">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.test_reward_range">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_reward_range</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that reward range is correctly set.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that MountainCarPOMDP has the correct reward range parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A MountainCarPOMDP environment with default configuration</span>
+<span class="sd">    When: Environment reward_range attribute is checked</span>
+<span class="sd">    Then: Returns (-1.0, 0.0) representing the minimum (per-step penalty) and maximum (goal achievement) rewards</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pomdp</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">reward_range</span> <span class="o">==</span> <span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    
+    <span class="c1"># Verify the actual rewards match the range</span>
+    <span class="n">non_goal_state</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>  <span class="c1"># Below goal position</span>
+    <span class="n">goal_state</span> <span class="o">=</span> <span class="p">(</span><span class="n">pomdp</span><span class="o">.</span><span class="n">goal_position</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>  <span class="c1"># At goal position</span>
+    <span class="n">past_goal_state</span> <span class="o">=</span> <span class="p">(</span><span class="n">pomdp</span><span class="o">.</span><span class="n">goal_position</span> <span class="o">+</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>  <span class="c1"># Past goal position</span>
+    
+    <span class="c1"># Test all possible rewards</span>
+    <span class="n">non_goal_reward</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">non_goal_state</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">goal_reward</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">goal_state</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    <span class="n">past_goal_reward</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">past_goal_state</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+    
+    <span class="n">min_reward</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="n">non_goal_reward</span><span class="p">,</span> <span class="n">goal_reward</span><span class="p">,</span> <span class="n">past_goal_reward</span><span class="p">)</span>
+    <span class="n">max_reward</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">non_goal_reward</span><span class="p">,</span> <span class="n">goal_reward</span><span class="p">,</span> <span class="n">past_goal_reward</span><span class="p">)</span>
+    
+    <span class="k">assert</span> <span class="n">min_reward</span> <span class="o">==</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">reward_range</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># Should be -1.0</span>
+    <span class="k">assert</span> <span class="n">max_reward</span> <span class="o">==</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">reward_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># Should be 0.0</span></div>
+
+
+
+<div class="viewcode-block" id="test_mountain_car_state_bounds">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.test_mountain_car_state_bounds">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_mountain_car_state_bounds</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test state boundary enforcement in transitions.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that state transitions respect position and velocity bounds defined by environment parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MountainCarPOMDP environment with min_position=-1.2, max_position=0.6, max_speed=0.07</span>
+<span class="sd">    When: State transitions are sampled from states outside bounds</span>
+<span class="sd">    Then: Resulting states are clamped to valid ranges: position within [-1.2, 0.6], velocity within [-0.07, 0.07]</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pomdp</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+    <span class="c1"># Test position bounds</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="p">(</span><span class="n">pomdp</span><span class="o">.</span><span class="n">min_position</span> <span class="o">-</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">transition</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">transition</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">min_position</span>
+
+    <span class="n">state</span> <span class="o">=</span> <span class="p">(</span><span class="n">pomdp</span><span class="o">.</span><span class="n">max_position</span> <span class="o">+</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+    <span class="n">transition</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">transition</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">max_position</span>
+
+    <span class="c1"># Test velocity bounds</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">max_speed</span> <span class="o">+</span> <span class="mf">0.1</span><span class="p">)</span>
+    <span class="n">transition</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">abs</span><span class="p">(</span><span class="n">transition</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">&lt;=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">max_speed</span>
+
+    <span class="n">state</span> <span class="o">=</span> <span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="o">-</span><span class="n">pomdp</span><span class="o">.</span><span class="n">max_speed</span> <span class="o">-</span> <span class="mf">0.1</span><span class="p">)</span>
+    <span class="n">transition</span> <span class="o">=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">abs</span><span class="p">(</span><span class="n">transition</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">&lt;=</span> <span class="n">pomdp</span><span class="o">.</span><span class="n">max_speed</span></div>
+
+
+
+<div class="viewcode-block" id="base_mountain_car_environment">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.base_mountain_car_environment">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">base_mountain_car_environment</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">MountainCarPOMDP</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Create base MountainCarPOMDP environment for testing.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Provides a consistent test environment with standard parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Standard discount factor of 0.95</span>
+<span class="sd">    When: Fixture is used in tests</span>
+<span class="sd">    Then: Returns MountainCarPOMDP instance with min_position=-1.2, max_position=0.6, max_speed=0.07, goal_position=0.5</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: fixture</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="TestMountainCarPOMDPEquality">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPEquality">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestMountainCarPOMDPEquality</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that MountainCarPOMDPs with different configurations are not equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that environment equality comparison correctly identifies different configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MountainCarPOMDP environments with various parameter differences</span>
+<span class="sd">    When: Equality comparison is performed</span>
+<span class="sd">    Then: Environments with different parameters are correctly identified as unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPEquality.test_same_discount_factor">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPEquality.test_same_discount_factor">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_same_discount_factor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that MountainCarPOMDPs with same discount factor are equal.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that environment equality comparison works correctly for identical configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Given: Two MountainCarPOMDP environments with identical discount_factor=0.95</span>
+<span class="sd">        When: Equality comparison is performed</span>
+<span class="sd">        Then: Both environments are equal, confirming symmetry of equality relation</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">==</span> <span class="n">other_env</span>
+        <span class="k">assert</span> <span class="n">other_env</span> <span class="o">==</span> <span class="n">base_mountain_car_environment</span>  <span class="c1"># Test symmetry</span></div>
+
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPEquality.test_different_discount_factor">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPEquality.test_different_discount_factor">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_discount_factor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that MountainCarPOMDPs with different discount factors are not equal.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that environment equality comparison correctly identifies different configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Given: MountainCarPOMDP with discount_factor=0.95 and another with discount_factor=0.8</span>
+<span class="sd">        When: Equality comparison is performed</span>
+<span class="sd">        Then: Environments are not equal, confirming symmetry of inequality relation</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="n">other_env</span>
+        <span class="k">assert</span> <span class="n">other_env</span> <span class="o">!=</span> <span class="n">base_mountain_car_environment</span>  <span class="c1"># Test symmetry</span></div>
+
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPEquality.test_different_parameters">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPEquality.test_different_parameters">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that MountainCarPOMDPs with different parameters are not equal.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that environment equality comparison detects parameter differences</span>
+<span class="sd">        </span>
+<span class="sd">        Given: MountainCarPOMDP with standard parameters and modified versions with different min_position, max_position, max_speed, goal_position</span>
+<span class="sd">        When: Equality comparison is performed</span>
+<span class="sd">        Then: Modified environments are not equal to base environment, confirming parameter sensitivity</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">min_position</span> <span class="o">=</span> <span class="o">-</span><span class="mf">1.0</span>  <span class="c1"># Different from -1.2</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="n">other_env</span>
+        
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">max_position</span> <span class="o">=</span> <span class="mf">0.7</span>  <span class="c1"># Different from 0.6</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="n">other_env</span>
+        
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">max_speed</span> <span class="o">=</span> <span class="mf">0.08</span>  <span class="c1"># Different from 0.07</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="n">other_env</span>
+        
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">goal_position</span> <span class="o">=</span> <span class="mf">0.6</span>  <span class="c1"># Different from 0.5</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPEquality.test_different_noise_parameters">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPEquality.test_different_noise_parameters">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_noise_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that MountainCarPOMDPs with different noise parameters are not equal.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that environment equality comparison detects noise parameter differences</span>
+<span class="sd">        </span>
+<span class="sd">        Given: MountainCarPOMDP with standard parameters and modified versions with different power, gravity, position_noise, velocity_noise</span>
+<span class="sd">        When: Equality comparison is performed</span>
+<span class="sd">        Then: Modified environments are not equal to base environment, confirming noise parameter sensitivity</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">position_noise</span> <span class="o">=</span> <span class="mf">0.2</span>  <span class="c1"># Different from 0.1</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="n">other_env</span>
+        
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">velocity_noise</span> <span class="o">=</span> <span class="mf">0.02</span>  <span class="c1"># Different from 0.01</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="n">other_env</span>
+        
+        <span class="c1"># Test covariance matrix changes</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.2</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.02</span><span class="o">**</span><span class="mi">2</span><span class="p">]])</span>  <span class="c1"># Different from original</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPEquality.test_different_actions">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPEquality.test_different_actions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that MountainCarPOMDPs with different actions are not equal.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that environment equality comparison detects action space differences</span>
+<span class="sd">        </span>
+<span class="sd">        Given: MountainCarPOMDP with standard actions [-1, 0, 1] and modified version with actions [-1, 0, 1, 2]</span>
+<span class="sd">        When: Equality comparison is performed</span>
+<span class="sd">        Then: Modified environment is not equal to base environment, confirming action space sensitivity</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span>  <span class="c1"># Different from [-1, 0, 1]</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPEquality.test_comparison_with_non_environment">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPEquality.test_comparison_with_non_environment">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_comparison_with_non_environment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test comparison with non-Environment objects.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that environment equality comparison handles non-environment objects correctly</span>
+<span class="sd">        </span>
+<span class="sd">        Given: MountainCarPOMDP environment and non-environment objects (string, integer, None)</span>
+<span class="sd">        When: Equality comparison is performed</span>
+<span class="sd">        Then: All comparisons return False, confirming proper type checking</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="s2">&quot;not an environment&quot;</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="mi">42</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="kc">None</span></div>
+
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPEquality.test_missing_attributes">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPEquality.test_missing_attributes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_missing_attributes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test equality when attributes are missing.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that environment equality comparison handles missing attributes gracefully</span>
+<span class="sd">        </span>
+<span class="sd">        Given: MountainCarPOMDP environment and modified version with deleted attributes (min_position, cov_matrix)</span>
+<span class="sd">        When: Equality comparison is performed</span>
+<span class="sd">        Then: Modified environment is not equal to base environment, confirming attribute completeness requirement</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="nb">delattr</span><span class="p">(</span><span class="n">other_env</span><span class="p">,</span> <span class="s1">&#39;min_position&#39;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="n">other_env</span>
+        
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="nb">delattr</span><span class="p">(</span><span class="n">other_env</span><span class="p">,</span> <span class="s1">&#39;cov_matrix&#39;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPEquality.test_deep_copy_equality">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPEquality.test_deep_copy_equality">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_deep_copy_equality</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that a deep copy of MountainCarPOMDP is equal to original.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that deep copying preserves environment equality</span>
+<span class="sd">        </span>
+<span class="sd">        Given: MountainCarPOMDP environment and its deep copy</span>
+<span class="sd">        When: Equality comparison is performed between original and copy</span>
+<span class="sd">        Then: Both environments are equal, confirming deep copy preserves all attributes</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+        <span class="n">copied_env</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">base_mountain_car_environment</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">copied_env</span> <span class="o">==</span> <span class="n">base_mountain_car_environment</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span> <span class="o">==</span> <span class="n">copied_env</span>  <span class="c1"># Test symmetry</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="TestMountainCarPOMDPConfigId">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPConfigId">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestMountainCarPOMDPConfigId</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that config_id changes with different configurations.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that config_id generates unique identifiers for different MountainCarPOMDP configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MountainCarPOMDP environments with various parameter differences</span>
+<span class="sd">    When: Config IDs are generated and compared</span>
+<span class="sd">    Then: Different configurations have different config_ids, demonstrating uniqueness and consistency</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPConfigId.test_config_id_consistency">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPConfigId.test_config_id_consistency">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_consistency</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id is consistent for identical environments.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that config_id generates consistent identifiers for identical configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Given: Two MountainCarPOMDP environments with identical parameters</span>
+<span class="sd">        When: Config IDs are generated for both environments</span>
+<span class="sd">        Then: Both environments have identical config_ids, demonstrating consistency for same configuration</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: configuration</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">==</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPConfigId.test_config_id_different_discount_factor">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPConfigId.test_config_id_different_discount_factor">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_different_discount_factor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id changes with different discount factor.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that config_id generates different identifiers for different discount factors</span>
+<span class="sd">        </span>
+<span class="sd">        Given: MountainCarPOMDP with discount_factor=0.95 and another with discount_factor=0.8</span>
+<span class="sd">        When: Config IDs are generated for both environments</span>
+<span class="sd">        Then: Environments have different config_ids, demonstrating uniqueness for different configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: configuration</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPConfigId.test_config_id_different_parameters">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPConfigId.test_config_id_different_parameters">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_different_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id changes with different parameters.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that config_id generates different identifiers for different parameter configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Given: MountainCarPOMDP with standard parameters and modified versions with different noise parameters</span>
+<span class="sd">        When: Config IDs are generated for all environments</span>
+<span class="sd">        Then: Modified environments have different config_ids from base environment, demonstrating parameter sensitivity</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: configuration</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Test different position noise</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">position_noise</span> <span class="o">=</span> <span class="mf">0.2</span>  <span class="c1"># Different from 0.1</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span>
+        
+        <span class="c1"># Test different velocity noise</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">velocity_noise</span> <span class="o">=</span> <span class="mf">0.02</span>  <span class="c1"># Different from 0.01</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span>
+<span class="w">        </span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id is a valid SHA-256 hash.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates config_id behavior for  format</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Belief objects with specific configurations</span>
+<span class="sd">    When: Config IDs are generated or compared</span>
+<span class="sd">    Then: Config IDs behave as expected (deterministic, unique, etc.)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">power</span> <span class="o">=</span> <span class="mf">0.002</span>  <span class="c1"># Different from 0.001</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span>
+        
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">MountainCarPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">gravity</span> <span class="o">=</span> <span class="mf">0.003</span>  <span class="c1"># Different from 0.0025</span>
+        <span class="k">assert</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPConfigId.test_config_id_format">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPConfigId.test_config_id_format">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_format</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id is a valid SHA-256 hash.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that config_id generates properly formatted SHA-256 hash identifiers</span>
+<span class="sd">        </span>
+<span class="sd">        Given: MountainCarPOMDP environment with specific configuration</span>
+<span class="sd">        When: Config ID is generated for the environment</span>
+<span class="sd">        Then: Returns a 64-character string containing only valid hexadecimal characters (0-9, a-f)</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: configuration</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">config_id</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config_id</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">config_id</span><span class="p">)</span> <span class="o">==</span> <span class="mi">64</span>  <span class="c1"># SHA-256 hash length</span>
+        <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">c</span> <span class="ow">in</span> <span class="s1">&#39;0123456789abcdef&#39;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">config_id</span><span class="p">)</span>  <span class="c1"># Valid hex characters</span></div>
+
+    
+<div class="viewcode-block" id="TestMountainCarPOMDPConfigId.test_config_id_deterministic">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.html#POMDPPlanners.tests.test_environments.test_mountain_car_pomdp.TestMountainCarPOMDPConfigId.test_config_id_deterministic">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_deterministic</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_mountain_car_environment</span><span class="p">:</span> <span class="n">MountainCarPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id is deterministic (same input always produces same output).</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that config_id generates deterministic identifiers for identical configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Given: MountainCarPOMDP environment with specific configuration</span>
+<span class="sd">        When: Config ID is generated multiple times for the same environment</span>
+<span class="sd">        Then: All generated config_ids are identical, demonstrating deterministic behavior</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: configuration</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">config_id1</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="n">config_id2</span> <span class="o">=</span> <span class="n">base_mountain_car_environment</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="k">assert</span> <span class="n">config_id1</span> <span class="o">==</span> <span class="n">config_id2</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

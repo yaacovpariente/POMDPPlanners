@@ -1,0 +1,4 @@
+.. automodule:: POMDPPlanners.tests.test_utils.test_tree_statistics
+   :members:
+   :show-inheritance:
+   :undoc-members:

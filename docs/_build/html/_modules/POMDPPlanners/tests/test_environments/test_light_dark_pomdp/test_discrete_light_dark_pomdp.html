@@ -1,0 +1,1385 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Tests for Discrete Light Dark POMDP environment.</span>
+
+<span class="sd">This module tests the Discrete Light Dark POMDP environment, focusing on:</span>
+<span class="sd">- Basic environment functionality</span>
+<span class="sd">- State transitions and observations</span>
+<span class="sd">- Reward calculations</span>
+<span class="sd">- Terminal conditions</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+<span class="c1"># Set seeds for reproducible tests</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteLightDarkPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteDistribution</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.environment</span><span class="w"> </span><span class="kn">import</span> <span class="n">ObservationModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">StepData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBelief</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">PolicyRunData</span><span class="p">,</span> <span class="n">PolicyInfoVariable</span>
+
+
+<div class="viewcode-block" id="base_light_dark_environment">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.base_light_dark_environment">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">base_light_dark_environment</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fixture providing a base DiscreteLightDarkPOMDP environment for comparison.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+        <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestDiscreteLightDarkPOMDPEquality</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test suite for DiscreteLightDarkPOMDP equality comparisons.&quot;&quot;&quot;</span>
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_same_discount_factor">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_same_discount_factor">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_same_discount_factor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that DiscreteLightDarkPOMDPs with same discount factor are equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP environments with identical parameters are equal and exhibit symmetry</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Two DiscreteLightDarkPOMDP environments with same parameters (discount=0.95, errors=0.05, grid=11x11, etc.)</span>
+<span class="sd">    When: Equality comparison is performed between identical environment configurations</span>
+<span class="sd">    Then: Both directions return True (env1 == env2 and env2 == env1) confirming symmetric equality</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">==</span> <span class="n">other_env</span>
+        <span class="k">assert</span> <span class="n">other_env</span> <span class="o">==</span> <span class="n">base_light_dark_environment</span>  <span class="c1"># Test symmetry</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_different_discount_factor">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_different_discount_factor">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_discount_factor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that DiscreteLightDarkPOMDPs with different discount factors are not equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP environments with different discount factors are correctly identified as unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base DiscreteLightDarkPOMDP with discount=0.95 and another with discount=0.8, otherwise identical parameters</span>
+<span class="sd">    When: Equality comparison is performed between environments with different discount factors</span>
+<span class="sd">    Then: Both directions return False (env1 != env2 and env2 != env1) confirming inequality detection</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span>
+        <span class="k">assert</span> <span class="n">other_env</span> <span class="o">!=</span> <span class="n">base_light_dark_environment</span>  <span class="c1"># Test symmetry</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_different_transition_error">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_different_transition_error">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_transition_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that DiscreteLightDarkPOMDPs with different transition error probabilities are not equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP environments with different transition error probabilities are correctly identified as unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base DiscreteLightDarkPOMDP with transition_error_prob=0.05 and another with transition_error_prob=0.1</span>
+<span class="sd">    When: Equality comparison is performed between environments with different transition error rates</span>
+<span class="sd">    Then: Environments are correctly identified as not equal due to different stochastic transition parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>  <span class="c1"># Different transition error</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_different_observation_error">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_different_observation_error">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_observation_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that DiscreteLightDarkPOMDPs with different observation error probabilities are not equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP environments with different observation error probabilities are correctly identified as unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base DiscreteLightDarkPOMDP with observation_error_prob=0.05 and another with observation_error_prob=0.1</span>
+<span class="sd">    When: Equality comparison is performed between environments with different observation noise levels</span>
+<span class="sd">    Then: Environments are correctly identified as not equal due to different partial observability parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>  <span class="c1"># Different observation error</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_different_beacons">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_different_beacons">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_beacons</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that DiscreteLightDarkPOMDPs with different beacon positions are not equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP environments with different beacon configurations are correctly identified as unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base DiscreteLightDarkPOMDP with default beacon positions and another with custom beacon array [[1,1,1,6,6,6,11,11,11],[1,6,11,1,6,11,1,6,11]]</span>
+<span class="sd">    When: Equality comparison is performed between environments with different light sources</span>
+<span class="sd">    Then: Environments are correctly identified as not equal due to different beacon position configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">beacons</span><span class="o">=</span><span class="p">[(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">11</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">11</span><span class="p">),</span> <span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="mi">11</span><span class="p">)],</span>  <span class="c1"># Different beacons</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_different_obstacles">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_different_obstacles">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_obstacles</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that DiscreteLightDarkPOMDPs with different obstacle positions are not equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP environments with different obstacle configurations are correctly identified as unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base DiscreteLightDarkPOMDP with default obstacle positions and another with custom obstacle array [[4,8],[6,6]]</span>
+<span class="sd">    When: Equality comparison is performed between environments with different obstacle layouts</span>
+<span class="sd">    Then: Environments are correctly identified as not equal due to different obstacle position configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">obstacles</span><span class="o">=</span><span class="p">[(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)],</span>  <span class="c1"># Different obstacles</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_different_goal_state">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_different_goal_state">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_goal_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that DiscreteLightDarkPOMDPs with different goal states are not equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP environments with different goal positions are correctly identified as unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base DiscreteLightDarkPOMDP with default goal_state=[10,5] and another with goal_state=[9,4]</span>
+<span class="sd">    When: Equality comparison is performed between environments with different target positions</span>
+<span class="sd">    Then: Environments are correctly identified as not equal due to different goal state configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">goal_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">9</span><span class="p">,</span> <span class="mi">4</span><span class="p">]),</span>  <span class="c1"># Different goal state</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_different_start_state">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_different_start_state">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_start_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that DiscreteLightDarkPOMDPs with different start states are not equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP environments with different starting positions are correctly identified as unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base DiscreteLightDarkPOMDP with default start_state=[0,5] and another with start_state=[1,4]</span>
+<span class="sd">    When: Equality comparison is performed between environments with different initial positions</span>
+<span class="sd">    Then: Environments are correctly identified as not equal due to different starting state configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">start_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">4</span><span class="p">]),</span>  <span class="c1"># Different start state</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_different_rewards">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_different_rewards">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_rewards</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that DiscreteLightDarkPOMDPs with different rewards are not equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP environments with different reward structures are correctly identified as unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base DiscreteLightDarkPOMDP with obstacle_reward=-10.0, goal_reward=10.0, fuel_cost=2.0 vs another with -20.0, 20.0, 3.0</span>
+<span class="sd">    When: Equality comparison is performed between environments with different reward parameters</span>
+<span class="sd">    Then: Environments are correctly identified as not equal due to different reward structure configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">20.0</span><span class="p">,</span>  <span class="c1"># Different obstacle reward</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">20.0</span><span class="p">,</span>  <span class="c1"># Different goal reward</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span>  <span class="c1"># Different fuel cost</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_different_grid_size">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_different_grid_size">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_grid_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that DiscreteLightDarkPOMDPs with different grid sizes are not equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP environments with different grid dimensions are correctly identified as unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base DiscreteLightDarkPOMDP with grid_size=11 (11x11 grid) and another with grid_size=15 (15x15 grid)</span>
+<span class="sd">    When: Equality comparison is performed between environments with different world dimensions</span>
+<span class="sd">    Then: Environments are correctly identified as not equal due to different grid size configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span>  <span class="c1"># Different grid size</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_different_beacon_radius">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_different_beacon_radius">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_beacon_radius</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that DiscreteLightDarkPOMDPs with different beacon radii are not equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP environments with different beacon influence radii are correctly identified as unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base DiscreteLightDarkPOMDP with default beacon_radius=1.0 and another with beacon_radius=2.0</span>
+<span class="sd">    When: Equality comparison is performed between environments with different beacon detection ranges</span>
+<span class="sd">    Then: Environments are correctly identified as not equal due to different beacon radius configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">beacon_radius</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>  <span class="c1"># Different beacon radius</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_different_stochastic_reward">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_different_stochastic_reward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_different_stochastic_reward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that DiscreteLightDarkPOMDPs with different stochastic reward settings are not equal.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP environments with different reward stochasticity settings are correctly identified as unequal</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base DiscreteLightDarkPOMDP with is_stochastic_reward=True and another with is_stochastic_reward=False</span>
+<span class="sd">    When: Equality comparison is performed between environments with different reward determinism settings</span>
+<span class="sd">    Then: Environments are correctly identified as not equal due to different stochastic reward configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>  <span class="c1"># Different stochastic reward setting</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_comparison_with_non_environment">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_comparison_with_non_environment">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_comparison_with_non_environment</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test comparison with non-Environment objects.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP equality returns False when compared with non-Environment objects</span>
+<span class="sd">    </span>
+<span class="sd">    Given: DiscreteLightDarkPOMDP environment and non-Environment objects (string, integer, None)</span>
+<span class="sd">    When: Equality comparison is performed between environment and non-environment types</span>
+<span class="sd">    Then: All comparisons return False for incompatible object types</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="s2">&quot;not an environment&quot;</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="mi">42</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="kc">None</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_missing_attributes">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_missing_attributes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_missing_attributes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test equality when attributes are missing.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP equality returns False when comparing with objects missing critical attributes</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Complete DiscreteLightDarkPOMDP and identical environments with missing attributes (beacons, obstacles)</span>
+<span class="sd">    When: Equality comparison is performed with environments missing critical configuration attributes</span>
+<span class="sd">    Then: All comparisons return False when attributes are missing from comparison objects</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="nb">delattr</span><span class="p">(</span><span class="n">other_env</span><span class="p">,</span> <span class="s1">&#39;beacons&#39;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span>
+        
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="nb">delattr</span><span class="p">(</span><span class="n">other_env</span><span class="p">,</span> <span class="s1">&#39;obstacles&#39;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">!=</span> <span class="n">other_env</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPEquality.test_deep_copy_equality">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPEquality.test_deep_copy_equality">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_deep_copy_equality</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that a deep copy of DiscreteLightDarkPOMDP is equal to original.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP equality works correctly with deep copied objects and exhibits symmetry</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Original DiscreteLightDarkPOMDP environment and its deep copy using copy.deepcopy</span>
+<span class="sd">    When: Equality comparison is performed between original and deep copied environment</span>
+<span class="sd">    Then: Both directions return True (original == copy and copy == original) confirming deep copy equality</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">copy</span>
+        <span class="n">copied_env</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">deepcopy</span><span class="p">(</span><span class="n">base_light_dark_environment</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">copied_env</span> <span class="o">==</span> <span class="n">base_light_dark_environment</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span> <span class="o">==</span> <span class="n">copied_env</span>  <span class="c1"># Test symmetry</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPConfigId">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPConfigId">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestDiscreteLightDarkPOMDPConfigId</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test suite for DiscreteLightDarkPOMDP config_id functionality.&quot;&quot;&quot;</span>
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPConfigId.test_config_id_consistency">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPConfigId.test_config_id_consistency">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_consistency</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id is consistent for identical environments.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP config_id generation produces consistent hashes for identical configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Two DiscreteLightDarkPOMDP environments with identical parameters (discount=0.95, errors=0.05, grid=11x11, etc.)</span>
+<span class="sd">    When: config_id is generated for both environment instances</span>
+<span class="sd">    Then: Both environments produce the same config_id hash value</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">==</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPConfigId.test_config_id_different_discount_factor">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPConfigId.test_config_id_different_discount_factor">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_different_discount_factor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id changes with different discount factor.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP config_id generation produces different hashes for different discount factors</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base DiscreteLightDarkPOMDP with discount=0.95 and another with discount=0.8, otherwise identical</span>
+<span class="sd">    When: config_id is generated for both environment instances with different discount factors</span>
+<span class="sd">    Then: Different discount factors produce different config_id hash values</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPConfigId.test_config_id_different_parameters">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPConfigId.test_config_id_different_parameters">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_different_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id changes with different parameters.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP config_id generation produces different hashes for different environment parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Base environment and multiple variations with different parameters (transition_error=0.1, observation_error=0.1, beacon positions)</span>
+<span class="sd">    When: config_id is generated for each parameter variation</span>
+<span class="sd">    Then: All parameter differences produce different config_id hash values</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="c1"># Test different transition error</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>  <span class="c1"># Different</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span>
+        
+        <span class="c1"># Test different observation error</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>  <span class="c1"># Different</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span>
+        
+        <span class="c1"># Test different beacons</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">beacons</span><span class="o">=</span><span class="p">[(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">11</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">11</span><span class="p">),</span> <span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="mi">11</span><span class="p">)],</span>  <span class="c1"># Different</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPConfigId.test_config_id_format">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPConfigId.test_config_id_format">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_format</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id is a valid SHA-256 hash.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP config_id follows proper SHA-256 hash format specification</span>
+<span class="sd">    </span>
+<span class="sd">    Given: DiscreteLightDarkPOMDP environment instance with configuration parameters</span>
+<span class="sd">    When: config_id property generates hash value from environment configuration</span>
+<span class="sd">    Then: Returns string with 64 characters, all valid hexadecimal digits (0-9, a-f)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">config_id</span> <span class="o">=</span> <span class="n">base_light_dark_environment</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config_id</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">config_id</span><span class="p">)</span> <span class="o">==</span> <span class="mi">64</span>  <span class="c1"># SHA-256 hash length</span>
+        <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">c</span> <span class="ow">in</span> <span class="s1">&#39;0123456789abcdef&#39;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">config_id</span><span class="p">)</span>  <span class="c1"># Valid hex characters</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPConfigId.test_config_id_deterministic">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPConfigId.test_config_id_deterministic">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_deterministic</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id is deterministic (same input always produces same output).</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP config_id property returns consistent values across multiple accesses</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Single DiscreteLightDarkPOMDP environment instance with fixed configuration parameters</span>
+<span class="sd">    When: config_id property is accessed multiple times on the same instance</span>
+<span class="sd">    Then: All accesses return identical config_id hash values (deterministic behavior)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">config_id1</span> <span class="o">=</span> <span class="n">base_light_dark_environment</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="n">config_id2</span> <span class="o">=</span> <span class="n">base_light_dark_environment</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="k">assert</span> <span class="n">config_id1</span> <span class="o">==</span> <span class="n">config_id2</span></div>
+
+    
+<div class="viewcode-block" id="TestDiscreteLightDarkPOMDPConfigId.test_config_id_order_invariance">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.TestDiscreteLightDarkPOMDPConfigId.test_config_id_order_invariance">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_order_invariance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_light_dark_environment</span><span class="p">:</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id is invariant to the order of beacons and obstacles.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates config_id behavior for  order invariance</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Belief objects with specific configurations</span>
+<span class="sd">    When: Config IDs are generated or compared</span>
+<span class="sd">    Then: Config IDs behave as expected (deterministic, unique, etc.)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="c1"># Create environment with same beacons but in different order</span>
+        <span class="c1"># Default beacons: [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)]</span>
+        <span class="c1"># Reorder by swapping first and last</span>
+        <span class="n">beacons_reordered</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)]</span>
+        
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">beacons</span><span class="o">=</span><span class="n">beacons_reordered</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">==</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span>
+        
+        <span class="c1"># Create environment with same obstacles but in different order</span>
+        <span class="c1"># Default obstacles: [(3, 7), (5, 5)]</span>
+        <span class="c1"># Reorder by swapping them</span>
+        <span class="n">obstacles_reordered</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">7</span><span class="p">)]</span>
+        
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">obstacles</span><span class="o">=</span><span class="n">obstacles_reordered</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">==</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span>
+        
+        <span class="c1"># Test both beacons and obstacles reordered together</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+            <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">beacons</span><span class="o">=</span><span class="n">beacons_reordered</span><span class="p">,</span>
+            <span class="n">obstacles</span><span class="o">=</span><span class="n">obstacles_reordered</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">base_light_dark_environment</span><span class="o">.</span><span class="n">config_id</span> <span class="o">==</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="test_initialization">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.test_initialization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_initialization</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test initialization with default parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates proper initialization of </span>
+<span class="sd">    </span>
+<span class="sd">    Given: Constructor parameters and initial conditions</span>
+<span class="sd">    When: Object is initialized</span>
+<span class="sd">    Then: Object is properly constructed with expected attributes</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+        <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Check default parameters</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">transition_error_prob</span> <span class="o">==</span> <span class="mf">0.05</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">observation_error_prob</span> <span class="o">==</span> <span class="mf">0.05</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacle_hit_probability</span> <span class="o">==</span> <span class="mf">0.2</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacle_reward</span> <span class="o">==</span> <span class="o">-</span><span class="mf">10.0</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">goal_reward</span> <span class="o">==</span> <span class="mf">10.0</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">fuel_cost</span> <span class="o">==</span> <span class="mf">2.0</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">grid_size</span> <span class="o">==</span> <span class="mi">11</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">beacon_radius</span> <span class="o">==</span> <span class="mf">1.0</span>
+
+    <span class="c1"># Check default state positions</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">goal_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">start_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+
+    <span class="c1"># Check default beacons</span>
+    <span class="n">expected_beacons</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+        <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">]]</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="p">,</span> <span class="n">expected_beacons</span><span class="p">)</span>
+
+    <span class="c1"># Check default obstacles (now 2xN format like beacons)</span>
+    <span class="n">expected_obstacles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">],</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mi">5</span><span class="p">]])</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="p">,</span> <span class="n">expected_obstacles</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_beacons_and_obstacles_array_structure">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.test_beacons_and_obstacles_array_structure">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_beacons_and_obstacles_array_structure</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that beacons and obstacles are numpy arrays with correct shapes after initialization.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP properly converts beacons and obstacles </span>
+<span class="sd">    to numpy arrays with the expected dimensions</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A DiscreteLightDarkPOMDP environment with default parameters</span>
+<span class="sd">    When: Environment is initialized with default beacons and obstacles</span>
+<span class="sd">    Then: </span>
+<span class="sd">        - beacons is a 2xN numpy array where N is the number of beacons</span>
+<span class="sd">        - obstacles is a 2xN numpy array where N is the number of obstacles (same format as beacons)</span>
+<span class="sd">        - Both arrays have the correct number of elements</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+        <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Test beacons structure</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="s2">&quot;beacons should be a numpy array&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;beacons should be 2-dimensional&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;beacons should have 2 rows (x and y coordinates)&quot;</span>
+    
+    <span class="c1"># Default beacons: [(0,0), (0,5), (0,10), (5,0), (5,5), (5,10), (10,0), (10,5), (10,10)]</span>
+    <span class="c1"># So there should be 9 beacons</span>
+    <span class="n">expected_num_beacons</span> <span class="o">=</span> <span class="mi">9</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">expected_num_beacons</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;beacons should have </span><span class="si">{</span><span class="n">expected_num_beacons</span><span class="si">}</span><span class="s2"> columns&quot;</span>
+    
+    <span class="c1"># Test obstacles structure (now 2xN format like beacons)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="s2">&quot;obstacles should be a numpy array&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;obstacles should be 2-dimensional&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;obstacles should have 2 rows (x and y coordinates)&quot;</span>
+    
+    <span class="c1"># Default obstacles: [(3,7), (5,5)]</span>
+    <span class="c1"># So there should be 2 obstacles</span>
+    <span class="n">expected_num_obstacles</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">expected_num_obstacles</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;obstacles should have </span><span class="si">{</span><span class="n">expected_num_obstacles</span><span class="si">}</span><span class="s2"> rows&quot;</span>
+    
+    <span class="c1"># Verify the coordinate structure</span>
+    <span class="c1"># Beacons: first row should be x coordinates, second row should be y coordinates</span>
+    <span class="n">expected_beacon_x</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">]</span>
+    <span class="n">expected_beacon_y</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">expected_beacon_x</span><span class="p">),</span> <span class="s2">&quot;beacons first row should contain x coordinates&quot;</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="p">:],</span> <span class="n">expected_beacon_y</span><span class="p">),</span> <span class="s2">&quot;beacons second row should contain y coordinates&quot;</span>
+    
+    <span class="c1"># Obstacles: now 2xN format like beacons (first row=x coords, second row=y coords)</span>
+    <span class="n">expected_obstacle_x</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span>  <span class="c1"># x coordinates of obstacles (3,7) and (5,5)</span>
+    <span class="n">expected_obstacle_y</span> <span class="o">=</span> <span class="p">[</span><span class="mi">7</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span>  <span class="c1"># y coordinates of obstacles (3,7) and (5,5)</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">expected_obstacle_x</span><span class="p">),</span> <span class="s2">&quot;obstacles first row should contain x coordinates&quot;</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="p">:],</span> <span class="n">expected_obstacle_y</span><span class="p">),</span> <span class="s2">&quot;obstacles second row should contain y coordinates&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_custom_beacons_and_obstacles_array_structure">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.test_custom_beacons_and_obstacles_array_structure">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_custom_beacons_and_obstacles_array_structure</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that custom beacons and obstacles are properly converted to numpy arrays with correct shapes.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP properly handles custom beacon and obstacle </span>
+<span class="sd">    configurations and converts them to the expected numpy array format</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A DiscreteLightDarkPOMDP environment with custom beacons and obstacles</span>
+<span class="sd">    When: Environment is initialized with custom beacon and obstacle lists</span>
+<span class="sd">    Then: </span>
+<span class="sd">        - Custom beacons are converted to 2xN numpy array format</span>
+<span class="sd">        - Custom obstacles are converted to Nx2 numpy array format</span>
+<span class="sd">        - Arrays contain the correct custom coordinates</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">custom_beacons</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)]</span>
+    <span class="n">custom_obstacles</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">8</span><span class="p">)]</span>
+    
+    <span class="n">env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+        <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">beacons</span><span class="o">=</span><span class="n">custom_beacons</span><span class="p">,</span>
+        <span class="n">obstacles</span><span class="o">=</span><span class="n">custom_obstacles</span><span class="p">,</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Test custom beacons structure</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="s2">&quot;custom beacons should be a numpy array&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;custom beacons should be 2-dimensional&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;custom beacons should have 2 rows (x and y coordinates)&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">custom_beacons</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;custom beacons should have </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">custom_beacons</span><span class="p">)</span><span class="si">}</span><span class="s2"> columns&quot;</span>
+    
+    <span class="c1"># Test custom obstacles structure (now 2xN format like beacons)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="s2">&quot;custom obstacles should be a numpy array&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;custom obstacles should be 2-dimensional&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;custom obstacles should have 2 rows (x and y coordinates)&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">custom_obstacles</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;custom obstacles should have </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">custom_obstacles</span><span class="p">)</span><span class="si">}</span><span class="s2"> columns&quot;</span>
+    
+    <span class="c1"># Verify custom coordinate structure</span>
+    <span class="c1"># Beacons: first row should be x coordinates, second row should be y coordinates</span>
+    <span class="n">expected_custom_beacon_x</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">]</span>
+    <span class="n">expected_custom_beacon_y</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">6</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">expected_custom_beacon_x</span><span class="p">),</span> <span class="s2">&quot;custom beacons first row should contain x coordinates&quot;</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="p">:],</span> <span class="n">expected_custom_beacon_y</span><span class="p">),</span> <span class="s2">&quot;custom beacons second row should contain y coordinates&quot;</span>
+    
+    <span class="c1"># Obstacles: now 2xN format like beacons (first row=x coords, second row=y coords)</span>
+    <span class="n">expected_custom_obstacle_x</span> <span class="o">=</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">7</span><span class="p">]</span>  <span class="c1"># x coordinates of obstacles (2,3), (4,4), (7,8)</span>
+    <span class="n">expected_custom_obstacle_y</span> <span class="o">=</span> <span class="p">[</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">8</span><span class="p">]</span>  <span class="c1"># y coordinates of obstacles (2,3), (4,4), (7,8)</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="p">:],</span> <span class="n">expected_custom_obstacle_x</span><span class="p">),</span> <span class="s2">&quot;custom obstacles first row should contain x coordinates&quot;</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="p">:],</span> <span class="n">expected_custom_obstacle_y</span><span class="p">),</span> <span class="s2">&quot;custom obstacles second row should contain y coordinates&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_empty_beacons_and_obstacles">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.test_empty_beacons_and_obstacles">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_empty_beacons_and_obstacles</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that empty beacons and obstacles lists are properly handled.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP properly handles edge cases with empty </span>
+<span class="sd">    beacon and obstacle configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A DiscreteLightDarkPOMDP environment with empty beacons and obstacles lists</span>
+<span class="sd">    When: Environment is initialized with empty lists</span>
+<span class="sd">    Then: </span>
+<span class="sd">        - Empty beacons list results in 2x0 numpy array</span>
+<span class="sd">        - Empty obstacles list results in 0x2 numpy array</span>
+<span class="sd">        - Arrays are properly shaped for empty cases</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">obstacle_reward</span><span class="o">=-</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">goal_reward</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">fuel_cost</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">grid_size</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+        <span class="n">is_stochastic_reward</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+        <span class="n">beacons</span><span class="o">=</span><span class="p">[],</span>  <span class="c1"># Empty beacons</span>
+        <span class="n">obstacles</span><span class="o">=</span><span class="p">[],</span>  <span class="c1"># Empty obstacles</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Test empty beacons structure</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="s2">&quot;empty beacons should be a numpy array&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;empty beacons should be 2-dimensional&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;empty beacons should have 2 rows&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;empty beacons should have 0 columns&quot;</span>
+    
+    <span class="c1"># Test empty obstacles structure (now 2xN format like beacons)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="s2">&quot;empty obstacles should be a numpy array&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;empty obstacles should be 2-dimensional&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;empty obstacles should have 2 rows&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;empty obstacles should have 0 columns&quot;</span>
+    
+    <span class="c1"># Verify arrays are empty but properly shaped</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">beacons</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;empty beacons array should have size 0&quot;</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;empty obstacles array should have size 0&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_state_transition_model">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.test_state_transition_model">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_state_transition_model</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test state transition model</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP state transition model correctly handles stochastic movement with error probabilities</span>
+<span class="sd">    </span>
+<span class="sd">    Given: DiscreteLightDarkPOMDP with transition_error_prob=0.1, state=[5,5], action=&quot;up&quot;</span>
+<span class="sd">    When: state_transition_model generates transition distribution with intended and unintended movements</span>
+<span class="sd">    Then: Returns DiscreteDistribution with 90% probability for &quot;up&quot; and 10%/3 for other directions, correct state values</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">transition_error_prob</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
+
+    <span class="c1"># Test &#39;up&#39; action</span>
+    <span class="n">dist</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s2">&quot;up&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dist</span><span class="p">,</span> <span class="n">DiscreteDistribution</span><span class="p">)</span>
+
+    <span class="c1"># Check probabilities</span>
+    <span class="c1"># The implementation uses the order: up, down, right, left</span>
+    <span class="c1"># For &#39;up&#39; action, the first position (index 0) should have high probability</span>
+    <span class="n">expected_probs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span>
+        <span class="p">[</span><span class="mf">0.9</span><span class="p">,</span> <span class="mf">0.1</span> <span class="o">/</span> <span class="mi">3</span><span class="p">,</span> <span class="mf">0.1</span> <span class="o">/</span> <span class="mi">3</span><span class="p">,</span> <span class="mf">0.1</span> <span class="o">/</span> <span class="mi">3</span><span class="p">]</span>
+    <span class="p">)</span>  <span class="c1"># 0.9 for correct action, 0.1/3 for others</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">probs</span><span class="p">,</span> <span class="n">expected_probs</span><span class="p">)</span>
+
+    <span class="c1"># Check values</span>
+    <span class="n">expected_values</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">state</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>  <span class="c1"># up</span>
+        <span class="n">state</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]),</span>  <span class="c1"># down</span>
+        <span class="n">state</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span>  <span class="c1"># right</span>
+        <span class="n">state</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span>  <span class="c1"># left</span>
+    <span class="p">]</span>
+    <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">v1</span><span class="p">,</span> <span class="n">v2</span><span class="p">)</span> <span class="k">for</span> <span class="n">v1</span><span class="p">,</span> <span class="n">v2</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">values</span><span class="p">,</span> <span class="n">expected_values</span><span class="p">))</span></div>
+
+
+
+<div class="viewcode-block" id="test_observation_model">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.test_observation_model">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_observation_model</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test observation model</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP observation model correctly handles partial observability with error probabilities</span>
+<span class="sd">    </span>
+<span class="sd">    Given: DiscreteLightDarkPOMDP with observation_error_prob=0.1, state=[5,5], action=&quot;up&quot;</span>
+<span class="sd">    When: observation_model generates observation distribution with true and noisy observations</span>
+<span class="sd">    Then: Returns ObservationModel with highest probability (&gt;0.5) for correct state observation</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">observation_error_prob</span><span class="o">=</span><span class="mf">0.1</span><span class="p">)</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
+
+    <span class="c1"># Test observation model</span>
+    <span class="n">dist</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s2">&quot;up&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dist</span><span class="p">,</span> <span class="n">ObservationModel</span><span class="p">)</span>
+
+    <span class="c1"># Check that the correct state has highest probability</span>
+    <span class="n">correct_state_idx</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="nb">len</span><span class="p">(</span><span class="n">dist</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">values</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+    <span class="p">)</span>  <span class="c1"># Last value is the correct state</span>
+    <span class="k">assert</span> <span class="p">(</span>
+        <span class="n">dist</span><span class="o">.</span><span class="n">distribution</span><span class="o">.</span><span class="n">probs</span><span class="p">[</span><span class="n">correct_state_idx</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.5</span>
+    <span class="p">)</span>  <span class="c1"># Should be 1 - observation_error_prob</span></div>
+
+
+
+<div class="viewcode-block" id="test_reward_function">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.test_reward_function">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_reward_function</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test reward function</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP reward function correctly calculates goal rewards, obstacle penalties, and fuel costs</span>
+<span class="sd">    </span>
+<span class="sd">    Given: DiscreteLightDarkPOMDP with obstacle_hit_probability=1.0, various state-action combinations</span>
+<span class="sd">    When: Reward is calculated for goal-reaching, obstacle-hitting, and normal movement scenarios</span>
+<span class="sd">    Then: Returns correct rewards: goal_reward-fuel_cost, obstacle penalty with distance cost, normal movement with distance cost</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+
+    <span class="c1"># Test goal state reward</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">9</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
+    <span class="n">reward</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">)</span>  <span class="c1"># Moves to [10, 5] which is goal</span>
+    <span class="k">assert</span> <span class="n">reward</span> <span class="o">==</span> <span class="n">env</span><span class="o">.</span><span class="n">goal_reward</span> <span class="o">-</span> <span class="n">env</span><span class="o">.</span><span class="n">fuel_cost</span>
+
+    <span class="c1"># Test obstacle hit reward</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
+    <span class="n">reward</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">)</span>  <span class="c1"># Moves to [5, 5] which is obstacle</span>
+    <span class="k">assert</span> <span class="n">reward</span> <span class="o">==</span> <span class="o">-</span><span class="n">env</span><span class="o">.</span><span class="n">fuel_cost</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span> <span class="o">-</span> <span class="n">env</span><span class="o">.</span><span class="n">goal_state</span><span class="p">)</span> <span class="o">+</span> <span class="n">env</span><span class="o">.</span><span class="n">obstacle_reward</span>
+
+    <span class="c1"># Test normal movement reward</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">reward</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">reward</span> <span class="o">==</span> <span class="o">-</span><span class="n">env</span><span class="o">.</span><span class="n">fuel_cost</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">-</span> <span class="n">env</span><span class="o">.</span><span class="n">goal_state</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_is_terminal">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.test_is_terminal">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_is_terminal</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test terminal state detection</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP correctly identifies terminal states including goal, obstacles, and boundary violations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: DiscreteLightDarkPOMDP with goal state, obstacle positions, grid boundaries, and normal states</span>
+<span class="sd">    When: is_terminal checks various state positions for termination conditions</span>
+<span class="sd">    Then: Returns True for goal state, obstacle states, out-of-bounds states, False for normal navigation states</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+    <span class="c1"># Test goal state</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">goal_state</span><span class="p">)</span>
+
+    <span class="c1"># Test obstacle state</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">env</span><span class="o">.</span><span class="n">obstacles</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span>  <span class="c1"># First obstacle</span>
+
+    <span class="c1"># Test out of grid state</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+    <span class="k">assert</span> <span class="n">env</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">12</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>  <span class="c1"># grid_size + 1</span>
+
+    <span class="c1"># Test non-terminal state</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">env</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">]))</span></div>
+
+
+
+<div class="viewcode-block" id="test_initial_distributions">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.test_initial_distributions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_initial_distributions</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test initial state and observation distributions</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP provides correct initial state and observation distributions for episode initialization</span>
+<span class="sd">    </span>
+<span class="sd">    Given: DiscreteLightDarkPOMDP with default start_state=[0,5] and initial observation setup</span>
+<span class="sd">    When: initial_state_dist and initial_observation_dist generate starting distributions</span>
+<span class="sd">    Then: State distribution has probability 1.0 for start_state, observation distribution has probability 1.0 for initial value</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+    <span class="c1"># Test initial state distribution</span>
+    <span class="n">state_dist</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">initial_state_dist</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state_dist</span><span class="p">,</span> <span class="n">DiscreteDistribution</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">state_dist</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">env</span><span class="o">.</span><span class="n">start_state</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">state_dist</span><span class="o">.</span><span class="n">probs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span>
+
+    <span class="c1"># Test initial observation distribution</span>
+    <span class="n">obs_dist</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">initial_observation_dist</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obs_dist</span><span class="p">,</span> <span class="n">DiscreteDistribution</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">obs_dist</span><span class="o">.</span><span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span>
+    <span class="k">assert</span> <span class="n">obs_dist</span><span class="o">.</span><span class="n">probs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span></div>
+
+
+
+<div class="viewcode-block" id="test_get_actions">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.test_get_actions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_get_actions</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test action list retrieval</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP provides correct set of available navigation actions</span>
+<span class="sd">    </span>
+<span class="sd">    Given: DiscreteLightDarkPOMDP environment with discrete action space</span>
+<span class="sd">    When: get_actions retrieves the complete set of available actions</span>
+<span class="sd">    Then: Returns action set {&quot;up&quot;, &quot;down&quot;, &quot;right&quot;, &quot;left&quot;} for 4-directional grid navigation</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="n">actions</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">get_actions</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;up&quot;</span><span class="p">,</span> <span class="s2">&quot;down&quot;</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="test_visualize_path">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.test_visualize_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_visualize_path</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test path visualization</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP visualization creates animated GIF files showing agent path and belief evolution</span>
+<span class="sd">    </span>
+<span class="sd">    Given: DiscreteLightDarkPOMDP, path=[0,5]→[1,5]→[2,5]→[3,5], belief path with distributions, actions=[&quot;right&quot;,&quot;right&quot;,&quot;right&quot;]</span>
+<span class="sd">    When: visualize_path creates animation with agent trajectory and belief visualization</span>
+<span class="sd">    Then: Creates GIF file at specified cache_path location with path animation</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">])]</span>
+    
+    <span class="c1"># Create a simple belief path for testing</span>
+    <span class="n">agent_belief_path</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">DiscreteDistribution</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="n">path</span><span class="p">[</span><span class="n">i</span><span class="p">]],</span> <span class="n">probs</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">]))</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">path</span><span class="p">))</span>
+    <span class="p">]</span>
+
+    <span class="c1"># Create actions corresponding to the path</span>
+    <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">]</span>  <span class="c1"># 0-&gt;1, 1-&gt;2, 2-&gt;3</span>
+
+    <span class="c1"># Test visualization with temporary path</span>
+    <span class="n">cache_path</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;test_animation.gif&quot;</span>
+    <span class="n">env</span><span class="o">.</span><span class="n">visualize_path</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">path</span><span class="p">,</span> <span class="n">agent_belief_path</span><span class="o">=</span><span class="n">agent_belief_path</span><span class="p">,</span> <span class="n">actions</span><span class="o">=</span><span class="n">actions</span><span class="p">,</span> <span class="n">cache_path</span><span class="o">=</span><span class="n">cache_path</span><span class="p">)</span>
+
+    <span class="c1"># Verify file was created</span>
+    <span class="k">assert</span> <span class="n">cache_path</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="test_compute_metrics">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.html#POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp.test_compute_metrics">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_compute_metrics</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test computation of metrics for different simulation histories</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteLightDarkPOMDP computes performance metrics from simulation histories including success and failure rates</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Three simulation histories - 2 reaching goal, 1 hitting obstacle, with proper StepData and belief sequences</span>
+<span class="sd">    When: compute_metrics analyzes the simulation histories for performance statistics</span>
+<span class="sd">    Then: Returns goal_reaching_rate=2/3 and obstacle_hit_rate=1/3 with confidence bounds</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">DiscreteLightDarkPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    
+    <span class="c1"># Create test histories</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">StepData</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBelief</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">PolicyRunData</span><span class="p">,</span> <span class="n">PolicyInfoVariable</span>
+    
+    <span class="c1"># Create a simple belief for testing</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">create_test_belief</span><span class="p">(</span><span class="n">state</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span>
+            <span class="n">particles</span><span class="o">=</span><span class="p">[</span><span class="n">state</span><span class="p">],</span>
+            <span class="n">log_weights</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">]),</span>  <span class="c1"># Using non-zero log weight</span>
+            <span class="n">resampling</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+    
+    <span class="c1"># History 1: Reaches goal in 3 steps</span>
+    <span class="n">history1</span> <span class="o">=</span> <span class="n">History</span><span class="p">([</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+        <span class="p">),</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+        <span class="p">),</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+        <span class="p">),</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span>  <span class="c1"># Goal state</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+        <span class="p">),</span>
+    <span class="p">],</span> <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">average_state_sampling_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">average_action_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">average_observation_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">average_belief_update_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">average_reward_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">actual_num_steps</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">reach_terminal_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">policy_run_data</span><span class="o">=</span><span class="n">PolicyRunData</span><span class="p">(</span><span class="n">info_variables</span><span class="o">=</span><span class="p">[]))</span>
+    
+    <span class="c1"># History 2: Hits obstacle</span>
+    <span class="n">history2</span> <span class="o">=</span> <span class="n">History</span><span class="p">([</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+        <span class="p">),</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+        <span class="p">),</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">12.0</span><span class="p">,</span>  <span class="c1"># Obstacle state at (5, 5)</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+        <span class="p">),</span>
+    <span class="p">],</span> <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">average_state_sampling_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">average_action_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">average_observation_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">average_belief_update_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">average_reward_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">actual_num_steps</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">reach_terminal_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">policy_run_data</span><span class="o">=</span><span class="n">PolicyRunData</span><span class="p">(</span><span class="n">info_variables</span><span class="o">=</span><span class="p">[]))</span>
+    
+    <span class="c1"># History 3: Reaches goal in 5 steps, avoiding obstacle by going up</span>
+    <span class="n">history3</span> <span class="o">=</span> <span class="n">History</span><span class="p">([</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+        <span class="p">),</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+        <span class="p">),</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;up&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">6</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">6</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+        <span class="p">),</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">6</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">2</span><span class="p">,</span> <span class="mi">6</span><span class="p">]))</span>
+        <span class="p">),</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">4</span><span class="p">,</span> <span class="mi">6</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=-</span><span class="mf">2.0</span><span class="p">,</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">3</span><span class="p">,</span> <span class="mi">6</span><span class="p">]))</span>
+        <span class="p">),</span>
+        <span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">action</span><span class="o">=</span><span class="s2">&quot;right&quot;</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+            <span class="n">reward</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span>  <span class="c1"># Goal state</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">create_test_belief</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]))</span>
+        <span class="p">),</span>
+    <span class="p">],</span> <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">average_state_sampling_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">average_action_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">average_observation_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">average_belief_update_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">average_reward_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">actual_num_steps</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">reach_terminal_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">policy_run_data</span><span class="o">=</span><span class="n">PolicyRunData</span><span class="p">(</span><span class="n">info_variables</span><span class="o">=</span><span class="p">[]))</span>
+    
+    <span class="c1"># Compute metrics</span>
+    <span class="n">metrics</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">compute_metrics</span><span class="p">([</span><span class="n">history1</span><span class="p">,</span> <span class="n">history2</span><span class="p">,</span> <span class="n">history3</span><span class="p">])</span>
+    
+    <span class="c1"># Convert metrics to dictionary for easier access</span>
+    <span class="n">metrics_dict</span> <span class="o">=</span> <span class="p">{</span><span class="n">metric</span><span class="o">.</span><span class="n">name</span><span class="p">:</span> <span class="n">metric</span> <span class="k">for</span> <span class="n">metric</span> <span class="ow">in</span> <span class="n">metrics</span><span class="p">}</span>
+    
+    <span class="c1"># Test goal reaching rate</span>
+    <span class="k">assert</span> <span class="s2">&quot;goal_reaching_rate&quot;</span> <span class="ow">in</span> <span class="n">metrics_dict</span>
+    <span class="n">goal_rate</span> <span class="o">=</span> <span class="n">metrics_dict</span><span class="p">[</span><span class="s2">&quot;goal_reaching_rate&quot;</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">goal_rate</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mi">2</span><span class="o">/</span><span class="mi">3</span>  <span class="c1"># 2 out of 3 histories reach goal</span>
+    <span class="k">assert</span> <span class="n">goal_rate</span><span class="o">.</span><span class="n">lower_confidence_bound</span> <span class="o">&lt;=</span> <span class="n">goal_rate</span><span class="o">.</span><span class="n">value</span> <span class="o">&lt;=</span> <span class="n">goal_rate</span><span class="o">.</span><span class="n">upper_confidence_bound</span>
+    
+    <span class="c1"># Test obstacle hit rate</span>
+    <span class="k">assert</span> <span class="s2">&quot;obstacle_hit_rate&quot;</span> <span class="ow">in</span> <span class="n">metrics_dict</span>
+    <span class="n">obstacle_rate</span> <span class="o">=</span> <span class="n">metrics_dict</span><span class="p">[</span><span class="s2">&quot;obstacle_hit_rate&quot;</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">obstacle_rate</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mi">1</span><span class="o">/</span><span class="mi">3</span>  <span class="c1"># 1 out of 3 histories hits obstacle</span>
+    <span class="k">assert</span> <span class="n">obstacle_rate</span><span class="o">.</span><span class="n">lower_confidence_bound</span> <span class="o">&lt;=</span> <span class="n">obstacle_rate</span><span class="o">.</span><span class="n">value</span> <span class="o">&lt;=</span> <span class="n">obstacle_rate</span><span class="o">.</span><span class="n">upper_confidence_bound</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

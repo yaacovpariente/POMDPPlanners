@@ -1,0 +1,823 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_environments.test_tiger_pomdp &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_environments.test_tiger_pomdp</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_environments.test_tiger_pomdp</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">StepData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">PolicyRunData</span><span class="p">,</span> <span class="n">PolicyInfoVariable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.tests.test_utils.confidence_interval_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">verify_metrics_within_confidence_intervals</span>
+
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="tiger_pomdp">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.tiger_pomdp">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">tiger_pomdp</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_initialization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_initialization</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test TigerPOMDP environment initialization and basic attributes.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP initializes correctly with expected states, actions, and observations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment with discount_factor=0.95</span>
+<span class="sd">    When: Environment instance is created</span>
+<span class="sd">    Then: Environment has correct attributes: discount_factor=0.95, states (tiger_left, tiger_right), actions (listen, open_left, open_right), observations (hear_left, hear_right, hear_nothing)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">discount_factor</span> <span class="o">==</span> <span class="mf">0.95</span>
+    <span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">states</span><span class="p">)</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;tiger_right&quot;</span><span class="p">}</span>
+    <span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">}</span>
+    <span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">observations</span><span class="p">)</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;hear_left&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_right&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_nothing&quot;</span><span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="test_get_actions">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_get_actions">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_get_actions</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test action space retrieval.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP get_actions method returns the correct action space</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment with default configuration</span>
+<span class="sd">    When: get_actions method is called</span>
+<span class="sd">    Then: Returns list of 3 actions: listen, open_left, open_right, representing all available actions in the Tiger environment</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">actions</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">get_actions</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+    <span class="k">assert</span> <span class="nb">set</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span> <span class="o">==</span> <span class="p">{</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">}</span></div>
+
+
+
+<div class="viewcode-block" id="test_initial_state_distribution">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_initial_state_distribution">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_initial_state_distribution</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test initial state distribution sampling.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP initial state distribution works correctly</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment</span>
+<span class="sd">    When: Initial state distribution is sampled 100 times</span>
+<span class="sd">    Then: All samples are valid states (tiger_left or tiger_right) and both states appear, demonstrating proper distribution</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dist</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">initial_state_dist</span><span class="p">()</span>
+    <span class="c1"># Sample multiple times to ensure we get both states</span>
+    <span class="n">samples</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">s</span> <span class="ow">in</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">states</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">samples</span><span class="p">))</span> <span class="o">==</span> <span class="mi">2</span>  <span class="c1"># Should get both states</span></div>
+
+
+
+<div class="viewcode-block" id="test_initial_observation_distribution">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_initial_observation_distribution">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_initial_observation_distribution</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test initial observation distribution sampling.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP initial observation distribution works correctly</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment</span>
+<span class="sd">    When: Initial observation distribution is sampled 10 times</span>
+<span class="sd">    Then: All samples return &quot;hear_nothing&quot;, confirming that initial observations are always &quot;hear_nothing&quot;</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dist</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">initial_observation_dist</span><span class="p">()</span>
+    <span class="n">samples</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">s</span> <span class="o">==</span> <span class="s2">&quot;hear_nothing&quot;</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_state_transition_listen">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_state_transition_listen">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_state_transition_listen</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test state transition for listen action.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP listen action doesn&#39;t change the state</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)</span>
+<span class="sd">    When: State transition model is created for listen action and next state is sampled</span>
+<span class="sd">    Then: All samples return the same state as the input state, confirming that listening doesn&#39;t change the tiger&#39;s position</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Listening shouldn&#39;t change the state</span>
+    <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">states</span><span class="p">:</span>
+        <span class="n">dist</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s2">&quot;listen&quot;</span><span class="p">)</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">s</span> <span class="o">==</span> <span class="n">state</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_state_transition_open_door">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_state_transition_open_door">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_state_transition_open_door</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test state transition for open door actions.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP open door actions randomly place tiger behind either door</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment starting from tiger_left state and both open actions (open_left, open_right)</span>
+<span class="sd">    When: State transition model is created for open actions and next states are sampled 100 times</span>
+<span class="sd">    Then: All samples are valid states and both states appear, demonstrating random placement after opening doors</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Opening a door should randomly place tiger behind either door</span>
+    <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">]:</span>
+        <span class="n">dist</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">s</span> <span class="ow">in</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">states</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="nb">set</span><span class="p">(</span><span class="n">samples</span><span class="p">))</span> <span class="o">==</span> <span class="mi">2</span>  <span class="c1"># Should get both states</span></div>
+
+
+
+<div class="viewcode-block" id="test_observation_model_listen">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_observation_model_listen">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_observation_model_listen</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test observation model for listen action.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP listen action provides mostly correct observations with some noise</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)</span>
+<span class="sd">    When: Observation model is created for listen action and observations are sampled 100 times</span>
+<span class="sd">    Then: Most observations are correct (hear_left for tiger_left, hear_right for tiger_right) with approximately 85% accuracy</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test listen action with both states</span>
+    <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">states</span><span class="p">:</span>
+        <span class="n">dist</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s2">&quot;listen&quot;</span><span class="p">)</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">s</span> <span class="ow">in</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">observations</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">)</span>
+
+        <span class="c1"># Should mostly get correct observation</span>
+        <span class="n">expected_obs</span> <span class="o">=</span> <span class="s2">&quot;hear_left&quot;</span> <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="s2">&quot;tiger_left&quot;</span> <span class="k">else</span> <span class="s2">&quot;hear_right&quot;</span>
+        <span class="n">correct_count</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="mi">1</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">samples</span> <span class="k">if</span> <span class="n">s</span> <span class="o">==</span> <span class="n">expected_obs</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">correct_count</span> <span class="o">&gt;</span> <span class="mi">70</span>  <span class="c1"># Should be around 85% correct</span></div>
+
+
+
+<div class="viewcode-block" id="test_observation_model_open_door">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_observation_model_open_door">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_observation_model_open_door</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test observation model for open door actions.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP open door actions always provide &quot;hear_nothing&quot; observations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment and both states (tiger_left, tiger_right) with both open actions (open_left, open_right)</span>
+<span class="sd">    When: Observation model is created for open actions and observations are sampled 10 times</span>
+<span class="sd">    Then: All samples return &quot;hear_nothing&quot;, confirming that opening doors provides no auditory information</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Opening a door should always give &#39;hear_nothing&#39;</span>
+    <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">states</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">]:</span>
+            <span class="n">dist</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+            <span class="n">samples</span> <span class="o">=</span> <span class="n">dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">s</span> <span class="o">==</span> <span class="s2">&quot;hear_nothing&quot;</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_reward_func_listen">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_reward_func_listen">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_reward_func_listen</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test reward function for listen action.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP listen action always provides -1.0 reward</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)</span>
+<span class="sd">    When: Reward function is called with listen action for each state</span>
+<span class="sd">    Then: All calls return -1.0, confirming that listening always incurs a small penalty</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Listening should always give -1 reward</span>
+    <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">states</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="s2">&quot;listen&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mf">1.0</span></div>
+
+
+
+<div class="viewcode-block" id="test_reward_func_open_door">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_reward_func_open_door">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_reward_func_open_door</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test reward function for open door actions.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP open door actions provide correct rewards based on tiger location</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)</span>
+<span class="sd">    When: Reward function is called with open actions for each state</span>
+<span class="sd">    Then: Returns -100.0 for opening door with tiger, 10.0 for opening door with treasure, demonstrating correct reward structure</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test opening doors with tiger</span>
+    <span class="k">assert</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mf">100.0</span>
+    <span class="k">assert</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="s2">&quot;tiger_right&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="o">-</span><span class="mf">100.0</span>
+
+    <span class="c1"># Test opening doors with treasure</span>
+    <span class="k">assert</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="s2">&quot;tiger_right&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mf">10.0</span>
+    <span class="k">assert</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mf">10.0</span></div>
+
+
+
+<div class="viewcode-block" id="test_is_terminal">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_is_terminal">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_is_terminal</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test terminal state detection.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP correctly identifies terminal states</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment and all possible states</span>
+<span class="sd">    When: is_terminal method is called for each state</span>
+<span class="sd">    Then: All states return False, confirming that TigerPOMDP currently has no terminal states</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Currently always returns False</span>
+    <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">states</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="ow">not</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">state</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_reward_range">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_reward_range">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_reward_range</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that reward range is correctly set.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP has the correct reward range parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment with default configuration</span>
+<span class="sd">    When: Environment reward_range attribute is checked</span>
+<span class="sd">    Then: Returns (-100.0, 10.0) representing the minimum (opening door with tiger) and maximum (opening door with treasure) rewards</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward_range</span> <span class="o">==</span> <span class="p">(</span><span class="o">-</span><span class="mf">100.0</span><span class="p">,</span> <span class="mf">10.0</span><span class="p">)</span>
+    
+    <span class="c1"># Verify the actual rewards match the range</span>
+    <span class="n">min_reward</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span>
+        <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">),</span>    <span class="c1"># Opening door with tiger: -100.0</span>
+        <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="s2">&quot;tiger_right&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">),</span>  <span class="c1"># Opening door with tiger: -100.0</span>
+        <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;listen&quot;</span><span class="p">),</span>       <span class="c1"># Listening: -1.0</span>
+        <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="s2">&quot;tiger_right&quot;</span><span class="p">,</span> <span class="s2">&quot;listen&quot;</span><span class="p">)</span>       <span class="c1"># Listening: -1.0</span>
+    <span class="p">)</span>
+    <span class="n">max_reward</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span>
+        <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">),</span>   <span class="c1"># Opening door with treasure: 10.0</span>
+        <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="s2">&quot;tiger_right&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">),</span>   <span class="c1"># Opening door with treasure: 10.0</span>
+        <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;listen&quot;</span><span class="p">),</span>       <span class="c1"># Listening: -1.0</span>
+        <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="s2">&quot;tiger_right&quot;</span><span class="p">,</span> <span class="s2">&quot;listen&quot;</span><span class="p">)</span>       <span class="c1"># Listening: -1.0</span>
+    <span class="p">)</span>
+    
+    <span class="k">assert</span> <span class="n">min_reward</span> <span class="o">==</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward_range</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">max_reward</span> <span class="o">==</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">reward_range</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span></div>
+
+
+
+<div class="viewcode-block" id="TestTigerPOMDPConfigId">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestTigerPOMDPConfigId</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test suite for TigerPOMDP config_id functionality.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP config_id generates proper identifiers and changes with configuration differences</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Various TigerPOMDP configurations with different parameters</span>
+<span class="sd">    When: Config IDs are generated and compared</span>
+<span class="sd">    Then: Config IDs behave correctly: consistent for same config, different for different configs, proper format, and deterministic</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+<div class="viewcode-block" id="TestTigerPOMDPConfigId.test_config_id_consistency">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_consistency">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_consistency</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiger_pomdp</span><span class="p">:</span> <span class="n">TigerPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id is consistent for identical configurations.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that TigerPOMDP config_id generates consistent identifiers for identical configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Given: Two TigerPOMDP environments with identical discount_factor=0.95</span>
+<span class="sd">        When: Config IDs are generated for both environments</span>
+<span class="sd">        Then: Both environments have identical config_ids, demonstrating consistency for same configuration</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: configuration</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">config_id</span> <span class="o">==</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestTigerPOMDPConfigId.test_config_id_different_discount_factor">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_different_discount_factor">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_different_discount_factor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiger_pomdp</span><span class="p">:</span> <span class="n">TigerPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id changes with different discount factors.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that TigerPOMDP config_id generates different identifiers for different discount factors</span>
+<span class="sd">        </span>
+<span class="sd">        Given: Two TigerPOMDP environments with different discount factors (0.95 vs 0.8)</span>
+<span class="sd">        When: Config IDs are generated for both environments</span>
+<span class="sd">        Then: Environments have different config_ids, demonstrating uniqueness for different configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: configuration</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestTigerPOMDPConfigId.test_config_id_different_states">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_different_states">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_different_states</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiger_pomdp</span><span class="p">:</span> <span class="n">TigerPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id changes with different states.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that TigerPOMDP config_id generates different identifiers for different state configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Given: Two TigerPOMDP environments with different states (2 states vs 3 states including tiger_middle)</span>
+<span class="sd">        When: Config IDs are generated for both environments</span>
+<span class="sd">        Then: Environments have different config_ids, demonstrating uniqueness for different state configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: configuration</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">states</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;tiger_right&quot;</span><span class="p">,</span> <span class="s2">&quot;tiger_middle&quot;</span><span class="p">]</span>  <span class="c1"># Different states</span>
+        <span class="k">assert</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestTigerPOMDPConfigId.test_config_id_different_actions">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_different_actions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_different_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiger_pomdp</span><span class="p">:</span> <span class="n">TigerPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id changes with different actions.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that TigerPOMDP config_id generates different identifiers for different action configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Given: Two TigerPOMDP environments with different actions (3 actions vs 4 actions including wait)</span>
+<span class="sd">        When: Config IDs are generated for both environments</span>
+<span class="sd">        Then: Environments have different config_ids, demonstrating uniqueness for different action configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: configuration</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">,</span> <span class="s2">&quot;wait&quot;</span><span class="p">]</span>  <span class="c1"># Different actions</span>
+        <span class="k">assert</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestTigerPOMDPConfigId.test_config_id_different_observations">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_different_observations">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_different_observations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiger_pomdp</span><span class="p">:</span> <span class="n">TigerPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id changes with different observations.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that TigerPOMDP config_id generates different identifiers for different observation configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Given: Two TigerPOMDP environments with different observations (3 observations vs 4 observations including hear_both)</span>
+<span class="sd">        When: Config IDs are generated for both environments</span>
+<span class="sd">        Then: Environments have different config_ids, demonstrating uniqueness for different observation configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: configuration</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">other_env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">other_env</span><span class="o">.</span><span class="n">observations</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;hear_left&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_right&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_nothing&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_both&quot;</span><span class="p">]</span>  <span class="c1"># Different observations</span>
+        <span class="k">assert</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">other_env</span><span class="o">.</span><span class="n">config_id</span></div>
+
+    
+<div class="viewcode-block" id="TestTigerPOMDPConfigId.test_config_id_format">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_format">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_format</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiger_pomdp</span><span class="p">:</span> <span class="n">TigerPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id is a valid SHA-256 hash.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that TigerPOMDP config_id generates properly formatted SHA-256 hash identifiers</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A TigerPOMDP environment with specific configuration</span>
+<span class="sd">        When: Config ID is generated for the environment</span>
+<span class="sd">        Then: Returns a 64-character string containing only valid hexadecimal characters (0-9, a-f)</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: configuration</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">config_id</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config_id</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">config_id</span><span class="p">)</span> <span class="o">==</span> <span class="mi">64</span>  <span class="c1"># SHA-256 hash length</span>
+        <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">c</span> <span class="ow">in</span> <span class="s1">&#39;0123456789abcdef&#39;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">config_id</span><span class="p">)</span>  <span class="c1"># Valid hex characters</span></div>
+
+    
+<div class="viewcode-block" id="TestTigerPOMDPConfigId.test_config_id_deterministic">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_deterministic">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_deterministic</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiger_pomdp</span><span class="p">:</span> <span class="n">TigerPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id is deterministic (same input always produces same output).</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that TigerPOMDP config_id generates deterministic identifiers for identical configurations</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A TigerPOMDP environment with specific configuration</span>
+<span class="sd">        When: Config ID is generated multiple times for the same environment</span>
+<span class="sd">        Then: All generated config_ids are identical, demonstrating deterministic behavior</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">config_id1</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="n">config_id2</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="k">assert</span> <span class="n">config_id1</span> <span class="o">==</span> <span class="n">config_id2</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="TestTigerPOMDPMetrics">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestTigerPOMDPMetrics</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test suite for TigerPOMDP compute_metrics functionality.&quot;&quot;&quot;</span>
+    
+<div class="viewcode-block" id="TestTigerPOMDPMetrics.test_compute_metrics_perfect_agent">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics.test_compute_metrics_perfect_agent">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_compute_metrics_perfect_agent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiger_pomdp</span><span class="p">:</span> <span class="n">TigerPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test metrics for a perfect agent that always opens the correct door.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that TigerPOMDP compute_metrics correctly calculates success rate and average listens for perfect performance</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A TigerPOMDP environment and 10 perfect agent histories (listen 3 times then open correct door)</span>
+<span class="sd">        When: compute_metrics is called with the perfect agent histories</span>
+<span class="sd">        Then: Returns 100% success rate and average of 3.0 listens, confirming perfect agent metrics</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">StepData</span>
+        
+        <span class="c1"># Create histories where agent always opens correct door</span>
+        <span class="n">histories</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+            <span class="c1"># Randomly choose initial state</span>
+            <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;tiger_right&quot;</span><span class="p">])</span>
+            <span class="c1"># Agent listens a few times then opens correct door</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>  <span class="c1"># Listen 3 times</span>
+                <span class="n">steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">StepData</span><span class="p">(</span>
+                    <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span>
+                    <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                    <span class="n">observation</span><span class="o">=</span><span class="s2">&quot;hear_nothing&quot;</span><span class="p">,</span>
+                    <span class="n">reward</span><span class="o">=-</span><span class="mf">1.0</span><span class="p">,</span>
+                    <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>  <span class="c1"># Belief not needed for metrics</span>
+                <span class="p">))</span>
+            <span class="c1"># Open correct door</span>
+            <span class="n">correct_action</span> <span class="o">=</span> <span class="s2">&quot;open_right&quot;</span> <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="s2">&quot;tiger_left&quot;</span> <span class="k">else</span> <span class="s2">&quot;open_left&quot;</span>
+            <span class="n">steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">StepData</span><span class="p">(</span>
+                <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                <span class="n">action</span><span class="o">=</span><span class="n">correct_action</span><span class="p">,</span>
+                <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                <span class="n">observation</span><span class="o">=</span><span class="s2">&quot;hear_nothing&quot;</span><span class="p">,</span>
+                <span class="n">reward</span><span class="o">=</span><span class="mf">10.0</span> <span class="k">if</span> <span class="n">correct_action</span> <span class="o">==</span> <span class="s2">&quot;open_right&quot;</span> <span class="k">else</span> <span class="o">-</span><span class="mf">100.0</span><span class="p">,</span>
+                <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>  <span class="c1"># Belief not needed for metrics</span>
+            <span class="p">))</span>
+            <span class="n">histories</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span>
+                <span class="n">history</span><span class="o">=</span><span class="n">steps</span><span class="p">,</span>
+                <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+                <span class="n">average_state_sampling_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">average_action_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">average_observation_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">average_belief_update_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">average_reward_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">actual_num_steps</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span>
+                <span class="n">reach_terminal_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">policy_run_data</span><span class="o">=</span><span class="n">PolicyRunData</span><span class="p">(</span><span class="n">info_variables</span><span class="o">=</span><span class="p">[])</span>
+            <span class="p">))</span>
+        
+        <span class="c1"># Compute metrics for the perfect agent</span>
+        <span class="n">metrics</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">compute_metrics</span><span class="p">(</span><span class="n">histories</span><span class="p">)</span>
+        
+        <span class="c1"># Should have 100% success rate</span>
+        <span class="n">success_metric</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metrics</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;success_rate&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">success_metric</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mf">1.0</span>
+        
+        <span class="c1"># Should have average of 3 listens</span>
+        <span class="n">listens_metric</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metrics</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;average_listens&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">listens_metric</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mf">3.0</span></div>
+
+    
+<div class="viewcode-block" id="TestTigerPOMDPMetrics.test_compute_metrics_failing_agent">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics.test_compute_metrics_failing_agent">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_compute_metrics_failing_agent</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiger_pomdp</span><span class="p">:</span> <span class="n">TigerPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test metrics for an agent that always opens the wrong door.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that TigerPOMDP compute_metrics correctly calculates success rate and average listens for failing performance</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A TigerPOMDP environment and 10 failing agent histories (listen 2 times then open wrong door)</span>
+<span class="sd">        When: compute_metrics is called with the failing agent histories</span>
+<span class="sd">        Then: Returns 0% success rate and average of 2.0 listens, confirming failing agent metrics</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">StepData</span>
+        
+        <span class="c1"># Create histories where agent always opens wrong door</span>
+        <span class="n">histories</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+            <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;tiger_right&quot;</span><span class="p">])</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>  <span class="c1"># Listen 2 times</span>
+                <span class="n">steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">StepData</span><span class="p">(</span>
+                    <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span>
+                    <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                    <span class="n">observation</span><span class="o">=</span><span class="s2">&quot;hear_nothing&quot;</span><span class="p">,</span>
+                    <span class="n">reward</span><span class="o">=-</span><span class="mf">1.0</span><span class="p">,</span>
+                    <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>  <span class="c1"># Belief not needed for metrics</span>
+                <span class="p">))</span>
+            <span class="c1"># Open wrong door</span>
+            <span class="n">wrong_action</span> <span class="o">=</span> <span class="s2">&quot;open_left&quot;</span> <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="s2">&quot;tiger_left&quot;</span> <span class="k">else</span> <span class="s2">&quot;open_right&quot;</span>
+            <span class="n">steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">StepData</span><span class="p">(</span>
+                <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                <span class="n">action</span><span class="o">=</span><span class="n">wrong_action</span><span class="p">,</span>
+                <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                <span class="n">observation</span><span class="o">=</span><span class="s2">&quot;hear_nothing&quot;</span><span class="p">,</span>
+                <span class="n">reward</span><span class="o">=-</span><span class="mf">100.0</span> <span class="k">if</span> <span class="n">wrong_action</span> <span class="o">==</span> <span class="s2">&quot;open_left&quot;</span> <span class="k">else</span> <span class="mf">10.0</span><span class="p">,</span>
+                <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>  <span class="c1"># Belief not needed for metrics</span>
+            <span class="p">))</span>
+            <span class="n">histories</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span>
+                <span class="n">history</span><span class="o">=</span><span class="n">steps</span><span class="p">,</span>
+                <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+                <span class="n">average_state_sampling_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">average_action_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">average_observation_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">average_belief_update_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">average_reward_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">actual_num_steps</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+                <span class="n">reach_terminal_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">policy_run_data</span><span class="o">=</span><span class="n">PolicyRunData</span><span class="p">(</span><span class="n">info_variables</span><span class="o">=</span><span class="p">[])</span>
+            <span class="p">))</span>
+        
+        <span class="c1"># Compute metrics for the failing agent</span>
+        <span class="n">metrics</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">compute_metrics</span><span class="p">(</span><span class="n">histories</span><span class="p">)</span>
+        
+        <span class="c1"># Should have 0% success rate</span>
+        <span class="n">success_metric</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metrics</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;success_rate&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">success_metric</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mf">0.0</span>
+        
+        <span class="c1"># Should have average of 2 listens</span>
+        <span class="n">listens_metric</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metrics</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;average_listens&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">listens_metric</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mf">2.0</span></div>
+
+    
+<div class="viewcode-block" id="TestTigerPOMDPMetrics.test_compute_metrics_mixed_performance">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics.test_compute_metrics_mixed_performance">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_compute_metrics_mixed_performance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiger_pomdp</span><span class="p">:</span> <span class="n">TigerPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test metrics for an agent with mixed performance.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that TigerPOMDP compute_metrics correctly calculates success rate and average listens for mixed performance</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A TigerPOMDP environment and 10 mixed performance histories (varying listens, alternating correct/incorrect actions)</span>
+<span class="sd">        When: compute_metrics is called with the mixed performance histories</span>
+<span class="sd">        Then: Returns 50% success rate and average of 1.9 listens, confirming mixed performance metrics</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">StepData</span>
+        
+        <span class="c1"># Create histories with mixed success/failure</span>
+        <span class="n">histories</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+            <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;tiger_right&quot;</span><span class="p">])</span>
+            <span class="n">steps</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">i</span> <span class="o">%</span> <span class="mi">3</span> <span class="o">+</span> <span class="mi">1</span><span class="p">):</span>  <span class="c1"># Varying number of listens</span>
+                <span class="n">steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">StepData</span><span class="p">(</span>
+                    <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                    <span class="n">action</span><span class="o">=</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span>
+                    <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                    <span class="n">observation</span><span class="o">=</span><span class="s2">&quot;hear_nothing&quot;</span><span class="p">,</span>
+                    <span class="n">reward</span><span class="o">=-</span><span class="mf">1.0</span><span class="p">,</span>
+                    <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>  <span class="c1"># Belief not needed for metrics</span>
+                <span class="p">))</span>
+            <span class="c1"># Alternate between correct and incorrect actions</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;open_right&quot;</span> <span class="k">if</span> <span class="p">(</span><span class="n">i</span> <span class="o">%</span> <span class="mi">2</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="n">state</span> <span class="o">==</span> <span class="s2">&quot;tiger_left&quot;</span><span class="p">)</span> <span class="k">else</span> <span class="s2">&quot;open_left&quot;</span>
+            <span class="n">steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">StepData</span><span class="p">(</span>
+                <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+                <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                <span class="n">observation</span><span class="o">=</span><span class="s2">&quot;hear_nothing&quot;</span><span class="p">,</span>
+                <span class="n">reward</span><span class="o">=</span><span class="mf">10.0</span> <span class="k">if</span> <span class="n">action</span> <span class="o">==</span> <span class="s2">&quot;open_right&quot;</span> <span class="k">else</span> <span class="o">-</span><span class="mf">100.0</span><span class="p">,</span>
+                <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>  <span class="c1"># Belief not needed for metrics</span>
+            <span class="p">))</span>
+            <span class="n">histories</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span>
+                <span class="n">history</span><span class="o">=</span><span class="n">steps</span><span class="p">,</span>
+                <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+                <span class="n">average_state_sampling_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">average_action_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">average_observation_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">average_belief_update_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">average_reward_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+                <span class="n">actual_num_steps</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">steps</span><span class="p">),</span>
+                <span class="n">reach_terminal_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                <span class="n">policy_run_data</span><span class="o">=</span><span class="n">PolicyRunData</span><span class="p">(</span><span class="n">info_variables</span><span class="o">=</span><span class="p">[])</span>
+            <span class="p">))</span>
+        
+        <span class="c1"># Compute metrics for the mixed performance agent</span>
+        <span class="n">metrics</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">compute_metrics</span><span class="p">(</span><span class="n">histories</span><span class="p">)</span>
+        
+        <span class="c1"># Should have 50% success rate</span>
+        <span class="n">success_metric</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metrics</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;success_rate&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">success_metric</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mf">0.5</span>
+        
+        <span class="c1"># Should have average of 1.9 listens (1, 2, 3, 1, 2, 3, 1, 2, 3, 1)</span>
+        <span class="n">listens_metric</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metrics</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;average_listens&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">listens_metric</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mf">1.9</span></div>
+
+    
+<div class="viewcode-block" id="TestTigerPOMDPMetrics.test_compute_metrics_empty_histories">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics.test_compute_metrics_empty_histories">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_compute_metrics_empty_histories</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tiger_pomdp</span><span class="p">:</span> <span class="n">TigerPOMDP</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test metrics with empty history list.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that TigerPOMDP compute_metrics handles empty history lists correctly</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A TigerPOMDP environment and empty history list []</span>
+<span class="sd">        When: compute_metrics is called with empty histories</span>
+<span class="sd">        Then: Returns 0% success rate and 0 listens, confirming proper handling of empty input</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">metrics</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">compute_metrics</span><span class="p">([])</span>
+        
+        <span class="c1"># Should have 0% success rate</span>
+        <span class="n">success_metric</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metrics</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;success_rate&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">success_metric</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mf">0.0</span>
+        
+        <span class="c1"># Should have 0 listens</span>
+        <span class="n">listens_metric</span> <span class="o">=</span> <span class="nb">next</span><span class="p">(</span><span class="n">m</span> <span class="k">for</span> <span class="n">m</span> <span class="ow">in</span> <span class="n">metrics</span> <span class="k">if</span> <span class="n">m</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;average_listens&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">listens_metric</span><span class="o">.</span><span class="n">value</span> <span class="o">==</span> <span class="mf">0.0</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="test_metrics_confidence_intervals">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.html#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_metrics_confidence_intervals">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_metrics_confidence_intervals</span><span class="p">(</span><span class="n">tiger_pomdp</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that metric values fall within their confidence intervals.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that TigerPOMDP compute_metrics returns metric values within their confidence bounds</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A TigerPOMDP environment and diverse performance histories</span>
+<span class="sd">    When: compute_metrics is called with the histories</span>
+<span class="sd">    Then: Each metric value falls within its lower_confidence_bound and upper_confidence_bound</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">StepData</span>
+    
+    <span class="c1"># Create diverse performance histories with different outcomes</span>
+    <span class="n">histories</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>  <span class="c1"># For reproducible test</span>
+    
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">20</span><span class="p">):</span>  <span class="c1"># Use enough episodes for meaningful statistics</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;tiger_right&quot;</span><span class="p">])</span>
+        <span class="n">steps</span> <span class="o">=</span> <span class="p">[]</span>
+        
+        <span class="c1"># Vary number of listens (0-5)</span>
+        <span class="n">num_listens</span> <span class="o">=</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">6</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_listens</span><span class="p">):</span>
+            <span class="n">steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">StepData</span><span class="p">(</span>
+                <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                <span class="n">action</span><span class="o">=</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span>
+                <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                <span class="n">observation</span><span class="o">=</span><span class="s2">&quot;hear_nothing&quot;</span><span class="p">,</span>
+                <span class="n">reward</span><span class="o">=-</span><span class="mf">1.0</span><span class="p">,</span>
+                <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>
+            <span class="p">))</span>
+        
+        <span class="c1"># Vary success rate: 70% success rate</span>
+        <span class="k">if</span> <span class="n">i</span> <span class="o">%</span> <span class="mi">10</span> <span class="o">&lt;</span> <span class="mi">7</span><span class="p">:</span>  <span class="c1"># 70% success</span>
+            <span class="n">correct_action</span> <span class="o">=</span> <span class="s2">&quot;open_right&quot;</span> <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="s2">&quot;tiger_left&quot;</span> <span class="k">else</span> <span class="s2">&quot;open_left&quot;</span>
+            <span class="n">reward</span> <span class="o">=</span> <span class="mf">10.0</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># 30% failure</span>
+            <span class="n">correct_action</span> <span class="o">=</span> <span class="s2">&quot;open_left&quot;</span> <span class="k">if</span> <span class="n">state</span> <span class="o">==</span> <span class="s2">&quot;tiger_left&quot;</span> <span class="k">else</span> <span class="s2">&quot;open_right&quot;</span>
+            <span class="n">reward</span> <span class="o">=</span> <span class="o">-</span><span class="mf">100.0</span>
+            
+        <span class="n">steps</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">StepData</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">correct_action</span><span class="p">,</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">observation</span><span class="o">=</span><span class="s2">&quot;hear_nothing&quot;</span><span class="p">,</span>
+            <span class="n">reward</span><span class="o">=</span><span class="n">reward</span><span class="p">,</span>
+            <span class="n">belief</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">))</span>
+        
+        <span class="n">histories</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">History</span><span class="p">(</span>
+            <span class="n">history</span><span class="o">=</span><span class="n">steps</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">average_state_sampling_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+            <span class="n">average_action_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+            <span class="n">average_observation_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+            <span class="n">average_belief_update_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+            <span class="n">average_reward_time</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+            <span class="n">actual_num_steps</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">steps</span><span class="p">),</span>
+            <span class="n">reach_terminal_state</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">policy_run_data</span><span class="o">=</span><span class="n">PolicyRunData</span><span class="p">(</span><span class="n">info_variables</span><span class="o">=</span><span class="p">[])</span>
+        <span class="p">))</span>
+    
+    <span class="c1"># Compute metrics</span>
+    <span class="n">metrics</span> <span class="o">=</span> <span class="n">tiger_pomdp</span><span class="o">.</span><span class="n">compute_metrics</span><span class="p">(</span><span class="n">histories</span><span class="p">)</span>
+    
+    <span class="c1"># Use generic confidence interval verification</span>
+    <span class="n">verify_metrics_within_confidence_intervals</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

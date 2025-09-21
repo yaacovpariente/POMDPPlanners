@@ -1,0 +1,222 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_utils.test_confidence_interval_utils &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_utils.test_confidence_interval_utils</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_utils.test_confidence_interval_utils</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Tests for confidence interval testing utilities.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">MetricValue</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.tests.test_utils.confidence_interval_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">verify_metrics_within_confidence_intervals</span>
+
+
+<div class="viewcode-block" id="test_verify_metrics_valid_intervals">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_confidence_interval_utils.test_verify_metrics_valid_intervals">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_verify_metrics_valid_intervals</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test confidence interval verification with valid intervals.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that verification passes for metrics within their confidence intervals</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MetricValue objects with values within their confidence bounds</span>
+<span class="sd">    When: verify_metrics_within_confidence_intervals is called</span>
+<span class="sd">    Then: No assertions are raised, confirming valid intervals pass</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">metrics</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">MetricValue</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_metric&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="mf">4.0</span><span class="p">,</span> <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="mf">6.0</span><span class="p">),</span>
+        <span class="n">MetricValue</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;zero_metric&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="mf">0.0</span><span class="p">),</span>
+        <span class="n">MetricValue</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;narrow_metric&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span> <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="mf">10.0</span><span class="p">)</span>
+    <span class="p">]</span>
+    
+    <span class="c1"># Should not raise any exceptions</span>
+    <span class="n">verify_metrics_within_confidence_intervals</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_verify_metrics_outside_intervals">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_confidence_interval_utils.test_verify_metrics_outside_intervals">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_verify_metrics_outside_intervals</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test confidence interval verification with metrics outside intervals.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that verification fails for metrics outside their confidence intervals</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MetricValue objects with values outside their confidence bounds</span>
+<span class="sd">    When: verify_metrics_within_confidence_intervals is called</span>
+<span class="sd">    Then: AssertionError is raised with descriptive message</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">metrics</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">MetricValue</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;outside_metric&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="mf">6.0</span><span class="p">,</span> <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="mf">8.0</span><span class="p">)</span>
+    <span class="p">]</span>
+    
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">AssertionError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">&quot;outside_metric value 5.0 not within confidence interval&quot;</span><span class="p">):</span>
+        <span class="n">verify_metrics_within_confidence_intervals</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_verify_metrics_invalid_bounds">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_confidence_interval_utils.test_verify_metrics_invalid_bounds">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_verify_metrics_invalid_bounds</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test confidence interval verification with invalid bound ordering.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that verification fails for metrics with lower &gt; upper bounds</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MetricValue objects with lower bound greater than upper bound</span>
+<span class="sd">    When: verify_metrics_within_confidence_intervals is called</span>
+<span class="sd">    Then: AssertionError is raised with descriptive message about bound ordering</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">metrics</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">MetricValue</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;invalid_bounds&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span> <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="mf">8.0</span><span class="p">,</span> <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="mf">6.0</span><span class="p">)</span>
+    <span class="p">]</span>
+    
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">AssertionError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">&quot;invalid_bounds: Lower bound 8.0 &gt; upper bound 6.0&quot;</span><span class="p">):</span>
+        <span class="n">verify_metrics_within_confidence_intervals</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_verify_metrics_with_tolerance">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_confidence_interval_utils.test_verify_metrics_with_tolerance">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_verify_metrics_with_tolerance</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test confidence interval verification with tolerance parameter.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that tolerance parameter correctly expands effective bounds</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MetricValue with value slightly outside bounds but within tolerance</span>
+<span class="sd">    When: verify_metrics_within_confidence_intervals is called with tolerance</span>
+<span class="sd">    Then: No exceptions are raised due to tolerance expansion</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">metrics</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">MetricValue</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;tolerance_metric&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mf">5.1</span><span class="p">,</span> <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="mf">4.0</span><span class="p">,</span> <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>
+    <span class="p">]</span>
+    
+    <span class="c1"># Should pass with tolerance of 0.2</span>
+    <span class="n">verify_metrics_within_confidence_intervals</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">0.2</span><span class="p">)</span>
+    
+    <span class="c1"># Should fail without tolerance</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">AssertionError</span><span class="p">):</span>
+        <span class="n">verify_metrics_within_confidence_intervals</span><span class="p">(</span><span class="n">metrics</span><span class="p">,</span> <span class="n">tolerance</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_verify_metrics_with_wide_intervals">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_confidence_interval_utils.test_verify_metrics_with_wide_intervals">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_verify_metrics_with_wide_intervals</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test confidence interval verification accepts wide intervals.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that verification accepts metrics with wide confidence intervals (common in POMDP environments)</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MetricValue objects with confidence intervals much wider than metric values</span>
+<span class="sd">    When: verify_metrics_within_confidence_intervals is called</span>
+<span class="sd">    Then: No exceptions are raised, as wide intervals are acceptable for small samples</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">metrics</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">MetricValue</span><span class="p">(</span><span class="n">name</span><span class="o">=</span><span class="s2">&quot;wide_metric&quot;</span><span class="p">,</span> <span class="n">value</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="mf">5.0</span><span class="p">)</span>  <span class="c1"># 500% relative width</span>
+    <span class="p">]</span>
+    
+    <span class="c1"># Should not raise any exceptions - wide intervals are acceptable</span>
+    <span class="n">verify_metrics_within_confidence_intervals</span><span class="p">(</span><span class="n">metrics</span><span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

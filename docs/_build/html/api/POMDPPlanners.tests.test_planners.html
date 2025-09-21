@@ -1,0 +1,756 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_planners package &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="POMDPPlanners.tests.test_planners.test_mcts_planners package" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html" />
+    <link rel="prev" title="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils package" href="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="POMDPPlanners.html">POMDPPlanners package</a></li>
+          <li class="breadcrumb-item"><a href="POMDPPlanners.tests.html">POMDPPlanners.tests package</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_planners package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.tests.test_planners.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-POMDPPlanners.tests.test_planners">
+<span id="pomdpplanners-tests-test-planners-package"></span><h1>POMDPPlanners.tests.test_planners package<a class="headerlink" href="#module-POMDPPlanners.tests.test_planners" title="Link to this heading"></a></h1>
+<section id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html">POMDPPlanners.tests.test_planners.test_mcts_planners package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#module-POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples">POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples.main"><code class="docutils literal notranslate"><span class="pre">main()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples.test_action_sampler_usage_example"><code class="docutils literal notranslate"><span class="pre">test_action_sampler_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples.test_mcts_algorithms_integration"><code class="docutils literal notranslate"><span class="pre">test_mcts_algorithms_integration()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples.test_path_simulation_policy_custom_mcts_example"><code class="docutils literal notranslate"><span class="pre">test_path_simulation_policy_custom_mcts_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples.test_pft_dpw_cartpole_usage_example"><code class="docutils literal notranslate"><span class="pre">test_pft_dpw_cartpole_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples.test_pft_dpw_navigation_usage_example"><code class="docutils literal notranslate"><span class="pre">test_pft_dpw_navigation_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples.test_pomcp_comprehensive_usage_example"><code class="docutils literal notranslate"><span class="pre">test_pomcp_comprehensive_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples.test_pomcpow_comprehensive_usage_example"><code class="docutils literal notranslate"><span class="pre">test_pomcpow_comprehensive_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples.test_sparse_pft_parameter_comparison_example"><code class="docutils literal notranslate"><span class="pre">test_sparse_pft_parameter_comparison_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples.test_sparse_pft_tiger_usage_example"><code class="docutils literal notranslate"><span class="pre">test_sparse_pft_tiger_usage_example()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#module-POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy">POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.ConcretePathSimulationPolicy"><code class="docutils literal notranslate"><span class="pre">ConcretePathSimulationPolicy</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.ConcretePathSimulationPolicy.get_space_info"><code class="docutils literal notranslate"><span class="pre">ConcretePathSimulationPolicy.get_space_info()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockActionSampler"><code class="docutils literal notranslate"><span class="pre">MockActionSampler</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockActionSampler.get_space"><code class="docutils literal notranslate"><span class="pre">MockActionSampler.get_space()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockActionSampler.sample"><code class="docutils literal notranslate"><span class="pre">MockActionSampler.sample()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment"><code class="docutils literal notranslate"><span class="pre">MockEnvironment</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.get_actions"><code class="docutils literal notranslate"><span class="pre">MockEnvironment.get_actions()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.initial_observation_dist"><code class="docutils literal notranslate"><span class="pre">MockEnvironment.initial_observation_dist()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.initial_state_dist"><code class="docutils literal notranslate"><span class="pre">MockEnvironment.initial_state_dist()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.is_equal_observation"><code class="docutils literal notranslate"><span class="pre">MockEnvironment.is_equal_observation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.is_equal_state"><code class="docutils literal notranslate"><span class="pre">MockEnvironment.is_equal_state()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.is_terminal"><code class="docutils literal notranslate"><span class="pre">MockEnvironment.is_terminal()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.observation_model"><code class="docutils literal notranslate"><span class="pre">MockEnvironment.observation_model()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.reward"><code class="docutils literal notranslate"><span class="pre">MockEnvironment.reward()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.state_transition_model"><code class="docutils literal notranslate"><span class="pre">MockEnvironment.state_transition_model()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyAbstractContract"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyAbstractContract</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyAbstractContract.test_cannot_instantiate_abstract_base_class"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyAbstractContract.test_cannot_instantiate_abstract_base_class()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyInitialization</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_both_n_simulations_and_timeout_raises_error"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyInitialization.test_both_n_simulations_and_timeout_raises_error()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_continuous_environment_initialization_with_action_sampler"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyInitialization.test_continuous_environment_initialization_with_action_sampler()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_continuous_environment_without_action_sampler_raises_error"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyInitialization.test_continuous_environment_without_action_sampler_raises_error()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_discrete_environment_initialization_with_n_simulations"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyInitialization.test_discrete_environment_initialization_with_n_simulations()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_discrete_environment_initialization_with_timeout"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyInitialization.test_discrete_environment_initialization_with_timeout()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_initialization_with_optional_parameters"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyInitialization.test_initialization_with_optional_parameters()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_neither_n_simulations_nor_timeout_in_learn_tree_raises_error"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyInitialization.test_neither_n_simulations_nor_timeout_in_learn_tree_raises_error()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTerminalBeliefHandling"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyTerminalBeliefHandling</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTerminalBeliefHandling.test_non_terminal_belief_builds_tree"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyTerminalBeliefHandling.test_non_terminal_belief_builds_tree()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTerminalBeliefHandling.test_terminal_belief_returns_random_action_continuous"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyTerminalBeliefHandling.test_terminal_belief_returns_random_action_continuous()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTerminalBeliefHandling.test_terminal_belief_returns_random_action_discrete"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyTerminalBeliefHandling.test_terminal_belief_returns_random_action_discrete()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTreeConstruction"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyTreeConstruction</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTreeConstruction.test_construct_tree_using_n_simulations"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyTreeConstruction.test_construct_tree_using_n_simulations()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTreeConstruction.test_construct_tree_using_timeout"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyTreeConstruction.test_construct_tree_using_timeout()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTreeConstruction.test_construct_tree_with_none_n_simulations_raises_error"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyTreeConstruction.test_construct_tree_with_none_n_simulations_raises_error()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTreeConstruction.test_construct_tree_with_none_timeout_raises_error"><code class="docutils literal notranslate"><span class="pre">TestPathSimulationPolicyTreeConstruction.test_construct_tree_with_none_timeout_raises_error()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.action_sampler"><code class="docutils literal notranslate"><span class="pre">action_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.belief"><code class="docutils literal notranslate"><span class="pre">belief()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.continuous_environment"><code class="docutils literal notranslate"><span class="pre">continuous_environment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.discrete_environment"><code class="docutils literal notranslate"><span class="pre">discrete_environment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.terminal_belief"><code class="docutils literal notranslate"><span class="pre">terminal_belief()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#module-POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw">POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.action_sampler"><code class="docutils literal notranslate"><span class="pre">action_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.environment"><code class="docutils literal notranslate"><span class="pre">environment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.initial_belief"><code class="docutils literal notranslate"><span class="pre">initial_belief()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.planner"><code class="docutils literal notranslate"><span class="pre">planner()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_action_progressive_widening"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_action_sampler"><code class="docutils literal notranslate"><span class="pre">test_action_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_initialization"><code class="docutils literal notranslate"><span class="pre">test_initialization()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_config_id_action_sampler_attribute_changes"><code class="docutils literal notranslate"><span class="pre">test_pft_dpw_config_id_action_sampler_attribute_changes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_config_id_consistency_across_evaluations"><code class="docutils literal notranslate"><span class="pre">test_pft_dpw_config_id_consistency_across_evaluations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_config_id_consistency_identical_parameters"><code class="docutils literal notranslate"><span class="pre">test_pft_dpw_config_id_consistency_identical_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_config_id_different_action_sampler_values"><code class="docutils literal notranslate"><span class="pre">test_pft_dpw_config_id_different_action_sampler_values()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_config_id_different_planner_parameters"><code class="docutils literal notranslate"><span class="pre">test_pft_dpw_config_id_different_planner_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_config_id_timeout_consistency"><code class="docutils literal notranslate"><span class="pre">test_pft_dpw_config_id_timeout_consistency()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_mutual_exclusivity_constraint"><code class="docutils literal notranslate"><span class="pre">test_pft_dpw_mutual_exclusivity_constraint()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_timeout_configuration"><code class="docutils literal notranslate"><span class="pre">test_pft_dpw_timeout_configuration()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_timeout_policy_execution"><code class="docutils literal notranslate"><span class="pre">test_pft_dpw_timeout_policy_execution()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_simulate_path"><code class="docutils literal notranslate"><span class="pre">test_simulate_path()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#module-POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp">POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.belief"><code class="docutils literal notranslate"><span class="pre">belief()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.depth"><code class="docutils literal notranslate"><span class="pre">depth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.discount_factor"><code class="docutils literal notranslate"><span class="pre">discount_factor()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.environment"><code class="docutils literal notranslate"><span class="pre">environment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.exploration_constant"><code class="docutils literal notranslate"><span class="pre">exploration_constant()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.n_particles"><code class="docutils literal notranslate"><span class="pre">n_particles()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.n_simulations"><code class="docutils literal notranslate"><span class="pre">n_simulations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.planner"><code class="docutils literal notranslate"><span class="pre">planner()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_action_selection"><code class="docutils literal notranslate"><span class="pre">test_action_selection()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_construct_tree_using_n_simulations"><code class="docutils literal notranslate"><span class="pre">test_construct_tree_using_n_simulations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_construct_tree_using_timeout"><code class="docutils literal notranslate"><span class="pre">test_construct_tree_using_timeout()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_initialization_with_n_simulations"><code class="docutils literal notranslate"><span class="pre">test_initialization_with_n_simulations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_initialization_with_timeout"><code class="docutils literal notranslate"><span class="pre">test_initialization_with_timeout()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_integration_with_tiger_pomdp"><code class="docutils literal notranslate"><span class="pre">test_integration_with_tiger_pomdp()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_invalid_initialization"><code class="docutils literal notranslate"><span class="pre">test_invalid_initialization()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_pomcp_config_id_consistency_across_evaluations"><code class="docutils literal notranslate"><span class="pre">test_pomcp_config_id_consistency_across_evaluations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_pomcp_config_id_consistency_identical_parameters"><code class="docutils literal notranslate"><span class="pre">test_pomcp_config_id_consistency_identical_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_pomcp_config_id_different_depth"><code class="docutils literal notranslate"><span class="pre">test_pomcp_config_id_different_depth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_pomcp_config_id_different_exploration_constant"><code class="docutils literal notranslate"><span class="pre">test_pomcp_config_id_different_exploration_constant()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_pomcp_config_id_different_min_samples_per_node"><code class="docutils literal notranslate"><span class="pre">test_pomcp_config_id_different_min_samples_per_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_pomcp_config_id_hash_properties"><code class="docutils literal notranslate"><span class="pre">test_pomcp_config_id_hash_properties()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_random_rollout"><code class="docutils literal notranslate"><span class="pre">test_random_rollout()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_sanity_pomdp_action_selection"><code class="docutils literal notranslate"><span class="pre">test_sanity_pomdp_action_selection()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_search_behavior_with_initial_belief"><code class="docutils literal notranslate"><span class="pre">test_search_behavior_with_initial_belief()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp.test_tree_structure_construction"><code class="docutils literal notranslate"><span class="pre">test_tree_structure_construction()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#module-POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw">POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.MockActionSampler"><code class="docutils literal notranslate"><span class="pre">MockActionSampler</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.MockActionSampler.get_space"><code class="docutils literal notranslate"><span class="pre">MockActionSampler.get_space()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.MockActionSampler.sample"><code class="docutils literal notranslate"><span class="pre">MockActionSampler.sample()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.action_sampler"><code class="docutils literal notranslate"><span class="pre">action_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.alpha_a"><code class="docutils literal notranslate"><span class="pre">alpha_a()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.alpha_o"><code class="docutils literal notranslate"><span class="pre">alpha_o()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.belief"><code class="docutils literal notranslate"><span class="pre">belief()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.depth"><code class="docutils literal notranslate"><span class="pre">depth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.discount_factor"><code class="docutils literal notranslate"><span class="pre">discount_factor()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.discrete_action_sampler"><code class="docutils literal notranslate"><span class="pre">discrete_action_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.environment"><code class="docutils literal notranslate"><span class="pre">environment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.exploration_constant"><code class="docutils literal notranslate"><span class="pre">exploration_constant()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.k_a"><code class="docutils literal notranslate"><span class="pre">k_a()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.k_o"><code class="docutils literal notranslate"><span class="pre">k_o()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.n_particles"><code class="docutils literal notranslate"><span class="pre">n_particles()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.n_simulations"><code class="docutils literal notranslate"><span class="pre">n_simulations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.planner"><code class="docutils literal notranslate"><span class="pre">planner()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_action_progressive_widening_existing_action"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening_existing_action()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_basic_tree_structure"><code class="docutils literal notranslate"><span class="pre">test_basic_tree_structure()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_belief_node_data_structure"><code class="docutils literal notranslate"><span class="pre">test_belief_node_data_structure()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_double_progressive_widening_integration"><code class="docutils literal notranslate"><span class="pre">test_double_progressive_widening_integration()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_explored_action_node_ucb_selection"><code class="docutils literal notranslate"><span class="pre">test_explored_action_node_ucb_selection()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_get_space_info"><code class="docutils literal notranslate"><span class="pre">test_get_space_info()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_integration_with_tiger_pomdp"><code class="docutils literal notranslate"><span class="pre">test_integration_with_tiger_pomdp()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_numpy_array_observation_comparison"><code class="docutils literal notranslate"><span class="pre">test_numpy_array_observation_comparison()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_pomcp_dpw_action_selection_returns_valid_action_from_sampler"><code class="docutils literal notranslate"><span class="pre">test_pomcp_dpw_action_selection_returns_valid_action_from_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_pomcp_dpw_config_id_consistency_across_evaluations"><code class="docutils literal notranslate"><span class="pre">test_pomcp_dpw_config_id_consistency_across_evaluations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_pomcp_dpw_config_id_consistency_identical_parameters"><code class="docutils literal notranslate"><span class="pre">test_pomcp_dpw_config_id_consistency_identical_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_pomcp_dpw_config_id_different_action_sampler_values"><code class="docutils literal notranslate"><span class="pre">test_pomcp_dpw_config_id_different_action_sampler_values()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_pomcp_dpw_config_id_different_progressive_widening_parameters"><code class="docutils literal notranslate"><span class="pre">test_pomcp_dpw_config_id_different_progressive_widening_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_pomcp_dpw_config_id_hash_properties"><code class="docutils literal notranslate"><span class="pre">test_pomcp_dpw_config_id_hash_properties()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_pomcp_dpw_initialization_both_termination_criteria_raises_error"><code class="docutils literal notranslate"><span class="pre">test_pomcp_dpw_initialization_both_termination_criteria_raises_error()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_pomcp_dpw_initialization_n_simulations_creates_configured_planner"><code class="docutils literal notranslate"><span class="pre">test_pomcp_dpw_initialization_n_simulations_creates_configured_planner()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_pomcp_dpw_initialization_timeout_creates_time_limited_planner"><code class="docutils literal notranslate"><span class="pre">test_pomcp_dpw_initialization_timeout_creates_time_limited_planner()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_pomcp_dpw_progressive_widening_adds_new_action_to_unvisited_node"><code class="docutils literal notranslate"><span class="pre">test_pomcp_dpw_progressive_widening_adds_new_action_to_unvisited_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_pomcp_dpw_tree_structure_construction"><code class="docutils literal notranslate"><span class="pre">test_pomcp_dpw_tree_structure_construction()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_pomcp_dpw_vs_pomcp_differences"><code class="docutils literal notranslate"><span class="pre">test_pomcp_dpw_vs_pomcp_differences()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_progressive_widening_parameters"><code class="docutils literal notranslate"><span class="pre">test_progressive_widening_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_q_value_updates"><code class="docutils literal notranslate"><span class="pre">test_q_value_updates()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_rollout"><code class="docutils literal notranslate"><span class="pre">test_rollout()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_rollout_max_depth"><code class="docutils literal notranslate"><span class="pre">test_rollout_max_depth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_rollout_terminal_state"><code class="docutils literal notranslate"><span class="pre">test_rollout_terminal_state()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_sanity_pomdp_action_selection"><code class="docutils literal notranslate"><span class="pre">test_sanity_pomdp_action_selection()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_simulate_path"><code class="docutils literal notranslate"><span class="pre">test_simulate_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_simulate_state_path_max_depth"><code class="docutils literal notranslate"><span class="pre">test_simulate_state_path_max_depth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_simulate_state_path_terminal_state"><code class="docutils literal notranslate"><span class="pre">test_simulate_state_path_terminal_state()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_tree_structure_after_construction"><code class="docutils literal notranslate"><span class="pre">test_tree_structure_after_construction()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_unweighted_particle_belief_usage"><code class="docutils literal notranslate"><span class="pre">test_unweighted_particle_belief_usage()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcp_dpw.test_visit_count_consistency"><code class="docutils literal notranslate"><span class="pre">test_visit_count_consistency()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#module-POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow">POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.MockActionSampler"><code class="docutils literal notranslate"><span class="pre">MockActionSampler</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.MockActionSampler.get_space"><code class="docutils literal notranslate"><span class="pre">MockActionSampler.get_space()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.MockActionSampler.sample"><code class="docutils literal notranslate"><span class="pre">MockActionSampler.sample()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.action_sampler"><code class="docutils literal notranslate"><span class="pre">action_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.alpha_a"><code class="docutils literal notranslate"><span class="pre">alpha_a()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.alpha_o"><code class="docutils literal notranslate"><span class="pre">alpha_o()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.belief"><code class="docutils literal notranslate"><span class="pre">belief()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.depth"><code class="docutils literal notranslate"><span class="pre">depth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.discount_factor"><code class="docutils literal notranslate"><span class="pre">discount_factor()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.environment"><code class="docutils literal notranslate"><span class="pre">environment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.exploration_constant"><code class="docutils literal notranslate"><span class="pre">exploration_constant()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.k_a"><code class="docutils literal notranslate"><span class="pre">k_a()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.k_o"><code class="docutils literal notranslate"><span class="pre">k_o()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.n_particles"><code class="docutils literal notranslate"><span class="pre">n_particles()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.n_simulations"><code class="docutils literal notranslate"><span class="pre">n_simulations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.planner"><code class="docutils literal notranslate"><span class="pre">planner()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_action_progressive_widening_existing_action"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening_existing_action()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_action_progressive_widening_new_action"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening_new_action()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_action_selection"><code class="docutils literal notranslate"><span class="pre">test_action_selection()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_belief_node_data_structure"><code class="docutils literal notranslate"><span class="pre">test_belief_node_data_structure()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_explored_action_node_ucb_selection"><code class="docutils literal notranslate"><span class="pre">test_explored_action_node_ucb_selection()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_get_space_info"><code class="docutils literal notranslate"><span class="pre">test_get_space_info()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_initialization_with_n_simulations"><code class="docutils literal notranslate"><span class="pre">test_initialization_with_n_simulations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_initialization_with_timeout"><code class="docutils literal notranslate"><span class="pre">test_initialization_with_timeout()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_integration_with_tiger_pomdp"><code class="docutils literal notranslate"><span class="pre">test_integration_with_tiger_pomdp()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_invalid_initialization"><code class="docutils literal notranslate"><span class="pre">test_invalid_initialization()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_pomcpow_config_id_action_sampler_attribute_changes"><code class="docutils literal notranslate"><span class="pre">test_pomcpow_config_id_action_sampler_attribute_changes()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_pomcpow_config_id_consistency_across_evaluations"><code class="docutils literal notranslate"><span class="pre">test_pomcpow_config_id_consistency_across_evaluations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_pomcpow_config_id_consistency_identical_parameters"><code class="docutils literal notranslate"><span class="pre">test_pomcpow_config_id_consistency_identical_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_pomcpow_config_id_different_action_sampler_values"><code class="docutils literal notranslate"><span class="pre">test_pomcpow_config_id_different_action_sampler_values()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_pomcpow_config_id_different_planner_parameters"><code class="docutils literal notranslate"><span class="pre">test_pomcpow_config_id_different_planner_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_pomcpow_config_id_hash_properties"><code class="docutils literal notranslate"><span class="pre">test_pomcpow_config_id_hash_properties()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_pomcpow_tree_structure_construction"><code class="docutils literal notranslate"><span class="pre">test_pomcpow_tree_structure_construction()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_progressive_widening_parameters"><code class="docutils literal notranslate"><span class="pre">test_progressive_widening_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_q_value_updates"><code class="docutils literal notranslate"><span class="pre">test_q_value_updates()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_rollout"><code class="docutils literal notranslate"><span class="pre">test_rollout()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_rollout_max_depth"><code class="docutils literal notranslate"><span class="pre">test_rollout_max_depth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_rollout_terminal_state"><code class="docutils literal notranslate"><span class="pre">test_rollout_terminal_state()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_sanity_pomdp_action_selection"><code class="docutils literal notranslate"><span class="pre">test_sanity_pomdp_action_selection()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_simulate_path"><code class="docutils literal notranslate"><span class="pre">test_simulate_path()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_simulate_state_path_max_depth"><code class="docutils literal notranslate"><span class="pre">test_simulate_state_path_max_depth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_simulate_state_path_terminal_state"><code class="docutils literal notranslate"><span class="pre">test_simulate_state_path_terminal_state()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_tree_structure_after_construction"><code class="docutils literal notranslate"><span class="pre">test_tree_structure_after_construction()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pomcpow.test_visit_count_consistency"><code class="docutils literal notranslate"><span class="pre">test_visit_count_consistency()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#module-POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft">POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.belief_child_num"><code class="docutils literal notranslate"><span class="pre">belief_child_num()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.beta_ucb"><code class="docutils literal notranslate"><span class="pre">beta_ucb()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.c_ucb"><code class="docutils literal notranslate"><span class="pre">c_ucb()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.depth"><code class="docutils literal notranslate"><span class="pre">depth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.discount_factor"><code class="docutils literal notranslate"><span class="pre">discount_factor()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.environment"><code class="docutils literal notranslate"><span class="pre">environment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.initial_belief"><code class="docutils literal notranslate"><span class="pre">initial_belief()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.n_particles"><code class="docutils literal notranslate"><span class="pre">n_particles()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.n_simulations"><code class="docutils literal notranslate"><span class="pre">n_simulations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.planner"><code class="docutils literal notranslate"><span class="pre">planner()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_action_selection"><code class="docutils literal notranslate"><span class="pre">test_action_selection()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_generate_belief"><code class="docutils literal notranslate"><span class="pre">test_generate_belief()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_get_explored_action_node"><code class="docutils literal notranslate"><span class="pre">test_get_explored_action_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_initialization"><code class="docutils literal notranslate"><span class="pre">test_initialization()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_integration_with_tiger_pomdp"><code class="docutils literal notranslate"><span class="pre">test_integration_with_tiger_pomdp()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_random_rollout"><code class="docutils literal notranslate"><span class="pre">test_random_rollout()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_sample_next_existing_belief"><code class="docutils literal notranslate"><span class="pre">test_sample_next_existing_belief()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_sanity_pomdp_action_selection"><code class="docutils literal notranslate"><span class="pre">test_sanity_pomdp_action_selection()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_sanity_pomdp_belief_children"><code class="docutils literal notranslate"><span class="pre">test_sanity_pomdp_belief_children()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_sparse_pft_config_id_consistency_across_evaluations"><code class="docutils literal notranslate"><span class="pre">test_sparse_pft_config_id_consistency_across_evaluations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_sparse_pft_config_id_consistency_identical_parameters"><code class="docutils literal notranslate"><span class="pre">test_sparse_pft_config_id_consistency_identical_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_sparse_pft_config_id_different_belief_child_num"><code class="docutils literal notranslate"><span class="pre">test_sparse_pft_config_id_different_belief_child_num()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_sparse_pft_config_id_different_c_ucb"><code class="docutils literal notranslate"><span class="pre">test_sparse_pft_config_id_different_c_ucb()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_sparse_pft_config_id_hash_properties"><code class="docutils literal notranslate"><span class="pre">test_sparse_pft_config_id_hash_properties()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_tree_structure_construction"><code class="docutils literal notranslate"><span class="pre">test_tree_structure_construction()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_sparse_pft.test_update_node_statistics"><code class="docutils literal notranslate"><span class="pre">test_update_node_statistics()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#module-POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils">POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils.validate_tree_structure_with_progressive_widening"><code class="docutils literal notranslate"><span class="pre">validate_tree_structure_with_progressive_widening()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html">POMDPPlanners.tests.test_planners.test_open_loop_planners package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#module-POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner">POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner.planner"><code class="docutils literal notranslate"><span class="pre">planner()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner.test_action_selection"><code class="docutils literal notranslate"><span class="pre">test_action_selection()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner.test_compute_return"><code class="docutils literal notranslate"><span class="pre">test_compute_return()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner.test_discrete_action_sequences_config_id_consistency_across_evaluations"><code class="docutils literal notranslate"><span class="pre">test_discrete_action_sequences_config_id_consistency_across_evaluations()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner.test_discrete_action_sequences_config_id_consistency_identical_parameters"><code class="docutils literal notranslate"><span class="pre">test_discrete_action_sequences_config_id_consistency_identical_parameters()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner.test_discrete_action_sequences_config_id_different_depth"><code class="docutils literal notranslate"><span class="pre">test_discrete_action_sequences_config_id_different_depth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner.test_discrete_action_sequences_config_id_different_n_return_samples"><code class="docutils literal notranslate"><span class="pre">test_discrete_action_sequences_config_id_different_n_return_samples()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner.test_discrete_action_sequences_config_id_hash_properties"><code class="docutils literal notranslate"><span class="pre">test_discrete_action_sequences_config_id_hash_properties()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner.test_initialization"><code class="docutils literal notranslate"><span class="pre">test_initialization()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner.test_integration_with_tiger_pomdp"><code class="docutils literal notranslate"><span class="pre">test_integration_with_tiger_pomdp()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner.test_search_behavior"><code class="docutils literal notranslate"><span class="pre">test_search_behavior()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_open_loop_planners.html#POMDPPlanners.tests.test_planners.test_open_loop_planners.test_discrete_action_sequences_planner.tiger_pomdp"><code class="docutils literal notranslate"><span class="pre">tiger_pomdp()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html">POMDPPlanners.tests.test_planners.test_planners_utils package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#module-POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw">POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.EmptySampler"><code class="docutils literal notranslate"><span class="pre">EmptySampler</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.EmptySampler.sample"><code class="docutils literal notranslate"><span class="pre">EmptySampler.sample()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.TestActionSampler"><code class="docutils literal notranslate"><span class="pre">TestActionSampler</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.TestActionSampler.sample"><code class="docutils literal notranslate"><span class="pre">TestActionSampler.sample()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.TestComplexSampler"><code class="docutils literal notranslate"><span class="pre">TestComplexSampler</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.TestComplexSampler.sample"><code class="docutils literal notranslate"><span class="pre">TestComplexSampler.sample()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.TestContinuousActionSampler"><code class="docutils literal notranslate"><span class="pre">TestContinuousActionSampler</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.TestContinuousActionSampler.sample"><code class="docutils literal notranslate"><span class="pre">TestContinuousActionSampler.sample()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.TestContinuousSampler"><code class="docutils literal notranslate"><span class="pre">TestContinuousSampler</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.TestContinuousSampler.sample"><code class="docutils literal notranslate"><span class="pre">TestContinuousSampler.sample()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.TestDiscreteSampler"><code class="docutils literal notranslate"><span class="pre">TestDiscreteSampler</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.TestDiscreteSampler.sample"><code class="docutils literal notranslate"><span class="pre">TestDiscreteSampler.sample()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.belief_node"><code class="docutils literal notranslate"><span class="pre">belief_node()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.belief_node_with_children"><code class="docutils literal notranslate"><span class="pre">belief_node_with_children()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.continuous_action_sampler"><code class="docutils literal notranslate"><span class="pre">continuous_action_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.discrete_action_sampler"><code class="docutils literal notranslate"><span class="pre">discrete_action_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_progressive_widening_alpha_comparison_example"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening_alpha_comparison_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_progressive_widening_alpha_parameter"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening_alpha_parameter()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_progressive_widening_basic_usage_example"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening_basic_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_progressive_widening_edge_cases"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening_edge_cases()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_progressive_widening_existing_action"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening_existing_action()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_progressive_widening_integration"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening_integration()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_progressive_widening_loop_simulation_example"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening_loop_simulation_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_progressive_widening_new_action"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening_new_action()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_progressive_widening_progressive_expansion"><code class="docutils literal notranslate"><span class="pre">test_action_progressive_widening_progressive_expansion()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_sampler_abstract_class"><code class="docutils literal notranslate"><span class="pre">test_action_sampler_abstract_class()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_sampler_equality_and_hashing"><code class="docutils literal notranslate"><span class="pre">test_action_sampler_equality_and_hashing()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_sampler_getstate_setstate"><code class="docutils literal notranslate"><span class="pre">test_action_sampler_getstate_setstate()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_sampler_serialization"><code class="docutils literal notranslate"><span class="pre">test_action_sampler_serialization()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_sampler_serialization_edge_cases"><code class="docutils literal notranslate"><span class="pre">test_action_sampler_serialization_edge_cases()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_action_sampler_with_belief_node_context"><code class="docutils literal notranslate"><span class="pre">test_action_sampler_with_belief_node_context()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_adaptive_action_sampler_usage_example"><code class="docutils literal notranslate"><span class="pre">test_adaptive_action_sampler_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_concrete_action_sampler_implementation"><code class="docutils literal notranslate"><span class="pre">test_concrete_action_sampler_implementation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_continuous_action_sampler"><code class="docutils literal notranslate"><span class="pre">test_continuous_action_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_continuous_control_sampler_usage_example"><code class="docutils literal notranslate"><span class="pre">test_continuous_control_sampler_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_goal_directed_action_sampler_usage_example"><code class="docutils literal notranslate"><span class="pre">test_goal_directed_action_sampler_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_multi_modal_action_sampler_usage_example"><code class="docutils literal notranslate"><span class="pre">test_multi_modal_action_sampler_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_progressive_widening_parameter_tuning_example"><code class="docutils literal notranslate"><span class="pre">test_progressive_widening_parameter_tuning_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_ucb1_exploration"><code class="docutils literal notranslate"><span class="pre">test_ucb1_exploration()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_ucb1_exploration_basic_usage_example"><code class="docutils literal notranslate"><span class="pre">test_ucb1_exploration_basic_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_ucb1_exploration_constants_comparison_example"><code class="docutils literal notranslate"><span class="pre">test_ucb1_exploration_constants_comparison_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_ucb1_exploration_edge_cases"><code class="docutils literal notranslate"><span class="pre">test_ucb1_exploration_edge_cases()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_ucb1_exploration_exploration_vs_exploitation"><code class="docutils literal notranslate"><span class="pre">test_ucb1_exploration_exploration_vs_exploitation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_ucb1_exploration_manual_calculation_example"><code class="docutils literal notranslate"><span class="pre">test_ucb1_exploration_manual_calculation_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_ucb1_exploration_mathematical_correctness"><code class="docutils literal notranslate"><span class="pre">test_ucb1_exploration_mathematical_correctness()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw.test_weighted_discrete_action_sampler_usage_example"><code class="docutils literal notranslate"><span class="pre">test_weighted_discrete_action_sampler_usage_example()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#module-POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout">POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.DeterministicActionSampler"><code class="docutils literal notranslate"><span class="pre">DeterministicActionSampler</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.DeterministicActionSampler.sample"><code class="docutils literal notranslate"><span class="pre">DeterministicActionSampler.sample()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.MockActionSampler"><code class="docutils literal notranslate"><span class="pre">MockActionSampler</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.MockActionSampler.sample"><code class="docutils literal notranslate"><span class="pre">MockActionSampler.sample()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.cartpole_action_sampler"><code class="docutils literal notranslate"><span class="pre">cartpole_action_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.cartpole_environment"><code class="docutils literal notranslate"><span class="pre">cartpole_environment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.sanity_action_sampler"><code class="docutils literal notranslate"><span class="pre">sanity_action_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.sanity_environment"><code class="docutils literal notranslate"><span class="pre">sanity_environment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_basic_tiger_rollout_usage_example"><code class="docutils literal notranslate"><span class="pre">test_basic_tiger_rollout_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_cartpole_rollout_usage_example"><code class="docutils literal notranslate"><span class="pre">test_cartpole_rollout_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_informed_action_sampler_usage_example"><code class="docutils literal notranslate"><span class="pre">test_informed_action_sampler_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_multiple_rollouts_usage_example"><code class="docutils literal notranslate"><span class="pre">test_multiple_rollouts_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_action_sampler_integration"><code class="docutils literal notranslate"><span class="pre">test_rollout_action_sampler_integration()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_at_max_depth"><code class="docutils literal notranslate"><span class="pre">test_rollout_at_max_depth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_basic_functionality"><code class="docutils literal notranslate"><span class="pre">test_rollout_basic_functionality()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_depth_comparison_usage_example"><code class="docutils literal notranslate"><span class="pre">test_rollout_depth_comparison_usage_example()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_deterministic_behavior"><code class="docutils literal notranslate"><span class="pre">test_rollout_deterministic_behavior()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_different_initial_states"><code class="docutils literal notranslate"><span class="pre">test_rollout_different_initial_states()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_discount_factor_effect"><code class="docutils literal notranslate"><span class="pre">test_rollout_discount_factor_effect()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_max_depth_handling"><code class="docutils literal notranslate"><span class="pre">test_rollout_max_depth_handling()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_parameter_validation"><code class="docutils literal notranslate"><span class="pre">test_rollout_parameter_validation()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_recursion_depth"><code class="docutils literal notranslate"><span class="pre">test_rollout_recursion_depth()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_terminal_state_handling"><code class="docutils literal notranslate"><span class="pre">test_rollout_terminal_state_handling()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_variance_reduction"><code class="docutils literal notranslate"><span class="pre">test_rollout_variance_reduction()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_with_continuous_environment"><code class="docutils literal notranslate"><span class="pre">test_rollout_with_continuous_environment()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.tiger_action_sampler"><code class="docutils literal notranslate"><span class="pre">tiger_action_sampler()</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.tiger_environment"><code class="docutils literal notranslate"><span class="pre">tiger_environment()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="module-POMDPPlanners.tests.test_planners.test_planners_usage_examples">
+<span id="pomdpplanners-tests-test-planners-test-planners-usage-examples-module"></span><h2>POMDPPlanners.tests.test_planners.test_planners_usage_examples module<a class="headerlink" href="#module-POMDPPlanners.tests.test_planners.test_planners_usage_examples" title="Link to this heading"></a></h2>
+<p>Test script to verify all usage examples from planner classes work correctly.</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_planners_usage_examples.main">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_planners_usage_examples.</span></span><span class="sig-name descname"><span class="pre">main</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_planners_usage_examples.html#main"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_planners_usage_examples.main" title="Link to this definition"></a></dt>
+<dd><p>Run all planner usage examples.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_discrete_action_sequences_planner_example">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_planners_usage_examples.</span></span><span class="sig-name descname"><span class="pre">test_discrete_action_sequences_planner_example</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_planners_usage_examples.html#test_discrete_action_sequences_planner_example"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_discrete_action_sequences_planner_example" title="Link to this definition"></a></dt>
+<dd><p>Test the DiscreteActionSequencesPlanner if it exists.</p>
+<p>Purpose: Validates that DiscreteActionSequencesPlanner correctly works with TigerPOMDP environment and short sequences</p>
+<p>Given: TigerPOMDP environment with discount_factor=0.95, DiscreteActionSequencesPlanner with sequence_length=2, and initial belief with 100 particles
+When: Discrete action sequences planner.action() is called with initial belief
+Then: Returns single action from valid action space [“listen”, “open_left”, “open_right”], confirming planner functionality</p>
+<p>Test type: example</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_pft_dpw_usage_example">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_planners_usage_examples.</span></span><span class="sig-name descname"><span class="pre">test_pft_dpw_usage_example</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_planners_usage_examples.html#test_pft_dpw_usage_example"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_pft_dpw_usage_example" title="Link to this definition"></a></dt>
+<dd><p>Test the PFT-DPW usage example with a custom action sampler.</p>
+<p>Purpose: Validates that PFT-DPW planner works correctly with CartPole environment and custom action sampler</p>
+<p>Given: CartPolePOMDP environment with noise_cov, PFT-DPW planner with depth=3, n_simulations=5, custom CartPoleActionSampler, and initial belief with 50 particles
+When: PFT-DPW planner.action() is called with initial belief
+Then: Returns single action from valid action space [0, 1] and run_data with info_variables, confirming custom action sampler integration</p>
+<p>Test type: example</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_pomcp_usage_example">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_planners_usage_examples.</span></span><span class="sig-name descname"><span class="pre">test_pomcp_usage_example</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_planners_usage_examples.html#test_pomcp_usage_example"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_pomcp_usage_example" title="Link to this definition"></a></dt>
+<dd><p>Test the POMCP usage example from the class docstring.</p>
+<p>Purpose: Validates that POMCP planner correctly works with TigerPOMDP environment and returns valid actions</p>
+<p>Given: TigerPOMDP environment with discount_factor=0.95, POMCP planner with depth=5, n_simulations=10, and initial belief with 100 particles
+When: POMCP planner.action() is called with initial belief
+Then: Returns single action from valid action space [“listen”, “open_left”, “open_right”] and run_data with info_variables</p>
+<p>Test type: example</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_space_info_consistency">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_planners_usage_examples.</span></span><span class="sig-name descname"><span class="pre">test_space_info_consistency</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_planners_usage_examples.html#test_space_info_consistency"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_space_info_consistency" title="Link to this definition"></a></dt>
+<dd><p>Test that all planners report consistent space info.</p>
+<p>Purpose: Validates that different planner types correctly report consistent space information for discrete and continuous environments</p>
+<p>Given: TigerPOMDP (discrete), CartPolePOMDP (continuous), POMCP, StandardSparseSamplingDiscreteActionsPlanner, PFT_DPW planners with SimpleActionSampler
+When: get_space_info() is called on each planner
+Then: Discrete planners report SpaceType.DISCRETE, continuous planners report SpaceType.CONTINUOUS, confirming space type consistency across planner implementations</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_sparse_pft_usage_example">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_planners_usage_examples.</span></span><span class="sig-name descname"><span class="pre">test_sparse_pft_usage_example</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_planners_usage_examples.html#test_sparse_pft_usage_example"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_sparse_pft_usage_example" title="Link to this definition"></a></dt>
+<dd><p>Test the Sparse-PFT usage example from the class docstring.</p>
+<p>Purpose: Validates that Sparse-PFT planner correctly works with TigerPOMDP environment and controlled branching</p>
+<p>Given: TigerPOMDP environment with discount_factor=0.95, SparsePFT planner with depth=5, belief_child_num=3, n_simulations=10, and initial belief with 50 particles
+When: Sparse-PFT planner.action() is called with initial belief
+Then: Returns single action from valid action space [“listen”, “open_left”, “open_right”] and run_data with info_variables, confirming tree metrics collection</p>
+<p>Test type: example</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_sparse_sampling_usage_example">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_planners_usage_examples.</span></span><span class="sig-name descname"><span class="pre">test_sparse_sampling_usage_example</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_planners_usage_examples.html#test_sparse_sampling_usage_example"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_sparse_sampling_usage_example" title="Link to this definition"></a></dt>
+<dd><p>Test the StandardSparseSamplingDiscreteActionsPlanner usage example.</p>
+<p>Purpose: Validates that Sparse Sampling planner correctly works with TigerPOMDP environment</p>
+<p>Given: TigerPOMDP environment with discount_factor=0.95, StandardSparseSamplingDiscreteActionsPlanner with branching_factor=3, depth=3, and initial belief with 100 particles
+When: Sparse sampling planner.action() is called with initial belief
+Then: Returns single action from valid action space [“listen”, “open_left”, “open_right”] and run_data with info_variables, confirming sparse sampling completion</p>
+<p>Test type: example</p>
+</dd></dl>
+
+</section>
+<section id="module-POMDPPlanners.tests.test_planners.test_sparse_sampling_planner">
+<span id="pomdpplanners-tests-test-planners-test-sparse-sampling-planner-module"></span><h2>POMDPPlanners.tests.test_planners.test_sparse_sampling_planner module<a class="headerlink" href="#module-POMDPPlanners.tests.test_planners.test_sparse_sampling_planner" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.initial_belief">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">initial_belief</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#initial_belief"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.initial_belief" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.planner">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">planner</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#planner"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.planner" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_action_selection">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_action_selection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">planner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_belief</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_action_selection"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_action_selection" title="Link to this definition"></a></dt>
+<dd><p>Test that action selection returns a valid action</p>
+<p>Purpose: Validates that StandardSparseSamplingDiscreteActionsPlanner returns valid TigerPOMDP actions through sparse sampling</p>
+<p>Given: StandardSparseSamplingDiscreteActionsPlanner with branching_factor=2, depth=2, TigerPOMDP environment, uniform initial belief
+When: action method performs sparse sampling tree construction and action selection
+Then: Returns list with single valid tiger action, PolicyRunData with no info_variables (as expected)</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_belief_node_statistics">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_belief_node_statistics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">planner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_belief</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_belief_node_statistics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_belief_node_statistics" title="Link to this definition"></a></dt>
+<dd><p>Test that belief node statistics are calculated correctly using fixed expected values</p>
+<p>Purpose: Validates that BeliefNode statistics are computed using minimum q_value and sum of visit counts from children</p>
+<p>Given: BeliefNode with two ActionNode children having q_values [3.0, 5.0] and visit_counts [2, 3]
+When: _update_belief_node_statistics computes v_value and visit_count from children
+Then: v_value = min([3.0, 5.0]) = 3.0, visit_count = sum([2, 3]) = 5</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_belief_tree_construction">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_belief_tree_construction</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">planner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_belief</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_belief_tree_construction"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_belief_tree_construction" title="Link to this definition"></a></dt>
+<dd><p>Test that the belief tree is constructed correctly</p>
+<p>Purpose: Validates that sparse sampling belief tree construction creates proper structure with correct depth and branching</p>
+<p>Given: BeliefNode with uniform initial belief, StandardSparseSamplingPlanner with depth=2
+When: _build_tree constructs sparse sampling tree from root node at current_depth=0
+Then: Tree has correct root belief, no parent, &gt;0 children, height=2*depth+1=5 for alternating belief-action levels</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_initialization">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_initialization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">planner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_initialization"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_initialization" title="Link to this definition"></a></dt>
+<dd><p>Test that the planner initializes correctly</p>
+<p>Purpose: Validates proper initialization of</p>
+<p>Given: Constructor parameters and initial conditions
+When: Object is initialized
+Then: Object is properly constructed with expected attributes</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_invalid_branching_factor">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_invalid_branching_factor</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_invalid_branching_factor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_invalid_branching_factor" title="Link to this definition"></a></dt>
+<dd><p>Test that invalid branching factor raises an error</p>
+<p>Purpose: Validates that StandardSparseSamplingPlanner rejects invalid branching_factor parameters</p>
+<p>Given: TigerPOMDP environment, invalid branching_factor=0, valid depth=1
+When: StandardSparseSamplingDiscreteActionsPlanner constructor is called with branching_factor=0
+Then: ValueError is raised for non-positive branching factor parameter</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_invalid_depth">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_invalid_depth</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_invalid_depth"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_invalid_depth" title="Link to this definition"></a></dt>
+<dd><p>Test that invalid depth raises an error</p>
+<p>Purpose: Validates that StandardSparseSamplingPlanner rejects invalid depth parameters</p>
+<p>Given: TigerPOMDP environment, valid branching_factor=2, invalid depth=0
+When: StandardSparseSamplingDiscreteActionsPlanner constructor is called with depth=0
+Then: ValueError is raised for non-positive depth parameter</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_leaf_node_statistics">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_leaf_node_statistics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">planner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_belief</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_leaf_node_statistics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_leaf_node_statistics" title="Link to this definition"></a></dt>
+<dd><p>Test that leaf node statistics are calculated correctly</p>
+<p>Purpose: Validates that sparse sampling leaf node statistics are computed correctly using rollout estimation</p>
+<p>Given: StandardSparseSamplingPlanner with uniform initial belief, learned belief tree with depth=2
+When: _learn_belief_tree constructs full tree and computes leaf node statistics
+Then: All leaf nodes are ActionNodes with visit_count=1 and q_value=immediate_cost (rollout result)</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_node_statistics">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_node_statistics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">planner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_belief</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_node_statistics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_node_statistics" title="Link to this definition"></a></dt>
+<dd><p>Test that node statistics are updated correctly</p>
+<p>Purpose: Validates that sparse sampling node statistics are properly initialized and computed for all node types</p>
+<p>Given: BeliefNode with uniform initial belief, sparse sampling tree built with branching_factor=2, depth=2
+When: _build_tree creates tree structure and computes statistics for all nodes
+Then: Leaf nodes have immediate_cost/q_value/visit_count, ActionNodes have visit_count/q_value, BeliefNodes have v_value/visit_count</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_non_leaf_action_node_statistics">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_non_leaf_action_node_statistics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">planner</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">initial_belief</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_non_leaf_action_node_statistics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_non_leaf_action_node_statistics" title="Link to this definition"></a></dt>
+<dd><p>Test that non-leaf action node statistics are calculated correctly using fixed expected values</p>
+<p>Purpose: Validates that non-leaf ActionNode statistics are computed using immediate cost plus discounted future value</p>
+<p>Given: ActionNode with immediate_cost=1.0, two BeliefNode children with v_values [2.0, 4.0], discount_factor=0.95
+When: _update_non_leaf_action_node_statistics computes q_value from children
+Then: q_value = 1.0 + 0.95 * mean([2.0, 4.0]) = 3.85, visit_count &gt; 0</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_sanity_pomdp_action_selection">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_sanity_pomdp_action_selection</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_sanity_pomdp_action_selection"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_sanity_pomdp_action_selection" title="Link to this definition"></a></dt>
+<dd><p>Test that the sparse sampling planner correctly identifies the better action in SanityPOMDP</p>
+<p>Purpose: Validates that StandardSparseSamplingPlanner identifies optimal actions in SanityPOMDP with deterministic reward structure</p>
+<p>Given: SanityPOMDP environment with clear optimal action, sparse sampling planner with branching_factor=4, depth=3, 100 particles
+When: Multiple trials of action selection using sparse sampling tree search
+Then: Action 0 (better action) selected ≥70% of trials, demonstrating systematic planning advantage over random selection</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_sparse_sampling_config_id_consistency_across_evaluations">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_sparse_sampling_config_id_consistency_across_evaluations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_sparse_sampling_config_id_consistency_across_evaluations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_sparse_sampling_config_id_consistency_across_evaluations" title="Link to this definition"></a></dt>
+<dd><p>Test that config_id remains consistent across different policy evaluations.</p>
+<p>Purpose: Validates that config_id is stable across multiple accesses and policy actions</p>
+<p>Given: Single StandardSparseSamplingPlanner instance and initial belief
+When: config_id is accessed before and after policy actions
+Then: config_id remains identical across all evaluations</p>
+<p>Test type: integration</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_sparse_sampling_config_id_consistency_identical_parameters">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_sparse_sampling_config_id_consistency_identical_parameters</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_sparse_sampling_config_id_consistency_identical_parameters"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_sparse_sampling_config_id_consistency_identical_parameters" title="Link to this definition"></a></dt>
+<dd><p>Test that config_id is consistent for identical StandardSparseSampling parameters.</p>
+<p>Purpose: Validates that StandardSparseSamplingPlanner with identical parameters produces identical config_id</p>
+<p>Given: Two StandardSparseSamplingPlanner instances with identical parameters
+When: config_id is accessed on both instances
+Then: Both instances return the same config_id</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_sparse_sampling_config_id_different_branching_factor">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_sparse_sampling_config_id_different_branching_factor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_sparse_sampling_config_id_different_branching_factor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_sparse_sampling_config_id_different_branching_factor" title="Link to this definition"></a></dt>
+<dd><p>Test that config_id changes when branching_factor parameter differs.</p>
+<p>Purpose: Validates that config_id changes when branching_factor parameter differs</p>
+<p>Given: Two StandardSparseSamplingPlanner instances with different branching_factor values
+When: config_id is accessed on both instances
+Then: config_id values are different</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_sparse_sampling_config_id_different_depth">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_sparse_sampling_config_id_different_depth</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_sparse_sampling_config_id_different_depth"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_sparse_sampling_config_id_different_depth" title="Link to this definition"></a></dt>
+<dd><p>Test that config_id changes when depth parameter differs.</p>
+<p>Purpose: Validates that config_id changes when depth parameter differs</p>
+<p>Given: Two StandardSparseSamplingPlanner instances with different depth values
+When: config_id is accessed on both instances
+Then: config_id values are different</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_sparse_sampling_config_id_hash_properties">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">test_sparse_sampling_config_id_hash_properties</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#test_sparse_sampling_config_id_hash_properties"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.test_sparse_sampling_config_id_hash_properties" title="Link to this definition"></a></dt>
+<dd><p>Test that config_id has proper hash properties.</p>
+<p>Purpose: Validates that config_id produces valid hash strings</p>
+<p>Given: StandardSparseSamplingPlanner instance
+When: config_id is accessed
+Then: config_id is a valid hash string with expected properties</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.tiger_pomdp">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.</span></span><span class="sig-name descname"><span class="pre">tiger_pomdp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_planners/test_sparse_sampling_planner.html#tiger_pomdp"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_planners.test_sparse_sampling_planner.tiger_pomdp" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils.html" class="btn btn-neutral float-left" title="POMDPPlanners.tests.test_environments.test_light_dark_pomdp.light_dark_pomdp_utils package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="POMDPPlanners.tests.test_planners.test_mcts_planners.html" class="btn btn-neutral float-right" title="POMDPPlanners.tests.test_planners.test_mcts_planners package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

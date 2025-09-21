@@ -1,0 +1,659 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>&lt;no title&gt; &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">&lt;no title&gt;</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.environments.push_pomdp.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <p id="module-POMDPPlanners.environments.push_pomdp">Push POMDP Environment Implementation.</p>
+<p>This module implements a robotic push task as a POMDP, where a robot must
+push an object to a target location on a 2D grid. The robot can move in
+four directions and pushes objects when within range, with noisy observations
+of the object’s position.</p>
+<p>The Push POMDP features:
+- Continuous 2D state space: [robot_x, robot_y, object_x, object_y, target_x, target_y]
+- Discrete action space: [“up”, “down”, “left”, “right”]
+- Noisy observations of object position (robot and target positions are known)
+- Physics-based pushing mechanics with friction
+- Distance-based rewards encouraging object movement toward target</p>
+<p>Key mechanics:
+- Robot must be within push_threshold distance to move objects
+- Friction reduces the effectiveness of pushes
+- Object position observations include Gaussian noise
+- Episode terminates when object reaches target</p>
+<dl class="simple">
+<dt>Classes:</dt><dd><p>PushStateTransition: Physics-based pushing dynamics
+PushObservation: Noisy object position observations
+PushPOMDP: Main push task environment with POMDP formulation</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushObservation">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.environments.push_pomdp.</span></span><span class="sig-name descname"><span class="pre">PushObservation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">next_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation_noise</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid_size</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushObservation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushObservation" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.ObservationModel" title="POMDPPlanners.core.environment.ObservationModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ObservationModel</span></code></a></p>
+<p>Noisy observation model for Push POMDP.</p>
+<p>This model provides partial observability by adding Gaussian noise to
+the object’s position while keeping robot and target positions fully observable.
+This creates uncertainty about the exact object location, making planning challenging.</p>
+<p>Observation format: [robot_x, robot_y, noisy_object_x, noisy_object_y, target_x, target_y]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>next_state</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>action</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>observation_noise</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>grid_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushObservation.next_state">
+<span class="sig-name descname"><span class="pre">next_state</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushObservation.next_state" title="Link to this definition"></a></dt>
+<dd><p>True state after action execution</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushObservation.action">
+<span class="sig-name descname"><span class="pre">action</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushObservation.action" title="Link to this definition"></a></dt>
+<dd><p>Action that was taken (not used in observation generation)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushObservation.observation_noise">
+<span class="sig-name descname"><span class="pre">observation_noise</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushObservation.observation_noise" title="Link to this definition"></a></dt>
+<dd><p>Standard deviation of Gaussian noise for object position</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushObservation.grid_size">
+<span class="sig-name descname"><span class="pre">grid_size</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushObservation.grid_size" title="Link to this definition"></a></dt>
+<dd><p>Size of the grid environment</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushObservation.robot_pos">
+<span class="sig-name descname"><span class="pre">robot_pos</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushObservation.robot_pos" title="Link to this definition"></a></dt>
+<dd><p>Robot position (observed exactly)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushObservation.object_pos">
+<span class="sig-name descname"><span class="pre">object_pos</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushObservation.object_pos" title="Link to this definition"></a></dt>
+<dd><p>True object position (observed with noise)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushObservation.target_pos">
+<span class="sig-name descname"><span class="pre">target_pos</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushObservation.target_pos" title="Link to this definition"></a></dt>
+<dd><p>Target position (observed exactly)</p>
+</dd></dl>
+
+<p class="rubric">Example</p>
+<p>Using the Push observation model:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="c1"># True state after robot movement</span>
+<span class="n">true_state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">2.8</span><span class="p">,</span> <span class="mf">3.2</span><span class="p">,</span> <span class="mf">8.0</span><span class="p">,</span> <span class="mf">8.0</span><span class="p">])</span>
+<span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;right&quot;</span>
+
+<span class="c1"># Create observation model</span>
+<span class="n">obs_model</span> <span class="o">=</span> <span class="n">PushObservation</span><span class="p">(</span>
+    <span class="n">next_state</span><span class="o">=</span><span class="n">true_state</span><span class="p">,</span>
+    <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+    <span class="n">observation_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">grid_size</span><span class="o">=</span><span class="mi">10</span>
+<span class="p">)</span>
+
+<span class="c1"># Sample noisy observation</span>
+<span class="n">observation</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+<span class="c1"># Robot and target positions exact: [3.0, 3.0, ?, ?, 8.0, 8.0]</span>
+<span class="c1"># Object position noisy: around [2.8, 3.2] ± 0.1</span>
+
+<span class="c1"># Calculate observation probability</span>
+<span class="n">prob</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushObservation.probability">
+<span class="sig-name descname"><span class="pre">probability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observations</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushObservation.probability"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushObservation.probability" title="Link to this definition"></a></dt>
+<dd><p>Calculate observation probabilities for given values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>values</strong> – List of observation values to calculate probabilities for</p></li>
+<li><p><strong>observations</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a><em>]</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Array of probabilities corresponding to the input values</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#NotImplementedError" title="(in Python v3.13)"><strong>NotImplementedError</strong></a> – This method is not implemented by default.
+    Subclasses should override if probability calculation is needed.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushObservation.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushObservation.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushObservation.sample" title="Link to this definition"></a></dt>
+<dd><p>Sample observations from the observation model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>n_samples</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></span>) – Number of observation samples to generate. Defaults to 1.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of sampled observations of length n_samples.</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method according to their
+specific observation generation logic.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushPOMDP">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.environments.push_pomdp.</span></span><span class="sig-name descname"><span class="pre">PushPOMDP</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">discount_factor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">push_threshold</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">friction_coefficient</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.3</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation_noise</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacle_radius</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacle_penalty</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'PushPOMDP'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_queue_logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushPOMDP"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushPOMDP" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.DiscreteActionsEnvironment" title="POMDPPlanners.core.environment.DiscreteActionsEnvironment"><code class="xref py py-class docutils literal notranslate"><span class="pre">DiscreteActionsEnvironment</span></code></a></p>
+<p>Robotic push task formulated as a POMDP.</p>
+<p>This environment simulates a robot that must push an object to a target location
+on a 2D grid. The robot can move in four directions and pushes objects when close
+enough, with partial observability through noisy object position measurements.</p>
+<p>Problem Structure:
+- State: [robot_x, robot_y, object_x, object_y, target_x, target_y] (continuous)
+- Actions: [“up”, “down”, “left”, “right”] (discrete)
+- Observations: [robot_x, robot_y, noisy_object_x, noisy_object_y, target_x, target_y]
+- Rewards: -distance_to_target + 100 (when object reaches target)
+- Termination: Object within 0.5 units of target position</p>
+<p>Key Features:
+- Physics-based pushing with configurable friction
+- Distance-based pushing threshold
+- Noisy observations of object position only
+- Dense reward signal based on object-target distance
+- Obstacle collision detection with configurable penalties
+- Obstacles prevent robot and object movement through them</p>
+<p class="rubric">Example</p>
+<p>Creating and using a Push POMDP:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create push environment with obstacles</span>
+<span class="n">push_env</span> <span class="o">=</span> <span class="n">PushPOMDP</span><span class="p">(</span>
+    <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+    <span class="n">grid_size</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">push_threshold</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">friction_coefficient</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+    <span class="n">observation_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+    <span class="n">obstacles</span><span class="o">=</span><span class="p">[(</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">),</span> <span class="p">(</span><span class="mf">6.0</span><span class="p">,</span> <span class="mf">7.0</span><span class="p">)],</span>  <span class="c1"># Obstacle positions</span>
+    <span class="n">obstacle_radius</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="n">obstacle_penalty</span><span class="o">=-</span><span class="mf">10.0</span>
+<span class="p">)</span>
+
+<span class="c1"># Get initial state</span>
+<span class="n">initial_state_dist</span> <span class="o">=</span> <span class="n">push_env</span><span class="o">.</span><span class="n">initial_state_dist</span><span class="p">()</span>
+<span class="n">state</span> <span class="o">=</span> <span class="n">initial_state_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="c1"># Move robot and potentially push object</span>
+<span class="n">actions</span> <span class="o">=</span> <span class="n">push_env</span><span class="o">.</span><span class="n">get_actions</span><span class="p">()</span>  <span class="c1"># [&quot;up&quot;, &quot;down&quot;, &quot;left&quot;, &quot;right&quot;]</span>
+<span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;right&quot;</span>
+<span class="n">reward</span> <span class="o">=</span> <span class="n">push_env</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+
+<span class="c1"># Check if object reached target</span>
+<span class="n">is_done</span> <span class="o">=</span> <span class="n">push_env</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>discount_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>grid_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>push_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>friction_coefficient</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>observation_noise</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>obstacles</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><em>Tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>]</em><em>] </em><em>| </em><em>None</em>)</p></li>
+<li><p><strong>obstacle_radius</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>obstacle_penalty</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>output_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><em>Path</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>debug</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+<li><p><strong>use_queue_logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushPOMDP.cache_visualization">
+<span class="sig-name descname"><span class="pre">cache_visualization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">history</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_path</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushPOMDP.cache_visualization"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushPOMDP.cache_visualization" title="Link to this definition"></a></dt>
+<dd><p>Cache animated visualization of the push episode.</p>
+<p>Creates an animated GIF showing the robot pushing the object toward the target,
+with obstacles, collision detection, distance indicators, and success feedback.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>history</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference internal" href="POMDPPlanners.core.simulation.html#POMDPPlanners.core.simulation.history.StepData" title="POMDPPlanners.core.simulation.history.StepData"><code class="xref py py-class docutils literal notranslate"><span class="pre">StepData</span></code></a>]</span>) – Episode history containing states, actions, and rewards</p></li>
+<li><p><strong>cache_path</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Path</span></code></a></span>) – Path where to save the visualization (must end with .gif)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If history is empty or cache_path doesn’t end with .gif</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If cache_path is not a Path object</p></li>
+</ul>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushPOMDP.compute_metrics">
+<span class="sig-name descname"><span class="pre">compute_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">histories</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushPOMDP.compute_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushPOMDP.compute_metrics" title="Link to this definition"></a></dt>
+<dd><p>Compute environment-specific metrics from episode histories.</p>
+<p>This method can be overridden by subclasses to provide custom
+metric calculations beyond standard return and episode length.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>histories</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference internal" href="POMDPPlanners.core.simulation.html#POMDPPlanners.core.simulation.history.History" title="POMDPPlanners.core.simulation.history.History"><code class="xref py py-class docutils literal notranslate"><span class="pre">History</span></code></a>]</span>) – List of episode histories to analyze</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference internal" href="POMDPPlanners.core.simulation.html#POMDPPlanners.core.simulation.metrics.MetricValue" title="POMDPPlanners.core.simulation.metrics.MetricValue"><code class="xref py py-class docutils literal notranslate"><span class="pre">MetricValue</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of computed metrics with confidence intervals</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushPOMDP.get_actions">
+<span class="sig-name descname"><span class="pre">get_actions</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushPOMDP.get_actions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushPOMDP.get_actions" title="Link to this definition"></a></dt>
+<dd><p>Get all possible actions in the discrete action space.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>]</span></p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>List containing all valid actions that can be executed</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to enumerate all possible actions.
+This is used by planning algorithms that need to iterate over actions.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushPOMDP.initial_observation_dist">
+<span class="sig-name descname"><span class="pre">initial_observation_dist</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushPOMDP.initial_observation_dist"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushPOMDP.initial_observation_dist" title="Link to this definition"></a></dt>
+<dd><p>Get the initial observation distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.distributions.html#POMDPPlanners.core.distributions.Distribution" title="POMDPPlanners.core.distributions.Distribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">Distribution</span></code></a></span></p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Distribution over initial observations</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define initial observations.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushPOMDP.initial_state_dist">
+<span class="sig-name descname"><span class="pre">initial_state_dist</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushPOMDP.initial_state_dist"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushPOMDP.initial_state_dist" title="Link to this definition"></a></dt>
+<dd><p>Get the initial state distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.distributions.html#POMDPPlanners.core.distributions.Distribution" title="POMDPPlanners.core.distributions.Distribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">Distribution</span></code></a></span></p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Distribution over initial states</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define the starting distribution.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushPOMDP.is_equal_observation">
+<span class="sig-name descname"><span class="pre">is_equal_observation</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">observation1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation2</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushPOMDP.is_equal_observation"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushPOMDP.is_equal_observation" title="Link to this definition"></a></dt>
+<dd><p>Check if two observations are equal.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>observation1</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – First observation to compare</p></li>
+<li><p><strong>observation2</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – Second observation to compare</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>True if observations are considered equal, False otherwise</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define observation equality.
+This is particularly important for discrete observation spaces.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushPOMDP.is_terminal">
+<span class="sig-name descname"><span class="pre">is_terminal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushPOMDP.is_terminal"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushPOMDP.is_terminal" title="Link to this definition"></a></dt>
+<dd><p>Check if a state is terminal.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – State to check for terminal condition</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>True if the state is terminal, False otherwise</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define terminal conditions.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushPOMDP.observation_model">
+<span class="sig-name descname"><span class="pre">observation_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">next_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushPOMDP.observation_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushPOMDP.observation_model" title="Link to this definition"></a></dt>
+<dd><p>Get the observation model for a given next state and action.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>next_state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – The resulting state after taking an action</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – The action that was executed</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.ObservationModel" title="POMDPPlanners.core.environment.ObservationModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ObservationModel</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Observation model that can sample observations</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define observation generation.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushPOMDP.reward">
+<span class="sig-name descname"><span class="pre">reward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushPOMDP.reward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushPOMDP.reward" title="Link to this definition"></a></dt>
+<dd><p>Calculate the immediate reward for a state-action pair.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – Current state</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – Action executed from the state</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Immediate reward value</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define reward structure.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushPOMDP.state_transition_model">
+<span class="sig-name descname"><span class="pre">state_transition_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushPOMDP.state_transition_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushPOMDP.state_transition_model" title="Link to this definition"></a></dt>
+<dd><p>Get the state transition model for a given state-action pair.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – Current state</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – Action to be executed</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.StateTransitionModel" title="POMDPPlanners.core.environment.StateTransitionModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">StateTransitionModel</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>State transition model that can sample next states</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define state dynamics.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushStateTransition">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.environments.push_pomdp.</span></span><span class="sig-name descname"><span class="pre">PushStateTransition</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid_size</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">push_threshold</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">friction_coefficient</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacle_radius</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushStateTransition"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushStateTransition" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.StateTransitionModel" title="POMDPPlanners.core.environment.StateTransitionModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">StateTransitionModel</span></code></a></p>
+<p>State transition model for Push POMDP with physics-based pushing.</p>
+<p>This model implements robot movement and object pushing dynamics on a 2D grid.
+The robot moves according to discrete actions, and can push objects when
+within the push threshold distance. Friction reduces push effectiveness.</p>
+<p>State representation: [robot_x, robot_y, object_x, object_y, target_x, target_y]</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>action</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>grid_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>push_threshold</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>friction_coefficient</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>obstacles</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><em>Tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>]</em><em>]</em>)</p></li>
+<li><p><strong>obstacle_radius</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushStateTransition.state">
+<span class="sig-name descname"><span class="pre">state</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushStateTransition.state" title="Link to this definition"></a></dt>
+<dd><p>Current state vector containing all entity positions</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushStateTransition.action">
+<span class="sig-name descname"><span class="pre">action</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushStateTransition.action" title="Link to this definition"></a></dt>
+<dd><p>Movement action (“up”, “down”, “left”, “right”)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushStateTransition.grid_size">
+<span class="sig-name descname"><span class="pre">grid_size</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushStateTransition.grid_size" title="Link to this definition"></a></dt>
+<dd><p>Size of the grid environment</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushStateTransition.push_threshold">
+<span class="sig-name descname"><span class="pre">push_threshold</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushStateTransition.push_threshold" title="Link to this definition"></a></dt>
+<dd><p>Maximum distance for robot to push object</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushStateTransition.friction_coefficient">
+<span class="sig-name descname"><span class="pre">friction_coefficient</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushStateTransition.friction_coefficient" title="Link to this definition"></a></dt>
+<dd><p>Friction that reduces push force (0=no friction, 1=max friction)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushStateTransition.robot_pos">
+<span class="sig-name descname"><span class="pre">robot_pos</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushStateTransition.robot_pos" title="Link to this definition"></a></dt>
+<dd><p>Current robot position [x, y]</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushStateTransition.object_pos">
+<span class="sig-name descname"><span class="pre">object_pos</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushStateTransition.object_pos" title="Link to this definition"></a></dt>
+<dd><p>Current object position [x, y]</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushStateTransition.target_pos">
+<span class="sig-name descname"><span class="pre">target_pos</span></span><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushStateTransition.target_pos" title="Link to this definition"></a></dt>
+<dd><p>Target position [x, y] (fixed)</p>
+</dd></dl>
+
+<p class="rubric">Example</p>
+<p>Using the Push state transition model:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="c1"># Define state: [robot_x, robot_y, object_x, object_y, target_x, target_y]</span>
+<span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">,</span> <span class="mf">3.1</span><span class="p">,</span> <span class="mf">8.0</span><span class="p">,</span> <span class="mf">8.0</span><span class="p">])</span>
+<span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;right&quot;</span>  <span class="c1"># Move robot right</span>
+
+<span class="c1"># Create transition model</span>
+<span class="n">transition</span> <span class="o">=</span> <span class="n">PushStateTransition</span><span class="p">(</span>
+    <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+    <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+    <span class="n">grid_size</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">push_threshold</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">friction_coefficient</span><span class="o">=</span><span class="mf">0.3</span>
+<span class="p">)</span>
+
+<span class="c1"># Simulate step</span>
+<span class="n">next_state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+<span class="c1"># Robot moves right, might push object if close enough</span>
+<span class="c1"># Returns new [robot_x, robot_y, object_x, object_y, target_x, target_y]</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.push_pomdp.PushStateTransition.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/push_pomdp.html#PushStateTransition.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.push_pomdp.PushStateTransition.sample" title="Link to this definition"></a></dt>
+<dd><p>Sample next states from the transition model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>n_samples</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></span>) – Number of next state samples to generate. Defaults to 1.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of sampled next states of length n_samples.</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method according to their
+specific state transition dynamics.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

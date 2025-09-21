@@ -1,0 +1,543 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_utils.test_logger &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_utils.test_logger</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_utils.test_logger</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.logger</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_logger</span><span class="p">,</span> <span class="n">get_queue_logger_diagnostics</span><span class="p">,</span> <span class="n">cleanup_all_loggers</span><span class="p">,</span> <span class="n">get_queue_logger_manager</span>
+
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="test_logger_console_output_true">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_logger.html#POMDPPlanners.tests.test_utils.test_logger.test_logger_console_output_true">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_logger_console_output_true</span><span class="p">(</span><span class="n">capsys</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test logger console output true.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that logger correctly outputs messages to console when console_output=True</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Logger configured with debug=True and console_output=True</span>
+<span class="sd">    When: Info message is logged</span>
+<span class="sd">    Then: Message appears in captured stdout or stderr output</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span><span class="s2">&quot;test.console&quot;</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">console_output</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;This is a test message for console output.&quot;</span><span class="p">)</span>
+    <span class="n">captured</span> <span class="o">=</span> <span class="n">capsys</span><span class="o">.</span><span class="n">readouterr</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="s2">&quot;This is a test message for console output.&quot;</span> <span class="ow">in</span> <span class="n">captured</span><span class="o">.</span><span class="n">out</span> <span class="ow">or</span> <span class="n">captured</span><span class="o">.</span><span class="n">err</span></div>
+
+
+
+<div class="viewcode-block" id="test_logger_console_output_false">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_logger.html#POMDPPlanners.tests.test_utils.test_logger.test_logger_console_output_false">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_logger_console_output_false</span><span class="p">(</span><span class="n">capsys</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test logger console output false.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that logger does not output messages to console when console_output=False</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Logger configured with debug=True and console_output=False</span>
+<span class="sd">    When: Info message is logged</span>
+<span class="sd">    Then: Message does not appear in captured stdout or stderr output</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span><span class="s2">&quot;test.no_console&quot;</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">console_output</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;This should not appear in the console.&quot;</span><span class="p">)</span>
+    <span class="n">captured</span> <span class="o">=</span> <span class="n">capsys</span><span class="o">.</span><span class="n">readouterr</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="s2">&quot;This should not appear in the console.&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">captured</span><span class="o">.</span><span class="n">out</span>
+    <span class="k">assert</span> <span class="s2">&quot;This should not appear in the console.&quot;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">captured</span><span class="o">.</span><span class="n">err</span></div>
+
+
+
+<div class="viewcode-block" id="test_logger_file_output">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_logger.html#POMDPPlanners.tests.test_utils.test_logger.test_logger_file_output">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_logger_file_output</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test logger file output.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that logger correctly writes messages to log files when output_dir is specified</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Logger configured with debug=True, output_dir=tmp_path, and console_output=False</span>
+<span class="sd">    When: Info message is logged</span>
+<span class="sd">    Then: Log file is created in logs subdirectory containing the test message</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">log_dir</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;logs&quot;</span>
+    <span class="n">logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span><span class="s2">&quot;test.file&quot;</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span> <span class="n">console_output</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;This is a test message for file output.&quot;</span><span class="p">)</span>
+    <span class="c1"># Find the log file</span>
+    <span class="n">log_files</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">log_dir</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">&quot;test_file_*.log&quot;</span><span class="p">))</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">log_files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">log_files</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="s2">&quot;This is a test message for file output.&quot;</span> <span class="ow">in</span> <span class="n">content</span></div>
+
+
+
+<div class="viewcode-block" id="test_logger_no_duplicate_handlers">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_logger.html#POMDPPlanners.tests.test_utils.test_logger.test_logger_no_duplicate_handlers">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_logger_no_duplicate_handlers</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test logger no duplicate handlers.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that repeated get_logger calls do not create duplicate handlers causing message duplication</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Logger called twice with identical parameters (debug=True, output_dir=tmp_path, console_output=True)</span>
+<span class="sd">    When: Messages are logged after each get_logger call</span>
+<span class="sd">    Then: Each message appears exactly once in the log file without duplication</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span><span class="s2">&quot;test.duplicate&quot;</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span> <span class="n">console_output</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;First message.&quot;</span><span class="p">)</span>
+    <span class="c1"># Call get_logger again to simulate repeated calls</span>
+    <span class="n">logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span><span class="s2">&quot;test.duplicate&quot;</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span> <span class="n">console_output</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Second message.&quot;</span><span class="p">)</span>
+    <span class="c1"># Should not duplicate messages in the log file</span>
+    <span class="n">log_dir</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;logs&quot;</span>
+    <span class="n">log_files</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">log_dir</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">&quot;test_duplicate_*.log&quot;</span><span class="p">))</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">log_files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">log_files</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+    <span class="c1"># Each message should appear only once</span>
+    <span class="k">assert</span> <span class="n">content</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s2">&quot;First message.&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="k">assert</span> <span class="n">content</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="s2">&quot;Second message.&quot;</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span></div>
+
+
+
+<div class="viewcode-block" id="test_queue_logger_basic_functionality">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_logger.html#POMDPPlanners.tests.test_utils.test_logger.test_queue_logger_basic_functionality">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_queue_logger_basic_functionality</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test basic queue-based logger functionality.</span>
+
+<span class="sd">    Purpose: Validates that queue-based logger works correctly for basic logging operations</span>
+
+<span class="sd">    Given: Logger configured with use_queue=True, output_dir=tmp_path, console_output=False</span>
+<span class="sd">    When: Info and warning messages are logged</span>
+<span class="sd">    Then: Messages are written to log file via queue mechanism without blocking</span>
+
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test.queue.basic&quot;</span><span class="p">,</span>
+            <span class="n">debug</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span>
+            <span class="n">console_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">use_queue</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Log some messages</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Queue logger test message 1&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Queue logger test warning&quot;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Queue logger test message 2&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Give writer thread time to process</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c1"># Check that log file was created</span>
+        <span class="n">log_dir</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;logs&quot;</span>
+        <span class="k">assert</span> <span class="n">log_dir</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span>
+
+        <span class="n">log_files</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">log_dir</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">&quot;test_queue_basic_*.log&quot;</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">log_files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+
+        <span class="c1"># Check content</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">log_files</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+
+        <span class="k">assert</span> <span class="s2">&quot;Queue logger test message 1&quot;</span> <span class="ow">in</span> <span class="n">content</span>
+        <span class="k">assert</span> <span class="s2">&quot;Queue logger test warning&quot;</span> <span class="ow">in</span> <span class="n">content</span>
+        <span class="k">assert</span> <span class="s2">&quot;Queue logger test message 2&quot;</span> <span class="ow">in</span> <span class="n">content</span>
+
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">cleanup_all_loggers</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="test_queue_logger_individual_task_files">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_logger.html#POMDPPlanners.tests.test_utils.test_logger.test_queue_logger_individual_task_files">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_queue_logger_individual_task_files</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test queue logger creates individual files per task.</span>
+
+<span class="sd">    Purpose: Validates that queue-based logger maintains individual log files for different tasks</span>
+
+<span class="sd">    Given: Multiple queue loggers with different task IDs</span>
+<span class="sd">    When: Messages are logged from each task</span>
+<span class="sd">    Then: Separate log files are created for each task with correct content</span>
+
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Create multiple task loggers</span>
+        <span class="n">loggers</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">task_names</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="n">task_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;test.task.</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">.task_id.abc</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">03d</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="n">logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="n">task_name</span><span class="p">,</span>
+                <span class="n">debug</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span>
+                <span class="n">console_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                <span class="n">use_queue</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+            <span class="n">loggers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">logger</span><span class="p">)</span>
+            <span class="n">task_names</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">task_name</span><span class="p">)</span>
+
+        <span class="c1"># Log from each task</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">logger</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">loggers</span><span class="p">):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Message from task </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Warning from task </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Give writer thread time to process</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c1"># Check that separate log files were created</span>
+        <span class="n">log_dir</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;logs&quot;</span>
+        <span class="k">assert</span> <span class="n">log_dir</span><span class="o">.</span><span class="n">exists</span><span class="p">()</span>
+
+        <span class="n">log_files</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">log_dir</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">&quot;test_task_*_task_id_*.log&quot;</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">log_files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+
+        <span class="c1"># Check each file has correct content</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+            <span class="n">matching_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">log_files</span> <span class="k">if</span> <span class="sa">f</span><span class="s2">&quot;task_</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">_task_id_abc</span><span class="si">{</span><span class="n">i</span><span class="si">:</span><span class="s2">03d</span><span class="si">}</span><span class="s2">&quot;</span> <span class="ow">in</span> <span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">matching_files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">matching_files</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+
+            <span class="k">assert</span> <span class="sa">f</span><span class="s2">&quot;Message from task </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span> <span class="ow">in</span> <span class="n">content</span>
+            <span class="k">assert</span> <span class="sa">f</span><span class="s2">&quot;Warning from task </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">&quot;</span> <span class="ow">in</span> <span class="n">content</span>
+
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">cleanup_all_loggers</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="test_queue_logger_diagnostics">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_logger.html#POMDPPlanners.tests.test_utils.test_logger.test_queue_logger_diagnostics">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_queue_logger_diagnostics</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test queue logger diagnostics functionality.</span>
+
+<span class="sd">    Purpose: Validates that diagnostic functions provide accurate information about queue logger state</span>
+
+<span class="sd">    Given: Queue logger system with multiple active loggers</span>
+<span class="sd">    When: Diagnostics are requested</span>
+<span class="sd">    Then: Accurate information about queue size, handlers, and system state is returned</span>
+
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Create some queue loggers</span>
+        <span class="n">logger1</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test.diag.1&quot;</span><span class="p">,</span>
+            <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span>
+            <span class="n">console_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">use_queue</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">logger2</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test.diag.2&quot;</span><span class="p">,</span>
+            <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span>
+            <span class="n">console_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">use_queue</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Log some messages</span>
+        <span class="n">logger1</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Test message 1&quot;</span><span class="p">)</span>
+        <span class="n">logger2</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Test message 2&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Give writer thread time to process</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c1"># Get diagnostics</span>
+        <span class="n">diagnostics</span> <span class="o">=</span> <span class="n">get_queue_logger_diagnostics</span><span class="p">()</span>
+
+        <span class="c1"># Check diagnostic information</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">diagnostics</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="s1">&#39;queue_size&#39;</span> <span class="ow">in</span> <span class="n">diagnostics</span>
+        <span class="k">assert</span> <span class="s1">&#39;writer_thread_alive&#39;</span> <span class="ow">in</span> <span class="n">diagnostics</span>
+        <span class="k">assert</span> <span class="s1">&#39;registered_loggers&#39;</span> <span class="ow">in</span> <span class="n">diagnostics</span>
+        <span class="k">assert</span> <span class="s1">&#39;active_handlers&#39;</span> <span class="ow">in</span> <span class="n">diagnostics</span>
+        <span class="k">assert</span> <span class="s1">&#39;max_handlers&#39;</span> <span class="ow">in</span> <span class="n">diagnostics</span>
+        <span class="k">assert</span> <span class="s1">&#39;shutdown_event_set&#39;</span> <span class="ow">in</span> <span class="n">diagnostics</span>
+
+        <span class="c1"># Verify some values</span>
+        <span class="k">assert</span> <span class="n">diagnostics</span><span class="p">[</span><span class="s1">&#39;writer_thread_alive&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span>
+        <span class="k">assert</span> <span class="n">diagnostics</span><span class="p">[</span><span class="s1">&#39;registered_loggers&#39;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">2</span>
+        <span class="k">assert</span> <span class="n">diagnostics</span><span class="p">[</span><span class="s1">&#39;shutdown_event_set&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">False</span>
+
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">cleanup_all_loggers</span><span class="p">()</span>
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span>  <span class="c1"># Give cleanup time to complete</span>
+
+        <span class="c1"># Check diagnostics after cleanup</span>
+        <span class="n">final_diagnostics</span> <span class="o">=</span> <span class="n">get_queue_logger_diagnostics</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="n">final_diagnostics</span><span class="p">[</span><span class="s1">&#39;registered_loggers&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>
+        <span class="k">assert</span> <span class="n">final_diagnostics</span><span class="p">[</span><span class="s1">&#39;active_handlers&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span></div>
+
+
+
+<div class="viewcode-block" id="test_queue_logger_cleanup">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_logger.html#POMDPPlanners.tests.test_utils.test_logger.test_queue_logger_cleanup">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_queue_logger_cleanup</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test queue logger cleanup functionality.</span>
+
+<span class="sd">    Purpose: Validates that cleanup functions properly shut down queue logger resources</span>
+
+<span class="sd">    Given: Active queue logger with writer thread and handlers</span>
+<span class="sd">    When: cleanup_all_loggers is called</span>
+<span class="sd">    Then: All resources are properly cleaned up and system returns to clean state</span>
+
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryDirectory</span><span class="p">()</span> <span class="k">as</span> <span class="n">tmp_dir</span><span class="p">:</span>
+        <span class="n">tmp_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">tmp_dir</span><span class="p">)</span>
+
+        <span class="c1"># Create queue logger</span>
+        <span class="n">logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test.cleanup&quot;</span><span class="p">,</span>
+            <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span>
+            <span class="n">use_queue</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Test cleanup message&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Verify system is active</span>
+        <span class="n">diagnostics_before</span> <span class="o">=</span> <span class="n">get_queue_logger_diagnostics</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="n">diagnostics_before</span><span class="p">[</span><span class="s1">&#39;writer_thread_alive&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="kc">True</span>
+        <span class="k">assert</span> <span class="n">diagnostics_before</span><span class="p">[</span><span class="s1">&#39;registered_loggers&#39;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+        <span class="c1"># Cleanup</span>
+        <span class="n">cleanup_all_loggers</span><span class="p">()</span>
+
+        <span class="c1"># Verify cleanup worked</span>
+        <span class="n">diagnostics_after</span> <span class="o">=</span> <span class="n">get_queue_logger_diagnostics</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="n">diagnostics_after</span><span class="p">[</span><span class="s1">&#39;registered_loggers&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>
+        <span class="k">assert</span> <span class="n">diagnostics_after</span><span class="p">[</span><span class="s1">&#39;active_handlers&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span></div>
+
+
+
+<div class="viewcode-block" id="test_queue_logger_handler_management">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_logger.html#POMDPPlanners.tests.test_utils.test_logger.test_queue_logger_handler_management">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_queue_logger_handler_management</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test queue logger handler pooling and management.</span>
+
+<span class="sd">    Purpose: Validates that queue logger properly manages file handlers with pooling</span>
+
+<span class="sd">    Given: Multiple queue loggers accessing the same task repeatedly</span>
+<span class="sd">    When: Handlers are created and reused</span>
+<span class="sd">    Then: Handler count is managed efficiently without resource leaks</span>
+
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">task_name</span> <span class="o">=</span> <span class="s2">&quot;test.handler.pooling.task_id.xyz123&quot;</span>
+
+        <span class="c1"># Create multiple loggers for same task</span>
+        <span class="n">logger1</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">task_name</span><span class="p">,</span>
+            <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span>
+            <span class="n">use_queue</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">logger2</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">task_name</span><span class="p">,</span>
+            <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span>
+            <span class="n">use_queue</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+
+        <span class="c1"># They should be the same logger instance</span>
+        <span class="k">assert</span> <span class="n">logger1</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="n">logger2</span><span class="o">.</span><span class="n">name</span>
+
+        <span class="c1"># Log messages</span>
+        <span class="n">logger1</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Message from logger1&quot;</span><span class="p">)</span>
+        <span class="n">logger2</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Message from logger2&quot;</span><span class="p">)</span>
+
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c1"># Check diagnostics</span>
+        <span class="n">diagnostics</span> <span class="o">=</span> <span class="n">get_queue_logger_diagnostics</span><span class="p">()</span>
+
+        <span class="c1"># Should have reasonable handler count</span>
+        <span class="k">assert</span> <span class="n">diagnostics</span><span class="p">[</span><span class="s1">&#39;active_handlers&#39;</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">diagnostics</span><span class="p">[</span><span class="s1">&#39;max_handlers&#39;</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="n">diagnostics</span><span class="p">[</span><span class="s1">&#39;active_handlers&#39;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">1</span>
+
+        <span class="c1"># Check log file</span>
+        <span class="n">log_dir</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;logs&quot;</span>
+        <span class="n">log_files</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">log_dir</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">&quot;test_handler_pooling_task_id_*.log&quot;</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">log_files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">log_files</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+
+        <span class="k">assert</span> <span class="s2">&quot;Message from logger1&quot;</span> <span class="ow">in</span> <span class="n">content</span>
+        <span class="k">assert</span> <span class="s2">&quot;Message from logger2&quot;</span> <span class="ow">in</span> <span class="n">content</span>
+
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">cleanup_all_loggers</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="test_queue_logger_backwards_compatibility">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_logger.html#POMDPPlanners.tests.test_utils.test_logger.test_queue_logger_backwards_compatibility">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_queue_logger_backwards_compatibility</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test queue logger backwards compatibility with existing code.</span>
+
+<span class="sd">    Purpose: Validates that queue logger maintains compatibility with existing get_logger calls</span>
+
+<span class="sd">    Given: Logger calls with and without use_queue parameter</span>
+<span class="sd">    When: Both types of loggers are used</span>
+<span class="sd">    Then: Both work correctly and produce expected log files</span>
+
+<span class="sd">    Test type: integration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="c1"># Test individual logger (default behavior)</span>
+        <span class="n">logger_individual</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test.compat.individual&quot;</span><span class="p">,</span>
+            <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span>
+            <span class="n">console_output</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Test queue logger (new behavior)</span>
+        <span class="n">logger_queue</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test.compat.queue&quot;</span><span class="p">,</span>
+            <span class="n">output_dir</span><span class="o">=</span><span class="n">tmp_path</span><span class="p">,</span>
+            <span class="n">console_output</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">use_queue</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Log messages</span>
+        <span class="n">logger_individual</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Individual logger message&quot;</span><span class="p">)</span>
+        <span class="n">logger_queue</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Queue logger message&quot;</span><span class="p">)</span>
+
+        <span class="n">time</span><span class="o">.</span><span class="n">sleep</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c1"># Check log files</span>
+        <span class="n">log_dir</span> <span class="o">=</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;logs&quot;</span>
+        <span class="n">log_files</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">log_dir</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="s2">&quot;*.log&quot;</span><span class="p">))</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">log_files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+
+        <span class="c1"># Find and check individual logger file</span>
+        <span class="n">individual_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">log_files</span> <span class="k">if</span> <span class="s2">&quot;test_compat_individual&quot;</span> <span class="ow">in</span> <span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">individual_files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">individual_files</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="s2">&quot;Individual logger message&quot;</span> <span class="ow">in</span> <span class="n">content</span>
+
+        <span class="c1"># Find and check queue logger file</span>
+        <span class="n">queue_files</span> <span class="o">=</span> <span class="p">[</span><span class="n">f</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">log_files</span> <span class="k">if</span> <span class="s2">&quot;test_compat_queue&quot;</span> <span class="ow">in</span> <span class="n">f</span><span class="o">.</span><span class="n">name</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">queue_files</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">queue_files</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+            <span class="n">content</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="s2">&quot;Queue logger message&quot;</span> <span class="ow">in</span> <span class="n">content</span>
+
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">cleanup_all_loggers</span><span class="p">()</span> </div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

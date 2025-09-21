@@ -1,0 +1,804 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Tests for PathSimulationPolicy implementations.</span>
+
+<span class="sd">This module tests the PathSimulationPolicy abstract base class, focusing on:</span>
+<span class="sd">- Class initialization and parameter validation</span>
+<span class="sd">- Terminal belief handling in the action method</span>
+<span class="sd">- Error conditions and edge cases</span>
+<span class="sd">- Abstract method contract enforcement</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">unittest.mock</span><span class="w"> </span><span class="kn">import</span> <span class="n">Mock</span><span class="p">,</span> <span class="n">patch</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.path_simulations_policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">PathSimulationPolicy</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.environment</span><span class="w"> </span><span class="kn">import</span> <span class="n">Environment</span><span class="p">,</span> <span class="n">SpaceInfo</span><span class="p">,</span> <span class="n">SpaceType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">Belief</span><span class="p">,</span> <span class="n">WeightedParticleBelief</span><span class="p">,</span> <span class="n">is_terminal_belief</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">BeliefNode</span><span class="p">,</span> <span class="n">ActionNode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">PolicyRunData</span><span class="p">,</span> <span class="n">PolicySpaceInfo</span><span class="p">,</span> <span class="n">PolicyInfoVariable</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+
+<span class="c1"># Set seeds for reproducible tests</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="MockEnvironment">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MockEnvironment</span><span class="p">(</span><span class="n">Environment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Mock environment for testing PathSimulationPolicy.&quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">action_space</span><span class="p">:</span> <span class="n">SpaceType</span> <span class="o">=</span> <span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">):</span>
+        <span class="n">space_info</span> <span class="o">=</span> <span class="n">SpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">action_space</span><span class="p">,</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span>
+        <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="n">discount_factor</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;MockEnvironment&quot;</span><span class="p">,</span> <span class="n">space_info</span><span class="o">=</span><span class="n">space_info</span><span class="p">)</span>
+    
+<div class="viewcode-block" id="MockEnvironment.state_transition_model">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.state_transition_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_transition_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">state</span><span class="p">]</span>  <span class="c1"># Simple identity transition</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.observation_model">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.observation_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observation_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_state</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># Simple observation</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.reward">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.reward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
+        <span class="k">return</span> <span class="mf">1.0</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.is_terminal">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.is_terminal">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_terminal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">state</span> <span class="o">==</span> <span class="s2">&quot;terminal&quot;</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.initial_state_dist">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.initial_state_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_state_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">mock_dist</span> <span class="o">=</span> <span class="n">Mock</span><span class="p">()</span>
+        <span class="n">mock_dist</span><span class="o">.</span><span class="n">sample</span> <span class="o">=</span> <span class="n">Mock</span><span class="p">(</span><span class="n">return_value</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;state1&quot;</span><span class="p">,</span> <span class="s2">&quot;state2&quot;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">mock_dist</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.initial_observation_dist">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.initial_observation_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_observation_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">mock_dist</span> <span class="o">=</span> <span class="n">Mock</span><span class="p">()</span>
+        <span class="n">mock_dist</span><span class="o">.</span><span class="n">sample</span> <span class="o">=</span> <span class="n">Mock</span><span class="p">(</span><span class="n">return_value</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">mock_dist</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.is_equal_observation">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.is_equal_observation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_equal_observation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation1</span><span class="p">,</span> <span class="n">observation2</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">observation1</span> <span class="o">==</span> <span class="n">observation2</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.is_equal_state">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.is_equal_state">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_equal_state</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state1</span><span class="p">,</span> <span class="n">state2</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">state1</span> <span class="o">==</span> <span class="n">state2</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.get_actions">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockEnvironment.get_actions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="MockActionSampler">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockActionSampler">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MockActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Mock action sampler for continuous action spaces.&quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">actions</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="n">actions</span> <span class="ow">or</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">]</span>
+    
+<div class="viewcode-block" id="MockActionSampler.sample">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockActionSampler.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="MockActionSampler.get_space">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.MockActionSampler.get_space">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_space</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">actions</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="ConcretePathSimulationPolicy">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.ConcretePathSimulationPolicy">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ConcretePathSimulationPolicy</span><span class="p">(</span><span class="n">PathSimulationPolicy</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Concrete implementation of PathSimulationPolicy for testing.&quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">simulate_path_calls</span> <span class="o">=</span> <span class="p">[]</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_simulate_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="p">:</span> <span class="n">BeliefNode</span><span class="p">,</span> <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Mock implementation that records calls and creates action nodes.&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">simulate_path_calls</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">belief_node</span><span class="p">,</span> <span class="n">depth</span><span class="p">))</span>
+        
+        <span class="c1"># Create action nodes if they don&#39;t exist</span>
+        <span class="k">if</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">get_actions</span><span class="p">():</span>
+                <span class="n">action_node</span> <span class="o">=</span> <span class="n">ActionNode</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="n">belief_node</span><span class="p">,</span> <span class="n">children</span><span class="o">=</span><span class="nb">tuple</span><span class="p">())</span>
+                <span class="c1"># Set Q-values so that action 1 has the highest value</span>
+                <span class="k">if</span> <span class="n">action</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">action_node</span><span class="o">.</span><span class="n">q_value</span> <span class="o">=</span> <span class="mf">2.0</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">action_node</span><span class="o">.</span><span class="n">q_value</span> <span class="o">=</span> <span class="mf">1.0</span>
+        
+        <span class="k">return</span> <span class="mf">1.0</span>  <span class="c1"># Mock reward</span>
+    
+<div class="viewcode-block" id="ConcretePathSimulationPolicy.get_space_info">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.ConcretePathSimulationPolicy.get_space_info">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_space_info</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PolicySpaceInfo</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get space type requirements for this test policy.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">PolicySpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span>
+        <span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="discrete_environment">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.discrete_environment">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">discrete_environment</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Environment with discrete action space.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">MockEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="continuous_environment">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.continuous_environment">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>  
+<span class="k">def</span><span class="w"> </span><span class="nf">continuous_environment</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Environment with continuous action space.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">MockEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">CONTINUOUS</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="action_sampler">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.action_sampler">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">action_sampler</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Mock action sampler for continuous spaces.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">MockActionSampler</span><span class="p">()</span></div>
+
+
+
+<div class="viewcode-block" id="belief">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.belief">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">belief</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Mock belief for testing.&quot;&quot;&quot;</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;state1&quot;</span><span class="p">,</span> <span class="s2">&quot;state2&quot;</span><span class="p">,</span> <span class="s2">&quot;state3&quot;</span><span class="p">]</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">([</span><span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="terminal_belief">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.terminal_belief">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">terminal_belief</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Mock terminal belief for testing.&quot;&quot;&quot;</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;terminal&quot;</span><span class="p">,</span> <span class="s2">&quot;terminal&quot;</span><span class="p">]</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyInitialization">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestPathSimulationPolicyInitialization</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test PathSimulationPolicy initialization and parameter validation.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="TestPathSimulationPolicyInitialization.test_discrete_environment_initialization_with_n_simulations">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_discrete_environment_initialization_with_n_simulations">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_environment_initialization_with_n_simulations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discrete_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test initialization with discrete environment and simulation count.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates PathSimulationPolicy initializes correctly for discrete action spaces with simulation count</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A discrete action environment and simulation count parameter</span>
+<span class="sd">        When: PathSimulationPolicy is initialized with n_simulations</span>
+<span class="sd">        Then: Policy is created with correct parameters and no action sampler required</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">)</span>
+        
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">environment</span> <span class="o">==</span> <span class="n">discrete_environment</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">discount_factor</span> <span class="o">==</span> <span class="mf">0.95</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;test_policy&quot;</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">n_simulations</span> <span class="o">==</span> <span class="mi">100</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">time_out_in_seconds</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">action_sampler</span> <span class="ow">is</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyInitialization.test_discrete_environment_initialization_with_timeout">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_discrete_environment_initialization_with_timeout">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_environment_initialization_with_timeout</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discrete_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test initialization with discrete environment and timeout.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates PathSimulationPolicy initializes correctly for discrete action spaces with timeout</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A discrete action environment and timeout parameter</span>
+<span class="sd">        When: PathSimulationPolicy is initialized with time_out_in_seconds</span>
+<span class="sd">        Then: Policy is created with correct parameters and no action sampler required</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span> 
+            <span class="n">n_simulations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="mi">30</span>
+        <span class="p">)</span>
+        
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">environment</span> <span class="o">==</span> <span class="n">discrete_environment</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">discount_factor</span> <span class="o">==</span> <span class="mf">0.95</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;test_policy&quot;</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">n_simulations</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">time_out_in_seconds</span> <span class="o">==</span> <span class="mi">30</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">action_sampler</span> <span class="ow">is</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyInitialization.test_continuous_environment_initialization_with_action_sampler">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_continuous_environment_initialization_with_action_sampler">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_continuous_environment_initialization_with_action_sampler</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">continuous_environment</span><span class="p">,</span> <span class="n">action_sampler</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test initialization with continuous environment and action sampler.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates PathSimulationPolicy initializes correctly for continuous action spaces with action sampler</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A continuous action environment and action sampler</span>
+<span class="sd">        When: PathSimulationPolicy is initialized with action_sampler</span>
+<span class="sd">        Then: Policy is created with correct parameters including the action sampler</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">continuous_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span>
+        <span class="p">)</span>
+        
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">environment</span> <span class="o">==</span> <span class="n">continuous_environment</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">discount_factor</span> <span class="o">==</span> <span class="mf">0.95</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;test_policy&quot;</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">n_simulations</span> <span class="o">==</span> <span class="mi">100</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">time_out_in_seconds</span> <span class="ow">is</span> <span class="kc">None</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">action_sampler</span> <span class="o">==</span> <span class="n">action_sampler</span></div>
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyInitialization.test_initialization_with_optional_parameters">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_initialization_with_optional_parameters">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_initialization_with_optional_parameters</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discrete_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test initialization with optional debug and log_path parameters.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates PathSimulationPolicy initializes correctly with optional parameters</span>
+<span class="sd">        </span>
+<span class="sd">        Given: Environment and optional debug and log_path parameters</span>
+<span class="sd">        When: PathSimulationPolicy is initialized with debug=True and log_path</span>
+<span class="sd">        Then: Policy is created with all parameters set correctly</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">log_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;/tmp/test_log&quot;</span><span class="p">)</span>
+        
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">debug</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+            <span class="n">log_path</span><span class="o">=</span><span class="n">log_path</span>
+        <span class="p">)</span>
+        
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">debug</span> <span class="ow">is</span> <span class="kc">True</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">log_path</span> <span class="o">==</span> <span class="n">log_path</span></div>
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyInitialization.test_both_n_simulations_and_timeout_raises_error">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_both_n_simulations_and_timeout_raises_error">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_both_n_simulations_and_timeout_raises_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discrete_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that providing both n_simulations and timeout raises ValueError.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates proper error handling when both termination criteria are provided</span>
+<span class="sd">        </span>
+<span class="sd">        Given: Environment and both n_simulations and time_out_in_seconds parameters</span>
+<span class="sd">        When: PathSimulationPolicy is initialized with both parameters</span>
+<span class="sd">        Then: ValueError is raised with appropriate message</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">&quot;Cannot specify both n_simulations and time_out_in_seconds&quot;</span><span class="p">):</span>
+            <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+                <span class="n">environment</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">,</span>
+                <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+                <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+                <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="mi">30</span>
+            <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyInitialization.test_continuous_environment_without_action_sampler_raises_error">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_continuous_environment_without_action_sampler_raises_error">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_continuous_environment_without_action_sampler_raises_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">continuous_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that continuous environment without action sampler raises ValueError.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates proper error handling when action sampler is required but not provided</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A continuous action environment without action sampler</span>
+<span class="sd">        When: PathSimulationPolicy is initialized without action_sampler</span>
+<span class="sd">        Then: ValueError is raised with appropriate message about action sampler requirement</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">&quot;Action sampler must be provided for continuous action spaces&quot;</span><span class="p">):</span>
+            <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+                <span class="n">environment</span><span class="o">=</span><span class="n">continuous_environment</span><span class="p">,</span>
+                <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+                <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+                <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="kc">None</span>
+            <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyInitialization.test_neither_n_simulations_nor_timeout_in_learn_tree_raises_error">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyInitialization.test_neither_n_simulations_nor_timeout_in_learn_tree_raises_error">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_neither_n_simulations_nor_timeout_in_learn_tree_raises_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discrete_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that providing neither n_simulations nor timeout raises error during tree learning.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates proper error handling when no termination criteria are provided</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A policy initialized with both n_simulations=None and time_out_in_seconds=None  </span>
+<span class="sd">        When: _learn_tree method is called</span>
+<span class="sd">        Then: ValueError is raised about missing termination criteria</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">)</span>
+        
+        <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;state1&quot;</span><span class="p">,</span> <span class="s2">&quot;state2&quot;</span><span class="p">]</span>
+        <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">])</span>
+        <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">)</span>
+        
+        <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">&quot;Either n_simulations or time_out_in_seconds must be provided&quot;</span><span class="p">):</span>
+            <span class="n">policy</span><span class="o">.</span><span class="n">_learn_tree</span><span class="p">(</span><span class="n">belief</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyTerminalBeliefHandling">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTerminalBeliefHandling">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestPathSimulationPolicyTerminalBeliefHandling</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test terminal belief handling in PathSimulationPolicy action method.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="TestPathSimulationPolicyTerminalBeliefHandling.test_terminal_belief_returns_random_action_discrete">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTerminalBeliefHandling.test_terminal_belief_returns_random_action_discrete">[docs]</a>
+    <span class="nd">@patch</span><span class="p">(</span><span class="s1">&#39;POMDPPlanners.planners.mcts_planners.path_simulations_policy.is_terminal_belief&#39;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_terminal_belief_returns_random_action_discrete</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_is_terminal</span><span class="p">,</span> <span class="n">discrete_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test terminal belief handling returns random action for discrete environment.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that terminal beliefs trigger random action selection in discrete environments</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A discrete environment and a terminal belief state</span>
+<span class="sd">        When: action method is called with terminal belief</span>
+<span class="sd">        Then: Random action from environment actions is returned with empty PolicyRunData</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">)</span>
+        
+        <span class="n">mock_is_terminal</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="kc">True</span>
+        
+        <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;terminal&quot;</span><span class="p">]</span>
+        <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">0.5</span><span class="p">])</span>  <span class="c1"># Non-zero log weight for single particle</span>
+        <span class="n">terminal_belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">)</span>
+        
+        <span class="n">actions</span><span class="p">,</span> <span class="n">policy_data</span> <span class="o">=</span> <span class="n">policy</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">terminal_belief</span><span class="p">)</span>
+        
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">assert</span> <span class="n">actions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="n">discrete_environment</span><span class="o">.</span><span class="n">get_actions</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_data</span><span class="p">,</span> <span class="n">PolicyRunData</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">policy_data</span><span class="o">.</span><span class="n">info_variables</span> <span class="o">==</span> <span class="p">[]</span>
+        <span class="n">mock_is_terminal</span><span class="o">.</span><span class="n">assert_called_once_with</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">terminal_belief</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyTerminalBeliefHandling.test_terminal_belief_returns_random_action_continuous">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTerminalBeliefHandling.test_terminal_belief_returns_random_action_continuous">[docs]</a>
+    <span class="nd">@patch</span><span class="p">(</span><span class="s1">&#39;POMDPPlanners.planners.mcts_planners.path_simulations_policy.is_terminal_belief&#39;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_terminal_belief_returns_random_action_continuous</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_is_terminal</span><span class="p">,</span> <span class="n">continuous_environment</span><span class="p">,</span> <span class="n">action_sampler</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test terminal belief handling returns random action for continuous environment.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that terminal beliefs trigger action sampler usage in continuous environments</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A continuous environment with action sampler and a terminal belief state</span>
+<span class="sd">        When: action method is called with terminal belief</span>
+<span class="sd">        Then: Action from action sampler is returned with empty PolicyRunData</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">continuous_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span>
+        <span class="p">)</span>
+        
+        <span class="n">mock_is_terminal</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="kc">True</span>
+        
+        <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;terminal&quot;</span><span class="p">]</span>
+        <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">0.5</span><span class="p">])</span>  <span class="c1"># Non-zero log weight for single particle</span>
+        <span class="n">terminal_belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">)</span>
+        
+        <span class="c1"># Mock the action sampler sample method</span>
+        <span class="k">with</span> <span class="n">patch</span><span class="o">.</span><span class="n">object</span><span class="p">(</span><span class="n">action_sampler</span><span class="p">,</span> <span class="s1">&#39;sample&#39;</span><span class="p">,</span> <span class="n">return_value</span><span class="o">=</span><span class="mf">1.5</span><span class="p">)</span> <span class="k">as</span> <span class="n">mock_sample</span><span class="p">:</span>
+            <span class="n">actions</span><span class="p">,</span> <span class="n">policy_data</span> <span class="o">=</span> <span class="n">policy</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">terminal_belief</span><span class="p">)</span>
+            
+            <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+            <span class="k">assert</span> <span class="n">actions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.5</span>
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_data</span><span class="p">,</span> <span class="n">PolicyRunData</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="n">policy_data</span><span class="o">.</span><span class="n">info_variables</span> <span class="o">==</span> <span class="p">[]</span>
+            <span class="n">mock_is_terminal</span><span class="o">.</span><span class="n">assert_called_once_with</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">terminal_belief</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="n">continuous_environment</span><span class="p">)</span>
+            <span class="n">mock_sample</span><span class="o">.</span><span class="n">assert_called_once</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyTerminalBeliefHandling.test_non_terminal_belief_builds_tree">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTerminalBeliefHandling.test_non_terminal_belief_builds_tree">[docs]</a>
+    <span class="nd">@patch</span><span class="p">(</span><span class="s1">&#39;POMDPPlanners.planners.mcts_planners.path_simulations_policy.is_terminal_belief&#39;</span><span class="p">)</span>
+    <span class="nd">@patch</span><span class="p">(</span><span class="s1">&#39;POMDPPlanners.planners.mcts_planners.path_simulations_policy.compute_tree_metrics&#39;</span><span class="p">)</span>
+    <span class="nd">@patch</span><span class="p">(</span><span class="s1">&#39;POMDPPlanners.planners.mcts_planners.path_simulations_policy.get_optimal_action_reward_setting&#39;</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_non_terminal_belief_builds_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_get_optimal</span><span class="p">,</span> <span class="n">mock_compute_metrics</span><span class="p">,</span> <span class="n">mock_is_terminal</span><span class="p">,</span> <span class="n">discrete_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test non-terminal belief triggers tree construction and action selection.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that non-terminal beliefs trigger proper tree construction and action selection</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A discrete environment and a non-terminal belief state</span>
+<span class="sd">        When: action method is called with non-terminal belief</span>
+<span class="sd">        Then: Tree is built, metrics are computed, and optimal action is selected</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>  <span class="c1"># Small number for testing</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">)</span>
+        
+        <span class="n">mock_is_terminal</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="n">mock_compute_metrics</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="p">[</span><span class="n">PolicyInfoVariable</span><span class="p">(</span><span class="s2">&quot;nodes&quot;</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="n">PolicyInfoVariable</span><span class="p">(</span><span class="s2">&quot;depth&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">)]</span>
+        <span class="n">mock_get_optimal</span><span class="o">.</span><span class="n">return_value</span> <span class="o">=</span> <span class="mi">1</span>
+        
+        <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;state1&quot;</span><span class="p">,</span> <span class="s2">&quot;state2&quot;</span><span class="p">]</span>
+        <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">0.3</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.7</span><span class="p">])</span>  <span class="c1"># Non-zero log weights for two particles</span>
+        <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">)</span>
+        
+        <span class="n">actions</span><span class="p">,</span> <span class="n">policy_data</span> <span class="o">=</span> <span class="n">policy</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">belief</span><span class="p">)</span>
+        
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">assert</span> <span class="n">actions</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">policy_data</span><span class="p">,</span> <span class="n">PolicyRunData</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">policy_data</span><span class="o">.</span><span class="n">info_variables</span> <span class="o">==</span> <span class="p">[</span><span class="n">PolicyInfoVariable</span><span class="p">(</span><span class="s2">&quot;nodes&quot;</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="n">PolicyInfoVariable</span><span class="p">(</span><span class="s2">&quot;depth&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">)]</span>
+        
+        <span class="c1"># Verify tree construction happened by checking simulate_path was called</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">simulate_path_calls</span><span class="p">)</span> <span class="o">==</span> <span class="mi">5</span>
+        
+        <span class="n">mock_is_terminal</span><span class="o">.</span><span class="n">assert_called_once_with</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">belief</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">)</span>
+        <span class="n">mock_compute_metrics</span><span class="o">.</span><span class="n">assert_called_once</span><span class="p">()</span>
+        <span class="n">mock_get_optimal</span><span class="o">.</span><span class="n">assert_called_once</span><span class="p">()</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyTreeConstruction">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTreeConstruction">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestPathSimulationPolicyTreeConstruction</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test tree construction methods in PathSimulationPolicy.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="TestPathSimulationPolicyTreeConstruction.test_construct_tree_using_n_simulations">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTreeConstruction.test_construct_tree_using_n_simulations">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_construct_tree_using_n_simulations</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discrete_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test tree construction using simulation count.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that tree construction runs the correct number of simulations</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A policy configured with n_simulations=10</span>
+<span class="sd">        When: _construct_tree_using_n_simulations is called</span>
+<span class="sd">        Then: _simulate_path is called exactly 10 times</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">)</span>
+        
+        <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;state1&quot;</span><span class="p">]</span>
+        <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">0.5</span><span class="p">])</span>  <span class="c1"># Non-zero log weight for single particle</span>
+        <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">)</span>
+        <span class="n">belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">belief</span><span class="p">)</span>
+        
+        <span class="n">policy</span><span class="o">.</span><span class="n">_construct_tree_using_n_simulations</span><span class="p">(</span><span class="n">belief_node</span><span class="p">)</span>
+        
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">simulate_path_calls</span><span class="p">)</span> <span class="o">==</span> <span class="mi">10</span>
+        <span class="k">for</span> <span class="n">call</span> <span class="ow">in</span> <span class="n">policy</span><span class="o">.</span><span class="n">simulate_path_calls</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">call</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">belief_node</span>
+            <span class="k">assert</span> <span class="n">call</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>  <span class="c1"># depth</span></div>
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyTreeConstruction.test_construct_tree_using_timeout">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTreeConstruction.test_construct_tree_using_timeout">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_construct_tree_using_timeout</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discrete_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test tree construction using timeout.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that tree construction respects time limits</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A policy configured with time_out_in_seconds=1</span>
+<span class="sd">        When: _construct_tree_using_timeout is called</span>
+<span class="sd">        Then: _simulate_path is called multiple times within the time limit</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="mi">1</span>  <span class="c1"># 1 second timeout</span>
+        <span class="p">)</span>
+        
+        <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;state1&quot;</span><span class="p">]</span>
+        <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">0.5</span><span class="p">])</span>  <span class="c1"># Non-zero log weight for single particle</span>
+        <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">)</span>
+        <span class="n">belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">belief</span><span class="p">)</span>
+        
+        <span class="n">policy</span><span class="o">.</span><span class="n">_construct_tree_using_timeout</span><span class="p">(</span><span class="n">belief_node</span><span class="p">)</span>
+        
+        <span class="c1"># Should have called simulate_path multiple times within 1 second</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">policy</span><span class="o">.</span><span class="n">simulate_path_calls</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">call</span> <span class="ow">in</span> <span class="n">policy</span><span class="o">.</span><span class="n">simulate_path_calls</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">call</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">belief_node</span>
+            <span class="k">assert</span> <span class="n">call</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span>  <span class="c1"># depth</span></div>
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyTreeConstruction.test_construct_tree_with_none_n_simulations_raises_error">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTreeConstruction.test_construct_tree_with_none_n_simulations_raises_error">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_construct_tree_with_none_n_simulations_raises_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discrete_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test error when n_simulations is None during simulation-based construction.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates proper error handling when n_simulations is None but method expects it</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A policy with n_simulations set to None</span>
+<span class="sd">        When: _construct_tree_using_n_simulations is called</span>
+<span class="sd">        Then: ValueError is raised about n_simulations being None</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="mi">30</span>
+        <span class="p">)</span>
+        
+        <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;state1&quot;</span><span class="p">]</span>
+        <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">0.5</span><span class="p">])</span>  <span class="c1"># Non-zero log weight for single particle</span>
+        <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">)</span>
+        <span class="n">belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">belief</span><span class="p">)</span>
+        
+        <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">&quot;n_simulations must not be None&quot;</span><span class="p">):</span>
+            <span class="n">policy</span><span class="o">.</span><span class="n">_construct_tree_using_n_simulations</span><span class="p">(</span><span class="n">belief_node</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyTreeConstruction.test_construct_tree_with_none_timeout_raises_error">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyTreeConstruction.test_construct_tree_with_none_timeout_raises_error">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_construct_tree_with_none_timeout_raises_error</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discrete_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test error when time_out_in_seconds is None during timeout-based construction.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates proper error handling when time_out_in_seconds is None but method expects it</span>
+<span class="sd">        </span>
+<span class="sd">        Given: A policy with time_out_in_seconds set to None</span>
+<span class="sd">        When: _construct_tree_using_timeout is called</span>
+<span class="sd">        Then: ValueError is raised about time_out_in_seconds being None</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">ConcretePathSimulationPolicy</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="kc">None</span>
+        <span class="p">)</span>
+        
+        <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;state1&quot;</span><span class="p">]</span>
+        <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">0.5</span><span class="p">])</span>  <span class="c1"># Non-zero log weight for single particle</span>
+        <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">)</span>
+        <span class="n">belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">belief</span><span class="p">)</span>
+        
+        <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">&quot;time_out_in_seconds must not be None&quot;</span><span class="p">):</span>
+            <span class="n">policy</span><span class="o">.</span><span class="n">_construct_tree_using_timeout</span><span class="p">(</span><span class="n">belief_node</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="TestPathSimulationPolicyAbstractContract">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyAbstractContract">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestPathSimulationPolicyAbstractContract</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test abstract method contract enforcement.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="TestPathSimulationPolicyAbstractContract.test_cannot_instantiate_abstract_base_class">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_path_simulation_policy.TestPathSimulationPolicyAbstractContract.test_cannot_instantiate_abstract_base_class">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_cannot_instantiate_abstract_base_class</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discrete_environment</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that PathSimulationPolicy cannot be instantiated directly.</span>
+<span class="sd">        </span>
+<span class="sd">        Purpose: Validates that abstract base class cannot be instantiated without implementing abstract methods</span>
+<span class="sd">        </span>
+<span class="sd">        Given: PathSimulationPolicy abstract base class</span>
+<span class="sd">        When: Attempting to instantiate PathSimulationPolicy directly</span>
+<span class="sd">        Then: TypeError is raised about abstract methods</span>
+<span class="sd">        </span>
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">TypeError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">&quot;Can&#39;t instantiate abstract class PathSimulationPolicy&quot;</span><span class="p">):</span>
+            <span class="n">PathSimulationPolicy</span><span class="p">(</span>
+                <span class="n">environment</span><span class="o">=</span><span class="n">discrete_environment</span><span class="p">,</span>
+                <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+                <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+                <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="kc">None</span>
+            <span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

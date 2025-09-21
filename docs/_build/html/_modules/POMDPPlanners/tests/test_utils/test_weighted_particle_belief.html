@@ -1,0 +1,666 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_utils.test_weighted_particle_belief &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_utils.test_weighted_particle_belief</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_utils.test_weighted_particle_belief</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Tests for weighted particle belief implementations.</span>
+
+<span class="sd">This module tests the weighted particle belief implementations, focusing on:</span>
+<span class="sd">- Basic belief functionality</span>
+<span class="sd">- Belief updates</span>
+<span class="sd">- Belief sampling</span>
+<span class="sd">- Belief types</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.weighted_particle_beliefs</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">WeightedParticleBeliefDiscreteLightDark</span><span class="p">,</span>
+    <span class="n">WeightedParticleBeliefDiscreteLightDarkFullCoverage</span><span class="p">,</span>
+    <span class="n">WeightedParticleBeliefContinuousLightDarkFullCoverage</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContinuousLightDarkPOMDPDiscreteActions</span>
+
+<span class="c1"># Set seeds for reproducible tests</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="test_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_initialization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_initialization</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test proper initialization of WeightedParticleBeliefDiscreteLightDark</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates proper initialization of WeightedParticleBeliefDiscreteLightDark with particle weights and reinvigoration parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Given: 10 particles at origin [0,0], uniform log weights, resampling=False, ess_factor=0.5, reinvigoration_fraction=0.2</span>
+<span class="sd">    When: WeightedParticleBeliefDiscreteLightDark is instantiated</span>
+<span class="sd">    Then: Correct particles/weights lengths, reinvigoration_fraction=0.2, actions=[up,down,right,left], action_to_vector mappings</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create test data</span>
+    <span class="n">n_particles</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)]</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_particles</span><span class="p">)</span>
+    
+    <span class="c1"># Initialize belief</span>
+    <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefDiscreteLightDark</span><span class="p">(</span>
+        <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+        <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+        <span class="n">resampling</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">ess_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">0.2</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Check attributes</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_particles</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">log_weights</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_particles</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">reinvigoration_fraction</span> <span class="o">==</span> <span class="mf">0.2</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="p">[</span><span class="s2">&quot;up&quot;</span><span class="p">,</span> <span class="s2">&quot;down&quot;</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="s2">&quot;up&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">pytest</span><span class="o">.</span><span class="n">approx</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]))</span></div>
+
+
+<div class="viewcode-block" id="test_reinvigoration">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_reinvigoration">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_reinvigoration</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test reinvigoration functionality</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that reinvigorate method correctly updates particle belief with new particles based on action and observation</span>
+<span class="sd">    </span>
+<span class="sd">    Given: WeightedParticleBeliefDiscreteLightDark with 10 particles, ContinuousLightDarkPOMDP environment, action=&quot;up&quot;, observation=[0,1]</span>
+<span class="sd">    When: reinvigorate method is called with these parameters</span>
+<span class="sd">    Then: Returns new belief with same particle count and at least reinvigoration_fraction*n_particles new particles added</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create test data</span>
+    <span class="n">n_particles</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)]</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_particles</span><span class="p">)</span>
+    
+    <span class="c1"># Initialize belief</span>
+    <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefDiscreteLightDark</span><span class="p">(</span>
+        <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+        <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+        <span class="n">resampling</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+        <span class="n">ess_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">0.2</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Create ContinuousLightDarkPOMDP environment</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">ContinuousLightDarkPOMDPDiscreteActions</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    
+    <span class="c1"># Test reinvigoration</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;up&quot;</span>
+    <span class="n">observation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">reinvigorated_belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">reinvigorate</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">belief</span><span class="p">)</span>
+    
+    <span class="c1"># Check that reinvigoration occurred</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_particles</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">log_weights</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_particles</span>
+    
+    <span class="c1"># Check that some particles were reinvigorated</span>
+    <span class="n">n_reinvigorate</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">reinvigoration_fraction</span> <span class="o">*</span> <span class="n">n_particles</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">n_reinvigorate</span> <span class="o">&gt;</span> <span class="mi">0</span></div>
+
+
+<div class="viewcode-block" id="test_invalid_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_invalid_initialization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_invalid_initialization</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test initialization with invalid parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that WeightedParticleBeliefDiscreteLightDark raises appropriate errors for invalid constructor parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Mismatched particles (5) and weights (10) arrays, or invalid reinvigoration_fraction (1.5) outside [0,1] range</span>
+<span class="sd">    When: WeightedParticleBeliefDiscreteLightDark constructor is called with invalid parameters</span>
+<span class="sd">    Then: ValueError is raised indicating parameter validation failure</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test with mismatched particles and weights</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+        <span class="n">WeightedParticleBeliefDiscreteLightDark</span><span class="p">(</span>
+            <span class="n">particles</span><span class="o">=</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)],</span>
+            <span class="n">log_weights</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">resampling</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+    
+    <span class="c1"># Test with invalid reinvigoration fraction</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+        <span class="n">WeightedParticleBeliefDiscreteLightDark</span><span class="p">(</span>
+            <span class="n">particles</span><span class="o">=</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)],</span>
+            <span class="n">log_weights</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">resampling</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+            <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">1.5</span>  <span class="c1"># Should be between 0 and 1</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="test_action_to_vector_mapping">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_action_to_vector_mapping">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_action_to_vector_mapping</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test action to vector mapping</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that action_to_vector dictionary correctly maps discrete actions to 2D movement vectors</span>
+<span class="sd">    </span>
+<span class="sd">    Given: WeightedParticleBeliefDiscreteLightDark with single particle and non-zero log weight</span>
+<span class="sd">    When: action_to_vector mappings are accessed for valid and invalid actions</span>
+<span class="sd">    Then: Correct vectors returned (up=[0,1], down=[0,-1], right=[1,0], left=[-1,0]) and KeyError for invalid actions</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create test data with non-zero log weights</span>
+    <span class="n">n_particles</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])]</span>
+    <span class="c1"># Use a non-zero log weight</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">1.0</span><span class="p">])</span>  <span class="c1"># log(1/e) ≈ -1.0</span>
+    
+    <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefDiscreteLightDark</span><span class="p">(</span>
+        <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+        <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+        <span class="n">resampling</span><span class="o">=</span><span class="kc">False</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Test all actions</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="s2">&quot;up&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">pytest</span><span class="o">.</span><span class="n">approx</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]))</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="s2">&quot;down&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">pytest</span><span class="o">.</span><span class="n">approx</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]))</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="s2">&quot;right&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">pytest</span><span class="o">.</span><span class="n">approx</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]))</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="s2">&quot;left&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">pytest</span><span class="o">.</span><span class="n">approx</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]))</span>
+    
+    <span class="c1"># Test invalid action</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">KeyError</span><span class="p">):</span>
+        <span class="n">_</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="s2">&quot;invalid_action&quot;</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="test_full_coverage_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_full_coverage_initialization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_full_coverage_initialization</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test proper initialization of WeightedParticleBeliefDiscreteLightDarkFullCoverage</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates proper initialization of WeightedParticleBeliefDiscreteLightDarkFullCoverage with full coverage reinvigoration parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Given: 10 particles at origin, uniform log weights, ess_factor=0.5, reinvigoration_fraction=0.05</span>
+<span class="sd">    When: WeightedParticleBeliefDiscreteLightDarkFullCoverage is instantiated</span>
+<span class="sd">    Then: Correct attributes set including reinvigoration_particles_weights_sum=0.05, resampling=False, action mappings</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create test data</span>
+    <span class="n">n_particles</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)]</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_particles</span><span class="p">)</span>
+    
+    <span class="c1"># Initialize belief</span>
+    <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefDiscreteLightDarkFullCoverage</span><span class="p">(</span>
+        <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+        <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+        <span class="n">ess_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">0.05</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Check attributes</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_particles</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">log_weights</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_particles</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">reinvigoration_particles_weights_sum</span> <span class="o">==</span> <span class="mf">0.05</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="p">[</span><span class="s2">&quot;up&quot;</span><span class="p">,</span> <span class="s2">&quot;down&quot;</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="s2">&quot;up&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">pytest</span><span class="o">.</span><span class="n">approx</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]))</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">belief</span><span class="o">.</span><span class="n">resampling</span>  <span class="c1"># Should be False as specified in __init__</span></div>
+
+
+<div class="viewcode-block" id="test_full_coverage_reinvigoration">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_full_coverage_reinvigoration">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_full_coverage_reinvigoration</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test reinvigoration functionality of WeightedParticleBeliefDiscreteLightDarkFullCoverage</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that full coverage reinvigoration adds systematic state coverage particles based on all possible actions</span>
+<span class="sd">    </span>
+<span class="sd">    Given: WeightedParticleBeliefDiscreteLightDarkFullCoverage with 10 particles, action=&quot;up&quot;, observation=[0,1]</span>
+<span class="sd">    When: reinvigorate method executes full coverage strategy</span>
+<span class="sd">    Then: Last n_states particles match expected states (observation + action_vectors for each action, plus observation itself)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create test data</span>
+    <span class="n">n_particles</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)]</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_particles</span><span class="p">)</span>
+    
+    <span class="c1"># Initialize belief</span>
+    <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefDiscreteLightDarkFullCoverage</span><span class="p">(</span>
+        <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+        <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+        <span class="n">ess_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">0.05</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Create ContinuousLightDarkPOMDP environment</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">ContinuousLightDarkPOMDPDiscreteActions</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    
+    <span class="c1"># Test reinvigoration</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;up&quot;</span>
+    <span class="n">observation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">reinvigorated_belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">reinvigorate</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">belief</span><span class="p">)</span>
+    
+    <span class="c1"># Check that reinvigoration occurred</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_particles</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">log_weights</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_particles</span>
+    
+    <span class="c1"># Check that the last n_states particles are the expected states</span>
+    <span class="n">n_states</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># +1 for the observation state</span>
+    <span class="n">expected_states</span> <span class="o">=</span> <span class="p">[</span><span class="n">observation</span> <span class="o">+</span> <span class="n">belief</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="n">action</span><span class="p">]</span> <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">belief</span><span class="o">.</span><span class="n">actions</span><span class="p">]</span>
+    <span class="n">expected_states</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span>
+    
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_states</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">[</span><span class="o">-</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)],</span> <span class="n">expected_states</span><span class="p">[</span><span class="o">-</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)])</span></div>
+
+
+<div class="viewcode-block" id="test_full_coverage_invalid_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_full_coverage_invalid_initialization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_full_coverage_invalid_initialization</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test initialization with invalid parameters for WeightedParticleBeliefDiscreteLightDarkFullCoverage</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates proper initialization of full coverage invalid </span>
+<span class="sd">    </span>
+<span class="sd">    Given: Constructor parameters and initial conditions</span>
+<span class="sd">    When: Object is initialized</span>
+<span class="sd">    Then: Object is properly constructed with expected attributes</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test with mismatched particles and weights</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+        <span class="n">WeightedParticleBeliefDiscreteLightDarkFullCoverage</span><span class="p">(</span>
+            <span class="n">particles</span><span class="o">=</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)],</span>
+            <span class="n">log_weights</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">0.05</span>
+        <span class="p">)</span>
+    
+    <span class="c1"># Test with invalid reinvigoration_particles_weights_sum</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+        <span class="n">WeightedParticleBeliefDiscreteLightDarkFullCoverage</span><span class="p">(</span>
+            <span class="n">particles</span><span class="o">=</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)],</span>
+            <span class="n">log_weights</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">1.5</span>  <span class="c1"># Should be between 0 and 1</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="test_full_coverage_resampling">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_full_coverage_resampling">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_full_coverage_resampling</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that resampling is performed during reinvigoration when ESS is below threshold</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that full coverage reinvigoration triggers resampling when Effective Sample Size falls below threshold due to degenerate weights</span>
+<span class="sd">    </span>
+<span class="sd">    Given: WeightedParticleBeliefDiscreteLightDarkFullCoverage with degenerate weights (one particle has all weight), ess_factor=0.5</span>
+<span class="sd">    When: reinvigorate is called with ESS below threshold</span>
+<span class="sd">    Then: Resampling occurs improving ESS above threshold while maintaining expected state particles in correct positions</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create test data with degenerate weights</span>
+    <span class="n">n_particles</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)]</span>
+    <span class="c1"># Create degenerate weights (all weight on one particle)</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="o">-</span><span class="mf">100.0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">n_particles</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+    
+    <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefDiscreteLightDarkFullCoverage</span><span class="p">(</span>
+        <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+        <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+        <span class="n">ess_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">0.05</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Check that initial ESS is below threshold (degenerate weights)</span>
+    <span class="n">initial_ess</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">normalized_weights</span><span class="p">))</span>
+    <span class="k">assert</span> <span class="n">initial_ess</span> <span class="o">&lt;</span> <span class="n">belief</span><span class="o">.</span><span class="n">ess_threshold</span>
+    
+    <span class="c1"># Create ContinuousLightDarkPOMDP environment</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">ContinuousLightDarkPOMDPDiscreteActions</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    
+    <span class="c1"># Test reinvigoration</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;up&quot;</span>
+    <span class="n">observation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">reinvigorated_belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">reinvigorate</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">belief</span><span class="p">)</span>
+    
+    <span class="c1"># Check that resampling occurred (weights should be more uniform)</span>
+    <span class="n">effective_sample_size</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">normalized_weights</span><span class="p">))</span>
+    <span class="c1"># After resampling, ESS should be improved but may still be below threshold</span>
+    <span class="k">assert</span> <span class="n">effective_sample_size</span> <span class="o">&gt;=</span> <span class="n">belief</span><span class="o">.</span><span class="n">ess_threshold</span>
+    
+    <span class="c1"># Check that the last n_states particles are still the expected states</span>
+    <span class="n">n_states</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+    <span class="n">expected_states</span> <span class="o">=</span> <span class="p">[</span><span class="n">observation</span> <span class="o">+</span> <span class="n">belief</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="n">action</span><span class="p">]</span> <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">belief</span><span class="o">.</span><span class="n">actions</span><span class="p">]</span>
+    <span class="n">expected_states</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span>
+    
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_states</span><span class="p">):</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">[</span><span class="o">-</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)],</span> <span class="n">expected_states</span><span class="p">[</span><span class="o">-</span><span class="p">(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)])</span></div>
+
+
+<div class="viewcode-block" id="test_continuous_full_coverage_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_continuous_full_coverage_initialization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_continuous_full_coverage_initialization</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test proper initialization of WeightedParticleBeliefContinuousLightDarkFullCoverage</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates proper initialization of continuous full coverage </span>
+<span class="sd">    </span>
+<span class="sd">    Given: Constructor parameters and initial conditions</span>
+<span class="sd">    When: Object is initialized</span>
+<span class="sd">    Then: Object is properly constructed with expected attributes</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create test data</span>
+    <span class="n">n_particles</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)]</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_particles</span><span class="p">)</span>
+    <span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]])</span>
+    
+    <span class="c1"># Initialize belief</span>
+    <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefContinuousLightDarkFullCoverage</span><span class="p">(</span>
+        <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+        <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+        <span class="n">ess_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">reinvigoration_cov_matrix</span><span class="o">=</span><span class="n">cov_matrix</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Check attributes</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_particles</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">log_weights</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_particles</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">reinvigoration_particles_weights_sum</span> <span class="o">==</span> <span class="mf">0.05</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">reinvigoration_cov_matrix</span><span class="p">,</span> <span class="n">cov_matrix</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="p">[</span><span class="s2">&quot;up&quot;</span><span class="p">,</span> <span class="s2">&quot;down&quot;</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">]</span>
+    <span class="k">assert</span> <span class="n">belief</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="s2">&quot;up&quot;</span><span class="p">]</span> <span class="o">==</span> <span class="n">pytest</span><span class="o">.</span><span class="n">approx</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]))</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">belief</span><span class="o">.</span><span class="n">resampling</span>  <span class="c1"># Should be False as specified in __init__</span></div>
+
+
+<div class="viewcode-block" id="test_continuous_full_coverage_reinvigoration">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_continuous_full_coverage_reinvigoration">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_continuous_full_coverage_reinvigoration</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test reinvigoration functionality of WeightedParticleBeliefContinuousLightDarkFullCoverage</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that continuous full coverage reinvigoration generates particles within environment bounds using covariance matrix sampling</span>
+<span class="sd">    </span>
+<span class="sd">    Given: WeightedParticleBeliefContinuousLightDarkFullCoverage with 10 particles, covariance matrix, action=&quot;up&quot;, observation=[0,1]</span>
+<span class="sd">    When: reinvigorate method samples new particles using continuous distributions</span>
+<span class="sd">    Then: Reinvigorated particles are within environment bounds [0, grid_size], have correct 2D shape, and particle count preserved</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create test data</span>
+    <span class="n">n_particles</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)]</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_particles</span><span class="p">)</span>
+    <span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]])</span>
+    
+    <span class="c1"># Initialize belief</span>
+    <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefContinuousLightDarkFullCoverage</span><span class="p">(</span>
+        <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+        <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+        <span class="n">ess_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">reinvigoration_cov_matrix</span><span class="o">=</span><span class="n">cov_matrix</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Create ContinuousLightDarkPOMDP environment</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">ContinuousLightDarkPOMDPDiscreteActions</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    
+    <span class="c1"># Test reinvigoration</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;up&quot;</span>
+    <span class="n">observation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">reinvigorated_belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">reinvigorate</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">belief</span><span class="p">)</span>
+    
+    <span class="c1"># Check that reinvigoration occurred</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_particles</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">log_weights</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_particles</span>
+    
+    <span class="c1"># Check that the reinvigorated particles are within bounds</span>
+    <span class="n">n_reinvigorate</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">reinvigoration_particles_weights_sum</span> <span class="o">*</span> <span class="n">n_particles</span><span class="p">)</span>
+    <span class="n">reinvigorated_particles</span> <span class="o">=</span> <span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">[</span><span class="o">-</span><span class="n">n_reinvigorate</span><span class="p">:]</span>
+    
+    <span class="k">for</span> <span class="n">particle</span> <span class="ow">in</span> <span class="n">reinvigorated_particles</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">particle</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># Check lower bound</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">particle</span> <span class="o">&lt;=</span> <span class="n">env</span><span class="o">.</span><span class="n">grid_size</span><span class="p">)</span>  <span class="c1"># Check upper bound</span>
+        <span class="k">assert</span> <span class="n">particle</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>  <span class="c1"># Check shape</span></div>
+
+
+<div class="viewcode-block" id="test_continuous_full_coverage_invalid_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_continuous_full_coverage_invalid_initialization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_continuous_full_coverage_invalid_initialization</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test initialization with invalid parameters for WeightedParticleBeliefContinuousLightDarkFullCoverage</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates proper initialization of continuous full coverage invalid </span>
+<span class="sd">    </span>
+<span class="sd">    Given: Constructor parameters and initial conditions</span>
+<span class="sd">    When: Object is initialized</span>
+<span class="sd">    Then: Object is properly constructed with expected attributes</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Test with mismatched particles and weights</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+        <span class="n">WeightedParticleBeliefContinuousLightDarkFullCoverage</span><span class="p">(</span>
+            <span class="n">particles</span><span class="o">=</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)],</span>
+            <span class="n">log_weights</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">0.05</span>
+        <span class="p">)</span>
+    
+    <span class="c1"># Test with invalid reinvigoration_particles_weights_sum</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+        <span class="n">WeightedParticleBeliefContinuousLightDarkFullCoverage</span><span class="p">(</span>
+            <span class="n">particles</span><span class="o">=</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)],</span>
+            <span class="n">log_weights</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">1.5</span>  <span class="c1"># Should be between 0 and 1</span>
+        <span class="p">)</span>
+    
+    <span class="c1"># Test with invalid covariance matrix shape</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">):</span>
+        <span class="n">WeightedParticleBeliefContinuousLightDarkFullCoverage</span><span class="p">(</span>
+            <span class="n">particles</span><span class="o">=</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)],</span>
+            <span class="n">log_weights</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">10</span><span class="p">),</span>
+            <span class="n">reinvigoration_cov_matrix</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span>  <span class="c1"># Should be 2x2</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="test_continuous_full_coverage_resampling">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_continuous_full_coverage_resampling">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_continuous_full_coverage_resampling</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that resampling is performed during reinvigoration when ESS is below threshold</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that continuous full coverage reinvigoration performs resampling when ESS drops below threshold while maintaining particle bounds</span>
+<span class="sd">    </span>
+<span class="sd">    Given: WeightedParticleBeliefContinuousLightDarkFullCoverage with degenerate weights, covariance matrix, ess_factor=0.5</span>
+<span class="sd">    When: reinvigorate is called with ESS below threshold triggering resampling</span>
+<span class="sd">    Then: ESS improves above threshold and reinvigorated particles remain within environment bounds [0, grid_size] with correct shapes</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create test data with degenerate weights</span>
+    <span class="n">n_particles</span> <span class="o">=</span> <span class="mi">10</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)]</span>
+    <span class="c1"># Create degenerate weights (all weight on one particle)</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">]</span> <span class="o">+</span> <span class="p">[</span><span class="o">-</span><span class="mf">100.0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">n_particles</span> <span class="o">-</span> <span class="mi">1</span><span class="p">))</span>
+    <span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]])</span>
+    
+    <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefContinuousLightDarkFullCoverage</span><span class="p">(</span>
+        <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+        <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+        <span class="n">ess_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+        <span class="n">reinvigoration_cov_matrix</span><span class="o">=</span><span class="n">cov_matrix</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Check that initial ESS is below threshold (degenerate weights)</span>
+    <span class="n">initial_ess</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">normalized_weights</span><span class="p">))</span>
+    <span class="k">assert</span> <span class="n">initial_ess</span> <span class="o">&lt;</span> <span class="n">belief</span><span class="o">.</span><span class="n">ess_threshold</span>
+    
+    <span class="c1"># Create ContinuousLightDarkPOMDP environment</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">ContinuousLightDarkPOMDPDiscreteActions</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    
+    <span class="c1"># Test reinvigoration</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;up&quot;</span>
+    <span class="n">observation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">reinvigorated_belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">reinvigorate</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">belief</span><span class="p">)</span>
+    
+    <span class="c1"># Check that resampling occurred (weights should be more uniform)</span>
+    <span class="n">effective_sample_size</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">square</span><span class="p">(</span><span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">normalized_weights</span><span class="p">))</span>
+    <span class="c1"># After resampling, ESS should be improved but may still be below threshold</span>
+    <span class="k">assert</span> <span class="n">effective_sample_size</span> <span class="o">&gt;=</span> <span class="n">belief</span><span class="o">.</span><span class="n">ess_threshold</span>
+    
+    <span class="c1"># Check that reinvigorated particles are within bounds and have correct shape</span>
+    <span class="n">n_reinvigorate</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">reinvigoration_particles_weights_sum</span> <span class="o">*</span> <span class="n">n_particles</span><span class="p">)</span>
+    <span class="n">reinvigorated_particles</span> <span class="o">=</span> <span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">[</span><span class="o">-</span><span class="n">n_reinvigorate</span><span class="p">:]</span>
+    
+    <span class="k">for</span> <span class="n">particle</span> <span class="ow">in</span> <span class="n">reinvigorated_particles</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">particle</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">particle</span> <span class="o">&lt;=</span> <span class="n">env</span><span class="o">.</span><span class="n">grid_size</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">particle</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span></div>
+
+
+<div class="viewcode-block" id="test_continuous_full_coverage_gmm_sampling">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.test_weighted_particle_belief.html#POMDPPlanners.tests.test_utils.test_weighted_particle_belief.test_continuous_full_coverage_gmm_sampling">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_continuous_full_coverage_gmm_sampling</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that GMM sampling produces expected distribution of particles</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that continuous full coverage uses Gaussian Mixture Model sampling to cluster reinvigorated particles around expected action centers</span>
+<span class="sd">    </span>
+<span class="sd">    Given: WeightedParticleBeliefContinuousLightDarkFullCoverage with 1000 particles, reinvigoration_fraction=0.2, tight covariance matrix, center observation [5,5]</span>
+<span class="sd">    When: reinvigoration with action=&quot;up&quot; generates GMM-sampled particles</span>
+<span class="sd">    Then: Reinvigorated particles cluster around expected centers (observation + action_vectors) with &gt;10% within 2 std deviations of each center</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create test data</span>
+    <span class="n">n_particles</span> <span class="o">=</span> <span class="mi">1000</span>  <span class="c1"># Use more particles for better statistical testing</span>
+    <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)]</span>
+    <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">n_particles</span><span class="p">)</span> <span class="o">/</span> <span class="n">n_particles</span><span class="p">)</span>
+    <span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">]])</span>  <span class="c1"># Small covariance for tight clusters</span>
+    
+    <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefContinuousLightDarkFullCoverage</span><span class="p">(</span>
+        <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+        <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+        <span class="n">ess_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">reinvigoration_fraction</span><span class="o">=</span><span class="mf">0.2</span><span class="p">,</span>  <span class="c1"># Larger fraction for better statistics</span>
+        <span class="n">reinvigoration_cov_matrix</span><span class="o">=</span><span class="n">cov_matrix</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Create ContinuousLightDarkPOMDP environment</span>
+    <span class="n">env</span> <span class="o">=</span> <span class="n">ContinuousLightDarkPOMDPDiscreteActions</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    
+    <span class="c1"># Test reinvigoration</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;up&quot;</span>
+    <span class="n">observation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>  <span class="c1"># Center observation for better testing</span>
+    <span class="n">reinvigorated_belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">reinvigorate</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">belief</span><span class="p">)</span>
+    
+    <span class="c1"># Get reinvigorated particles</span>
+    <span class="n">n_reinvigorate</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">reinvigoration_particles_weights_sum</span> <span class="o">*</span> <span class="n">n_particles</span><span class="p">)</span>
+    <span class="n">reinvigorated_particles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">reinvigorated_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">[</span><span class="o">-</span><span class="n">n_reinvigorate</span><span class="p">:])</span>
+    
+    <span class="c1"># Check that particles are clustered around expected centers</span>
+    <span class="n">expected_centers</span> <span class="o">=</span> <span class="p">[</span><span class="n">observation</span> <span class="o">+</span> <span class="n">belief</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="n">action</span><span class="p">]</span> <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">belief</span><span class="o">.</span><span class="n">actions</span><span class="p">]</span>
+    <span class="n">expected_centers</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span>
+    <span class="n">expected_centers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">expected_centers</span><span class="p">)</span>
+    
+    <span class="c1"># For each center, check that there are particles nearby</span>
+    <span class="k">for</span> <span class="n">center</span> <span class="ow">in</span> <span class="n">expected_centers</span><span class="p">:</span>
+        <span class="n">distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">reinvigorated_particles</span> <span class="o">-</span> <span class="n">center</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="c1"># Check that at least 10% of particles are within 2 standard deviations</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">distances</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mf">0.1</span><span class="p">))</span> <span class="o">&gt;</span> <span class="mf">0.1</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,1275 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_utils.test_action_samplers &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_utils.test_action_samplers</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_utils.test_action_samplers</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Tests for action samplers utility functions.</span>
+
+<span class="sd">This module tests the action sampler implementations used for continuous action</span>
+<span class="sd">space sampling in POMDP planners, particularly for PFT-DPW integration.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">tempfile</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.action_samplers</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnitCircleActionSampler</span><span class="p">,</span> <span class="n">DiscreteActionSampler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">BeliefNode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.pft_dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">PFT_DPW</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ContinuousLightDarkPOMDP</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_initial_belief</span><span class="p">,</span> <span class="n">WeightedParticleBelief</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestUnitCircleActionSampler</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test cases for the UnitCircleActionSampler class.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_initialization">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_initialization</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test initialization of UnitCircleActionSampler.</span>
+
+<span class="sd">        Purpose: Validates that UnitCircleActionSampler initializes with correct parameters</span>
+
+<span class="sd">        Given: Different max_action_magnitude values</span>
+<span class="sd">        When: UnitCircleActionSampler is instantiated</span>
+<span class="sd">        Then: Object is created with correct attributes and default values</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Test default initialization</span>
+        <span class="n">sampler_default</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="n">sampler_default</span><span class="o">.</span><span class="n">max_action_magnitude</span> <span class="o">==</span> <span class="mf">1.0</span>
+
+        <span class="c1"># Test custom initialization</span>
+        <span class="n">sampler_custom</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">2.5</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">sampler_custom</span><span class="o">.</span><span class="n">max_action_magnitude</span> <span class="o">==</span> <span class="mf">2.5</span>
+
+        <span class="c1"># Test zero magnitude</span>
+        <span class="n">sampler_zero</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">sampler_zero</span><span class="o">.</span><span class="n">max_action_magnitude</span> <span class="o">==</span> <span class="mf">0.0</span>
+
+        <span class="c1"># Test very large magnitude</span>
+        <span class="n">sampler_large</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">100.0</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">sampler_large</span><span class="o">.</span><span class="n">max_action_magnitude</span> <span class="o">==</span> <span class="mf">100.0</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_basic_sampling">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_basic_sampling">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_basic_sampling</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test basic action sampling functionality.</span>
+
+<span class="sd">        Purpose: Validates that action sampling produces 2D vectors within magnitude constraints</span>
+
+<span class="sd">        Given: UnitCircleActionSampler with specific max_action_magnitude</span>
+<span class="sd">        When: Multiple actions are sampled</span>
+<span class="sd">        Then: All actions are 2D vectors with magnitudes within the specified limit</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">max_magnitude</span> <span class="o">=</span> <span class="mf">1.5</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="n">max_magnitude</span><span class="p">)</span>
+
+        <span class="c1"># Sample multiple actions</span>
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="mi">100</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">)]</span>
+
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions</span><span class="p">:</span>
+            <span class="c1"># Check that action is a 2D numpy array</span>
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+            <span class="k">assert</span> <span class="n">action</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">np</span><span class="o">.</span><span class="n">float64</span>
+
+            <span class="c1"># Check magnitude constraint</span>
+            <span class="n">magnitude</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="p">(</span>
+                <span class="n">magnitude</span> <span class="o">&lt;=</span> <span class="n">max_magnitude</span> <span class="o">+</span> <span class="mf">1e-10</span>
+            <span class="p">)</span>  <span class="c1"># Small tolerance for floating point</span>
+
+            <span class="c1"># Check that we get finite values</span>
+            <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">action</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_magnitude_distribution">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_magnitude_distribution">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_magnitude_distribution</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that magnitudes follow correct distribution within the circle.</span>
+
+<span class="sd">        Purpose: Validates that action magnitudes are properly distributed within the circle</span>
+
+<span class="sd">        Given: UnitCircleActionSampler with unit magnitude</span>
+<span class="sd">        When: Large number of actions are sampled</span>
+<span class="sd">        Then: Magnitude distribution follows uniform area distribution (not biased toward center)</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c1"># Sample large number of actions for statistical analysis</span>
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="mi">10000</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">)])</span>
+
+        <span class="c1"># Calculate magnitudes</span>
+        <span class="n">magnitudes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">actions</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="c1"># All magnitudes should be within unit circle</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">magnitudes</span> <span class="o">&lt;=</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="mf">1e-10</span><span class="p">)</span>
+
+        <span class="c1"># For uniform distribution in a circle, the CDF of radius should be r²</span>
+        <span class="c1"># This means the mean magnitude should be approximately 2/3 for unit circle</span>
+        <span class="n">mean_magnitude</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">magnitudes</span><span class="p">)</span>
+        <span class="n">expected_mean</span> <span class="o">=</span> <span class="p">(</span>
+            <span class="mf">2.0</span> <span class="o">/</span> <span class="mf">3.0</span>
+        <span class="p">)</span>  <span class="c1"># Theoretical mean for uniform distribution in unit circle</span>
+
+        <span class="c1"># Allow some statistical variation</span>
+        <span class="k">assert</span> <span class="nb">abs</span><span class="p">(</span><span class="n">mean_magnitude</span> <span class="o">-</span> <span class="n">expected_mean</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">0.05</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_angle_distribution">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_angle_distribution">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_angle_distribution</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that angles are uniformly distributed.</span>
+
+<span class="sd">        Purpose: Validates that action angles are uniformly distributed around the circle</span>
+
+<span class="sd">        Given: UnitCircleActionSampler</span>
+<span class="sd">        When: Large number of actions are sampled</span>
+<span class="sd">        Then: Angles are uniformly distributed between 0 and 2π</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c1"># Sample actions</span>
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="mi">5000</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">)])</span>
+
+        <span class="c1"># Calculate angles</span>
+        <span class="n">angles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arctan2</span><span class="p">(</span><span class="n">actions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">actions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="c1"># Convert to [0, 2π] range</span>
+        <span class="n">angles</span> <span class="o">=</span> <span class="p">(</span><span class="n">angles</span> <span class="o">+</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span> <span class="o">%</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+
+        <span class="c1"># Test uniform distribution by checking distribution across quadrants</span>
+        <span class="n">quadrant_1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">angles</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">angles</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="n">quadrant_2</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">angles</span> <span class="o">&gt;=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">angles</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">))</span>
+        <span class="n">quadrant_3</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">angles</span> <span class="o">&gt;=</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">angles</span> <span class="o">&lt;</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="n">quadrant_4</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">angles</span> <span class="o">&gt;=</span> <span class="mi">3</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span> <span class="o">&amp;</span> <span class="p">(</span><span class="n">angles</span> <span class="o">&lt;</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">))</span>
+
+        <span class="c1"># Each quadrant should have roughly equal representation (within statistical variation)</span>
+        <span class="n">expected_per_quadrant</span> <span class="o">=</span> <span class="n">num_samples</span> <span class="o">/</span> <span class="mi">4</span>
+        <span class="n">tolerance</span> <span class="o">=</span> <span class="n">expected_per_quadrant</span> <span class="o">*</span> <span class="mf">0.15</span>  <span class="c1"># 15% tolerance</span>
+
+        <span class="k">assert</span> <span class="nb">abs</span><span class="p">(</span><span class="n">quadrant_1</span> <span class="o">-</span> <span class="n">expected_per_quadrant</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">tolerance</span>
+        <span class="k">assert</span> <span class="nb">abs</span><span class="p">(</span><span class="n">quadrant_2</span> <span class="o">-</span> <span class="n">expected_per_quadrant</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">tolerance</span>
+        <span class="k">assert</span> <span class="nb">abs</span><span class="p">(</span><span class="n">quadrant_3</span> <span class="o">-</span> <span class="n">expected_per_quadrant</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">tolerance</span>
+        <span class="k">assert</span> <span class="nb">abs</span><span class="p">(</span><span class="n">quadrant_4</span> <span class="o">-</span> <span class="n">expected_per_quadrant</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">tolerance</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_different_magnitudes">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_different_magnitudes">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_different_magnitudes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test sampling with different maximum magnitudes.</span>
+
+<span class="sd">        Purpose: Validates that different max_action_magnitude values scale results correctly</span>
+
+<span class="sd">        Given: Multiple UnitCircleActionSamplers with different max magnitudes</span>
+<span class="sd">        When: Actions are sampled from each</span>
+<span class="sd">        Then: Action magnitudes scale proportionally with max_action_magnitude</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">magnitudes</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">]</span>
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="mi">200</span>
+
+        <span class="k">for</span> <span class="n">max_mag</span> <span class="ow">in</span> <span class="n">magnitudes</span><span class="p">:</span>
+            <span class="n">sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="n">max_mag</span><span class="p">)</span>
+            <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">)]</span>
+
+            <span class="c1"># Check all actions respect the magnitude constraint</span>
+            <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions</span><span class="p">:</span>
+                <span class="n">magnitude</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+                <span class="k">assert</span> <span class="n">magnitude</span> <span class="o">&lt;=</span> <span class="n">max_mag</span> <span class="o">+</span> <span class="mf">1e-10</span>
+
+            <span class="c1"># Check that we actually use the full range (some actions should be near max)</span>
+            <span class="n">max_observed</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="p">(</span>
+                <span class="n">max_observed</span> <span class="o">&gt;</span> <span class="n">max_mag</span> <span class="o">*</span> <span class="mf">0.8</span>
+            <span class="p">)</span>  <span class="c1"># At least 80% of max magnitude observed</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_belief_node_parameter">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_belief_node_parameter">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_belief_node_parameter</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that belief_node parameter is handled correctly.</span>
+
+<span class="sd">        Purpose: Validates that optional belief_node parameter doesn&#39;t affect sampling</span>
+
+<span class="sd">        Given: UnitCircleActionSampler and real belief node</span>
+<span class="sd">        When: Sampler is called with and without belief_node parameter</span>
+<span class="sd">        Then: Both calls produce valid actions of same distribution</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c1"># Create real belief node with WeightedParticleBelief</span>
+        <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])]</span>
+        <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">0.1</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2</span><span class="p">])</span>
+        <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span>
+            <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+            <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+            <span class="n">resampling</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+        <span class="n">belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">belief</span><span class="p">,</span> <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]))</span>
+
+        <span class="c1"># Sample without belief node</span>
+        <span class="n">action1</span> <span class="o">=</span> <span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+
+        <span class="c1"># Sample with belief node</span>
+        <span class="n">action2</span> <span class="o">=</span> <span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">belief_node</span><span class="o">=</span><span class="n">belief_node</span><span class="p">)</span>
+
+        <span class="c1"># Both should be valid actions</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action1</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="ow">and</span> <span class="n">action1</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action2</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="ow">and</span> <span class="n">action2</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">action1</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="mf">1e-10</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">action2</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="mf">1e-10</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_zero_magnitude">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_zero_magnitude">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_zero_magnitude</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test edge case of zero magnitude sampling.</span>
+
+<span class="sd">        Purpose: Validates behavior when max_action_magnitude is zero</span>
+
+<span class="sd">        Given: UnitCircleActionSampler with zero max_action_magnitude</span>
+<span class="sd">        When: Actions are sampled</span>
+<span class="sd">        Then: All actions should be zero vectors</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">0.0</span><span class="p">)</span>
+
+        <span class="c1"># Sample multiple actions</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
+
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+            <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>
+            <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">==</span> <span class="mf">0.0</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_repeatability">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_repeatability">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_repeatability</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test action sampling reproducibility with fixed seed.</span>
+
+<span class="sd">        Purpose: Validates that sampling is reproducible when random seed is fixed</span>
+
+<span class="sd">        Given: Fixed numpy random seed and UnitCircleActionSampler</span>
+<span class="sd">        When: Actions are sampled multiple times with same seed</span>
+<span class="sd">        Then: Identical sequences of actions are produced</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c1"># First sequence</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+        <span class="n">actions1</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
+
+        <span class="c1"># Second sequence with same seed</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+        <span class="n">actions2</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
+
+        <span class="c1"># Should be identical</span>
+        <span class="k">for</span> <span class="n">a1</span><span class="p">,</span> <span class="n">a2</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">actions1</span><span class="p">,</span> <span class="n">actions2</span><span class="p">):</span>
+            <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">a1</span><span class="p">,</span> <span class="n">a2</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_serialization_pickle">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_serialization_pickle">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_serialization_pickle</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test serialization and deserialization using pickle.</span>
+
+<span class="sd">        Purpose: Validates that UnitCircleActionSampler can be serialized and deserialized with pickle</span>
+
+<span class="sd">        Given: UnitCircleActionSampler instance with specific parameters</span>
+<span class="sd">        When: Object is pickled and unpickled</span>
+<span class="sd">        Then: Deserialized object has same parameters and produces equivalent actions</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Create original sampler</span>
+        <span class="n">original_sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">2.5</span><span class="p">)</span>
+
+        <span class="c1"># Serialize with pickle</span>
+        <span class="n">pickled_data</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">original_sampler</span><span class="p">)</span>
+
+        <span class="c1"># Deserialize</span>
+        <span class="n">deserialized_sampler</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">pickled_data</span><span class="p">)</span>
+
+        <span class="c1"># Check that attributes are preserved</span>
+        <span class="k">assert</span> <span class="p">(</span>
+            <span class="n">deserialized_sampler</span><span class="o">.</span><span class="n">max_action_magnitude</span>
+            <span class="o">==</span> <span class="n">original_sampler</span><span class="o">.</span><span class="n">max_action_magnitude</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">type</span><span class="p">(</span><span class="n">deserialized_sampler</span><span class="p">)</span> <span class="o">==</span> <span class="nb">type</span><span class="p">(</span><span class="n">original_sampler</span><span class="p">)</span>
+
+        <span class="c1"># Check that both samplers produce valid actions</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">123</span><span class="p">)</span>
+        <span class="n">original_action</span> <span class="o">=</span> <span class="n">original_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+
+        <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">123</span><span class="p">)</span>
+        <span class="n">deserialized_action</span> <span class="o">=</span> <span class="n">deserialized_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+
+        <span class="c1"># With same seed, should produce identical results</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">original_action</span><span class="p">,</span> <span class="n">deserialized_action</span><span class="p">)</span>
+
+        <span class="c1"># Both actions should respect magnitude constraint</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">original_action</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">2.5</span> <span class="o">+</span> <span class="mf">1e-10</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">deserialized_action</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">2.5</span> <span class="o">+</span> <span class="mf">1e-10</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_serialization_file">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_serialization_file">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_serialization_file</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test serialization to file and loading.</span>
+
+<span class="sd">        Purpose: Validates that UnitCircleActionSampler can be saved to and loaded from files</span>
+
+<span class="sd">        Given: UnitCircleActionSampler instance and temporary file</span>
+<span class="sd">        When: Object is saved to file and loaded back</span>
+<span class="sd">        Then: Loaded object functions identically to original</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Create original sampler</span>
+        <span class="n">original_sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">3.0</span><span class="p">)</span>
+
+        <span class="c1"># Use temporary file for serialization test</span>
+        <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">NamedTemporaryFile</span><span class="p">(</span><span class="n">delete</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s2">&quot;.pkl&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">temp_file</span><span class="p">:</span>
+            <span class="n">temp_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">temp_file</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+            <span class="c1"># Save to file</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">temp_path</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">original_sampler</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+
+            <span class="c1"># Load from file</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">temp_path</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">loaded_sampler</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+            <span class="c1"># Clean up</span>
+            <span class="n">temp_path</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
+
+        <span class="c1"># Verify loaded sampler</span>
+        <span class="k">assert</span> <span class="n">loaded_sampler</span><span class="o">.</span><span class="n">max_action_magnitude</span> <span class="o">==</span> <span class="mf">3.0</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loaded_sampler</span><span class="p">,</span> <span class="n">UnitCircleActionSampler</span><span class="p">)</span>
+
+        <span class="c1"># Test functionality</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">loaded_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">3.0</span> <span class="o">+</span> <span class="mf">1e-10</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_integration_with_pft_dpw">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_integration_with_pft_dpw">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_integration_with_pft_dpw</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test integration with PFT-DPW planner.</span>
+
+<span class="sd">        Purpose: Validates that UnitCircleActionSampler integrates correctly with PFT-DPW planner</span>
+
+<span class="sd">        Given: ContinuousLightDarkPOMDP environment and PFT-DPW with UnitCircleActionSampler</span>
+<span class="sd">        When: Planner uses the action sampler during planning</span>
+<span class="sd">        Then: Planner executes successfully and produces valid actions</span>
+
+<span class="sd">        Test type: integration</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Create environment</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">ContinuousLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+            <span class="n">goal_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span>
+            <span class="n">start_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;TestContinuousLightDark&quot;</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Create action sampler</span>
+        <span class="n">action_sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c1"># Create PFT-DPW planner with action sampler</span>
+        <span class="n">planner</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Shallow depth for testing</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;TestPFT_DPW_ActionSampler&quot;</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>  <span class="c1"># Few simulations for testing</span>
+            <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">k_a</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+            <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Create initial belief</span>
+        <span class="n">initial_belief</span> <span class="o">=</span> <span class="n">get_initial_belief</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+        <span class="c1"># Test that planner can use the action sampler</span>
+        <span class="n">action</span><span class="p">,</span> <span class="n">run_data</span> <span class="o">=</span> <span class="n">planner</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">initial_belief</span><span class="p">)</span>
+
+        <span class="c1"># Verify action is valid</span>
+        <span class="c1"># PFT-DPW returns actions as a list</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>  <span class="c1"># Single action</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>  <span class="c1"># 2D action</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&lt;=</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="mf">1e-10</span>  <span class="c1"># Within magnitude constraint</span>
+
+        <span class="c1"># Verify run data exists</span>
+        <span class="k">assert</span> <span class="n">run_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_statistical_properties">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_statistical_properties">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_statistical_properties</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test statistical properties of the action sampling distribution.</span>
+
+<span class="sd">        Purpose: Validates statistical properties of sampled actions for quality assurance</span>
+
+<span class="sd">        Given: UnitCircleActionSampler with unit magnitude</span>
+<span class="sd">        When: Large number of actions are sampled</span>
+<span class="sd">        Then: Statistical properties match theoretical expectations for uniform circle sampling</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c1"># Sample large number of actions</span>
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="mi">20000</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">)])</span>
+
+        <span class="c1"># Test mean (should be close to [0, 0] for symmetric distribution)</span>
+        <span class="n">mean_action</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">actions</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">abs</span><span class="p">(</span><span class="n">mean_action</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="o">&lt;</span> <span class="mf">0.05</span>  <span class="c1"># Should be close to 0</span>
+        <span class="k">assert</span> <span class="nb">abs</span><span class="p">(</span><span class="n">mean_action</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="o">&lt;</span> <span class="mf">0.05</span>  <span class="c1"># Should be close to 0</span>
+
+        <span class="c1"># Test that we cover the full circle (check all quadrants)</span>
+        <span class="n">positive_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">actions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.1</span><span class="p">)</span>
+        <span class="n">negative_x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">actions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">&lt;</span> <span class="o">-</span><span class="mf">0.1</span><span class="p">)</span>
+        <span class="n">positive_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">actions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">&gt;</span> <span class="mf">0.1</span><span class="p">)</span>
+        <span class="n">negative_y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">actions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">&lt;</span> <span class="o">-</span><span class="mf">0.1</span><span class="p">)</span>
+
+        <span class="c1"># Each should have reasonable representation</span>
+        <span class="n">min_expected</span> <span class="o">=</span> <span class="n">num_samples</span> <span class="o">*</span> <span class="mf">0.2</span>  <span class="c1"># At least 20% in each direction</span>
+        <span class="k">assert</span> <span class="n">positive_x</span> <span class="o">&gt;</span> <span class="n">min_expected</span>
+        <span class="k">assert</span> <span class="n">negative_x</span> <span class="o">&gt;</span> <span class="n">min_expected</span>
+        <span class="k">assert</span> <span class="n">positive_y</span> <span class="o">&gt;</span> <span class="n">min_expected</span>
+        <span class="k">assert</span> <span class="n">negative_y</span> <span class="o">&gt;</span> <span class="n">min_expected</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_parameter_validation">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_parameter_validation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_parameter_validation</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test parameter validation and edge cases.</span>
+
+<span class="sd">        Purpose: Validates that UnitCircleActionSampler handles edge cases and invalid parameters appropriately</span>
+
+<span class="sd">        Given: Various parameter values including edge cases</span>
+<span class="sd">        When: UnitCircleActionSampler is initialized and used</span>
+<span class="sd">        Then: Appropriate behavior for all parameter ranges</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Test negative magnitude (should work, just interpreted as absolute value)</span>
+        <span class="n">sampler_neg</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=-</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">sampler_neg</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+        <span class="c1"># The implementation uses the magnitude directly, so negative values may behave unexpectedly</span>
+        <span class="c1"># but shouldn&#39;t crash</span>
+
+        <span class="c1"># Test very small positive magnitude</span>
+        <span class="n">sampler_small</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">1e-10</span><span class="p">)</span>
+        <span class="n">action_small</span> <span class="o">=</span> <span class="n">sampler_small</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action_small</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">action_small</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">action_small</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">1e-10</span> <span class="o">+</span> <span class="mf">1e-15</span></div>
+
+
+<div class="viewcode-block" id="TestUnitCircleActionSampler.test_unit_circle_action_sampler_performance_characteristics">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUnitCircleActionSampler.test_unit_circle_action_sampler_performance_characteristics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_unit_circle_action_sampler_performance_characteristics</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test performance characteristics of action sampling.</span>
+
+<span class="sd">        Purpose: Validates that action sampling performs efficiently for practical use</span>
+
+<span class="sd">        Given: UnitCircleActionSampler</span>
+<span class="sd">        When: Large number of actions are sampled rapidly</span>
+<span class="sd">        Then: Sampling completes efficiently without memory issues</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c1"># Test that we can sample many actions quickly without issues</span>
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="mi">10000</span>
+
+        <span class="c1"># This should complete quickly and without memory issues</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">)]</span>
+
+        <span class="c1"># Verify we got the expected number of valid actions</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span> <span class="o">==</span> <span class="n">num_samples</span>
+
+        <span class="c1"># Spot check some actions</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">num_samples</span> <span class="o">//</span> <span class="mi">2</span><span class="p">,</span> <span class="n">num_samples</span> <span class="o">-</span> <span class="mi">1</span><span class="p">]:</span>
+            <span class="n">action</span> <span class="o">=</span> <span class="n">actions</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+            <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="mf">1e-10</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="TestUsageExamples">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUsageExamples">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestUsageExamples</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test cases for usage examples from docstrings.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="TestUsageExamples.test_docstring_basic_usage_example">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUsageExamples.test_docstring_basic_usage_example">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_docstring_basic_usage_example</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test the basic usage example from the docstring.</span>
+
+<span class="sd">        Purpose: Validates that the basic usage example from UnitCircleActionSampler docstring works correctly</span>
+
+<span class="sd">        Given: Example code from docstring with PFT-DPW integration</span>
+<span class="sd">        When: Example code is executed with reduced parameters for testing</span>
+<span class="sd">        Then: Example runs successfully and produces expected results</span>
+
+<span class="sd">        Test type: example</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Create 2D navigation environment (reduced size for testing)</span>
+        <span class="n">nav_env</span> <span class="o">=</span> <span class="n">ContinuousLightDarkPOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+            <span class="n">goal_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span>
+            <span class="n">start_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Create unit circle action sampler</span>
+        <span class="n">action_sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+
+        <span class="c1"># Test action sampling</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">action_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">)]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">action</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">actions</span><span class="p">):</span>
+            <span class="n">magnitude</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">action</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+            <span class="k">assert</span> <span class="n">magnitude</span> <span class="o">&lt;=</span> <span class="mf">2.0</span> <span class="o">+</span> <span class="mf">1e-10</span>
+            <span class="c1"># Verify the action has reasonable values</span>
+            <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">action</span><span class="p">))</span>
+
+        <span class="c1"># Use with PFT-DPW planner (reduced parameters for testing)</span>
+        <span class="n">planner</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">nav_env</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>  <span class="c1"># Reduced from 10</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Navigation&quot;</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>  <span class="c1"># Reduced from 100</span>
+        <span class="p">)</span>
+
+        <span class="n">initial_belief</span> <span class="o">=</span> <span class="n">get_initial_belief</span><span class="p">(</span><span class="n">nav_env</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>  <span class="c1"># Reduced from 200</span>
+        <span class="n">action</span><span class="p">,</span> <span class="n">run_data</span> <span class="o">=</span> <span class="n">planner</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">initial_belief</span><span class="p">)</span>
+
+        <span class="c1"># Verify the selected action</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span></div>
+
+
+<div class="viewcode-block" id="TestUsageExamples.test_docstring_magnitude_comparison_example">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUsageExamples.test_docstring_magnitude_comparison_example">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_docstring_magnitude_comparison_example</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test the magnitude comparison example from the docstring.</span>
+
+<span class="sd">        Purpose: Validates that the magnitude comparison example demonstrates different movement strategies</span>
+
+<span class="sd">        Given: Conservative and aggressive action samplers with different magnitudes</span>
+<span class="sd">        When: Actions are sampled from both</span>
+<span class="sd">        Then: Magnitude distributions show expected differences between strategies</span>
+
+<span class="sd">        Test type: example</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Conservative movement sampler</span>
+        <span class="n">conservative_sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+
+        <span class="c1"># Aggressive movement sampler</span>
+        <span class="n">aggressive_sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+
+        <span class="c1"># Compare action distributions</span>
+        <span class="n">conservative_actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">conservative_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">)]</span>
+        <span class="n">aggressive_actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">aggressive_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">)]</span>
+
+        <span class="n">conservative_magnitudes</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">conservative_actions</span><span class="p">]</span>
+        <span class="n">aggressive_magnitudes</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">a</span><span class="p">)</span> <span class="k">for</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">aggressive_actions</span><span class="p">]</span>
+
+        <span class="c1"># Validate that conservative actions are indeed smaller</span>
+        <span class="n">max_conservative</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">conservative_magnitudes</span><span class="p">)</span>
+        <span class="n">max_aggressive</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">aggressive_magnitudes</span><span class="p">)</span>
+        <span class="n">avg_conservative</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">conservative_magnitudes</span><span class="p">)</span>
+        <span class="n">avg_aggressive</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">aggressive_magnitudes</span><span class="p">)</span>
+
+        <span class="c1"># Conservative should be smaller</span>
+        <span class="k">assert</span> <span class="n">max_conservative</span> <span class="o">&lt;=</span> <span class="mf">0.5</span> <span class="o">+</span> <span class="mf">1e-10</span>
+        <span class="k">assert</span> <span class="n">max_aggressive</span> <span class="o">&lt;=</span> <span class="mf">2.0</span> <span class="o">+</span> <span class="mf">1e-10</span>
+        <span class="k">assert</span> <span class="n">avg_conservative</span> <span class="o">&lt;</span> <span class="n">avg_aggressive</span>
+        <span class="k">assert</span> <span class="n">max_conservative</span> <span class="o">&lt;</span> <span class="n">max_aggressive</span>
+
+        <span class="c1"># Both should have valid ranges</span>
+        <span class="k">assert</span> <span class="n">max_conservative</span> <span class="o">&gt;</span> <span class="mf">0.3</span>  <span class="c1"># Should use most of the range</span>
+        <span class="k">assert</span> <span class="n">max_aggressive</span> <span class="o">&gt;</span> <span class="mf">1.5</span>  <span class="c1"># Should use most of the range</span></div>
+
+
+<div class="viewcode-block" id="TestUsageExamples.test_docstring_visualization_example_data_generation">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestUsageExamples.test_docstring_visualization_example_data_generation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_docstring_visualization_example_data_generation</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test the data generation part of the visualization example.</span>
+
+<span class="sd">        Purpose: Validates that the visualization example generates correct data</span>
+
+<span class="sd">        Given: UnitCircleActionSampler with unit magnitude</span>
+<span class="sd">        When: Actions are sampled for visualization</span>
+<span class="sd">        Then: Generated data has correct properties for plotting</span>
+
+<span class="sd">        Test type: example</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)])</span>
+
+        <span class="c1"># Verify data structure for plotting</span>
+        <span class="k">assert</span> <span class="n">actions</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">1000</span><span class="p">,</span> <span class="mi">2</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">actions</span><span class="p">))</span>
+
+        <span class="c1"># Verify all points are within unit circle</span>
+        <span class="n">magnitudes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">actions</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">magnitudes</span> <span class="o">&lt;=</span> <span class="mf">1.0</span> <span class="o">+</span> <span class="mf">1e-10</span><span class="p">)</span>
+
+        <span class="c1"># Verify good distribution (should cover most of the circle)</span>
+        <span class="n">x_range</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">actions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">actions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="n">y_range</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">actions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">actions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span>
+
+        <span class="c1"># Should span most of the diameter in both dimensions</span>
+        <span class="k">assert</span> <span class="n">x_range</span> <span class="o">&gt;</span> <span class="mf">1.5</span>  <span class="c1"># Should span more than 75% of diameter</span>
+        <span class="k">assert</span> <span class="n">y_range</span> <span class="o">&gt;</span> <span class="mf">1.5</span>  <span class="c1"># Should span more than 75% of diameter</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestDiscreteActionSampler</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test cases for the DiscreteActionSampler class.&quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_initialization">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_initialization</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test initialization of DiscreteActionSampler.</span>
+
+<span class="sd">        Purpose: Validates that DiscreteActionSampler initializes with correct parameters</span>
+
+<span class="sd">        Given: Different action lists</span>
+<span class="sd">        When: DiscreteActionSampler is instantiated</span>
+<span class="sd">        Then: Object is created with correct attributes</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Test with string actions</span>
+        <span class="n">string_actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;up&quot;</span><span class="p">,</span> <span class="s2">&quot;down&quot;</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">]</span>
+        <span class="n">sampler_strings</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">string_actions</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">sampler_strings</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="n">string_actions</span>
+
+        <span class="c1"># Test with integer actions</span>
+        <span class="n">int_actions</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>
+        <span class="n">sampler_ints</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">int_actions</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">sampler_ints</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="n">int_actions</span>
+
+        <span class="c1"># Test with mixed type actions</span>
+        <span class="n">mixed_actions</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;up&quot;</span><span class="p">,</span> <span class="mf">1.5</span><span class="p">,</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">)]</span>
+        <span class="n">sampler_mixed</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">mixed_actions</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">sampler_mixed</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="n">mixed_actions</span>
+
+        <span class="c1"># Test with single action</span>
+        <span class="n">single_action</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;only_action&quot;</span><span class="p">]</span>
+        <span class="n">sampler_single</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">single_action</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">sampler_single</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="n">single_action</span>
+
+        <span class="c1"># Test with empty list (edge case)</span>
+        <span class="n">empty_actions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">sampler_empty</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">empty_actions</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">sampler_empty</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="p">[]</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_basic_sampling">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_basic_sampling">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_basic_sampling</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test basic action sampling functionality.</span>
+
+<span class="sd">        Purpose: Validates that action sampling produces actions from the provided list</span>
+
+<span class="sd">        Given: DiscreteActionSampler with specific actions</span>
+<span class="sd">        When: Multiple actions are sampled</span>
+<span class="sd">        Then: All sampled actions are from the original action list</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;north&quot;</span><span class="p">,</span> <span class="s2">&quot;south&quot;</span><span class="p">,</span> <span class="s2">&quot;east&quot;</span><span class="p">,</span> <span class="s2">&quot;west&quot;</span><span class="p">]</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">actions</span><span class="p">)</span>
+
+        <span class="c1"># Sample multiple actions</span>
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="mi">100</span>
+        <span class="n">sampled_actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">)]</span>
+
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">sampled_actions</span><span class="p">:</span>
+            <span class="c1"># Check that action is from the original list</span>
+            <span class="k">assert</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions</span>
+
+        <span class="c1"># Check that we get variety (not all the same action)</span>
+        <span class="n">unique_actions</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">sampled_actions</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">unique_actions</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span>  <span class="c1"># Should have some variety</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_uniform_distribution">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_uniform_distribution">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_uniform_distribution</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that actions are sampled uniformly.</span>
+
+<span class="sd">        Purpose: Validates that actions are sampled with roughly uniform distribution</span>
+
+<span class="sd">        Given: DiscreteActionSampler with equal-probability actions</span>
+<span class="sd">        When: Large number of actions are sampled</span>
+<span class="sd">        Then: Each action appears roughly equally often</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;C&quot;</span><span class="p">,</span> <span class="s2">&quot;D&quot;</span><span class="p">]</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">actions</span><span class="p">)</span>
+
+        <span class="c1"># Sample large number of actions for statistical analysis</span>
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="mi">10000</span>
+        <span class="n">sampled_actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">)]</span>
+
+        <span class="c1"># Count occurrences of each action</span>
+        <span class="n">action_counts</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">sampled_actions</span><span class="p">:</span>
+            <span class="n">action_counts</span><span class="p">[</span><span class="n">action</span><span class="p">]</span> <span class="o">=</span> <span class="n">action_counts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+        <span class="c1"># Each action should appear roughly equally often</span>
+        <span class="n">expected_count</span> <span class="o">=</span> <span class="n">num_samples</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span>
+        <span class="n">tolerance</span> <span class="o">=</span> <span class="n">expected_count</span> <span class="o">*</span> <span class="mf">0.1</span>  <span class="c1"># 10% tolerance</span>
+
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions</span><span class="p">:</span>
+            <span class="n">count</span> <span class="o">=</span> <span class="n">action_counts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="nb">abs</span><span class="p">(</span><span class="n">count</span> <span class="o">-</span> <span class="n">expected_count</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">tolerance</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_belief_node_parameter">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_belief_node_parameter">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_belief_node_parameter</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that belief_node parameter is handled correctly.</span>
+
+<span class="sd">        Purpose: Validates that optional belief_node parameter doesn&#39;t affect sampling</span>
+
+<span class="sd">        Given: DiscreteActionSampler and real belief node</span>
+<span class="sd">        When: Sampler is called with and without belief_node parameter</span>
+<span class="sd">        Then: Both calls produce valid actions from the action list</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">]</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">actions</span><span class="p">)</span>
+
+        <span class="c1"># Create real belief node</span>
+        <span class="n">particles</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">])]</span>
+        <span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">0.1</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2</span><span class="p">])</span>
+        <span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span>
+            <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+            <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+            <span class="n">resampling</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+        <span class="n">belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">belief</span><span class="p">,</span> <span class="n">observation</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]))</span>
+
+        <span class="c1"># Sample without belief node</span>
+        <span class="n">action1</span> <span class="o">=</span> <span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+
+        <span class="c1"># Sample with belief node</span>
+        <span class="n">action2</span> <span class="o">=</span> <span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">belief_node</span><span class="o">=</span><span class="n">belief_node</span><span class="p">)</span>
+
+        <span class="c1"># Both should be valid actions from the list</span>
+        <span class="k">assert</span> <span class="n">action1</span> <span class="ow">in</span> <span class="n">actions</span>
+        <span class="k">assert</span> <span class="n">action2</span> <span class="ow">in</span> <span class="n">actions</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_single_action">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_single_action">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_single_action</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test edge case of single action sampling.</span>
+
+<span class="sd">        Purpose: Validates behavior when only one action is available</span>
+
+<span class="sd">        Given: DiscreteActionSampler with single action</span>
+<span class="sd">        When: Actions are sampled</span>
+<span class="sd">        Then: All sampled actions should be the same</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">single_action</span> <span class="o">=</span> <span class="s2">&quot;only_choice&quot;</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="p">[</span><span class="n">single_action</span><span class="p">])</span>
+
+        <span class="c1"># Sample multiple actions</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
+
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">action</span> <span class="o">==</span> <span class="n">single_action</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_empty_actions">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_empty_actions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_empty_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test edge case of empty action list.</span>
+
+<span class="sd">        Purpose: Validates behavior when action list is empty</span>
+
+<span class="sd">        Given: DiscreteActionSampler with empty action list</span>
+<span class="sd">        When: Actions are sampled</span>
+<span class="sd">        Then: Should raise appropriate error</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="p">[])</span>
+
+        <span class="c1"># Sampling from empty list should raise IndexError</span>
+        <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">IndexError</span><span class="p">):</span>
+            <span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_repeatability">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_repeatability">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_repeatability</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test action sampling reproducibility with fixed seed.</span>
+
+<span class="sd">        Purpose: Validates that sampling is reproducible when random seed is fixed</span>
+
+<span class="sd">        Given: Fixed random seed and DiscreteActionSampler</span>
+<span class="sd">        When: Actions are sampled multiple times with same seed</span>
+<span class="sd">        Then: Identical sequences of actions are produced</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="s2">&quot;green&quot;</span><span class="p">,</span> <span class="s2">&quot;blue&quot;</span><span class="p">]</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">actions</span><span class="p">)</span>
+
+        <span class="c1"># First sequence</span>
+        <span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+        <span class="n">actions1</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
+
+        <span class="c1"># Second sequence with same seed</span>
+        <span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+        <span class="n">actions2</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">)]</span>
+
+        <span class="c1"># Should be identical</span>
+        <span class="k">assert</span> <span class="n">actions1</span> <span class="o">==</span> <span class="n">actions2</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_serialization_pickle">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_serialization_pickle">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_serialization_pickle</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test serialization and deserialization using pickle.</span>
+
+<span class="sd">        Purpose: Validates that DiscreteActionSampler can be serialized and deserialized with pickle</span>
+
+<span class="sd">        Given: DiscreteActionSampler instance with specific actions</span>
+<span class="sd">        When: Object is pickled and unpickled</span>
+<span class="sd">        Then: Deserialized object has same actions and produces equivalent sampling</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Create original sampler</span>
+        <span class="n">original_actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;action1&quot;</span><span class="p">,</span> <span class="s2">&quot;action2&quot;</span><span class="p">,</span> <span class="s2">&quot;action3&quot;</span><span class="p">]</span>
+        <span class="n">original_sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">original_actions</span><span class="p">)</span>
+
+        <span class="c1"># Serialize with pickle</span>
+        <span class="n">pickled_data</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">original_sampler</span><span class="p">)</span>
+
+        <span class="c1"># Deserialize</span>
+        <span class="n">deserialized_sampler</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">pickled_data</span><span class="p">)</span>
+
+        <span class="c1"># Check that attributes are preserved</span>
+        <span class="k">assert</span> <span class="n">deserialized_sampler</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="n">original_sampler</span><span class="o">.</span><span class="n">actions</span>
+        <span class="k">assert</span> <span class="nb">type</span><span class="p">(</span><span class="n">deserialized_sampler</span><span class="p">)</span> <span class="o">==</span> <span class="nb">type</span><span class="p">(</span><span class="n">original_sampler</span><span class="p">)</span>
+
+        <span class="c1"># Check that both samplers produce valid actions</span>
+        <span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">123</span><span class="p">)</span>
+        <span class="n">original_action</span> <span class="o">=</span> <span class="n">original_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+
+        <span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">123</span><span class="p">)</span>
+        <span class="n">deserialized_action</span> <span class="o">=</span> <span class="n">deserialized_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+
+        <span class="c1"># With same seed, should produce identical results</span>
+        <span class="k">assert</span> <span class="n">original_action</span> <span class="o">==</span> <span class="n">deserialized_action</span>
+
+        <span class="c1"># Both actions should be from the original list</span>
+        <span class="k">assert</span> <span class="n">original_action</span> <span class="ow">in</span> <span class="n">original_actions</span>
+        <span class="k">assert</span> <span class="n">deserialized_action</span> <span class="ow">in</span> <span class="n">original_actions</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_serialization_file">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_serialization_file">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_serialization_file</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test serialization to file and loading.</span>
+
+<span class="sd">        Purpose: Validates that DiscreteActionSampler can be saved to and loaded from files</span>
+
+<span class="sd">        Given: DiscreteActionSampler instance and temporary file</span>
+<span class="sd">        When: Object is saved to file and loaded back</span>
+<span class="sd">        Then: Loaded object functions identically to original</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Create original sampler</span>
+        <span class="n">original_actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;move&quot;</span><span class="p">,</span> <span class="s2">&quot;stay&quot;</span><span class="p">,</span> <span class="s2">&quot;turn_left&quot;</span><span class="p">,</span> <span class="s2">&quot;turn_right&quot;</span><span class="p">]</span>
+        <span class="n">original_sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">original_actions</span><span class="p">)</span>
+
+        <span class="c1"># Use temporary file for serialization test</span>
+        <span class="k">with</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">NamedTemporaryFile</span><span class="p">(</span><span class="n">delete</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s2">&quot;.pkl&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">temp_file</span><span class="p">:</span>
+            <span class="n">temp_path</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="n">temp_file</span><span class="o">.</span><span class="n">name</span><span class="p">)</span>
+
+            <span class="c1"># Save to file</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">temp_path</span><span class="p">,</span> <span class="s2">&quot;wb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">original_sampler</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+
+            <span class="c1"># Load from file</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">temp_path</span><span class="p">,</span> <span class="s2">&quot;rb&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">loaded_sampler</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+            <span class="c1"># Clean up</span>
+            <span class="n">temp_path</span><span class="o">.</span><span class="n">unlink</span><span class="p">()</span>
+
+        <span class="c1"># Verify loaded sampler</span>
+        <span class="k">assert</span> <span class="n">loaded_sampler</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="n">original_actions</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">loaded_sampler</span><span class="p">,</span> <span class="n">DiscreteActionSampler</span><span class="p">)</span>
+
+        <span class="c1"># Test functionality</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">loaded_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">original_actions</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_complex_action_types">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_complex_action_types">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_complex_action_types</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test sampling with complex action types.</span>
+
+<span class="sd">        Purpose: Validates that DiscreteActionSampler works with various complex action types</span>
+
+<span class="sd">        Given: DiscreteActionSampler with complex action objects</span>
+<span class="sd">        When: Actions are sampled</span>
+<span class="sd">        Then: Complex actions are sampled correctly</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Test with tuples</span>
+        <span class="n">tuple_actions</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)]</span>
+        <span class="n">sampler_tuples</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">tuple_actions</span><span class="p">)</span>
+        
+        <span class="n">sampled_tuple</span> <span class="o">=</span> <span class="n">sampler_tuples</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="n">sampled_tuple</span> <span class="ow">in</span> <span class="n">tuple_actions</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sampled_tuple</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
+
+        <span class="c1"># Test with numpy arrays</span>
+        <span class="n">array_actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">])]</span>
+        <span class="n">sampler_arrays</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">array_actions</span><span class="p">)</span>
+        
+        <span class="n">sampled_array</span> <span class="o">=</span> <span class="n">sampler_arrays</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="c1"># Check that the sampled array matches one of the original arrays</span>
+        <span class="k">assert</span> <span class="nb">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">sampled_array</span><span class="p">,</span> <span class="n">arr</span><span class="p">)</span> <span class="k">for</span> <span class="n">arr</span> <span class="ow">in</span> <span class="n">array_actions</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sampled_array</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+
+        <span class="c1"># Test with dictionaries</span>
+        <span class="n">dict_actions</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;x&quot;</span><span class="p">:</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;y&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}]</span>
+        <span class="n">sampler_dicts</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">dict_actions</span><span class="p">)</span>
+        
+        <span class="n">sampled_dict</span> <span class="o">=</span> <span class="n">sampler_dicts</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="n">sampled_dict</span> <span class="ow">in</span> <span class="n">dict_actions</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">sampled_dict</span><span class="p">,</span> <span class="nb">dict</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_duplicate_actions">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_duplicate_actions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_duplicate_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test behavior with duplicate actions in the list.</span>
+
+<span class="sd">        Purpose: Validates that duplicate actions are handled correctly</span>
+
+<span class="sd">        Given: DiscreteActionSampler with duplicate actions</span>
+<span class="sd">        When: Actions are sampled</span>
+<span class="sd">        Then: Duplicate actions appear with higher probability</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># List with duplicates</span>
+        <span class="n">actions_with_duplicates</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="s2">&quot;C&quot;</span><span class="p">,</span> <span class="s2">&quot;A&quot;</span><span class="p">]</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">actions_with_duplicates</span><span class="p">)</span>
+
+        <span class="c1"># Sample many actions</span>
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="mi">10000</span>
+        <span class="n">sampled_actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">)]</span>
+
+        <span class="c1"># Count occurrences</span>
+        <span class="n">action_counts</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">sampled_actions</span><span class="p">:</span>
+            <span class="n">action_counts</span><span class="p">[</span><span class="n">action</span><span class="p">]</span> <span class="o">=</span> <span class="n">action_counts</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span>
+
+        <span class="c1"># &quot;A&quot; should appear more often since it&#39;s in the list 3 times</span>
+        <span class="k">assert</span> <span class="n">action_counts</span><span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">action_counts</span><span class="p">[</span><span class="s2">&quot;B&quot;</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="n">action_counts</span><span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">]</span> <span class="o">&gt;</span> <span class="n">action_counts</span><span class="p">[</span><span class="s2">&quot;C&quot;</span><span class="p">]</span>
+
+        <span class="c1"># All sampled actions should be from the original list</span>
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">sampled_actions</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions_with_duplicates</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_performance_characteristics">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_performance_characteristics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_performance_characteristics</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test performance characteristics of action sampling.</span>
+
+<span class="sd">        Purpose: Validates that action sampling performs efficiently for practical use</span>
+
+<span class="sd">        Given: DiscreteActionSampler with large action space</span>
+<span class="sd">        When: Large number of actions are sampled rapidly</span>
+<span class="sd">        Then: Sampling completes efficiently without memory issues</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Create sampler with many actions</span>
+        <span class="n">large_action_space</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">))</span>  <span class="c1"># 1000 different actions</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">large_action_space</span><span class="p">)</span>
+
+        <span class="c1"># Test that we can sample many actions quickly without issues</span>
+        <span class="n">num_samples</span> <span class="o">=</span> <span class="mi">10000</span>
+
+        <span class="c1"># This should complete quickly and without memory issues</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_samples</span><span class="p">)]</span>
+
+        <span class="c1"># Verify we got the expected number of valid actions</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span> <span class="o">==</span> <span class="n">num_samples</span>
+
+        <span class="c1"># All actions should be from the original list</span>
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">large_action_space</span>
+
+        <span class="c1"># Should have good variety (not all the same)</span>
+        <span class="n">unique_actions</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">unique_actions</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">100</span>  <span class="c1"># Should sample many different actions</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_reduce_method">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_reduce_method">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_reduce_method</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test the __reduce__ method for pickle serialization.</span>
+
+<span class="sd">        Purpose: Validates that the __reduce__ method works correctly for serialization</span>
+
+<span class="sd">        Given: DiscreteActionSampler instance</span>
+<span class="sd">        When: Object is pickled using __reduce__ method</span>
+<span class="sd">        Then: Deserialized object is identical to original</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;test1&quot;</span><span class="p">,</span> <span class="s2">&quot;test2&quot;</span><span class="p">,</span> <span class="s2">&quot;test3&quot;</span><span class="p">]</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">actions</span><span class="p">)</span>
+
+        <span class="c1"># Test __reduce__ method directly</span>
+        <span class="n">reduce_result</span> <span class="o">=</span> <span class="n">sampler</span><span class="o">.</span><span class="n">__reduce__</span><span class="p">()</span>
+        
+        <span class="c1"># Should return tuple with class and constructor arguments</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reduce_result</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">reduce_result</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span>
+        <span class="k">assert</span> <span class="n">reduce_result</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">DiscreteActionSampler</span>
+        <span class="k">assert</span> <span class="n">reduce_result</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="p">(</span><span class="n">actions</span><span class="p">,)</span>
+
+        <span class="c1"># Test reconstruction</span>
+        <span class="n">reconstructed_sampler</span> <span class="o">=</span> <span class="n">reduce_result</span><span class="p">[</span><span class="mi">0</span><span class="p">](</span><span class="o">*</span><span class="n">reduce_result</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="n">reconstructed_sampler</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="n">actions</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">reconstructed_sampler</span><span class="p">,</span> <span class="n">DiscreteActionSampler</span><span class="p">)</span>
+
+        <span class="c1"># Test that reconstructed sampler works</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">reconstructed_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_immutability">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_immutability">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_immutability</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that the action list is properly stored as immutable.</span>
+
+<span class="sd">        Purpose: Validates that changes to the original action list don&#39;t affect the sampler</span>
+
+<span class="sd">        Given: DiscreteActionSampler and original action list</span>
+<span class="sd">        When: Original action list is modified</span>
+<span class="sd">        Then: Sampler continues to use the original list</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">original_actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;C&quot;</span><span class="p">]</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">original_actions</span><span class="p">)</span>
+
+        <span class="c1"># Modify the original list</span>
+        <span class="n">original_actions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="s2">&quot;D&quot;</span><span class="p">)</span>
+        <span class="n">original_actions</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="s2">&quot;A&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Sampler should still use the original list (before modification)</span>
+        <span class="n">sampled_actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">)]</span>
+        
+        <span class="c1"># All sampled actions should be from the original list (A, B, C)</span>
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">sampled_actions</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">action</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;A&quot;</span><span class="p">,</span> <span class="s2">&quot;B&quot;</span><span class="p">,</span> <span class="s2">&quot;C&quot;</span><span class="p">]</span>
+            <span class="k">assert</span> <span class="n">action</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;D&quot;</span><span class="p">]</span>  <span class="c1"># Should not sample the added action</span></div>
+
+
+<div class="viewcode-block" id="TestDiscreteActionSampler.test_discrete_action_sampler_none_action">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_utils.html#POMDPPlanners.tests.test_utils.test_action_samplers.TestDiscreteActionSampler.test_discrete_action_sampler_none_action">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sampler_none_action</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test behavior with None as an action.</span>
+
+<span class="sd">        Purpose: Validates that None can be used as a valid action</span>
+
+<span class="sd">        Given: DiscreteActionSampler with None as one of the actions</span>
+<span class="sd">        When: Actions are sampled</span>
+<span class="sd">        Then: None can be sampled as a valid action</span>
+
+<span class="sd">        Test type: unit</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;action1&quot;</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;action3&quot;</span><span class="p">]</span>
+        <span class="n">sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="o">=</span><span class="n">actions</span><span class="p">)</span>
+
+        <span class="c1"># Sample multiple actions</span>
+        <span class="n">sampled_actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">)]</span>
+
+        <span class="c1"># Should be able to sample None</span>
+        <span class="k">assert</span> <span class="kc">None</span> <span class="ow">in</span> <span class="n">sampled_actions</span>
+
+        <span class="c1"># All sampled actions should be from the original list</span>
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">sampled_actions</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

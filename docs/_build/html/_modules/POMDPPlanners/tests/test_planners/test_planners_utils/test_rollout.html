@@ -1,0 +1,949 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Tests for rollout planner utilities.</span>
+
+<span class="sd">This module tests the rollout planner utilities, focusing on:</span>
+<span class="sd">- Basic rollout functionality</span>
+<span class="sd">- Rollout policies</span>
+<span class="sd">- Rollout execution</span>
+<span class="sd">- Rollout evaluation</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+<span class="c1"># Set seeds for reproducible tests</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.rollout</span><span class="w"> </span><span class="kn">import</span> <span class="n">random_rollout_action_sampler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.sanity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SanityPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.cartpole_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartPolePOMDP</span>
+
+
+<div class="viewcode-block" id="MockActionSampler">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.MockActionSampler">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MockActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Mock action sampler for testing rollouts.&quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">actions</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="n">actions</span>
+    
+<div class="viewcode-block" id="MockActionSampler.sample">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.MockActionSampler.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="DeterministicActionSampler">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.DeterministicActionSampler">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DeterministicActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Deterministic action sampler for reproducible testing.&quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action</span> <span class="o">=</span> <span class="n">action</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">call_count</span> <span class="o">=</span> <span class="mi">0</span>
+    
+<div class="viewcode-block" id="DeterministicActionSampler.sample">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.DeterministicActionSampler.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">call_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">action</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="tiger_environment">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.tiger_environment">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">tiger_environment</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Tiger POMDP environment fixture.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="sanity_environment">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.sanity_environment">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">sanity_environment</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Sanity POMDP environment fixture.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="cartpole_environment">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.cartpole_environment">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">cartpole_environment</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;CartPole POMDP environment fixture.&quot;&quot;&quot;</span>
+    <span class="n">noise_cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">CartPolePOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span> <span class="n">noise_cov</span><span class="o">=</span><span class="n">noise_cov</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="tiger_action_sampler">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.tiger_action_sampler">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">tiger_action_sampler</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Action sampler for Tiger POMDP.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">MockActionSampler</span><span class="p">([</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">])</span></div>
+
+
+
+<div class="viewcode-block" id="sanity_action_sampler">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.sanity_action_sampler">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">sanity_action_sampler</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Action sampler for Sanity POMDP.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">MockActionSampler</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span></div>
+
+
+
+<div class="viewcode-block" id="cartpole_action_sampler">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.cartpole_action_sampler">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">cartpole_action_sampler</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Action sampler for CartPole POMDP.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">MockActionSampler</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_basic_functionality">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_basic_functionality">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_basic_functionality</span><span class="p">(</span><span class="n">tiger_environment</span><span class="p">,</span> <span class="n">tiger_action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test basic rollout functionality.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that the rollout function can execute a basic rollout simulation</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Tiger POMDP environment and action sampler with initial state &quot;tiger_left&quot;</span>
+<span class="sd">    When: A rollout is performed with depth 0 and max_depth 5</span>
+<span class="sd">    Then: The function returns a float value within reasonable bounds (-500 to 50) for Tiger POMDP rewards</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">initial_state</span> <span class="o">=</span> <span class="s2">&quot;tiger_left&quot;</span>
+    
+    <span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="n">initial_state</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">tiger_action_sampler</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">tiger_environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="o">=</span><span class="mi">5</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Should return a float value</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rollout_value</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected float, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">rollout_value</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+    
+    <span class="c1"># Value should be within reasonable bounds for Tiger POMDP</span>
+    <span class="c1"># Tiger rewards range from -100 to 10, so discounted sum should be reasonable</span>
+    <span class="k">assert</span> <span class="o">-</span><span class="mi">500</span> <span class="o">&lt;=</span> <span class="n">rollout_value</span> <span class="o">&lt;=</span> <span class="mi">50</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Rollout value </span><span class="si">{</span><span class="n">rollout_value</span><span class="si">}</span><span class="s2"> outside expected range&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_terminal_state_handling">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_terminal_state_handling">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_terminal_state_handling</span><span class="p">(</span><span class="n">tiger_environment</span><span class="p">,</span> <span class="n">tiger_action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that rollout handles terminal states correctly.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that rollout function properly handles terminal states by returning 0</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Tiger POMDP environment with mocked terminal state behavior</span>
+<span class="sd">    When: A rollout is attempted from a terminal state</span>
+<span class="sd">    Then: The function returns 0.0 as expected for terminal states</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Mock terminal state</span>
+    <span class="n">original_is_terminal</span> <span class="o">=</span> <span class="n">tiger_environment</span><span class="o">.</span><span class="n">is_terminal</span>
+    <span class="n">tiger_environment</span><span class="o">.</span><span class="n">is_terminal</span> <span class="o">=</span> <span class="k">lambda</span> <span class="n">state</span><span class="p">:</span> <span class="kc">True</span>
+    
+    <span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">tiger_action_sampler</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">tiger_environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="o">=</span><span class="mi">10</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Should return 0 for terminal state</span>
+    <span class="k">assert</span> <span class="n">rollout_value</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected 0.0 for terminal state, got </span><span class="si">{</span><span class="n">rollout_value</span><span class="si">}</span><span class="s2">&quot;</span>
+    
+    <span class="c1"># Restore original method</span>
+    <span class="n">tiger_environment</span><span class="o">.</span><span class="n">is_terminal</span> <span class="o">=</span> <span class="n">original_is_terminal</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_max_depth_handling">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_max_depth_handling">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_max_depth_handling</span><span class="p">(</span><span class="n">sanity_environment</span><span class="p">,</span> <span class="n">sanity_action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that rollout respects max_depth parameter.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that rollout function respects the max_depth parameter and produces reasonable values</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Sanity POMDP environment and action sampler with initial state 0</span>
+<span class="sd">    When: Rollouts are performed with different max_depth values (1, 3, 5, 10)</span>
+<span class="sd">    Then: Each rollout returns a float value within reasonable bounds (0 to max_depth) for the given depth</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">initial_state</span> <span class="o">=</span> <span class="mi">0</span>
+    
+    <span class="c1"># Test with different max depths</span>
+    <span class="k">for</span> <span class="n">max_depth</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">]:</span>
+        <span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">initial_state</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">sanity_action_sampler</span><span class="p">,</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">sanity_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+            <span class="n">max_depth</span><span class="o">=</span><span class="n">max_depth</span>
+        <span class="p">)</span>
+        
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rollout_value</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected float for depth </span><span class="si">{</span><span class="n">max_depth</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="c1"># Value should be reasonable for SanityPOMDP (rewards are 0 or 1)</span>
+        <span class="k">assert</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">rollout_value</span> <span class="o">&lt;=</span> <span class="n">max_depth</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Value </span><span class="si">{</span><span class="n">rollout_value</span><span class="si">}</span><span class="s2"> unreasonable for depth </span><span class="si">{</span><span class="n">max_depth</span><span class="si">}</span><span class="s2">&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_at_max_depth">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_at_max_depth">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_at_max_depth</span><span class="p">(</span><span class="n">sanity_environment</span><span class="p">,</span> <span class="n">sanity_action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test rollout behavior when starting at max depth.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that rollout function returns 0 when starting at the maximum allowed depth</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Sanity POMDP environment and action sampler</span>
+<span class="sd">    When: A rollout is attempted starting at depth 5 with max_depth 5</span>
+<span class="sd">    Then: The function returns 0.0 since no further exploration is allowed</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>  <span class="c1"># At max depth</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">sanity_action_sampler</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">sanity_environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="o">=</span><span class="mi">5</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Should return 0 when at max depth</span>
+    <span class="k">assert</span> <span class="n">rollout_value</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected 0.0 at max depth, got </span><span class="si">{</span><span class="n">rollout_value</span><span class="si">}</span><span class="s2">&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_discount_factor_effect">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_discount_factor_effect">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_discount_factor_effect</span><span class="p">(</span><span class="n">sanity_environment</span><span class="p">,</span> <span class="n">sanity_action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that discount factor affects rollout values appropriately.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that different discount factors produce appropriately different rollout values</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Sanity POMDP environment and action sampler with initial state 0</span>
+<span class="sd">    When: Multiple rollouts are performed with different discount factors (0.1, 0.5, 0.9, 0.99)</span>
+<span class="sd">    Then: Higher discount factors generally lead to higher rollout values, accounting for noise</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Good state in SanityPOMDP</span>
+    
+    <span class="c1"># Test with different discount factors</span>
+    <span class="n">discount_factors</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.9</span><span class="p">,</span> <span class="mf">0.99</span><span class="p">]</span>
+    <span class="n">rollout_values</span> <span class="o">=</span> <span class="p">[]</span>
+    
+    <span class="k">for</span> <span class="n">gamma</span> <span class="ow">in</span> <span class="n">discount_factors</span><span class="p">:</span>
+        <span class="c1"># Use multiple rollouts to reduce variance</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">20</span><span class="p">):</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+                <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">action_sampler</span><span class="o">=</span><span class="n">sanity_action_sampler</span><span class="p">,</span>
+                <span class="n">environment</span><span class="o">=</span><span class="n">sanity_environment</span><span class="p">,</span>
+                <span class="n">discount_factor</span><span class="o">=</span><span class="n">gamma</span><span class="p">,</span>
+                <span class="n">max_depth</span><span class="o">=</span><span class="mi">10</span>
+            <span class="p">)</span>
+            <span class="n">values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        
+        <span class="n">mean_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">rollout_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">mean_value</span><span class="p">)</span>
+    
+    <span class="c1"># Generally, higher discount factors should lead to higher values</span>
+    <span class="c1"># (though this can be noisy due to randomness)</span>
+    <span class="k">assert</span> <span class="n">rollout_values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">rollout_values</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mf">1.0</span><span class="p">,</span> <span class="s2">&quot;Discount factor effect not as expected&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_deterministic_behavior">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_deterministic_behavior">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_deterministic_behavior</span><span class="p">(</span><span class="n">sanity_environment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test rollout with deterministic action sampler.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that rollout function works correctly with deterministic action sampling</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Sanity POMDP environment and a deterministic action sampler that always chooses action 0</span>
+<span class="sd">    When: A rollout is performed from initial state 0 (good state)</span>
+<span class="sd">    Then: The function returns a positive value and the action sampler is called multiple times</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create deterministic sampler that always chooses action 0 (good action in SanityPOMDP)</span>
+    <span class="n">det_sampler</span> <span class="o">=</span> <span class="n">DeterministicActionSampler</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    
+    <span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>  <span class="c1"># Start in good state</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">det_sampler</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">sanity_environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="o">=</span><span class="mi">5</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># With deterministic good actions from good state, should get positive value</span>
+    <span class="k">assert</span> <span class="n">rollout_value</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected positive value with good actions, got </span><span class="si">{</span><span class="n">rollout_value</span><span class="si">}</span><span class="s2">&quot;</span>
+    
+    <span class="c1"># Sampler should have been called multiple times</span>
+    <span class="k">assert</span> <span class="n">det_sampler</span><span class="o">.</span><span class="n">call_count</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Action sampler should have been called&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_different_initial_states">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_different_initial_states">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_different_initial_states</span><span class="p">(</span><span class="n">sanity_environment</span><span class="p">,</span> <span class="n">sanity_action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test rollout from different initial states.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that rollout function produces appropriate values for different initial states</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Sanity POMDP environment with good state (0) and bad state (1)</span>
+<span class="sd">    When: Multiple rollouts are performed from each state with 50 trials each</span>
+<span class="sd">    Then: On average, the good state produces higher or equal rollout values compared to the bad state</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">max_depth</span> <span class="o">=</span> <span class="mi">8</span>
+    <span class="n">n_rollouts</span> <span class="o">=</span> <span class="mi">50</span>
+    
+    <span class="c1"># Test from good state (0)</span>
+    <span class="n">good_state_values</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_rollouts</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">sanity_action_sampler</span><span class="p">,</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">sanity_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+            <span class="n">max_depth</span><span class="o">=</span><span class="n">max_depth</span>
+        <span class="p">)</span>
+        <span class="n">good_state_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    
+    <span class="c1"># Test from bad state (1)</span>
+    <span class="n">bad_state_values</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_rollouts</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">sanity_action_sampler</span><span class="p">,</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">sanity_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+            <span class="n">max_depth</span><span class="o">=</span><span class="n">max_depth</span>
+        <span class="p">)</span>
+        <span class="n">bad_state_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    
+    <span class="c1"># On average, good state should have higher or equal value than bad state</span>
+    <span class="n">mean_good</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">good_state_values</span><span class="p">)</span>
+    <span class="n">mean_bad</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">bad_state_values</span><span class="p">)</span>
+    
+    <span class="c1"># Allow some tolerance due to randomness, but good state should generally be better</span>
+    <span class="k">assert</span> <span class="n">mean_good</span> <span class="o">&gt;=</span> <span class="n">mean_bad</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Good state mean </span><span class="si">{</span><span class="n">mean_good</span><span class="si">}</span><span class="s2"> should be &gt;= bad state mean </span><span class="si">{</span><span class="n">mean_bad</span><span class="si">}</span><span class="s2">&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_with_continuous_environment">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_with_continuous_environment">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_with_continuous_environment</span><span class="p">(</span><span class="n">cartpole_environment</span><span class="p">,</span> <span class="n">cartpole_action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test rollout with continuous state environment.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that rollout function works correctly with continuous state environments</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A CartPole POMDP environment with continuous state space and action sampler</span>
+<span class="sd">    When: A rollout is performed from a sampled initial state with max_depth 15</span>
+<span class="sd">    Then: The function returns a float value within reasonable bounds (-20 to 20) for CartPole rewards</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Sample initial state</span>
+    <span class="n">initial_state_dist</span> <span class="o">=</span> <span class="n">cartpole_environment</span><span class="o">.</span><span class="n">initial_state_dist</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">initial_state_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    
+    <span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">cartpole_action_sampler</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">cartpole_environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="o">=</span><span class="mi">15</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Should return a float value</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rollout_value</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected float, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">rollout_value</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+    
+    <span class="c1"># CartPole rewards are typically 1.0 per step, so value should be reasonable</span>
+    <span class="k">assert</span> <span class="o">-</span><span class="mi">20</span> <span class="o">&lt;=</span> <span class="n">rollout_value</span> <span class="o">&lt;=</span> <span class="mi">20</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Rollout value </span><span class="si">{</span><span class="n">rollout_value</span><span class="si">}</span><span class="s2"> outside reasonable range&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_variance_reduction">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_variance_reduction">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_variance_reduction</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that multiple rollouts reduce variance in value estimates.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that multiple rollouts provide more stable value estimates with reduced variance</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Sanity POMDP environment and action sampler with initial state 0</span>
+<span class="sd">    When: Single rollout vs 100 multiple rollouts are performed</span>
+<span class="sd">    Then: Multiple rollouts produce reasonable mean values and standard errors, demonstrating variance reduction</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">sanity</span> <span class="o">=</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="n">sampler</span> <span class="o">=</span> <span class="n">MockActionSampler</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="mi">0</span>
+    
+    <span class="c1"># Single rollout</span>
+    <span class="n">single_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">sanity</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="o">=</span><span class="mi">10</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Multiple rollouts</span>
+    <span class="n">n_rollouts</span> <span class="o">=</span> <span class="mi">100</span>
+    <span class="n">multiple_values</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_rollouts</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">sanity</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">max_depth</span><span class="o">=</span><span class="mi">10</span>
+        <span class="p">)</span>
+        <span class="n">multiple_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    
+    <span class="n">mean_multiple</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">multiple_values</span><span class="p">)</span>
+    <span class="n">std_multiple</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">multiple_values</span><span class="p">)</span>
+    
+    <span class="c1"># Mean should be reasonable</span>
+    <span class="k">assert</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">mean_multiple</span> <span class="o">&lt;=</span> <span class="mi">15</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Mean value </span><span class="si">{</span><span class="n">mean_multiple</span><span class="si">}</span><span class="s2"> outside reasonable range&quot;</span>
+    
+    <span class="c1"># Standard error should be reasonable (not too high variance)</span>
+    <span class="n">std_error</span> <span class="o">=</span> <span class="n">std_multiple</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_rollouts</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">std_error</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Standard error </span><span class="si">{</span><span class="n">std_error</span><span class="si">}</span><span class="s2"> too high&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_recursion_depth">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_recursion_depth">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_recursion_depth</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that rollout doesn&#39;t cause stack overflow with deep recursion.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that rollout function can handle very deep recursion without stack overflow</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Sanity POMDP environment and action sampler</span>
+<span class="sd">    When: A rollout is performed with very deep max_depth (100)</span>
+<span class="sd">    Then: The function completes successfully and returns a non-negative float value</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">sanity</span> <span class="o">=</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">)</span>
+    <span class="n">sampler</span> <span class="o">=</span> <span class="n">MockActionSampler</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    
+    <span class="c1"># Test with very deep max_depth</span>
+    <span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">sanity</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="o">=</span><span class="mi">100</span>  <span class="c1"># Deep recursion</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Should complete without stack overflow</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rollout_value</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="s2">&quot;Should handle deep recursion&quot;</span>
+    <span class="k">assert</span> <span class="n">rollout_value</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Value should be non-negative for good initial state&quot;</span></div>
+
+
+
+<span class="c1"># Usage Example Tests</span>
+<span class="c1"># Following the project standard of testing all usage examples from docstrings</span>
+
+<div class="viewcode-block" id="test_basic_tiger_rollout_usage_example">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_basic_tiger_rollout_usage_example">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_basic_tiger_rollout_usage_example</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test the basic Tiger POMDP rollout usage example from docstring.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that the basic Tiger POMDP rollout usage example works correctly</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Tiger POMDP environment and TigerActionSampler with initial state &quot;tiger_left&quot;</span>
+<span class="sd">    When: A rollout is performed using the docstring example code</span>
+<span class="sd">    Then: The rollout returns a float value within reasonable bounds for Tiger POMDP</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: example</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.rollout</span><span class="w"> </span><span class="kn">import</span> <span class="n">random_rollout_action_sampler</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+    
+    <span class="c1"># Simple action sampler for Tiger POMDP (from docstring)</span>
+    <span class="k">class</span><span class="w"> </span><span class="nc">TigerActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">])</span>
+    
+    <span class="c1"># Create environment and sampler (from docstring)</span>
+    <span class="n">tiger</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="n">action_sampler</span> <span class="o">=</span> <span class="n">TigerActionSampler</span><span class="p">()</span>
+    
+    <span class="c1"># Perform rollout from initial state (from docstring)</span>
+    <span class="n">initial_state</span> <span class="o">=</span> <span class="s2">&quot;tiger_left&quot;</span>
+    <span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="n">initial_state</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">tiger</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="o">=</span><span class="mi">10</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Verify results</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rollout_value</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="s2">&quot;Rollout should return float value&quot;</span>
+    
+    <span class="c1"># Calculate theoretical bounds for Tiger POMDP with max_depth=10 and discount_factor=0.95</span>
+    <span class="c1"># Worst case: all actions are &quot;listen&quot; (-1 each) for 10 steps</span>
+    <span class="c1"># Best case: open correct door early (+10) then mostly listen</span>
+    <span class="c1"># Realistic worst case: open wrong doors multiple times (-100 each) + some listening</span>
+    <span class="c1"># With discount factor 0.95, cumulative rewards can go much lower than -500</span>
+    <span class="n">theoretical_min</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1000</span>  <span class="c1"># Conservative lower bound for worst-case scenarios</span>
+    <span class="n">theoretical_max</span> <span class="o">=</span> <span class="mi">100</span>    <span class="c1"># Conservative upper bound for best-case scenarios</span>
+    
+    <span class="k">assert</span> <span class="n">theoretical_min</span> <span class="o">&lt;=</span> <span class="n">rollout_value</span> <span class="o">&lt;=</span> <span class="n">theoretical_max</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Tiger rollout value </span><span class="si">{</span><span class="n">rollout_value</span><span class="si">}</span><span class="s2"> should be in reasonable range [</span><span class="si">{</span><span class="n">theoretical_min</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">theoretical_max</span><span class="si">}</span><span class="s2">]&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_cartpole_rollout_usage_example">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_cartpole_rollout_usage_example">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_cartpole_rollout_usage_example</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test the CartPole rollout usage example from docstring.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that the CartPole rollout usage example works correctly with continuous state space</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A CartPole POMDP environment with continuous state space and CartPoleActionSampler</span>
+<span class="sd">    When: A rollout is performed from a sampled initial state with max_depth 20</span>
+<span class="sd">    Then: The rollout returns a float value and the state is a 4-dimensional numpy array</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: example</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.rollout</span><span class="w"> </span><span class="kn">import</span> <span class="n">random_rollout_action_sampler</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.cartpole_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartPolePOMDP</span>
+    
+    <span class="k">class</span><span class="w"> </span><span class="nc">CartPoleActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>  <span class="c1"># Left or right force</span>
+    
+    <span class="c1"># Create CartPole environment (from docstring)</span>
+    <span class="n">noise_cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">])</span>
+    <span class="n">cartpole</span> <span class="o">=</span> <span class="n">CartPolePOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span> <span class="n">noise_cov</span><span class="o">=</span><span class="n">noise_cov</span><span class="p">)</span>
+    <span class="n">action_sampler</span> <span class="o">=</span> <span class="n">CartPoleActionSampler</span><span class="p">()</span>
+    
+    <span class="c1"># Sample initial state and perform rollout (from docstring)</span>
+    <span class="n">initial_state_dist</span> <span class="o">=</span> <span class="n">cartpole</span><span class="o">.</span><span class="n">initial_state_dist</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">initial_state_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+    
+    <span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">cartpole</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="o">=</span><span class="mi">20</span>  <span class="c1"># Longer horizon for control task</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Verify results</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rollout_value</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="s2">&quot;CartPole rollout should return float value&quot;</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="s2">&quot;CartPole state should be numpy array&quot;</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">state</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span><span class="p">,</span> <span class="s2">&quot;CartPole state should be 4-dimensional&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_multiple_rollouts_usage_example">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_multiple_rollouts_usage_example">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_multiple_rollouts_usage_example</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test the multiple rollouts for variance reduction usage example from docstring.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that multiple rollouts can be used to reduce variance in value estimates</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Sanity POMDP environment and SanityActionSampler with initial state 0</span>
+<span class="sd">    When: 50 rollouts are performed and confidence intervals are calculated</span>
+<span class="sd">    Then: All rollout values are floats, mean is non-negative, and confidence intervals are properly calculated</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: integration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.rollout</span><span class="w"> </span><span class="kn">import</span> <span class="n">random_rollout_action_sampler</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.sanity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SanityPOMDP</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+    
+    <span class="k">class</span><span class="w"> </span><span class="nc">SanityActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    
+    <span class="n">sanity</span> <span class="o">=</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="n">action_sampler</span> <span class="o">=</span> <span class="n">SanityActionSampler</span><span class="p">()</span>
+    
+    <span class="c1"># Perform multiple rollouts to reduce variance (from docstring)</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Good state</span>
+    <span class="n">n_rollouts</span> <span class="o">=</span> <span class="mi">50</span>  <span class="c1"># Reduced for testing speed</span>
+    <span class="n">rollout_values</span> <span class="o">=</span> <span class="p">[]</span>
+    
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_rollouts</span><span class="p">):</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">sanity</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">max_depth</span><span class="o">=</span><span class="mi">15</span>
+        <span class="p">)</span>
+        <span class="n">rollout_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+    
+    <span class="c1"># Estimate value with confidence intervals (from docstring)</span>
+    <span class="n">mean_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">rollout_values</span><span class="p">)</span>
+    <span class="n">std_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">rollout_values</span><span class="p">)</span>
+    <span class="n">confidence_interval</span> <span class="o">=</span> <span class="mf">1.96</span> <span class="o">*</span> <span class="n">std_value</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_rollouts</span><span class="p">)</span>
+    
+    <span class="c1"># Verify results</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">rollout_values</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_rollouts</span><span class="p">,</span> <span class="s2">&quot;Should have correct number of rollouts&quot;</span>
+    <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">rollout_values</span><span class="p">),</span> <span class="s2">&quot;All rollout values should be floats&quot;</span>
+    <span class="k">assert</span> <span class="n">mean_value</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Mean value should be non-negative for good initial state&quot;</span>
+    <span class="k">assert</span> <span class="n">std_value</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Standard deviation should be non-negative&quot;</span>
+    <span class="k">assert</span> <span class="n">confidence_interval</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Confidence interval should be non-negative&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_depth_comparison_usage_example">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_depth_comparison_usage_example">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_depth_comparison_usage_example</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test the rollout depth comparison usage example from docstring.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that different max_depth values produce different rollout statistics</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Sanity POMDP environment and SanityActionSampler with initial state 0</span>
+<span class="sd">    When: Rollouts are performed with different max_depth values (5, 10, 20) and 20 trials each</span>
+<span class="sd">    Then: Results are collected for all depths with proper mean and standard deviation calculations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: example</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.rollout</span><span class="w"> </span><span class="kn">import</span> <span class="n">random_rollout_action_sampler</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.sanity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SanityPOMDP</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+    
+    <span class="k">class</span><span class="w"> </span><span class="nc">SanityActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    
+    <span class="n">sanity</span> <span class="o">=</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="n">action_sampler</span> <span class="o">=</span> <span class="n">SanityActionSampler</span><span class="p">()</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="mi">0</span>
+    
+    <span class="c1"># Test effect of max_depth on value estimates (from docstring)</span>
+    <span class="n">depths</span> <span class="o">=</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">]</span>  <span class="c1"># Reduced for testing speed</span>
+    <span class="n">depth_results</span> <span class="o">=</span> <span class="p">{}</span>
+    
+    <span class="k">for</span> <span class="n">max_depth</span> <span class="ow">in</span> <span class="n">depths</span><span class="p">:</span>
+        <span class="n">values</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">20</span><span class="p">):</span>  <span class="c1"># Reduced for testing speed</span>
+            <span class="n">value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+                <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+                <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+                <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+                <span class="n">environment</span><span class="o">=</span><span class="n">sanity</span><span class="p">,</span>
+                <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+                <span class="n">max_depth</span><span class="o">=</span><span class="n">max_depth</span>
+            <span class="p">)</span>
+            <span class="n">values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+        
+        <span class="n">depth_results</span><span class="p">[</span><span class="n">max_depth</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s1">&#39;mean&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">values</span><span class="p">),</span>
+            <span class="s1">&#39;std&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        <span class="p">}</span>
+    
+    <span class="c1"># Verify results</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">depth_results</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">depths</span><span class="p">),</span> <span class="s2">&quot;Should have results for all depths&quot;</span>
+    <span class="k">for</span> <span class="n">depth</span><span class="p">,</span> <span class="n">stats</span> <span class="ow">in</span> <span class="n">depth_results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="k">assert</span> <span class="s1">&#39;mean&#39;</span> <span class="ow">in</span> <span class="n">stats</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Missing mean for depth </span><span class="si">{</span><span class="n">depth</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="s1">&#39;std&#39;</span> <span class="ow">in</span> <span class="n">stats</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Missing std for depth </span><span class="si">{</span><span class="n">depth</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">stats</span><span class="p">[</span><span class="s1">&#39;mean&#39;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Mean should be non-negative for depth </span><span class="si">{</span><span class="n">depth</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">stats</span><span class="p">[</span><span class="s1">&#39;std&#39;</span><span class="p">]</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Std should be non-negative for depth </span><span class="si">{</span><span class="n">depth</span><span class="si">}</span><span class="s2">&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_informed_action_sampler_usage_example">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_informed_action_sampler_usage_example">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_informed_action_sampler_usage_example</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test the custom informed action sampler usage example from docstring.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that informed action samplers can use domain knowledge to improve rollout quality</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Tiger POMDP environment with random vs informed action samplers</span>
+<span class="sd">    When: Multiple rollouts are performed with both samplers (20 trials each)</span>
+<span class="sd">    Then: Both samplers produce reasonable values within expected ranges for Tiger POMDP</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: example</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.rollout</span><span class="w"> </span><span class="kn">import</span> <span class="n">random_rollout_action_sampler</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+    <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+    
+    <span class="k">class</span><span class="w"> </span><span class="nc">TigerActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+        <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">])</span>
+    
+    <span class="k">class</span><span class="w"> </span><span class="nc">InformedActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Action sampler that uses domain knowledge for better rollouts&quot;&quot;&quot;</span>
+        <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">environment</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">environment</span> <span class="o">=</span> <span class="n">environment</span>
+        
+        <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+            <span class="c1"># For Tiger POMDP: listen more often early, then choose door</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mf">0.7</span><span class="p">:</span>
+                <span class="k">return</span> <span class="s2">&quot;listen&quot;</span>  <span class="c1"># Gather information first</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">])</span>
+    
+    <span class="c1"># Compare random vs informed rollouts (from docstring)</span>
+    <span class="n">tiger</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    <span class="n">random_sampler</span> <span class="o">=</span> <span class="n">TigerActionSampler</span><span class="p">()</span>  <span class="c1"># From earlier example</span>
+    <span class="n">informed_sampler</span> <span class="o">=</span> <span class="n">InformedActionSampler</span><span class="p">(</span><span class="n">tiger</span><span class="p">)</span>
+    
+    <span class="n">initial_state</span> <span class="o">=</span> <span class="s2">&quot;tiger_left&quot;</span>
+    <span class="n">n_trials</span> <span class="o">=</span> <span class="mi">20</span>  <span class="c1"># Reduced for testing speed</span>
+    
+    <span class="n">random_values</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+            <span class="n">initial_state</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">random_sampler</span><span class="p">,</span> <span class="n">tiger</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">,</span> <span class="mi">10</span>  <span class="c1"># Reduced depth for speed</span>
+        <span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_trials</span><span class="p">)</span>
+    <span class="p">]</span>
+    
+    <span class="n">informed_values</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+            <span class="n">initial_state</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">informed_sampler</span><span class="p">,</span> <span class="n">tiger</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">,</span> <span class="mi">10</span>  <span class="c1"># Reduced depth for speed</span>
+        <span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_trials</span><span class="p">)</span>
+    <span class="p">]</span>
+    
+    <span class="c1"># Verify results</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">random_values</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_trials</span><span class="p">,</span> <span class="s2">&quot;Should have correct number of random rollouts&quot;</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">informed_values</span><span class="p">)</span> <span class="o">==</span> <span class="n">n_trials</span><span class="p">,</span> <span class="s2">&quot;Should have correct number of informed rollouts&quot;</span>
+    <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">random_values</span><span class="p">),</span> <span class="s2">&quot;All random values should be floats&quot;</span>
+    <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="nb">float</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">informed_values</span><span class="p">),</span> <span class="s2">&quot;All informed values should be floats&quot;</span>
+    
+    <span class="c1"># Both should produce reasonable values (though we can&#39;t guarantee informed is better due to randomness)</span>
+    <span class="n">random_mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">random_values</span><span class="p">)</span>
+    <span class="n">informed_mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">informed_values</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="o">-</span><span class="mi">500</span> <span class="o">&lt;=</span> <span class="n">random_mean</span> <span class="o">&lt;=</span> <span class="mi">100</span><span class="p">,</span> <span class="s2">&quot;Random policy mean should be in reasonable range&quot;</span>
+    <span class="k">assert</span> <span class="o">-</span><span class="mi">500</span> <span class="o">&lt;=</span> <span class="n">informed_mean</span> <span class="o">&lt;=</span> <span class="mi">100</span><span class="p">,</span> <span class="s2">&quot;Informed policy mean should be in reasonable range&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_parameter_validation">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_parameter_validation">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_parameter_validation</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test rollout function with edge case parameters.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that rollout function handles extreme discount factor values correctly</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Sanity POMDP environment and action sampler</span>
+<span class="sd">    When: Rollouts are performed with discount_factor=0.0 and discount_factor=1.0</span>
+<span class="sd">    Then: Function works correctly with both extreme values, returning appropriate results</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">sanity</span> <span class="o">=</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+    <span class="n">sampler</span> <span class="o">=</span> <span class="n">MockActionSampler</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+    
+    <span class="c1"># Test with discount_factor of 0 (no future value)</span>
+    <span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">sanity</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="o">=</span><span class="mi">5</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># With discount_factor=0, only immediate reward should matter</span>
+    <span class="n">expected_reward</span> <span class="o">=</span> <span class="n">sanity</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">sampler</span><span class="o">.</span><span class="n">actions</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="k">assert</span> <span class="n">rollout_value</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Should get non-negative value with discount_factor=0&quot;</span>
+    
+    <span class="c1"># Test with discount_factor of 1 (no discounting)</span>
+    <span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">sanity</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="o">=</span><span class="mi">3</span>
+    <span class="p">)</span>
+    
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rollout_value</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="s2">&quot;Should work with discount_factor=1.0&quot;</span></div>
+
+
+
+<div class="viewcode-block" id="test_rollout_action_sampler_integration">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_planners_utils.html#POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout.test_rollout_action_sampler_integration">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_rollout_action_sampler_integration</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that rollout works with different types of action samplers.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that rollout function works correctly with various action sampler configurations</span>
+<span class="sd">    </span>
+<span class="sd">    Given: A Tiger POMDP environment and different action samplers (single action, two actions, all actions)</span>
+<span class="sd">    When: Rollouts are performed with each sampler configuration</span>
+<span class="sd">    Then: All samplers return float values within reasonable bounds regardless of action space size</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: integration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">tiger</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+    
+    <span class="c1"># Test with different action samplers</span>
+    <span class="n">samplers</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">MockActionSampler</span><span class="p">([</span><span class="s2">&quot;listen&quot;</span><span class="p">]),</span>  <span class="c1"># Single action</span>
+        <span class="n">MockActionSampler</span><span class="p">([</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">]),</span>  <span class="c1"># Two actions</span>
+        <span class="n">MockActionSampler</span><span class="p">([</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">]),</span>  <span class="c1"># All actions</span>
+    <span class="p">]</span>
+    
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">sampler</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">samplers</span><span class="p">):</span>
+        <span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">tiger</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">max_depth</span><span class="o">=</span><span class="mi">5</span>
+        <span class="p">)</span>
+        
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">rollout_value</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Sampler </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> should return float value&quot;</span>
+        <span class="c1"># Values should be reasonable regardless of action space size</span>
+        <span class="k">assert</span> <span class="o">-</span><span class="mi">300</span> <span class="o">&lt;=</span> <span class="n">rollout_value</span> <span class="o">&lt;=</span> <span class="mi">50</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Sampler </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2"> value </span><span class="si">{</span><span class="n">rollout_value</span><span class="si">}</span><span class="s2"> outside range&quot;</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

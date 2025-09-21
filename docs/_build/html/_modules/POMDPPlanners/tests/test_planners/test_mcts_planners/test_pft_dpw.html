@@ -1,0 +1,717 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.pft_dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">PFT_DPW</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">action_progressive_widening</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContinuousLightDarkPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBelief</span><span class="p">,</span> <span class="n">get_initial_belief</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">BeliefNode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.environment</span><span class="w"> </span><span class="kn">import</span> <span class="n">Environment</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.action_samplers</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnitCircleActionSampler</span>
+
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="environment">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.environment">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">environment</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">ContinuousLightDarkPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="action_sampler">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.action_sampler">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">action_sampler</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="planner">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.planner">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">planner</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">action_sampler</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_pft_dpw&quot;</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+        <span class="n">min_samples_per_node</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">min_visit_count_per_action</span><span class="o">=</span><span class="mi">1</span>
+    <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="initial_belief">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.initial_belief">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">initial_belief</span><span class="p">(</span><span class="n">environment</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">get_initial_belief</span><span class="p">(</span>
+        <span class="n">pomdp</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">n_particles</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>  <span class="c1"># Small number of particles for testing</span>
+        <span class="n">resampling</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">)</span> </div>
+
+
+<div class="viewcode-block" id="test_initialization">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_initialization">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_initialization</span><span class="p">(</span><span class="n">planner</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that the planner initializes correctly with valid parameters.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates proper initialization of PFT_DPW planner with all configuration parameters</span>
+<span class="sd">    </span>
+<span class="sd">    Given: PFT_DPW constructor with depth=5, progressive widening parameters (k_a=1.0, alpha_a=0.5, k_o=1.0, alpha_o=0.5), and sampling settings</span>
+<span class="sd">    When: Planner object is initialized with these parameters</span>
+<span class="sd">    Then: All attributes are correctly set and accessible (depth, k_a, alpha_a, k_o, alpha_o, exploration_constant)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="n">planner</span><span class="o">.</span><span class="n">depth</span> <span class="o">==</span> <span class="mi">5</span>
+    <span class="k">assert</span> <span class="n">planner</span><span class="o">.</span><span class="n">min_samples_per_node</span> <span class="o">==</span> <span class="mi">10</span>
+    <span class="k">assert</span> <span class="n">planner</span><span class="o">.</span><span class="n">min_visit_count_per_action</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="k">assert</span> <span class="n">planner</span><span class="o">.</span><span class="n">k_a</span> <span class="o">==</span> <span class="mf">1.0</span>
+    <span class="k">assert</span> <span class="n">planner</span><span class="o">.</span><span class="n">alpha_a</span> <span class="o">==</span> <span class="mf">0.5</span>
+    <span class="k">assert</span> <span class="n">planner</span><span class="o">.</span><span class="n">k_o</span> <span class="o">==</span> <span class="mf">1.0</span>
+    <span class="k">assert</span> <span class="n">planner</span><span class="o">.</span><span class="n">alpha_o</span> <span class="o">==</span> <span class="mf">0.5</span>
+    <span class="k">assert</span> <span class="n">planner</span><span class="o">.</span><span class="n">exploration_constant</span> <span class="o">==</span> <span class="mf">1.0</span></div>
+
+
+<div class="viewcode-block" id="test_action_sampler">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_action_sampler">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_action_sampler</span><span class="p">(</span><span class="n">action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that the action sampler returns valid actions.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates sampling behavior for action r</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Configured object with sampling capabilities</span>
+<span class="sd">    When: Sample method is called</span>
+<span class="sd">    Then: Valid samples are returned according to distribution</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">action</span> <span class="o">=</span> <span class="n">action_sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mf">1.0</span>  <span class="c1"># Action should be within unit circle</span></div>
+
+
+<div class="viewcode-block" id="test_action_progressive_widening">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_action_progressive_widening">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_action_progressive_widening</span><span class="p">(</span><span class="n">planner</span><span class="p">,</span> <span class="n">initial_belief</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that action progressive widening creates new action nodes when needed.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that progressive widening correctly expands action nodes in belief tree according to DPW algorithm</span>
+<span class="sd">    </span>
+<span class="sd">    Given: BeliefNode with initial belief and PFT_DPW planner with progressive widening parameters (alpha_a=0.5, k_a=1.0)</span>
+<span class="sd">    When: action_progressive_widening is called multiple times on the same belief node</span>
+<span class="sd">    Then: New action nodes are progressively added to belief node children (1 after first call, 2 after second call)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">initial_belief</span><span class="p">)</span>
+    
+    <span class="c1"># First call should create a new action node</span>
+    <span class="n">action_node1</span> <span class="o">=</span> <span class="n">action_progressive_widening</span><span class="p">(</span>
+        <span class="n">belief_node</span><span class="o">=</span><span class="n">belief_node</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="n">planner</span><span class="o">.</span><span class="n">alpha_a</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">planner</span><span class="o">.</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="n">planner</span><span class="o">.</span><span class="n">exploration_constant</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="n">planner</span><span class="o">.</span><span class="n">k_a</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief_node</span><span class="o">.</span><span class="n">children</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    
+    <span class="c1"># Second call should create another action node</span>
+    <span class="n">action_node2</span> <span class="o">=</span> <span class="n">action_progressive_widening</span><span class="p">(</span>
+        <span class="n">belief_node</span><span class="o">=</span><span class="n">belief_node</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="n">planner</span><span class="o">.</span><span class="n">alpha_a</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">planner</span><span class="o">.</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="n">planner</span><span class="o">.</span><span class="n">exploration_constant</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="n">planner</span><span class="o">.</span><span class="n">k_a</span>
+    <span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief_node</span><span class="o">.</span><span class="n">children</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span></div>
+
+
+<div class="viewcode-block" id="test_simulate_path">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_simulate_path">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_simulate_path</span><span class="p">(</span><span class="n">planner</span><span class="p">,</span> <span class="n">initial_belief</span><span class="p">,</span> <span class="n">environment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that path simulation updates node statistics correctly.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that simulate path method correctly updates tree node statistics during MCTS simulation</span>
+<span class="sd">    </span>
+<span class="sd">    Given: BeliefNode with initial belief, PFT_DPW planner, and ContinuousLightDarkPOMDP environment with grid_size and reward bounds</span>
+<span class="sd">    When: _simulate_path is called with depth=0 to run a single simulation step</span>
+<span class="sd">    Then: Node visit count increases, node is no longer leaf, and return value is within expected reward range (-grid_size*sqrt(2)-10 to 10)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">initial_belief</span><span class="p">)</span>
+    
+    <span class="c1"># Run a simulation</span>
+    <span class="n">return_value</span> <span class="o">=</span> <span class="n">planner</span><span class="o">.</span><span class="n">_simulate_path</span><span class="p">(</span><span class="n">belief_node</span><span class="o">=</span><span class="n">belief_node</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    
+    <span class="c1"># Verify node statistics were updated</span>
+    <span class="k">assert</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">is_leaf</span>
+    
+    <span class="c1"># Verify return value is within expected range</span>
+    <span class="c1"># For LightDarkPOMDP, rewards are typically between -10 (obstacle hit) and 10 (goal reached)</span>
+    <span class="k">assert</span> <span class="n">return_value</span> <span class="o">&gt;=</span> <span class="p">(</span><span class="o">-</span><span class="mi">10</span> <span class="o">-</span> <span class="n">environment</span><span class="o">.</span><span class="n">grid_size</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span> <span class="o">*</span> <span class="mi">5</span>  <span class="c1"># Minimum possible reward</span>
+    <span class="k">assert</span> <span class="n">return_value</span> <span class="o">&lt;=</span> <span class="mi">10</span>  <span class="c1"># Maximum possible reward</span></div>
+
+
+
+<span class="c1"># Config ID Tests</span>
+
+<div class="viewcode-block" id="test_pft_dpw_config_id_consistency_identical_parameters">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_config_id_consistency_identical_parameters">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_pft_dpw_config_id_consistency_identical_parameters</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that config_id is consistent for identical PFT_DPW parameters.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that PFT_DPW with identical parameters produces identical config_id</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Two PFT_DPW instances with identical parameters</span>
+<span class="sd">    When: config_id is accessed on both instances</span>
+<span class="sd">    Then: Both instances return the same config_id</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create two PFT_DPW instances with identical parameters</span>
+    <span class="n">pft_dpw1</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Test1&quot;</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span><span class="p">,</span>
+        <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">pft_dpw2</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Test1&quot;</span><span class="p">,</span>  <span class="c1"># Same name</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span><span class="p">,</span>
+        <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Config IDs should be identical</span>
+    <span class="n">config_id1</span> <span class="o">=</span> <span class="n">pft_dpw1</span><span class="o">.</span><span class="n">config_id</span>
+    <span class="n">config_id2</span> <span class="o">=</span> <span class="n">pft_dpw2</span><span class="o">.</span><span class="n">config_id</span>
+
+    <span class="k">assert</span> <span class="n">config_id1</span> <span class="o">==</span> <span class="n">config_id2</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config_id1</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">config_id1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span></div>
+
+
+
+<div class="viewcode-block" id="test_pft_dpw_config_id_different_action_sampler_values">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_config_id_different_action_sampler_values">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_pft_dpw_config_id_different_action_sampler_values</span><span class="p">(</span><span class="n">environment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that config_id changes when action sampler is initialized with different values.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that config_id changes when action sampler parameters differ</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Two PFT_DPW instances with action samplers having different max_action_magnitude</span>
+<span class="sd">    When: config_id is accessed on both instances</span>
+<span class="sd">    Then: config_id values are different</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create action samplers with different max_action_magnitude</span>
+    <span class="n">sampler1</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+    <span class="n">sampler2</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+
+    <span class="n">pft_dpw1</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Test&quot;</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">sampler1</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span><span class="p">,</span>
+        <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">pft_dpw2</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Test&quot;</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">sampler2</span><span class="p">,</span>  <span class="c1"># Different sampler parameters</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span><span class="p">,</span>
+        <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">config_id1</span> <span class="o">=</span> <span class="n">pft_dpw1</span><span class="o">.</span><span class="n">config_id</span>
+    <span class="n">config_id2</span> <span class="o">=</span> <span class="n">pft_dpw2</span><span class="o">.</span><span class="n">config_id</span>
+
+    <span class="k">assert</span> <span class="n">config_id1</span> <span class="o">!=</span> <span class="n">config_id2</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config_id1</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config_id2</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">config_id1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">config_id2</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span></div>
+
+
+
+<div class="viewcode-block" id="test_pft_dpw_config_id_different_planner_parameters">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_config_id_different_planner_parameters">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_pft_dpw_config_id_different_planner_parameters</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that config_id changes when PFT_DPW planner parameters differ.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that config_id changes when core PFT_DPW parameters differ</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Two PFT_DPW instances with different exploration_constant values</span>
+<span class="sd">    When: config_id is accessed on both instances</span>
+<span class="sd">    Then: config_id values are different</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pft_dpw1</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Test&quot;</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>  <span class="c1"># Different exploration constant</span>
+        <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">pft_dpw2</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Test&quot;</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>  <span class="c1"># Different exploration constant</span>
+        <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="n">config_id1</span> <span class="o">=</span> <span class="n">pft_dpw1</span><span class="o">.</span><span class="n">config_id</span>
+    <span class="n">config_id2</span> <span class="o">=</span> <span class="n">pft_dpw2</span><span class="o">.</span><span class="n">config_id</span>
+
+    <span class="k">assert</span> <span class="n">config_id1</span> <span class="o">!=</span> <span class="n">config_id2</span></div>
+
+
+
+<div class="viewcode-block" id="test_pft_dpw_config_id_consistency_across_evaluations">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_config_id_consistency_across_evaluations">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_pft_dpw_config_id_consistency_across_evaluations</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that config_id remains consistent across different policy evaluations.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that config_id is stable across multiple accesses and policy actions</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Single PFT_DPW instance and initial belief</span>
+<span class="sd">    When: config_id is accessed before and after policy actions</span>
+<span class="sd">    Then: config_id remains identical across all evaluations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: integration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pft_dpw</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>  <span class="c1"># Reduced for testing</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Consistency_Test&quot;</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span><span class="p">,</span>
+        <span class="n">n_simulations</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>  <span class="c1"># Reduced for testing</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Get initial config_id</span>
+    <span class="n">initial_config_id</span> <span class="o">=</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">config_id</span>
+
+    <span class="c1"># Create initial belief and perform policy actions</span>
+    <span class="n">initial_belief</span> <span class="o">=</span> <span class="n">get_initial_belief</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>
+
+    <span class="c1"># Perform multiple policy evaluations</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+        <span class="n">action</span><span class="p">,</span> <span class="n">run_data</span> <span class="o">=</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">initial_belief</span><span class="p">)</span>
+        
+        <span class="c1"># Check config_id remains the same</span>
+        <span class="n">current_config_id</span> <span class="o">=</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="k">assert</span> <span class="n">current_config_id</span> <span class="o">==</span> <span class="n">initial_config_id</span>
+        
+        <span class="c1"># Verify the action and run_data are valid</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+        <span class="k">assert</span> <span class="n">run_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+    <span class="c1"># Final check</span>
+    <span class="n">final_config_id</span> <span class="o">=</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">config_id</span>
+    <span class="k">assert</span> <span class="n">final_config_id</span> <span class="o">==</span> <span class="n">initial_config_id</span></div>
+
+
+
+<div class="viewcode-block" id="test_pft_dpw_config_id_action_sampler_attribute_changes">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_config_id_action_sampler_attribute_changes">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_pft_dpw_config_id_action_sampler_attribute_changes</span><span class="p">(</span><span class="n">environment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test config_id changes when action sampler attributes are modified.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that modifying action sampler attributes affects config_id</span>
+<span class="sd">    </span>
+<span class="sd">    Given: PFT_DPW instance with modifiable action sampler</span>
+<span class="sd">    When: Action sampler attributes are changed</span>
+<span class="sd">    Then: config_id reflects the change</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create initial action sampler and PFT_DPW</span>
+    <span class="n">action_sampler</span> <span class="o">=</span> <span class="n">UnitCircleActionSampler</span><span class="p">(</span><span class="n">max_action_magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">)</span>
+    
+    <span class="n">pft_dpw</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Attribute_Test&quot;</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span><span class="p">,</span>
+        <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Get initial config_id</span>
+    <span class="n">initial_config_id</span> <span class="o">=</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">config_id</span>
+
+    <span class="c1"># Modify the action sampler&#39;s attribute</span>
+    <span class="n">action_sampler</span><span class="o">.</span><span class="n">max_action_magnitude</span> <span class="o">=</span> <span class="mf">2.0</span>
+
+    <span class="c1"># Config ID should be different after modification</span>
+    <span class="n">modified_config_id</span> <span class="o">=</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">config_id</span>
+    <span class="k">assert</span> <span class="n">modified_config_id</span> <span class="o">!=</span> <span class="n">initial_config_id</span>
+
+    <span class="c1"># Restore original value</span>
+    <span class="n">action_sampler</span><span class="o">.</span><span class="n">max_action_magnitude</span> <span class="o">=</span> <span class="mf">1.0</span>
+
+    <span class="c1"># Config ID should return to original</span>
+    <span class="n">restored_config_id</span> <span class="o">=</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">config_id</span>
+    <span class="k">assert</span> <span class="n">restored_config_id</span> <span class="o">==</span> <span class="n">initial_config_id</span></div>
+
+
+
+<div class="viewcode-block" id="test_pft_dpw_timeout_configuration">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_timeout_configuration">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_pft_dpw_timeout_configuration</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that PFT_DPW works correctly with time_out_in_seconds instead of n_simulations.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that PFT_DPW can be configured with time-based termination instead of simulation count</span>
+<span class="sd">    </span>
+<span class="sd">    Given: PFT_DPW constructor with time_out_in_seconds=2 and no n_simulations</span>
+<span class="sd">    When: PFT_DPW instance is created with timeout configuration</span>
+<span class="sd">    Then: Instance is created successfully with correct timeout value and n_simulations is None</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pft_dpw</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Timeout_Test&quot;</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>  <span class="c1"># Use timeout instead of n_simulations</span>
+        <span class="n">min_samples_per_node</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">min_visit_count_per_action</span><span class="o">=</span><span class="mi">1</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Verify timeout configuration is set correctly</span>
+    <span class="k">assert</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">time_out_in_seconds</span> <span class="o">==</span> <span class="mi">2</span>
+    <span class="k">assert</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">n_simulations</span> <span class="ow">is</span> <span class="kc">None</span>
+    
+    <span class="c1"># Verify other parameters are set correctly</span>
+    <span class="k">assert</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">depth</span> <span class="o">==</span> <span class="mi">5</span>
+    <span class="k">assert</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">k_a</span> <span class="o">==</span> <span class="mf">1.0</span>
+    <span class="k">assert</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">alpha_a</span> <span class="o">==</span> <span class="mf">0.5</span>
+    <span class="k">assert</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">k_o</span> <span class="o">==</span> <span class="mf">1.0</span>
+    <span class="k">assert</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">alpha_o</span> <span class="o">==</span> <span class="mf">0.5</span>
+    <span class="k">assert</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">exploration_constant</span> <span class="o">==</span> <span class="mf">1.0</span></div>
+
+
+
+<div class="viewcode-block" id="test_pft_dpw_mutual_exclusivity_constraint">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_mutual_exclusivity_constraint">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_pft_dpw_mutual_exclusivity_constraint</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that PFT_DPW enforces mutual exclusivity between time_out_in_seconds and n_simulations.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that PFT_DPW raises ValueError when both time_out_in_seconds and n_simulations are provided</span>
+<span class="sd">    </span>
+<span class="sd">    Given: PFT_DPW constructor with both time_out_in_seconds=2 and n_simulations=100</span>
+<span class="sd">    When: PFT_DPW instance creation is attempted with both parameters</span>
+<span class="sd">    Then: ValueError is raised with appropriate error message</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="n">pytest</span><span class="o">.</span><span class="n">raises</span><span class="p">(</span><span class="ne">ValueError</span><span class="p">,</span> <span class="n">match</span><span class="o">=</span><span class="s2">&quot;Cannot specify both n_simulations and time_out_in_seconds&quot;</span><span class="p">):</span>
+        <span class="n">PFT_DPW</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Mutual_Exclusivity_Test&quot;</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+            <span class="n">k_a</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+            <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+            <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>  <span class="c1"># Both parameters provided</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span>      <span class="c1"># Both parameters provided</span>
+            <span class="n">min_samples_per_node</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+            <span class="n">min_visit_count_per_action</span><span class="o">=</span><span class="mi">1</span>
+        <span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="test_pft_dpw_timeout_policy_execution">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_timeout_policy_execution">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_pft_dpw_timeout_policy_execution</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that PFT_DPW with timeout configuration can execute policy actions.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that PFT_DPW configured with timeout can successfully execute policy actions within time limit</span>
+<span class="sd">    </span>
+<span class="sd">    Given: PFT_DPW instance with time_out_in_seconds=1 and initial belief</span>
+<span class="sd">    When: Policy action is requested</span>
+<span class="sd">    Then: Action is returned successfully within timeout period</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: integration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">pft_dpw</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Reduced depth for faster execution</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Timeout_Execution_Test&quot;</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span>  <span class="c1"># Short timeout for testing</span>
+        <span class="n">min_samples_per_node</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>  <span class="c1"># Reduced for faster execution</span>
+        <span class="n">min_visit_count_per_action</span><span class="o">=</span><span class="mi">1</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Create initial belief</span>
+    <span class="n">initial_belief</span> <span class="o">=</span> <span class="n">get_initial_belief</span><span class="p">(</span>
+        <span class="n">pomdp</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">n_particles</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>  <span class="c1"># Small number of particles for testing</span>
+        <span class="n">resampling</span><span class="o">=</span><span class="kc">True</span>
+    <span class="p">)</span>
+    
+    <span class="c1"># Execute policy action</span>
+    <span class="n">action</span><span class="p">,</span> <span class="n">run_data</span> <span class="o">=</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">initial_belief</span><span class="p">)</span>
+    
+    <span class="c1"># Verify action is returned successfully</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="nb">list</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">2</span><span class="p">,)</span>
+    <span class="k">assert</span> <span class="n">run_data</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+    
+    <span class="c1"># Verify timeout configuration is preserved</span>
+    <span class="k">assert</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">time_out_in_seconds</span> <span class="o">==</span> <span class="mi">1</span>
+    <span class="k">assert</span> <span class="n">pft_dpw</span><span class="o">.</span><span class="n">n_simulations</span> <span class="ow">is</span> <span class="kc">None</span></div>
+
+
+
+<div class="viewcode-block" id="test_pft_dpw_config_id_timeout_consistency">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_pft_dpw.test_pft_dpw_config_id_timeout_consistency">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_pft_dpw_config_id_timeout_consistency</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">action_sampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that config_id is consistent for PFT_DPW with timeout configuration.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that PFT_DPW with identical timeout parameters produces identical config_id</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Two PFT_DPW instances with identical parameters including time_out_in_seconds=3</span>
+<span class="sd">    When: config_id is accessed on both instances</span>
+<span class="sd">    Then: Both instances return the same config_id</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># Create two PFT_DPW instances with identical timeout parameters</span>
+    <span class="n">pft_dpw1</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Timeout_Config_Test&quot;</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span><span class="p">,</span>
+        <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Use timeout instead of n_simulations</span>
+    <span class="p">)</span>
+
+    <span class="n">pft_dpw2</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+        <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Timeout_Config_Test&quot;</span><span class="p">,</span>  <span class="c1"># Same name</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">k_a</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span><span class="p">,</span>
+        <span class="n">time_out_in_seconds</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>  <span class="c1"># Same timeout value</span>
+    <span class="p">)</span>
+
+    <span class="c1"># Config IDs should be identical</span>
+    <span class="n">config_id1</span> <span class="o">=</span> <span class="n">pft_dpw1</span><span class="o">.</span><span class="n">config_id</span>
+    <span class="n">config_id2</span> <span class="o">=</span> <span class="n">pft_dpw2</span><span class="o">.</span><span class="n">config_id</span>
+
+    <span class="k">assert</span> <span class="n">config_id1</span> <span class="o">==</span> <span class="n">config_id2</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config_id1</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">config_id1</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    
+    <span class="c1"># Verify timeout configuration is set correctly</span>
+    <span class="k">assert</span> <span class="n">pft_dpw1</span><span class="o">.</span><span class="n">time_out_in_seconds</span> <span class="o">==</span> <span class="mi">3</span>
+    <span class="k">assert</span> <span class="n">pft_dpw2</span><span class="o">.</span><span class="n">time_out_in_seconds</span> <span class="o">==</span> <span class="mi">3</span>
+    <span class="k">assert</span> <span class="n">pft_dpw1</span><span class="o">.</span><span class="n">n_simulations</span> <span class="ow">is</span> <span class="kc">None</span>
+    <span class="k">assert</span> <span class="n">pft_dpw2</span><span class="o">.</span><span class="n">n_simulations</span> <span class="ow">is</span> <span class="kc">None</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

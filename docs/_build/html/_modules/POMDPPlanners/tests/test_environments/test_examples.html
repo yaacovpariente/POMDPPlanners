@@ -1,0 +1,527 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_environments.test_examples &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_environments.test_examples</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_environments.test_examples</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="sd">&quot;&quot;&quot;Test script to verify all usage examples in environments directory work correctly.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">traceback</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+
+<span class="c1"># Add the current directory to Python path for relative imports</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)))</span>
+
+<div class="viewcode-block" id="test_sanity_pomdp_examples">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_examples.html#POMDPPlanners.tests.test_environments.test_examples.test_sanity_pomdp_examples">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_sanity_pomdp_examples</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test all Sanity POMDP supporting class examples.&quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing Sanity POMDP examples...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.sanity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">SanityStateTransitionModel</span><span class="p">,</span> <span class="n">SanityObservationModel</span><span class="p">,</span> 
+            <span class="n">SanityInitialStateDist</span><span class="p">,</span> <span class="n">SanityInitialObservationDist</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Test SanityStateTransitionModel</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing SanityStateTransitionModel...&quot;</span><span class="p">)</span>
+        <span class="n">transition_model</span> <span class="o">=</span> <span class="n">SanityStateTransitionModel</span><span class="p">(</span><span class="n">state</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">next_state</span> <span class="o">=</span> <span class="n">transition_model</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">prob</span> <span class="o">=</span> <span class="n">transition_model</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">prob_wrong</span> <span class="o">=</span> <span class="n">transition_model</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="n">next_state</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected 0, got </span><span class="si">{</span><span class="n">next_state</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">prob</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected [1.0], got </span><span class="si">{</span><span class="n">prob</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">prob_wrong</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected [0.0], got </span><span class="si">{</span><span class="n">prob_wrong</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="c1"># Test SanityObservationModel</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing SanityObservationModel...&quot;</span><span class="p">)</span>
+        <span class="n">obs_model</span> <span class="o">=</span> <span class="n">SanityObservationModel</span><span class="p">(</span><span class="n">next_state</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">observation</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">prob_correct</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">prob_wrong</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="n">observation</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected 0, got </span><span class="si">{</span><span class="n">observation</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">prob_correct</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected [1.0], got </span><span class="si">{</span><span class="n">prob_correct</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">prob_wrong</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected [0.0], got </span><span class="si">{</span><span class="n">prob_wrong</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="c1"># Test SanityInitialStateDist</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing SanityInitialStateDist...&quot;</span><span class="p">)</span>
+        <span class="n">initial_dist</span> <span class="o">=</span> <span class="n">SanityInitialStateDist</span><span class="p">()</span>
+        <span class="n">initial_state</span> <span class="o">=</span> <span class="n">initial_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">states</span> <span class="o">=</span> <span class="n">initial_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+        <span class="n">prob_good</span> <span class="o">=</span> <span class="n">initial_dist</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">prob_bad</span> <span class="o">=</span> <span class="n">initial_dist</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="n">initial_state</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected 0, got </span><span class="si">{</span><span class="n">initial_state</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">s</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">states</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected all 0s, got </span><span class="si">{</span><span class="n">states</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">prob_good</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected [1.0], got </span><span class="si">{</span><span class="n">prob_good</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">prob_bad</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected [0.0], got </span><span class="si">{</span><span class="n">prob_bad</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="c1"># Test SanityInitialObservationDist</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing SanityInitialObservationDist...&quot;</span><span class="p">)</span>
+        <span class="n">initial_obs_dist</span> <span class="o">=</span> <span class="n">SanityInitialObservationDist</span><span class="p">()</span>
+        <span class="n">initial_obs</span> <span class="o">=</span> <span class="n">initial_obs_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">observations</span> <span class="o">=</span> <span class="n">initial_obs_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+        <span class="n">prob</span> <span class="o">=</span> <span class="n">initial_obs_dist</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="n">initial_obs</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected 0, got </span><span class="si">{</span><span class="n">initial_obs</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">o</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">o</span> <span class="ow">in</span> <span class="n">observations</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected all 0s, got </span><span class="si">{</span><span class="n">observations</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">prob</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected [1.0], got </span><span class="si">{</span><span class="n">prob</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ Sanity POMDP examples passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ Sanity POMDP examples failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="test_tiger_pomdp_examples">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_examples.html#POMDPPlanners.tests.test_environments.test_examples.test_tiger_pomdp_examples">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_tiger_pomdp_examples</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test all Tiger POMDP supporting class examples.&quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing Tiger POMDP examples...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">TigerStateTransition</span><span class="p">,</span> <span class="n">TigerObservation</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Test TigerStateTransition for listening</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing TigerStateTransition (listen)...&quot;</span><span class="p">)</span>
+        <span class="n">transition_listen</span> <span class="o">=</span> <span class="n">TigerStateTransition</span><span class="p">(</span><span class="n">state</span><span class="o">=</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;listen&quot;</span><span class="p">)</span>
+        <span class="n">next_state_listen</span> <span class="o">=</span> <span class="n">transition_listen</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">prob_same</span> <span class="o">=</span> <span class="n">transition_listen</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="n">next_state_listen</span> <span class="o">==</span> <span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected tiger_left, got </span><span class="si">{</span><span class="n">next_state_listen</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">prob_same</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected [1.0], got </span><span class="si">{</span><span class="n">prob_same</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="c1"># Test TigerStateTransition for opening door</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing TigerStateTransition (open door)...&quot;</span><span class="p">)</span>
+        <span class="n">transition_open</span> <span class="o">=</span> <span class="n">TigerStateTransition</span><span class="p">(</span><span class="n">state</span><span class="o">=</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;open_left&quot;</span><span class="p">)</span>
+        <span class="n">next_state_open</span> <span class="o">=</span> <span class="n">transition_open</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">prob_random</span> <span class="o">=</span> <span class="n">transition_open</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="n">next_state_open</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;tiger_right&quot;</span><span class="p">],</span> <span class="sa">f</span><span class="s2">&quot;Unexpected state: </span><span class="si">{</span><span class="n">next_state_open</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">prob_random</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">0.5</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected [0.5], got </span><span class="si">{</span><span class="n">prob_random</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="c1"># Test TigerObservation for listening</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing TigerObservation (listen)...&quot;</span><span class="p">)</span>
+        <span class="n">obs_listen</span> <span class="o">=</span> <span class="n">TigerObservation</span><span class="p">(</span><span class="n">next_state</span><span class="o">=</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;listen&quot;</span><span class="p">)</span>
+        <span class="n">observation</span> <span class="o">=</span> <span class="n">obs_listen</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">prob_correct</span> <span class="o">=</span> <span class="n">obs_listen</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="s2">&quot;hear_left&quot;</span><span class="p">])</span>
+        <span class="n">prob_wrong</span> <span class="o">=</span> <span class="n">obs_listen</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="s2">&quot;hear_right&quot;</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="n">observation</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;hear_left&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_right&quot;</span><span class="p">],</span> <span class="sa">f</span><span class="s2">&quot;Unexpected observation: </span><span class="si">{</span><span class="n">observation</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">prob_correct</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">0.85</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected [0.85], got </span><span class="si">{</span><span class="n">prob_correct</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">prob_wrong</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">0.15</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected [0.15], got </span><span class="si">{</span><span class="n">prob_wrong</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="c1"># Test TigerObservation for opening door</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing TigerObservation (open door)...&quot;</span><span class="p">)</span>
+        <span class="n">obs_open</span> <span class="o">=</span> <span class="n">TigerObservation</span><span class="p">(</span><span class="n">next_state</span><span class="o">=</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="s2">&quot;open_left&quot;</span><span class="p">)</span>
+        <span class="n">observation_open</span> <span class="o">=</span> <span class="n">obs_open</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">prob_nothing</span> <span class="o">=</span> <span class="n">obs_open</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="s2">&quot;hear_nothing&quot;</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="n">observation_open</span> <span class="o">==</span> <span class="s2">&quot;hear_nothing&quot;</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected hear_nothing, got </span><span class="si">{</span><span class="n">observation_open</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">prob_nothing</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected [1.0], got </span><span class="si">{</span><span class="n">prob_nothing</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ Tiger POMDP examples passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ Tiger POMDP examples failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="test_cartpole_pomdp_examples">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_examples.html#POMDPPlanners.tests.test_environments.test_examples.test_cartpole_pomdp_examples">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_cartpole_pomdp_examples</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test all CartPole POMDP supporting class examples.&quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing CartPole POMDP examples...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.cartpole_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">CartPoleStateTransition</span><span class="p">,</span> <span class="n">CartPoleObservation</span><span class="p">,</span> <span class="n">CartPoleInitialStateDistribution</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Test CartPoleStateTransition</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing CartPoleStateTransition...&quot;</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">transition</span> <span class="o">=</span> <span class="n">CartPoleStateTransition</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">force_mag</span><span class="o">=</span><span class="mf">10.0</span><span class="p">,</span>
+            <span class="n">total_mass</span><span class="o">=</span><span class="mf">1.1</span><span class="p">,</span>
+            <span class="n">polemass_length</span><span class="o">=</span><span class="mf">0.05</span><span class="p">,</span>
+            <span class="n">gravity</span><span class="o">=</span><span class="mf">9.8</span><span class="p">,</span>
+            <span class="n">length</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+            <span class="n">kinematics_integrator</span><span class="o">=</span><span class="s2">&quot;euler&quot;</span><span class="p">,</span>
+            <span class="n">tau</span><span class="o">=</span><span class="mf">0.02</span><span class="p">,</span>
+            <span class="n">masspole</span><span class="o">=</span><span class="mf">0.1</span>
+        <span class="p">)</span>
+        <span class="n">next_state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected ndarray, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected length 4, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="c1"># Test CartPoleObservation</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing CartPoleObservation...&quot;</span><span class="p">)</span>
+        <span class="n">true_state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.05</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1</span><span class="p">])</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">noise_cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">])</span>
+        <span class="n">obs_model</span> <span class="o">=</span> <span class="n">CartPoleObservation</span><span class="p">(</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">true_state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">noise_cov</span><span class="o">=</span><span class="n">noise_cov</span>
+        <span class="p">)</span>
+        <span class="n">observation</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">prob</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="n">observation</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected ndarray, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected length 4, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prob</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)),</span> <span class="sa">f</span><span class="s2">&quot;Expected array or float, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">prob</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="c1"># Test CartPoleInitialStateDistribution</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing CartPoleInitialStateDistribution...&quot;</span><span class="p">)</span>
+        <span class="n">initial_dist</span> <span class="o">=</span> <span class="n">CartPoleInitialStateDistribution</span><span class="p">()</span>
+        <span class="n">initial_state</span> <span class="o">=</span> <span class="n">initial_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">states</span> <span class="o">=</span> <span class="n">initial_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">(</span><span class="n">n_samples</span><span class="o">=</span><span class="mi">3</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">initial_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected ndarray, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">initial_state</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">initial_state</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected length 4, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">initial_state</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">states</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected 3 states, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">states</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">states</span><span class="p">),</span> <span class="s2">&quot;All states should have length 4&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ CartPole POMDP examples passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ CartPole POMDP examples failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="test_mountain_car_pomdp_examples">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_examples.html#POMDPPlanners.tests.test_environments.test_examples.test_mountain_car_pomdp_examples">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_mountain_car_pomdp_examples</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test all Mountain Car POMDP supporting class examples.&quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing Mountain Car POMDP examples...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.mountain_car_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">MountainCarTransition</span><span class="p">,</span> <span class="n">MountainCarObservation</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Test MountainCarTransition</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing MountainCarTransition...&quot;</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">)</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">transition</span> <span class="o">=</span> <span class="n">MountainCarTransition</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">power</span><span class="o">=</span><span class="mf">0.001</span><span class="p">,</span>
+            <span class="n">gravity</span><span class="o">=</span><span class="mf">0.0025</span><span class="p">,</span>
+            <span class="n">max_speed</span><span class="o">=</span><span class="mf">0.07</span><span class="p">,</span>
+            <span class="n">min_position</span><span class="o">=-</span><span class="mf">1.2</span><span class="p">,</span>
+            <span class="n">max_position</span><span class="o">=</span><span class="mf">0.6</span>
+        <span class="p">)</span>
+        <span class="n">next_state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected ndarray, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected length 2, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="c1"># Test MountainCarObservation  </span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing MountainCarObservation...&quot;</span><span class="p">)</span>
+        <span class="n">true_state</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mf">0.45</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">)</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">0.1</span><span class="o">**</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mf">0.01</span><span class="o">**</span><span class="mi">2</span><span class="p">]])</span>
+        <span class="n">obs_model</span> <span class="o">=</span> <span class="n">MountainCarObservation</span><span class="p">(</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">true_state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">cov_matrix</span><span class="o">=</span><span class="n">cov_matrix</span>
+        <span class="p">)</span>
+        <span class="n">observation</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">prob</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="n">observation</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected ndarray, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected length 2, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prob</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)),</span> <span class="sa">f</span><span class="s2">&quot;Expected array or float, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">prob</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ Mountain Car POMDP examples passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ Mountain Car POMDP examples failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="test_push_pomdp_examples">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_examples.html#POMDPPlanners.tests.test_environments.test_examples.test_push_pomdp_examples">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_push_pomdp_examples</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test all Push POMDP supporting class examples.&quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing Push POMDP examples...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.push_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">PushStateTransition</span><span class="p">,</span> <span class="n">PushObservation</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Test PushStateTransition</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing PushStateTransition...&quot;</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">2.5</span><span class="p">,</span> <span class="mf">3.1</span><span class="p">,</span> <span class="mf">8.0</span><span class="p">,</span> <span class="mf">8.0</span><span class="p">])</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;right&quot;</span>
+        <span class="n">transition</span> <span class="o">=</span> <span class="n">PushStateTransition</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+            <span class="n">push_threshold</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">friction_coefficient</span><span class="o">=</span><span class="mf">0.3</span>
+        <span class="p">)</span>
+        <span class="n">next_state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected ndarray, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span> <span class="o">==</span> <span class="mi">6</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected length 6, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="c1"># Test PushObservation</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing PushObservation...&quot;</span><span class="p">)</span>
+        <span class="n">true_state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">2.8</span><span class="p">,</span> <span class="mf">3.2</span><span class="p">,</span> <span class="mf">8.0</span><span class="p">,</span> <span class="mf">8.0</span><span class="p">])</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;right&quot;</span>
+        <span class="n">obs_model</span> <span class="o">=</span> <span class="n">PushObservation</span><span class="p">(</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">true_state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">observation_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="mi">10</span>
+        <span class="p">)</span>
+        <span class="n">observation</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">prob</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected ndarray, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span> <span class="o">==</span> <span class="mi">6</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected length 6, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prob</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected float, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">prob</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ Push POMDP examples passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ Push POMDP examples failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="test_safety_ant_velocity_pomdp_examples">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_examples.html#POMDPPlanners.tests.test_environments.test_examples.test_safety_ant_velocity_pomdp_examples">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_safety_ant_velocity_pomdp_examples</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test all Safety Ant Velocity POMDP supporting class examples.&quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing Safety Ant Velocity POMDP examples...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.safety_ant_velocity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">SafeAntVelocityStateTransition</span><span class="p">,</span> <span class="n">SafeAntVelocityObservation</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Test SafeAntVelocityStateTransition</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing SafeAntVelocityStateTransition...&quot;</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">])</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="mi">2</span>
+        <span class="n">transition</span> <span class="o">=</span> <span class="n">SafeAntVelocityStateTransition</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">dt</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+            <span class="n">mass</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">damping</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+            <span class="n">max_force</span><span class="o">=</span><span class="mf">1.0</span>
+        <span class="p">)</span>
+        <span class="n">next_state</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">new_pos</span> <span class="o">=</span> <span class="n">next_state</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="n">new_vel</span> <span class="o">=</span> <span class="n">next_state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected ndarray, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected length 4, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">new_pos</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected position length 2, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">new_pos</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">new_vel</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected velocity length 2, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">new_vel</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="c1"># Test SafeAntVelocityObservation</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing SafeAntVelocityObservation...&quot;</span><span class="p">)</span>
+        <span class="n">true_state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.6</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">1.2</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">])</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="mi">2</span>
+        <span class="n">obs_model</span> <span class="o">=</span> <span class="n">SafeAntVelocityObservation</span><span class="p">(</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">true_state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">position_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span>
+            <span class="n">velocity_noise</span><span class="o">=</span><span class="mf">0.2</span>
+        <span class="p">)</span>
+        <span class="n">observation</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">prob</span> <span class="o">=</span> <span class="n">obs_model</span><span class="o">.</span><span class="n">probability</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected ndarray, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span> <span class="o">==</span> <span class="mi">4</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected length 4, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prob</span><span class="p">,</span> <span class="nb">float</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected float, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">prob</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ Safety Ant Velocity POMDP examples passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ Safety Ant Velocity POMDP examples failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="test_light_dark_pomdp_examples">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_examples.html#POMDPPlanners.tests.test_environments.test_examples.test_light_dark_pomdp_examples">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_light_dark_pomdp_examples</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test all Light-Dark POMDP supporting class examples.&quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing Light-Dark POMDP examples...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+            <span class="n">StateTransitionModel</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Test StateTransitionModel</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  Testing StateTransitionModel...&quot;</span><span class="p">)</span>
+        <span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">])</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">])</span>
+        <span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.1</span>
+        <span class="n">transition</span> <span class="o">=</span> <span class="n">StateTransitionModel</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">state_transition_cov_matrix</span><span class="o">=</span><span class="n">cov_matrix</span>
+        <span class="p">)</span>
+        <span class="n">next_position</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">prob</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="n">next_position</span><span class="p">])</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">next_position</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Expected ndarray, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">next_position</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">next_position</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected length 2, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">next_position</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">prob</span><span class="p">,</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)),</span> <span class="sa">f</span><span class="s2">&quot;Expected array or float, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">prob</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ Light-Dark POMDP examples passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ Light-Dark POMDP examples failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_environments.test_examples.html#POMDPPlanners.tests.test_environments.test_examples.main">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run all example tests.&quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Running all usage examples from environments directory...</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+    
+    <span class="n">tests</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">test_sanity_pomdp_examples</span><span class="p">,</span>
+        <span class="n">test_tiger_pomdp_examples</span><span class="p">,</span>
+        <span class="n">test_cartpole_pomdp_examples</span><span class="p">,</span>
+        <span class="n">test_mountain_car_pomdp_examples</span><span class="p">,</span>
+        <span class="n">test_push_pomdp_examples</span><span class="p">,</span>
+        <span class="n">test_safety_ant_velocity_pomdp_examples</span><span class="p">,</span>
+        <span class="n">test_light_dark_pomdp_examples</span><span class="p">,</span>
+    <span class="p">]</span>
+    
+    <span class="n">passed</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">tests</span><span class="p">)</span>
+    
+    <span class="k">for</span> <span class="n">test_func</span> <span class="ow">in</span> <span class="n">tests</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">test_func</span><span class="p">():</span>
+            <span class="n">passed</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="nb">print</span><span class="p">()</span>
+    
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Results: </span><span class="si">{</span><span class="n">passed</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">total</span><span class="si">}</span><span class="s2"> test groups passed&quot;</span><span class="p">)</span>
+    
+    <span class="k">if</span> <span class="n">passed</span> <span class="o">==</span> <span class="n">total</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;🎉 All usage examples work correctly!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">0</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;❌ Some usage examples have issues.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">1</span></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
