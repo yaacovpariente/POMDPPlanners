@@ -1,0 +1,1259 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.environments.laser_tag_pomdp &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.environments.laser_tag_pomdp</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.environments.laser_tag_pomdp</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;LaserTag POMDP Environment Implementation.</span>
+
+<span class="sd">This module implements the LaserTag problem, a pursuit-evasion POMDP environment</span>
+<span class="sd">where an agent must navigate a grid to tag an opponent that moves stochastically.</span>
+<span class="sd">The agent has noisy observations of the opponent&#39;s location.</span>
+
+<span class="sd">The LaserTag problem features:</span>
+<span class="sd">- A grid-based environment (default 7x11) with optional walls</span>
+<span class="sd">- Robot and opponent moving on discrete grid cells</span>
+<span class="sd">- 5 possible actions: North, South, East, West, Tag</span>
+<span class="sd">- 8-directional laser range measurements with Gaussian noise</span>
+<span class="sd">- Positive reward for successful tagging, negative reward for failed tag attempts</span>
+<span class="sd">- Step cost for each movement action</span>
+<span class="sd">- Opponent moves with 0.4 prob toward robot in x-dir, 0.4 prob toward robot in y-dir, 0.2 prob stay</span>
+
+<span class="sd">Based on the LaserTag.jl implementation from: https://github.com/JuliaPOMDP/LaserTag.jl</span>
+
+<span class="sd">Classes:</span>
+<span class="sd">    LaserTagState: State representation with robot and opponent positions</span>
+<span class="sd">    LaserTagStateTransition: State transition model for robot and opponent movement</span>
+<span class="sd">    LaserTagObservation: Observation model with noisy opponent position measurements</span>
+<span class="sd">    LaserTagPOMDP: Main environment class implementing the LaserTag problem</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Set</span><span class="p">,</span> <span class="n">Dict</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">dataclasses</span><span class="w"> </span><span class="kn">import</span> <span class="n">dataclass</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.animation</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">animation</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.environment</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">DiscreteActionsEnvironment</span><span class="p">,</span>
+    <span class="n">ObservationModel</span><span class="p">,</span>
+    <span class="n">StateTransitionModel</span><span class="p">,</span>
+    <span class="n">SpaceInfo</span><span class="p">,</span>
+    <span class="n">SpaceType</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteDistribution</span><span class="p">,</span> <span class="n">Distribution</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">MetricValue</span><span class="p">,</span> <span class="n">StepData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.statistics</span><span class="w"> </span><span class="kn">import</span> <span class="n">confidence_interval</span>
+
+
+<div class="viewcode-block" id="LaserTagState">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagState">[docs]</a>
+<span class="nd">@dataclass</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">LaserTagState</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;State representation for LaserTag POMDP.</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes:</span>
+<span class="sd">        robot: Robot&#39;s position as (row, col) tuple</span>
+<span class="sd">        opponent: Opponent&#39;s position as (row, col) tuple  </span>
+<span class="sd">        terminal: Whether the episode has terminated</span>
+<span class="sd">        </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Creating a LaserTag state::</span>
+<span class="sd">        </span>
+<span class="sd">            state = LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)</span>
+<span class="sd">            print(state.robot)     # (0, 0)</span>
+<span class="sd">            print(state.opponent)  # (6, 10)</span>
+<span class="sd">            print(state.terminal)  # False</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">robot</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+    <span class="n">opponent</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span>
+    <span class="n">terminal</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">LaserTagState</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">robot</span> <span class="ow">and</span> 
+                <span class="bp">self</span><span class="o">.</span><span class="n">opponent</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">opponent</span> <span class="ow">and</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">terminal</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">terminal</span><span class="p">)</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__hash__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">hash</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">robot</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">opponent</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">terminal</span><span class="p">))</span></div>
+
+
+
+<div class="viewcode-block" id="LaserTagStateTransition">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagStateTransition">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LaserTagStateTransition</span><span class="p">(</span><span class="n">StateTransitionModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;State transition model for LaserTag POMDP.</span>
+<span class="sd">    </span>
+<span class="sd">    Handles robot movement (deterministic based on action) and opponent movement</span>
+<span class="sd">    (probabilistic, with tendency to move toward robot&#39;s position).</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes:</span>
+<span class="sd">        state: Current LaserTagState</span>
+<span class="sd">        action: Action to be executed (0=North, 1=South, 2=East, 3=West, 4=Tag)</span>
+<span class="sd">        floor_shape: Tuple of (rows, cols) for grid dimensions</span>
+<span class="sd">        walls: Set of wall positions</span>
+<span class="sd">        </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Creating and using the state transition model::</span>
+<span class="sd">        </span>
+<span class="sd">            state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)</span>
+<span class="sd">            transition = LaserTagStateTransition(</span>
+<span class="sd">                state=state, </span>
+<span class="sd">                action=0,  # North</span>
+<span class="sd">                floor_shape=(7, 11),</span>
+<span class="sd">                walls=set()</span>
+<span class="sd">            )</span>
+<span class="sd">            next_states = transition.sample(n_samples=5)</span>
+<span class="sd">            probabilities = transition.probability(next_states)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">LaserTagState</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">floor_shape</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> 
+                 <span class="n">walls</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the state transition model.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            state: Current LaserTagState</span>
+<span class="sd">            action: Action to execute (0=North, 1=South, 2=East, 3=West, 4=Tag)</span>
+<span class="sd">            floor_shape: Grid dimensions as (rows, cols)</span>
+<span class="sd">            walls: Set of wall positions as (row, col) tuples</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">floor_shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">walls</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="n">walls</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_action_directions</span><span class="p">:</span> <span class="n">Dict</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="mi">0</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>  <span class="c1"># North (up)</span>
+            <span class="mi">1</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>   <span class="c1"># South (down)</span>
+            <span class="mi">2</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>   <span class="c1"># East (right)  </span>
+            <span class="mi">3</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>  <span class="c1"># West (left)</span>
+            <span class="mi">4</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>    <span class="c1"># Tag (no movement)</span>
+        <span class="p">}</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_is_valid_position</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if position is within bounds and not a wall.&quot;&quot;&quot;</span>
+        <span class="n">row</span><span class="p">,</span> <span class="n">col</span> <span class="o">=</span> <span class="n">pos</span>
+        <span class="k">return</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">row</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">and</span> 
+                <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">col</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">and</span>
+                <span class="n">pos</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">walls</span><span class="p">)</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_robot_next_position</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get robot&#39;s next position based on action.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">action</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>  <span class="c1"># Tag action</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span>
+        
+        <span class="n">dr</span><span class="p">,</span> <span class="n">dc</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_action_directions</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="p">]</span>
+        <span class="n">new_pos</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">dr</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">dc</span><span class="p">)</span>
+        
+        <span class="c1"># If new position is invalid, stay at current position</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">new_pos</span><span class="p">):</span>
+            <span class="k">return</span> <span class="n">new_pos</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_opponent_move_probabilities</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">robot_pos</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="nb">float</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get opponent&#39;s movement probabilities based on robot position.</span>
+<span class="sd">        </span>
+<span class="sd">        Uses Julia LaserTag.jl movement model:</span>
+<span class="sd">        - 0.4 probability to move in x-direction (toward/away from robot)</span>
+<span class="sd">        - 0.4 probability to move in y-direction (toward/away from robot) </span>
+<span class="sd">        - 0.2 probability to stay in place</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">current_opp</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">opponent</span>
+        <span class="n">robot_row</span><span class="p">,</span> <span class="n">robot_col</span> <span class="o">=</span> <span class="n">robot_pos</span>
+        <span class="n">opp_row</span><span class="p">,</span> <span class="n">opp_col</span> <span class="o">=</span> <span class="n">current_opp</span>
+        
+        <span class="c1"># Calculate movement preferences</span>
+        <span class="n">x_moves</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Column movements</span>
+        <span class="n">y_moves</span> <span class="o">=</span> <span class="p">[]</span>  <span class="c1"># Row movements</span>
+        
+        <span class="c1"># X-direction (column) movements</span>
+        <span class="k">if</span> <span class="n">robot_col</span> <span class="o">&gt;</span> <span class="n">opp_col</span><span class="p">:</span>  <span class="c1"># Robot is east, opponent should move east</span>
+            <span class="n">east_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">opp_row</span><span class="p">,</span> <span class="n">opp_col</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">east_pos</span><span class="p">):</span>
+                <span class="n">x_moves</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">east_pos</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">))</span>  <span class="c1"># Move toward robot</span>
+            <span class="n">west_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">opp_row</span><span class="p">,</span> <span class="n">opp_col</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">west_pos</span><span class="p">):</span>
+                <span class="n">x_moves</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">west_pos</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>  <span class="c1"># Move away from robot gets remaining prob</span>
+        <span class="k">elif</span> <span class="n">robot_col</span> <span class="o">&lt;</span> <span class="n">opp_col</span><span class="p">:</span>  <span class="c1"># Robot is west, opponent should move west</span>
+            <span class="n">west_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">opp_row</span><span class="p">,</span> <span class="n">opp_col</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">west_pos</span><span class="p">):</span>
+                <span class="n">x_moves</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">west_pos</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">))</span>  <span class="c1"># Move toward robot</span>
+            <span class="n">east_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">opp_row</span><span class="p">,</span> <span class="n">opp_col</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">east_pos</span><span class="p">):</span>
+                <span class="n">x_moves</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">east_pos</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>  <span class="c1"># Move away from robot gets remaining prob</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># Same column</span>
+            <span class="n">east_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">opp_row</span><span class="p">,</span> <span class="n">opp_col</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">east_pos</span><span class="p">):</span>
+                <span class="n">x_moves</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">east_pos</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+            <span class="n">west_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">opp_row</span><span class="p">,</span> <span class="n">opp_col</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">west_pos</span><span class="p">):</span>
+                <span class="n">x_moves</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">west_pos</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+        
+        <span class="c1"># Y-direction (row) movements  </span>
+        <span class="k">if</span> <span class="n">robot_row</span> <span class="o">&gt;</span> <span class="n">opp_row</span><span class="p">:</span>  <span class="c1"># Robot is south, opponent should move south</span>
+            <span class="n">south_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">opp_row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">opp_col</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">south_pos</span><span class="p">):</span>
+                <span class="n">y_moves</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">south_pos</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">))</span>  <span class="c1"># Move toward robot</span>
+            <span class="n">north_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">opp_row</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">opp_col</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">north_pos</span><span class="p">):</span>
+                <span class="n">y_moves</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">north_pos</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>  <span class="c1"># Move away from robot gets remaining prob</span>
+        <span class="k">elif</span> <span class="n">robot_row</span> <span class="o">&lt;</span> <span class="n">opp_row</span><span class="p">:</span>  <span class="c1"># Robot is north, opponent should move north</span>
+            <span class="n">north_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">opp_row</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">opp_col</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">north_pos</span><span class="p">):</span>
+                <span class="n">y_moves</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">north_pos</span><span class="p">,</span> <span class="mf">0.4</span><span class="p">))</span>  <span class="c1"># Move toward robot</span>
+            <span class="n">south_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">opp_row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">opp_col</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">south_pos</span><span class="p">):</span>
+                <span class="n">y_moves</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">south_pos</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>  <span class="c1"># Move away from robot gets remaining prob</span>
+        <span class="k">else</span><span class="p">:</span>  <span class="c1"># Same row</span>
+            <span class="n">north_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">opp_row</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">opp_col</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">north_pos</span><span class="p">):</span>
+                <span class="n">y_moves</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">north_pos</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+            <span class="n">south_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">opp_row</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="n">opp_col</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_valid_position</span><span class="p">(</span><span class="n">south_pos</span><span class="p">):</span>
+                <span class="n">y_moves</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">south_pos</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">))</span>
+        
+        <span class="c1"># Combine moves and normalize probabilities</span>
+        <span class="n">move_probs</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">total_x_prob</span> <span class="o">=</span> <span class="mf">0.4</span> <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">prob</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">prob</span> <span class="ow">in</span> <span class="n">x_moves</span><span class="p">)</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="n">total_y_prob</span> <span class="o">=</span> <span class="mf">0.4</span> <span class="k">if</span> <span class="nb">any</span><span class="p">(</span><span class="n">prob</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">prob</span> <span class="ow">in</span> <span class="n">y_moves</span><span class="p">)</span> <span class="k">else</span> <span class="mf">0.0</span>
+        <span class="n">stay_prob</span> <span class="o">=</span> <span class="mf">0.2</span>
+        
+        <span class="c1"># Add x-direction moves</span>
+        <span class="k">for</span> <span class="n">pos</span><span class="p">,</span> <span class="n">prob</span> <span class="ow">in</span> <span class="n">x_moves</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">prob</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># Toward robot</span>
+                <span class="n">move_probs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">pos</span><span class="p">,</span> <span class="n">prob</span><span class="p">))</span>
+            <span class="k">elif</span> <span class="n">total_x_prob</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># Away from robot gets remaining x-prob</span>
+                <span class="n">remaining_x_prob</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># No probability for away moves in Julia model</span>
+                <span class="n">move_probs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">pos</span><span class="p">,</span> <span class="n">remaining_x_prob</span><span class="p">))</span>
+        
+        <span class="c1"># Add y-direction moves</span>
+        <span class="k">for</span> <span class="n">pos</span><span class="p">,</span> <span class="n">prob</span> <span class="ow">in</span> <span class="n">y_moves</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">prob</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># Toward robot</span>
+                <span class="n">move_probs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">pos</span><span class="p">,</span> <span class="n">prob</span><span class="p">))</span>
+            <span class="k">elif</span> <span class="n">total_y_prob</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># Away from robot gets remaining y-prob</span>
+                <span class="n">remaining_y_prob</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># No probability for away moves in Julia model</span>
+                <span class="n">move_probs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">pos</span><span class="p">,</span> <span class="n">remaining_y_prob</span><span class="p">))</span>
+        
+        <span class="c1"># Add stay probability</span>
+        <span class="n">move_probs</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">current_opp</span><span class="p">,</span> <span class="n">stay_prob</span><span class="p">))</span>
+        
+        <span class="c1"># Normalize probabilities to handle blocked moves</span>
+        <span class="n">actual_total</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">prob</span> <span class="k">for</span> <span class="n">_</span><span class="p">,</span> <span class="n">prob</span> <span class="ow">in</span> <span class="n">move_probs</span> <span class="k">if</span> <span class="n">prob</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">actual_total</span> <span class="o">&lt;</span> <span class="mf">1.0</span><span class="p">:</span>
+            <span class="c1"># Redistribute remaining probability to staying</span>
+            <span class="n">stay_index</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">move_probs</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+            <span class="n">move_probs</span><span class="p">[</span><span class="n">stay_index</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">current_opp</span><span class="p">,</span> <span class="n">stay_prob</span> <span class="o">+</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">actual_total</span><span class="p">))</span>
+        
+        <span class="c1"># Filter out zero probability moves</span>
+        <span class="n">move_probs</span> <span class="o">=</span> <span class="p">[(</span><span class="n">pos</span><span class="p">,</span> <span class="n">prob</span><span class="p">)</span> <span class="k">for</span> <span class="n">pos</span><span class="p">,</span> <span class="n">prob</span> <span class="ow">in</span> <span class="n">move_probs</span> <span class="k">if</span> <span class="n">prob</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">]</span>
+        
+        <span class="k">return</span> <span class="n">move_probs</span>
+    
+<div class="viewcode-block" id="LaserTagStateTransition.sample">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagStateTransition.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">LaserTagState</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sample next states from the transition model.&quot;&quot;&quot;</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">robot_next</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_robot_next_position</span><span class="p">()</span>
+        
+        <span class="c1"># Check if tagging occurred</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">action</span> <span class="o">==</span> <span class="mi">4</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">opponent</span><span class="p">:</span>
+            <span class="c1"># Successful tag - terminal state</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_samples</span><span class="p">):</span>
+                <span class="n">samples</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">LaserTagState</span><span class="p">(</span><span class="n">robot_next</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">opponent</span><span class="p">,</span> <span class="n">terminal</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Regular transition</span>
+            <span class="n">opp_moves</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_opponent_move_probabilities</span><span class="p">(</span><span class="n">robot_next</span><span class="p">)</span>
+            <span class="n">positions</span><span class="p">,</span> <span class="n">probabilities</span> <span class="o">=</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">opp_moves</span><span class="p">)</span>
+            
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_samples</span><span class="p">):</span>
+                <span class="n">opp_next</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">positions</span><span class="p">),</span> <span class="n">p</span><span class="o">=</span><span class="n">probabilities</span><span class="p">)</span>
+                <span class="n">samples</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">LaserTagState</span><span class="p">(</span><span class="n">robot_next</span><span class="p">,</span> <span class="n">positions</span><span class="p">[</span><span class="n">opp_next</span><span class="p">],</span> <span class="n">terminal</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+        
+        <span class="k">return</span> <span class="n">samples</span></div>
+
+    
+<div class="viewcode-block" id="LaserTagStateTransition.probability">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagStateTransition.probability">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probability</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate transition probabilities for given next states.&quot;&quot;&quot;</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">))</span>
+        <span class="n">robot_next</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_robot_next_position</span><span class="p">()</span>
+        
+        <span class="c1"># Check if tagging occurred</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">action</span> <span class="o">==</span> <span class="mi">4</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">opponent</span><span class="p">:</span>
+            <span class="c1"># Successful tag case</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">next_state</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+                <span class="k">if</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">LaserTagState</span><span class="p">)</span> <span class="ow">and</span> 
+                    <span class="n">next_state</span><span class="o">.</span><span class="n">robot</span> <span class="o">==</span> <span class="n">robot_next</span> <span class="ow">and</span> 
+                    <span class="n">next_state</span><span class="o">.</span><span class="n">opponent</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">opponent</span> <span class="ow">and</span>
+                    <span class="n">next_state</span><span class="o">.</span><span class="n">terminal</span><span class="p">):</span>
+                    <span class="n">result</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Regular transition case</span>
+            <span class="n">opp_moves</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_opponent_move_probabilities</span><span class="p">(</span><span class="n">robot_next</span><span class="p">)</span>
+            
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">next_state</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+                <span class="k">if</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">LaserTagState</span><span class="p">)</span> <span class="ow">and</span> 
+                    <span class="n">next_state</span><span class="o">.</span><span class="n">robot</span> <span class="o">==</span> <span class="n">robot_next</span> <span class="ow">and</span>
+                    <span class="ow">not</span> <span class="n">next_state</span><span class="o">.</span><span class="n">terminal</span><span class="p">):</span>
+                    
+                    <span class="c1"># Find probability for this opponent position</span>
+                    <span class="k">for</span> <span class="n">opp_pos</span><span class="p">,</span> <span class="n">prob</span> <span class="ow">in</span> <span class="n">opp_moves</span><span class="p">:</span>
+                        <span class="k">if</span> <span class="n">next_state</span><span class="o">.</span><span class="n">opponent</span> <span class="o">==</span> <span class="n">opp_pos</span><span class="p">:</span>
+                            <span class="n">result</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">prob</span>
+                            <span class="k">break</span>
+        
+        <span class="k">return</span> <span class="n">result</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="LaserTagObservation">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagObservation">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LaserTagObservation</span><span class="p">(</span><span class="n">ObservationModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Observation model for LaserTag POMDP.</span>
+<span class="sd">    </span>
+<span class="sd">    Provides 8-directional laser range measurements from the robot&#39;s position.</span>
+<span class="sd">    Each measurement represents the number of clear cells in that direction</span>
+<span class="sd">    before hitting a wall or boundary, with Gaussian noise.</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes:</span>
+<span class="sd">        next_state: The state after action execution</span>
+<span class="sd">        action: The action that was taken</span>
+<span class="sd">        measurement_noise: Standard deviation of Gaussian measurement noise</span>
+<span class="sd">        floor_shape: Grid dimensions as (rows, cols)</span>
+<span class="sd">        walls: Set of wall positions</span>
+<span class="sd">        </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Creating and using the observation model::</span>
+<span class="sd">        </span>
+<span class="sd">            state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)</span>
+<span class="sd">            obs_model = LaserTagObservation(</span>
+<span class="sd">                next_state=state,</span>
+<span class="sd">                action=0,</span>
+<span class="sd">                measurement_noise=1.0,</span>
+<span class="sd">                floor_shape=(7, 11),</span>
+<span class="sd">                walls=set()</span>
+<span class="sd">            )</span>
+<span class="sd">            observations = obs_model.sample(n_samples=3)</span>
+<span class="sd">            probabilities = obs_model.probability(observations)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_state</span><span class="p">:</span> <span class="n">LaserTagState</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">measurement_noise</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+                 <span class="n">floor_shape</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">11</span><span class="p">),</span> <span class="n">walls</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the observation model.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            next_state: State after taking the action</span>
+<span class="sd">            action: Action that was executed</span>
+<span class="sd">            measurement_noise: Standard deviation of Gaussian measurement noise</span>
+<span class="sd">            floor_shape: Grid dimensions as (rows, cols)</span>
+<span class="sd">            walls: Set of wall positions as (row, col) tuples</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">measurement_noise</span> <span class="o">=</span> <span class="n">measurement_noise</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span> <span class="o">=</span> <span class="n">floor_shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">walls</span> <span class="o">=</span> <span class="n">walls</span> <span class="k">if</span> <span class="n">walls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">set</span><span class="p">()</span>
+        
+        <span class="c1"># 8-directional laser measurements: N, NE, E, SE, S, SW, W, NW</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_laser_directions</span> <span class="o">=</span> <span class="p">[</span>
+            <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>   <span class="c1"># North</span>
+            <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>   <span class="c1"># Northeast  </span>
+            <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>    <span class="c1"># East</span>
+            <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>    <span class="c1"># Southeast</span>
+            <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>    <span class="c1"># South</span>
+            <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>   <span class="c1"># Southwest</span>
+            <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span>   <span class="c1"># West</span>
+            <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span>   <span class="c1"># Northwest</span>
+        <span class="p">]</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_laser_measurement</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">robot_pos</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">],</span> <span class="n">direction</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get laser range measurement in a specific direction.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            robot_pos: Robot&#39;s position as (row, col)</span>
+<span class="sd">            direction: Direction vector as (row_delta, col_delta)</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Number of clear cells in that direction before hitting obstacle/boundary</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">row</span><span class="p">,</span> <span class="n">col</span> <span class="o">=</span> <span class="n">robot_pos</span>
+        <span class="n">dr</span><span class="p">,</span> <span class="n">dc</span> <span class="o">=</span> <span class="n">direction</span>
+        <span class="n">distance</span> <span class="o">=</span> <span class="mf">0.0</span>
+        
+        <span class="c1"># Cast ray in direction until hitting obstacle or boundary</span>
+        <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+            <span class="n">row</span> <span class="o">+=</span> <span class="n">dr</span>
+            <span class="n">col</span> <span class="o">+=</span> <span class="n">dc</span>
+            <span class="n">distance</span> <span class="o">+=</span> <span class="mf">1.0</span>
+            
+            <span class="c1"># Check if hit boundary</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">row</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">row</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">or</span> 
+                <span class="n">col</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">col</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+                <span class="k">break</span>
+                
+            <span class="c1"># Check if hit wall</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">col</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">walls</span> <span class="ow">or</span> <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">col</span><span class="p">)</span> <span class="o">==</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">next_state</span><span class="o">.</span><span class="n">opponent</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">next_state</span><span class="o">.</span><span class="n">opponent</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+                <span class="k">break</span>
+                
+        <span class="k">return</span> <span class="n">distance</span> <span class="o">-</span> <span class="mf">1.0</span>  <span class="c1"># Don&#39;t count the wall/boundary cell</span>
+    
+<div class="viewcode-block" id="LaserTagObservation.sample">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagObservation.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="o">...</span><span class="p">]]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sample observations from the observation model.</span>
+<span class="sd">        </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            List of 8-tuple observations representing laser measurements in 8 directions</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="p">[]</span>
+        
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">next_state</span><span class="o">.</span><span class="n">terminal</span><span class="p">:</span>
+            <span class="c1"># Terminal state - return special terminal observation</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_samples</span><span class="p">):</span>
+                <span class="n">samples</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Get true laser measurements from robot position</span>
+            <span class="n">robot_pos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">next_state</span><span class="o">.</span><span class="n">robot</span>
+            <span class="n">true_measurements</span> <span class="o">=</span> <span class="p">[]</span>
+            
+            <span class="k">for</span> <span class="n">direction</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_laser_directions</span><span class="p">:</span>
+                <span class="n">measurement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_laser_measurement</span><span class="p">(</span><span class="n">robot_pos</span><span class="p">,</span> <span class="n">direction</span><span class="p">)</span>
+                <span class="n">true_measurements</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">measurement</span><span class="p">)</span>
+            
+            <span class="c1"># Add Gaussian noise to each measurement</span>
+            <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_samples</span><span class="p">):</span>
+                <span class="n">noisy_measurements</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">true_measure</span> <span class="ow">in</span> <span class="n">true_measurements</span><span class="p">:</span>
+                    <span class="n">noise</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">measurement_noise</span><span class="p">)</span>
+                    <span class="n">noisy_measure</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">true_measure</span> <span class="o">+</span> <span class="n">noise</span><span class="p">)</span>  <span class="c1"># Clamp to non-negative</span>
+                    <span class="n">noisy_measurements</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">noisy_measure</span><span class="p">)</span>
+                
+                <span class="n">samples</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">noisy_measurements</span><span class="p">))</span>
+        
+        <span class="k">return</span> <span class="n">samples</span></div>
+
+    
+<div class="viewcode-block" id="LaserTagObservation.probability">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagObservation.probability">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probability</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate observation probabilities for given values.&quot;&quot;&quot;</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">))</span>
+        
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">next_state</span><span class="o">.</span><span class="n">terminal</span><span class="p">:</span>
+            <span class="c1"># Terminal state case</span>
+            <span class="n">terminal_obs</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="o">-</span><span class="mf">1.0</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">obs</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">obs</span> <span class="o">==</span> <span class="n">terminal_obs</span><span class="p">:</span>
+                    <span class="n">result</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Get true laser measurements</span>
+            <span class="n">robot_pos</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">next_state</span><span class="o">.</span><span class="n">robot</span>
+            <span class="n">true_measurements</span> <span class="o">=</span> <span class="p">[]</span>
+            
+            <span class="k">for</span> <span class="n">direction</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_laser_directions</span><span class="p">:</span>
+                <span class="n">measurement</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_laser_measurement</span><span class="p">(</span><span class="n">robot_pos</span><span class="p">,</span> <span class="n">direction</span><span class="p">)</span>
+                <span class="n">true_measurements</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">measurement</span><span class="p">)</span>
+            
+            <span class="c1"># Calculate Gaussian probability density for each observation</span>
+            <span class="n">variance</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">measurement_noise</span> <span class="o">**</span> <span class="mi">2</span>
+            
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">obs</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">values</span><span class="p">):</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obs</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">))</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">obs</span><span class="p">)</span> <span class="o">==</span> <span class="mi">8</span><span class="p">:</span>
+                    <span class="c1"># Product of independent Gaussian PDFs for each direction</span>
+                    <span class="n">prob</span> <span class="o">=</span> <span class="mf">1.0</span>
+                    <span class="k">for</span> <span class="n">j</span><span class="p">,</span> <span class="p">(</span><span class="n">true_measure</span><span class="p">,</span> <span class="n">observed_measure</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">true_measurements</span><span class="p">,</span> <span class="n">obs</span><span class="p">)):</span>
+                        <span class="k">if</span> <span class="n">observed_measure</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># Valid measurement</span>
+                            <span class="n">diff</span> <span class="o">=</span> <span class="n">observed_measure</span> <span class="o">-</span> <span class="n">true_measure</span>
+                            <span class="n">prob</span> <span class="o">*=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">diff</span> <span class="o">**</span> <span class="mi">2</span> <span class="o">/</span> <span class="n">variance</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span> <span class="o">*</span> <span class="n">variance</span><span class="p">)</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">prob</span> <span class="o">=</span> <span class="mf">0.0</span>  <span class="c1"># Invalid negative measurement</span>
+                            <span class="k">break</span>
+                    <span class="n">result</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">prob</span>
+        
+        <span class="k">return</span> <span class="n">result</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="LaserTagPOMDP">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagPOMDP">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">LaserTagPOMDP</span><span class="p">(</span><span class="n">DiscreteActionsEnvironment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;LaserTag POMDP environment implementation.</span>
+<span class="sd">    </span>
+<span class="sd">    This is a pursuit-evasion problem where a robot must navigate a grid to tag</span>
+<span class="sd">    an opponent. The robot receives noisy observations of the opponent&#39;s position</span>
+<span class="sd">    and must decide when and where to attempt tagging.</span>
+<span class="sd">    </span>
+<span class="sd">    Problem Structure:</span>
+<span class="sd">    - States: Robot position, opponent position, terminal flag</span>
+<span class="sd">    - Actions: North(0), South(1), East(2), West(3), Tag(4)</span>
+<span class="sd">    - Observations: 8-directional laser measurements (N,NE,E,SE,S,SW,W,NW)</span>
+<span class="sd">    - Rewards: Tag success(+10), Tag failure(-10), Movement(-1)</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes:</span>
+<span class="sd">        floor_shape: Grid dimensions as (rows, cols)</span>
+<span class="sd">        walls: Set of wall positions as (row, col) tuples</span>
+<span class="sd">        tag_reward: Reward for successful tagging</span>
+<span class="sd">        tag_penalty: Penalty for unsuccessful tagging  </span>
+<span class="sd">        step_cost: Cost per movement action</span>
+<span class="sd">        measurement_noise: Standard deviation of observation noise</span>
+<span class="sd">        </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Creating and using a LaserTag POMDP::</span>
+<span class="sd">        </span>
+<span class="sd">            # Create LaserTag environment</span>
+<span class="sd">            env = LaserTagPOMDP(</span>
+<span class="sd">                discount_factor=0.95,</span>
+<span class="sd">                floor_shape=(7, 11),</span>
+<span class="sd">                tag_reward=10.0,</span>
+<span class="sd">                step_cost=1.0</span>
+<span class="sd">            )</span>
+<span class="sd">            </span>
+<span class="sd">            # Sample initial state and get actions</span>
+<span class="sd">            initial_state = env.initial_state_dist().sample()[0]</span>
+<span class="sd">            actions = env.get_actions()</span>
+<span class="sd">            </span>
+<span class="sd">            # Execute action and get reward</span>
+<span class="sd">            reward = env.reward(initial_state, action=0)  # Move north</span>
+<span class="sd">            </span>
+<span class="sd">            # Check terminal condition</span>
+<span class="sd">            is_done = env.is_terminal(initial_state)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> 
+                 <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+                 <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;LaserTagPOMDP&quot;</span><span class="p">,</span>
+                 <span class="n">floor_shape</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="mi">11</span><span class="p">,</span> <span class="mi">7</span><span class="p">),</span>
+                 <span class="n">walls</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Set</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">6</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">9</span><span class="p">,</span> <span class="mi">4</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">6</span><span class="p">)},</span>
+                 <span class="n">tag_reward</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+                 <span class="n">tag_penalty</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+                 <span class="n">step_cost</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+                 <span class="n">measurement_noise</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+                 <span class="n">dangerous_areas</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]]</span> <span class="o">=</span> <span class="p">{(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="p">(</span><span class="mi">7</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">5</span><span class="p">)},</span>
+                 <span class="n">dangerous_area_radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+                 <span class="n">dangerous_area_penalty</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">5.0</span><span class="p">,</span>
+                 <span class="n">output_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+                 <span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+                 <span class="n">use_queue_logger</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the LaserTag POMDP environment.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            discount_factor: Discount factor for future rewards (0 &lt; discount_factor &lt;= 1)</span>
+<span class="sd">            name: Name identifier for this environment instance</span>
+<span class="sd">            floor_shape: Grid dimensions as (rows, cols). Defaults to (11, 7).</span>
+<span class="sd">            walls: Set of wall positions as (row, col) tuples. Each tuple represents</span>
+<span class="sd">                the (row, col) coordinates of a wall on the grid. Defaults to empty set.</span>
+<span class="sd">            tag_reward: Reward for successful tagging. Defaults to 10.0.</span>
+<span class="sd">            tag_penalty: Penalty for unsuccessful tagging. Defaults to 10.0.</span>
+<span class="sd">            step_cost: Cost per movement action. Defaults to 1.0.</span>
+<span class="sd">            measurement_noise: Standard deviation of observation noise. Defaults to 1.0.</span>
+<span class="sd">            dangerous_areas: List of dangerous area center positions as (row, col) tuples. Defaults to None.</span>
+<span class="sd">            dangerous_area_radius: Radius around dangerous area centers. Defaults to 1.0.</span>
+<span class="sd">            dangerous_area_penalty: Penalty magnitude applied randomly when in dangerous areas. Defaults to 2.0.</span>
+<span class="sd">            output_dir: Optional directory for logging output. Defaults to None.</span>
+<span class="sd">            debug: Enable debug logging. Defaults to False.</span>
+<span class="sd">            </span>
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If discount_factor is not in valid range [0, 1]</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mf">0.0</span> <span class="o">&lt;=</span> <span class="n">discount_factor</span> <span class="o">&lt;=</span> <span class="mf">1.0</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;discount_factor must be between 0 and 1 (inclusive)&quot;</span><span class="p">)</span>
+        
+        <span class="n">space_info</span> <span class="o">=</span> <span class="n">SpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span>  <span class="c1"># 5 discrete actions</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">CONTINUOUS</span>  <span class="c1"># Continuous 8-dimensional laser measurements with noise</span>
+        <span class="p">)</span>
+        
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="n">discount_factor</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">space_info</span><span class="o">=</span><span class="n">space_info</span><span class="p">,</span>
+            <span class="n">reward_range</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="n">tag_penalty</span><span class="p">,</span> <span class="n">tag_reward</span><span class="p">),</span>
+            <span class="n">output_dir</span><span class="o">=</span><span class="n">output_dir</span><span class="p">,</span>
+            <span class="n">debug</span><span class="o">=</span><span class="n">debug</span><span class="p">,</span>
+            <span class="n">use_queue_logger</span><span class="o">=</span><span class="n">use_queue_logger</span>
+        <span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]</span> <span class="o">=</span> <span class="n">floor_shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">walls</span><span class="p">:</span> <span class="n">Set</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="n">walls</span> <span class="k">if</span> <span class="n">walls</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="nb">set</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tag_reward</span> <span class="o">=</span> <span class="n">tag_reward</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tag_penalty</span> <span class="o">=</span> <span class="n">tag_penalty</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">step_cost</span> <span class="o">=</span> <span class="n">step_cost</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">measurement_noise</span> <span class="o">=</span> <span class="n">measurement_noise</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dangerous_areas</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">]]</span> <span class="o">=</span> <span class="n">dangerous_areas</span> <span class="k">if</span> <span class="n">dangerous_areas</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="k">else</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dangerous_area_radius</span> <span class="o">=</span> <span class="n">dangerous_area_radius</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dangerous_area_penalty</span> <span class="o">=</span> <span class="n">dangerous_area_penalty</span>
+        
+        <span class="c1"># Action definitions</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">]</span>  <span class="c1"># North, South, East, West, Tag</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_names</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;North&quot;</span><span class="p">,</span> <span class="s2">&quot;South&quot;</span><span class="p">,</span> <span class="s2">&quot;East&quot;</span><span class="p">,</span> <span class="s2">&quot;West&quot;</span><span class="p">,</span> <span class="s2">&quot;Tag&quot;</span><span class="p">]</span>
+    
+<div class="viewcode-block" id="LaserTagPOMDP.state_transition_model">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagPOMDP.state_transition_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_transition_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">LaserTagState</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StateTransitionModel</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the state transition model for a given state-action pair.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">LaserTagStateTransition</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">floor_shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span><span class="p">,</span>
+            <span class="n">walls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">walls</span>
+        <span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="LaserTagPOMDP.observation_model">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagPOMDP.observation_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observation_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_state</span><span class="p">:</span> <span class="n">LaserTagState</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObservationModel</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the observation model for a given next state and action.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">LaserTagObservation</span><span class="p">(</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">next_state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">measurement_noise</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">measurement_noise</span><span class="p">,</span>
+            <span class="n">floor_shape</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span><span class="p">,</span>
+            <span class="n">walls</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">walls</span>
+        <span class="p">)</span></div>
+
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_is_in_dangerous_area</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">position</span><span class="p">:</span> <span class="n">Tuple</span><span class="p">[</span><span class="nb">int</span><span class="p">,</span> <span class="nb">int</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if a position is within any dangerous area.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            position: Position to check as (row, col) tuple</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            True if position is within radius of any dangerous area center</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">dangerous_areas</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+            
+        <span class="n">pos_row</span><span class="p">,</span> <span class="n">pos_col</span> <span class="o">=</span> <span class="n">position</span>
+        
+        <span class="k">for</span> <span class="n">danger_row</span><span class="p">,</span> <span class="n">danger_col</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">dangerous_areas</span><span class="p">:</span>
+            <span class="c1"># Calculate Euclidean distance</span>
+            <span class="n">distance</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">((</span><span class="n">pos_row</span> <span class="o">-</span> <span class="n">danger_row</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="p">(</span><span class="n">pos_col</span> <span class="o">-</span> <span class="n">danger_col</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">distance</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dangerous_area_radius</span><span class="p">:</span>
+                <span class="k">return</span> <span class="kc">True</span>
+        
+        <span class="k">return</span> <span class="kc">False</span>
+    
+<div class="viewcode-block" id="LaserTagPOMDP.reward">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagPOMDP.reward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">LaserTagState</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Calculate the immediate reward for a state-action pair.&quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">terminal</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mf">0.0</span>  <span class="c1"># No reward in terminal state</span>
+        
+        <span class="n">base_reward</span> <span class="o">=</span> <span class="mf">0.0</span>
+        
+        <span class="k">if</span> <span class="n">action</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>  <span class="c1"># Tag action</span>
+            <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">robot</span> <span class="o">==</span> <span class="n">state</span><span class="o">.</span><span class="n">opponent</span><span class="p">:</span>
+                <span class="n">base_reward</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">tag_reward</span>  <span class="c1"># Successful tag</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">base_reward</span> <span class="o">=</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">tag_penalty</span>  <span class="c1"># Failed tag attempt</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">base_reward</span> <span class="o">=</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">step_cost</span>  <span class="c1"># Movement cost</span>
+        
+        <span class="c1"># Check for wall collision and apply dangerous area penalty</span>
+        <span class="k">if</span> <span class="n">action</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]:</span>  <span class="c1"># Movement actions</span>
+            <span class="c1"># Calculate intended position based on action</span>
+            <span class="n">action_directions</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">1</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">2</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">3</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)}</span>
+            <span class="n">dr</span><span class="p">,</span> <span class="n">dc</span> <span class="o">=</span> <span class="n">action_directions</span><span class="p">[</span><span class="n">action</span><span class="p">]</span>
+            <span class="n">intended_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">dr</span><span class="p">,</span> <span class="n">state</span><span class="o">.</span><span class="n">robot</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">dc</span><span class="p">)</span>
+            
+            <span class="c1"># Check if intended position is a wall (collision)</span>
+            <span class="k">if</span> <span class="n">intended_pos</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">walls</span><span class="p">:</span>
+                <span class="c1"># Apply dangerous area penalty for wall collision</span>
+                <span class="n">base_reward</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dangerous_area_penalty</span>
+        
+        <span class="c1"># Add dangerous area penalty/bonus with 50% probability</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_in_dangerous_area</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span><span class="p">):</span>
+            <span class="c1"># Random penalty or bonus with equal probability</span>
+            <span class="n">danger_modifier</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dangerous_area_penalty</span> <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mf">0.5</span> <span class="k">else</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">dangerous_area_penalty</span>
+            <span class="n">base_reward</span> <span class="o">+=</span> <span class="n">danger_modifier</span>
+        
+        <span class="k">return</span> <span class="n">base_reward</span></div>
+
+    
+<div class="viewcode-block" id="LaserTagPOMDP.is_terminal">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagPOMDP.is_terminal">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_terminal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">LaserTagState</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if a state is terminal.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">state</span><span class="o">.</span><span class="n">terminal</span></div>
+
+    
+<div class="viewcode-block" id="LaserTagPOMDP.initial_state_dist">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagPOMDP.initial_state_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_state_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the initial state distribution.&quot;&quot;&quot;</span>
+        <span class="c1"># Generate all valid robot and opponent positions</span>
+        <span class="n">valid_positions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">row</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="k">for</span> <span class="n">col</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">row</span><span class="p">,</span> <span class="n">col</span><span class="p">)</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">walls</span><span class="p">:</span>
+                    <span class="n">valid_positions</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">row</span><span class="p">,</span> <span class="n">col</span><span class="p">))</span>
+        
+        <span class="c1"># Create all possible initial states (robot and opponent at different positions)</span>
+        <span class="n">initial_states</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">robot_pos</span> <span class="ow">in</span> <span class="n">valid_positions</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">opp_pos</span> <span class="ow">in</span> <span class="n">valid_positions</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">robot_pos</span> <span class="o">!=</span> <span class="n">opp_pos</span><span class="p">:</span>  <span class="c1"># Robot and opponent start at different positions</span>
+                    <span class="n">initial_states</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">LaserTagState</span><span class="p">(</span><span class="n">robot_pos</span><span class="p">,</span> <span class="n">opp_pos</span><span class="p">,</span> <span class="n">terminal</span><span class="o">=</span><span class="kc">False</span><span class="p">))</span>
+        
+        <span class="c1"># Uniform distribution over all initial states</span>
+        <span class="n">num_states</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">initial_states</span><span class="p">)</span>
+        <span class="n">probs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">num_states</span><span class="p">)</span> <span class="o">/</span> <span class="n">num_states</span>
+        
+        <span class="k">return</span> <span class="n">DiscreteDistribution</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="n">initial_states</span><span class="p">,</span> <span class="n">probs</span><span class="o">=</span><span class="n">probs</span><span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="LaserTagPOMDP.initial_observation_dist">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagPOMDP.initial_observation_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_observation_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get the initial observation distribution.&quot;&quot;&quot;</span>
+        <span class="c1"># Return distribution over possible initial laser observations</span>
+        <span class="c1"># For simplicity, return a uniform distribution over typical laser readings</span>
+        <span class="c1"># This would normally be computed from the initial state distribution</span>
+        <span class="n">typical_readings</span> <span class="o">=</span> <span class="p">(</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">,</span> <span class="mf">3.0</span><span class="p">)</span>  <span class="c1"># Mid-range readings</span>
+        <span class="k">return</span> <span class="n">DiscreteDistribution</span><span class="p">(</span>
+            <span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="n">typical_readings</span><span class="p">],</span> 
+            <span class="n">probs</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">])</span>
+        <span class="p">)</span></div>
+
+    
+<div class="viewcode-block" id="LaserTagPOMDP.get_actions">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagPOMDP.get_actions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Get all possible actions in the discrete action space.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">actions</span></div>
+
+    
+<div class="viewcode-block" id="LaserTagPOMDP.is_equal_observation">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagPOMDP.is_equal_observation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_equal_observation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation1</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">observation2</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Check if two observations are equal.</span>
+<span class="sd">        </span>
+<span class="sd">        Observations are 8-dimensional laser measurements or terminal observations.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation1</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">))</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation2</span><span class="p">,</span> <span class="p">(</span><span class="nb">tuple</span><span class="p">,</span> <span class="nb">list</span><span class="p">)):</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">observation1</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">observation2</span><span class="p">)</span> <span class="o">==</span> <span class="mi">8</span><span class="p">:</span>
+                <span class="c1"># Compare 8-dimensional laser measurements with tolerance</span>
+                <span class="k">return</span> <span class="nb">all</span><span class="p">(</span><span class="nb">abs</span><span class="p">(</span><span class="n">obs1</span> <span class="o">-</span> <span class="n">obs2</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">1e-10</span> <span class="k">for</span> <span class="n">obs1</span><span class="p">,</span> <span class="n">obs2</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">observation1</span><span class="p">,</span> <span class="n">observation2</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">observation1</span> <span class="o">==</span> <span class="n">observation2</span></div>
+
+    
+<div class="viewcode-block" id="LaserTagPOMDP.compute_metrics">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagPOMDP.compute_metrics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">histories</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">History</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">MetricValue</span><span class="p">]:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Compute LaserTag POMDP specific metrics from simulation histories.&quot;&quot;&quot;</span>
+        <span class="n">total_episodes</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">histories</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">total_episodes</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># Return empty metrics for no data</span>
+            <span class="k">return</span> <span class="p">[]</span>
+        
+        <span class="c1"># Initialize per-episode lists for confidence intervals</span>
+        <span class="n">episode_lengths</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">success_indicators</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">failed_tags_per_episode</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">obstacle_collisions_per_episode</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">dangerous_area_steps_per_episode</span> <span class="o">=</span> <span class="p">[]</span>
+        
+        <span class="c1"># Action direction mappings (used multiple times)</span>
+        <span class="n">action_dirs</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">1</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">2</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">3</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)}</span>
+        
+        <span class="c1"># Single loop to collect all metrics</span>
+        <span class="k">for</span> <span class="n">history</span> <span class="ow">in</span> <span class="n">histories</span><span class="p">:</span>
+            <span class="n">episode_length</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">)</span>
+            <span class="n">episode_lengths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">episode_length</span><span class="p">)</span>
+            
+            <span class="c1"># Check if episode ended with successful tag</span>
+            <span class="n">episode_successful</span> <span class="o">=</span> <span class="p">(</span>
+                <span class="n">history</span><span class="o">.</span><span class="n">history</span> <span class="ow">and</span> 
+                <span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">reward</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> 
+                <span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">reward</span> <span class="o">&gt;</span> <span class="mi">0</span>
+            <span class="p">)</span>
+            <span class="n">success_indicators</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">episode_successful</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+            
+            <span class="c1"># Initialize episode-specific counters</span>
+            <span class="n">episode_failed_tags</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">episode_obstacle_collisions</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">episode_dangerous_area_steps</span> <span class="o">=</span> <span class="mi">0</span>
+            
+            <span class="c1"># Count per-step metrics</span>
+            <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">:</span>
+                <span class="c1"># Count failed tag attempts</span>
+                <span class="k">if</span> <span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">action</span> <span class="o">==</span> <span class="mi">4</span> <span class="ow">and</span> 
+                    <span class="n">step</span><span class="o">.</span><span class="n">reward</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> 
+                    <span class="n">step</span><span class="o">.</span><span class="n">reward</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">):</span>  <span class="c1"># Tag action with negative reward</span>
+                    <span class="n">episode_failed_tags</span> <span class="o">+=</span> <span class="mi">1</span>
+                
+                <span class="c1"># Count dangerous area steps</span>
+                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="p">,</span> <span class="n">LaserTagState</span><span class="p">):</span>
+                    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_is_in_dangerous_area</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span><span class="p">):</span>
+                        <span class="n">episode_dangerous_area_steps</span> <span class="o">+=</span> <span class="mi">1</span>
+                
+                <span class="c1"># Count obstacle collisions</span>
+                <span class="k">if</span> <span class="n">step</span><span class="o">.</span><span class="n">action</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]:</span>  <span class="c1"># Movement actions</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="p">,</span> <span class="n">LaserTagState</span><span class="p">)</span> <span class="ow">and</span> 
+                        <span class="nb">hasattr</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s1">&#39;next_state&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">next_state</span><span class="p">,</span> <span class="n">LaserTagState</span><span class="p">)):</span>
+                        
+                        <span class="k">if</span> <span class="n">step</span><span class="o">.</span><span class="n">action</span> <span class="ow">in</span> <span class="n">action_dirs</span><span class="p">:</span>
+                            <span class="n">dr</span><span class="p">,</span> <span class="n">dc</span> <span class="o">=</span> <span class="n">action_dirs</span><span class="p">[</span><span class="n">step</span><span class="o">.</span><span class="n">action</span><span class="p">]</span>
+                            <span class="n">intended_pos</span> <span class="o">=</span> <span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">dr</span><span class="p">,</span> <span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">dc</span><span class="p">)</span>
+                            
+                            <span class="c1"># Check if intended position was a wall and robot didn&#39;t move</span>
+                            <span class="k">if</span> <span class="p">(</span><span class="n">intended_pos</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">walls</span> <span class="ow">and</span> 
+                                <span class="n">step</span><span class="o">.</span><span class="n">next_state</span><span class="o">.</span><span class="n">robot</span> <span class="o">==</span> <span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span><span class="p">):</span>
+                                <span class="n">episode_obstacle_collisions</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+            <span class="c1"># Store episode counts for confidence intervals</span>
+            <span class="n">failed_tags_per_episode</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">episode_failed_tags</span><span class="p">)</span>
+            <span class="n">obstacle_collisions_per_episode</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">episode_obstacle_collisions</span><span class="p">)</span>
+            <span class="n">dangerous_area_steps_per_episode</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">episode_dangerous_area_steps</span><span class="p">)</span>
+        
+        <span class="c1"># Calculate aggregate statistics</span>
+        <span class="n">successful_tags</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">success_indicators</span><span class="p">)</span>
+        <span class="n">success_rate</span> <span class="o">=</span> <span class="n">successful_tags</span> <span class="o">/</span> <span class="n">total_episodes</span>
+        <span class="n">avg_episode_length</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">episode_lengths</span><span class="p">)</span>
+        <span class="n">avg_failed_tags</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">failed_tags_per_episode</span><span class="p">)</span>
+        <span class="n">avg_obstacle_collisions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">obstacle_collisions_per_episode</span><span class="p">)</span>
+        <span class="n">avg_dangerous_area_steps</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">dangerous_area_steps_per_episode</span><span class="p">)</span>
+        
+        <span class="c1"># Calculate confidence intervals (handle single episode case)</span>
+        <span class="k">if</span> <span class="n">total_episodes</span> <span class="o">&gt;=</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="n">success_ci</span> <span class="o">=</span> <span class="n">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">success_indicators</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+            <span class="n">episode_length_ci</span> <span class="o">=</span> <span class="n">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">episode_lengths</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+            <span class="n">failed_tags_ci</span> <span class="o">=</span> <span class="n">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">failed_tags_per_episode</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+            <span class="n">obstacle_collisions_ci</span> <span class="o">=</span> <span class="n">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">obstacle_collisions_per_episode</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+            <span class="n">dangerous_area_steps_ci</span> <span class="o">=</span> <span class="n">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">dangerous_area_steps_per_episode</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+            
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># For single episode, confidence bounds equal the value (no statistical inference)</span>
+            <span class="n">success_ci</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+            <span class="n">episode_length_ci</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+            <span class="n">failed_tags_ci</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+            <span class="n">obstacle_collisions_ci</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+            <span class="n">dangerous_area_steps_ci</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">)</span>
+            
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="n">MetricValue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;tag_success_rate&quot;</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">success_rate</span><span class="p">,</span>
+                <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="n">success_ci</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="n">success_ci</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="p">),</span>
+            <span class="n">MetricValue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;average_episode_length&quot;</span><span class="p">,</span> 
+                <span class="n">value</span><span class="o">=</span><span class="n">avg_episode_length</span><span class="p">,</span>
+                <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="n">episode_length_ci</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="n">episode_length_ci</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="p">),</span>
+            <span class="n">MetricValue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;average_failed_tag_attempts&quot;</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">avg_failed_tags</span><span class="p">,</span>
+                <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="n">failed_tags_ci</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="n">failed_tags_ci</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="p">),</span>
+            <span class="n">MetricValue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;average_obstacle_collisions&quot;</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">avg_obstacle_collisions</span><span class="p">,</span>
+                <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="n">obstacle_collisions_ci</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="n">obstacle_collisions_ci</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="p">),</span>
+            <span class="n">MetricValue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;average_dangerous_area_steps&quot;</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">avg_dangerous_area_steps</span><span class="p">,</span>
+                <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="n">dangerous_area_steps_ci</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="n">dangerous_area_steps_ci</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="p">),</span>
+        <span class="p">]</span></div>
+
+    
+<div class="viewcode-block" id="LaserTagPOMDP.cache_visualization">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagPOMDP.cache_visualization">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cache_visualization</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">history</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">StepData</span><span class="p">],</span> <span class="n">cache_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Cache visualization of the LaserTag episode as an animated GIF.</span>
+<span class="sd">        </span>
+<span class="sd">        Creates an animated visualization showing:</span>
+<span class="sd">        - Robot movement (red circle with path trail)</span>
+<span class="sd">        - Opponent movement (blue circle)</span>
+<span class="sd">        - Walls (black squares)</span>
+<span class="sd">        - Action arrows showing robot&#39;s intended movement</span>
+<span class="sd">        - Laser measurements (green rays from robot position)</span>
+<span class="sd">        - Belief particles (if available) showing robot&#39;s belief about opponent location</span>
+<span class="sd">        - Grid boundaries and coordinate system</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            history: The history of states, actions, and observations from an episode</span>
+<span class="sd">            cache_path: Path where to save the visualization GIF</span>
+<span class="sd">            </span>
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If history is empty or contains invalid data</span>
+<span class="sd">            TypeError: If cache_path is not a Path object or doesn&#39;t end with .gif</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">history</span><span class="p">,</span> <span class="n">List</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;history must be a List object&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">history</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot visualize empty history&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">history</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">StepData</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;history must be a List of StepData objects&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cache_path</span><span class="p">,</span> <span class="n">Path</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;cache_path must be a Path object&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">)</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.gif&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cache_path must end with .gif&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Create directory if it doesn&#39;t exist</span>
+        <span class="n">cache_path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        
+        <span class="c1"># Extract robot and opponent paths</span>
+        <span class="n">robot_path</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">opponent_path</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">beliefs</span> <span class="o">=</span> <span class="p">[]</span>
+        
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">history</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="p">,</span> <span class="n">LaserTagState</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected LaserTagState, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            
+            <span class="n">robot_path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span><span class="p">)</span>
+            <span class="n">opponent_path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">opponent</span><span class="p">)</span>
+            <span class="n">actions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">action</span><span class="p">)</span>
+            
+            <span class="c1"># Try to extract belief if available</span>
+            <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s1">&#39;belief&#39;</span><span class="p">)</span> <span class="ow">and</span> <span class="n">step</span><span class="o">.</span><span class="n">belief</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">beliefs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">belief</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">beliefs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+        
+        <span class="c1"># Set up the figure and axis with extra space for legend</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">14</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+        <span class="n">rows</span><span class="p">,</span> <span class="n">cols</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">rows</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">cols</span> <span class="o">-</span> <span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">invert_yaxis</span><span class="p">()</span>  <span class="c1"># Invert y-axis so (0,0) is top-left like matrix indexing</span>
+        
+        <span class="c1"># Set grid</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xticks</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">rows</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_yticks</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="n">cols</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Row&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Column&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;LaserTag POMDP Episode Visualization&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># Draw walls as black squares</span>
+        <span class="n">wall_patches</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">wall</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">walls</span><span class="p">):</span>
+            <span class="n">row</span><span class="p">,</span> <span class="n">col</span> <span class="o">=</span> <span class="n">wall</span>
+            <span class="n">square</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Rectangle</span><span class="p">((</span><span class="n">row</span> <span class="o">-</span> <span class="mf">0.4</span><span class="p">,</span> <span class="n">col</span> <span class="o">-</span> <span class="mf">0.4</span><span class="p">),</span> <span class="mf">0.8</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">,</span> 
+                                 <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span>
+                                 <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Wall&#39;</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>  <span class="c1"># Only label first wall</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span><span class="n">square</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># Keep reference for legend</span>
+                <span class="n">wall_patches</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">square</span><span class="p">)</span>
+        
+        <span class="c1"># Draw dangerous areas as red circles (like in light_dark_pomdp)</span>
+        <span class="n">danger_patches</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">danger_center</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dangerous_areas</span><span class="p">):</span>
+            <span class="n">row</span><span class="p">,</span> <span class="n">col</span> <span class="o">=</span> <span class="n">danger_center</span>
+            <span class="n">circle</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">((</span><span class="n">row</span><span class="p">,</span> <span class="n">col</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">dangerous_area_radius</span><span class="p">,</span> 
+                               <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span>
+                               <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Dangerous Areas&#39;</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>  <span class="c1"># Only label first area</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span><span class="n">circle</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># Keep reference for legend</span>
+                <span class="n">danger_patches</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">circle</span><span class="p">)</span>
+        
+        <span class="c1"># Initialize animated elements</span>
+        <span class="n">robot_agent</span><span class="p">,</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">([],</span> <span class="p">[],</span> <span class="s1">&#39;ro&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Robot&#39;</span><span class="p">)</span>
+        <span class="n">opponent_agent</span><span class="p">,</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">([],</span> <span class="p">[],</span> <span class="s1">&#39;bo&#39;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Opponent&#39;</span><span class="p">)</span>
+        <span class="n">robot_path_line</span><span class="p">,</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">([],</span> <span class="p">[],</span> <span class="s1">&#39;r-&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Robot Path&#39;</span><span class="p">)</span>
+        <span class="n">opponent_path_line</span><span class="p">,</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">([],</span> <span class="p">[],</span> <span class="s1">&#39;b-&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Opponent Path&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># Action arrow</span>
+        <span class="n">action_arrow</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">xy</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">xytext</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                                 <span class="n">arrowprops</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">arrowstyle</span><span class="o">=</span><span class="s1">&#39;-&gt;&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">2</span><span class="p">))</span>
+        
+        <span class="c1"># Step counter</span>
+        <span class="n">step_text</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.98</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">ax</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+                          <span class="n">verticalalignment</span><span class="o">=</span><span class="s1">&#39;top&#39;</span><span class="p">,</span> <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round&#39;</span><span class="p">,</span> <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;wheat&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">))</span>
+        
+        <span class="c1"># Action text</span>
+        <span class="n">action_text</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.90</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">ax</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+                            <span class="n">verticalalignment</span><span class="o">=</span><span class="s1">&#39;top&#39;</span><span class="p">,</span> <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round&#39;</span><span class="p">,</span> <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;lightblue&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">))</span>
+        
+        <span class="c1"># Tag success indicator</span>
+        <span class="n">tag_text</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.02</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">ax</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">24</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span>
+                         <span class="n">horizontalalignment</span><span class="o">=</span><span class="s1">&#39;left&#39;</span><span class="p">,</span> <span class="n">verticalalignment</span><span class="o">=</span><span class="s1">&#39;bottom&#39;</span><span class="p">,</span>
+                         <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.5&#39;</span><span class="p">,</span> <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;gold&#39;</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.9</span><span class="p">),</span>
+                         <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">visible</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        
+        <span class="c1"># Belief particles (if available) - opponent beliefs</span>
+        <span class="n">opponent_belief_scatter</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">([],</span> <span class="p">[],</span> <span class="n">c</span><span class="o">=</span><span class="s1">&#39;lightblue&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Opponent Belief Particles&#39;</span><span class="p">)</span>
+        <span class="c1"># Robot belief particles</span>
+        <span class="n">robot_belief_scatter</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">([],</span> <span class="p">[],</span> <span class="n">c</span><span class="o">=</span><span class="s1">&#39;lightcoral&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Robot Belief Particles&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># Laser rays (8 directions from robot)</span>
+        <span class="n">laser_lines</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">laser_directions</span> <span class="o">=</span> <span class="p">[(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">8</span><span class="p">):</span>
+            <span class="n">line</span><span class="p">,</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">([],</span> <span class="p">[],</span> <span class="s1">&#39;g-&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.4</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> 
+                           <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Laser Rays&#39;</span> <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="k">else</span> <span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="n">laser_lines</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+        
+        <span class="c1"># Legend - position it inside the plot area to avoid truncation</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s1">&#39;upper right&#39;</span><span class="p">,</span> <span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mf">0.98</span><span class="p">,</span> <span class="mf">0.98</span><span class="p">),</span> <span class="n">framealpha</span><span class="o">=</span><span class="mf">0.9</span><span class="p">)</span>
+        
+        <span class="k">def</span><span class="w"> </span><span class="nf">init</span><span class="p">():</span>
+            <span class="n">robot_agent</span><span class="o">.</span><span class="n">set_data</span><span class="p">([],</span> <span class="p">[])</span>
+            <span class="n">opponent_agent</span><span class="o">.</span><span class="n">set_data</span><span class="p">([],</span> <span class="p">[])</span>
+            <span class="n">robot_path_line</span><span class="o">.</span><span class="n">set_data</span><span class="p">([],</span> <span class="p">[])</span>
+            <span class="n">opponent_path_line</span><span class="o">.</span><span class="n">set_data</span><span class="p">([],</span> <span class="p">[])</span>
+            <span class="n">action_arrow</span><span class="o">.</span><span class="n">set_position</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+            <span class="n">action_arrow</span><span class="o">.</span><span class="n">xy</span> <span class="o">=</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">step_text</span><span class="o">.</span><span class="n">set_text</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">)</span>
+            <span class="n">action_text</span><span class="o">.</span><span class="n">set_text</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">)</span>
+            <span class="n">tag_text</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+            <span class="n">opponent_belief_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+            <span class="n">robot_belief_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+            <span class="c1"># Clear laser rays</span>
+            <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">laser_lines</span><span class="p">:</span>
+                <span class="n">line</span><span class="o">.</span><span class="n">set_data</span><span class="p">([],</span> <span class="p">[])</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">robot_agent</span><span class="p">,</span> <span class="n">opponent_agent</span><span class="p">,</span> <span class="n">robot_path_line</span><span class="p">,</span> <span class="n">opponent_path_line</span><span class="p">,</span> 
+                   <span class="n">action_arrow</span><span class="p">,</span> <span class="n">step_text</span><span class="p">,</span> <span class="n">action_text</span><span class="p">,</span> <span class="n">tag_text</span><span class="p">,</span> <span class="n">opponent_belief_scatter</span><span class="p">,</span> <span class="n">robot_belief_scatter</span><span class="p">]</span> <span class="o">+</span> <span class="n">laser_lines</span>
+        
+        <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="n">frame</span><span class="p">):</span>
+            <span class="c1"># Current positions</span>
+            <span class="n">robot_pos</span> <span class="o">=</span> <span class="n">robot_path</span><span class="p">[</span><span class="n">frame</span><span class="p">]</span>
+            <span class="n">opponent_pos</span> <span class="o">=</span> <span class="n">opponent_path</span><span class="p">[</span><span class="n">frame</span><span class="p">]</span>
+            
+            <span class="c1"># Update agent positions (transpose: row,col to x,y for plotting)</span>
+            <span class="n">robot_agent</span><span class="o">.</span><span class="n">set_data</span><span class="p">([</span><span class="n">robot_pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="p">[</span><span class="n">robot_pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>  <span class="c1"># row, col</span>
+            <span class="n">opponent_agent</span><span class="o">.</span><span class="n">set_data</span><span class="p">([</span><span class="n">opponent_pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="p">[</span><span class="n">opponent_pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>  <span class="c1"># row, col</span>
+            
+            <span class="c1"># Update path lines up to current frame</span>
+            <span class="n">robot_rows</span> <span class="o">=</span> <span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">robot_path</span><span class="p">[:</span><span class="n">frame</span><span class="o">+</span><span class="mi">1</span><span class="p">]]</span>
+            <span class="n">robot_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">robot_path</span><span class="p">[:</span><span class="n">frame</span><span class="o">+</span><span class="mi">1</span><span class="p">]]</span>
+            <span class="n">opponent_rows</span> <span class="o">=</span> <span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">opponent_path</span><span class="p">[:</span><span class="n">frame</span><span class="o">+</span><span class="mi">1</span><span class="p">]]</span>
+            <span class="n">opponent_cols</span> <span class="o">=</span> <span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">opponent_path</span><span class="p">[:</span><span class="n">frame</span><span class="o">+</span><span class="mi">1</span><span class="p">]]</span>
+            
+            <span class="n">robot_path_line</span><span class="o">.</span><span class="n">set_data</span><span class="p">(</span><span class="n">robot_rows</span><span class="p">,</span> <span class="n">robot_cols</span><span class="p">)</span>
+            <span class="n">opponent_path_line</span><span class="o">.</span><span class="n">set_data</span><span class="p">(</span><span class="n">opponent_rows</span><span class="p">,</span> <span class="n">opponent_cols</span><span class="p">)</span>
+            
+            <span class="c1"># Update action arrow</span>
+            <span class="k">if</span> <span class="n">frame</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">):</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="n">actions</span><span class="p">[</span><span class="n">frame</span><span class="p">]</span>
+                <span class="n">action_dirs</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">1</span><span class="p">:</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">2</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="mi">3</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="mi">4</span><span class="p">:</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)}</span>
+                <span class="n">action_names</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="s2">&quot;North&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="s2">&quot;South&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="s2">&quot;East&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">:</span> <span class="s2">&quot;West&quot;</span><span class="p">,</span> <span class="mi">4</span><span class="p">:</span> <span class="s2">&quot;Tag&quot;</span><span class="p">}</span>
+                
+                <span class="k">if</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">action_dirs</span><span class="p">:</span>
+                    <span class="n">dr</span><span class="p">,</span> <span class="n">dc</span> <span class="o">=</span> <span class="n">action_dirs</span><span class="p">[</span><span class="n">action</span><span class="p">]</span>
+                    <span class="c1"># Arrow from robot position in direction of action</span>
+                    <span class="n">action_arrow</span><span class="o">.</span><span class="n">set_position</span><span class="p">((</span><span class="n">robot_pos</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">robot_pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+                    <span class="n">action_arrow</span><span class="o">.</span><span class="n">xy</span> <span class="o">=</span> <span class="p">(</span><span class="n">robot_pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="n">dr</span> <span class="o">*</span> <span class="mf">0.3</span><span class="p">,</span> <span class="n">robot_pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="n">dc</span> <span class="o">*</span> <span class="mf">0.3</span><span class="p">)</span>
+                    
+                    <span class="c1"># Update text displays</span>
+                    <span class="n">step_text</span><span class="o">.</span><span class="n">set_text</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Step: </span><span class="si">{</span><span class="n">frame</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mi">1</span><span class="si">}</span><span class="s1">/</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">robot_path</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+                    <span class="n">action_text</span><span class="o">.</span><span class="n">set_text</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Action: </span><span class="si">{</span><span class="n">action_names</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">action</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Unknown&quot;</span><span class="p">)</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+                    
+                    <span class="c1"># Show tag indicator for tag actions</span>
+                    <span class="k">if</span> <span class="n">action</span> <span class="o">==</span> <span class="mi">4</span><span class="p">:</span>  <span class="c1"># Tag action</span>
+                        <span class="k">if</span> <span class="n">robot_pos</span> <span class="o">==</span> <span class="n">opponent_pos</span><span class="p">:</span>  <span class="c1"># Successful tag</span>
+                            <span class="n">tag_text</span><span class="o">.</span><span class="n">set_text</span><span class="p">(</span><span class="s1">&#39;🏷️ TAGGED! 🏷️&#39;</span><span class="p">)</span>
+                            <span class="n">tag_text</span><span class="o">.</span><span class="n">set_bbox</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.5&#39;</span><span class="p">,</span> <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;gold&#39;</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;green&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.9</span><span class="p">))</span>
+                            <span class="n">tag_text</span><span class="o">.</span><span class="n">set_color</span><span class="p">(</span><span class="s1">&#39;green&#39;</span><span class="p">)</span>
+                            <span class="n">tag_text</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+                        <span class="k">else</span><span class="p">:</span>  <span class="c1"># Failed tag attempt</span>
+                            <span class="n">tag_text</span><span class="o">.</span><span class="n">set_text</span><span class="p">(</span><span class="s1">&#39;❌ MISSED! ❌&#39;</span><span class="p">)</span>
+                            <span class="n">tag_text</span><span class="o">.</span><span class="n">set_bbox</span><span class="p">(</span><span class="nb">dict</span><span class="p">(</span><span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.5&#39;</span><span class="p">,</span> <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;lightcoral&#39;</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.9</span><span class="p">))</span>
+                            <span class="n">tag_text</span><span class="o">.</span><span class="n">set_color</span><span class="p">(</span><span class="s1">&#39;darkred&#39;</span><span class="p">)</span>
+                            <span class="n">tag_text</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">tag_text</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+            
+            <span class="c1"># Update belief particles if available</span>
+            <span class="k">if</span> <span class="n">frame</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">beliefs</span><span class="p">)</span> <span class="ow">and</span> <span class="n">beliefs</span><span class="p">[</span><span class="n">frame</span><span class="p">]</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">belief</span> <span class="o">=</span> <span class="n">beliefs</span><span class="p">[</span><span class="n">frame</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">belief</span><span class="p">,</span> <span class="s1">&#39;to_unique_support_distribution&#39;</span><span class="p">):</span>
+                        <span class="n">unique_belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">to_unique_support_distribution</span><span class="p">()</span>
+                        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">unique_belief</span><span class="o">.</span><span class="n">values</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                            <span class="c1"># Extract opponent and robot positions from belief states</span>
+                            <span class="n">opponent_belief_positions</span> <span class="o">=</span> <span class="p">[]</span>
+                            <span class="n">opponent_belief_weights</span> <span class="o">=</span> <span class="p">[]</span>
+                            <span class="n">robot_belief_positions</span> <span class="o">=</span> <span class="p">[]</span>
+                            <span class="n">robot_belief_weights</span> <span class="o">=</span> <span class="p">[]</span>
+                            
+                            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">state</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">unique_belief</span><span class="o">.</span><span class="n">values</span><span class="p">):</span>
+                                <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">LaserTagState</span><span class="p">):</span>
+                                    <span class="c1"># Convert row,col to x,y for plotting (transposed mapping)</span>
+                                    <span class="n">opponent_belief_positions</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">state</span><span class="o">.</span><span class="n">opponent</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">state</span><span class="o">.</span><span class="n">opponent</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+                                    <span class="n">opponent_belief_weights</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">unique_belief</span><span class="o">.</span><span class="n">probs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)</span>  <span class="c1"># Scale for visibility</span>
+                                    
+                                    <span class="n">robot_belief_positions</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">state</span><span class="o">.</span><span class="n">robot</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">state</span><span class="o">.</span><span class="n">robot</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+                                    <span class="n">robot_belief_weights</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">unique_belief</span><span class="o">.</span><span class="n">probs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">*</span> <span class="mi">100</span><span class="p">)</span>  <span class="c1"># Scale for visibility</span>
+                            
+                            <span class="k">if</span> <span class="n">opponent_belief_positions</span><span class="p">:</span>
+                                <span class="n">opponent_belief_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">opponent_belief_positions</span><span class="p">))</span>
+                                <span class="n">opponent_belief_scatter</span><span class="o">.</span><span class="n">set_sizes</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">opponent_belief_weights</span><span class="p">))</span>
+                            <span class="k">else</span><span class="p">:</span>
+                                <span class="n">opponent_belief_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+                                
+                            <span class="k">if</span> <span class="n">robot_belief_positions</span><span class="p">:</span>
+                                <span class="n">robot_belief_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">robot_belief_positions</span><span class="p">))</span>
+                                <span class="n">robot_belief_scatter</span><span class="o">.</span><span class="n">set_sizes</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">robot_belief_weights</span><span class="p">))</span>
+                            <span class="k">else</span><span class="p">:</span>
+                                <span class="n">robot_belief_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+                        <span class="k">else</span><span class="p">:</span>
+                            <span class="n">opponent_belief_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+                            <span class="n">robot_belief_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+                <span class="k">except</span><span class="p">:</span>
+                    <span class="n">opponent_belief_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+                    <span class="n">robot_belief_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">opponent_belief_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+                <span class="n">robot_belief_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+            
+            <span class="c1"># Update laser rays visualization</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="p">(</span><span class="n">line</span><span class="p">,</span> <span class="n">direction</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">laser_lines</span><span class="p">,</span> <span class="n">laser_directions</span><span class="p">)):</span>
+                <span class="n">dr</span><span class="p">,</span> <span class="n">dc</span> <span class="o">=</span> <span class="n">direction</span>
+                <span class="c1"># Show laser ray from robot position</span>
+                <span class="n">start_x</span><span class="p">,</span> <span class="n">start_y</span> <span class="o">=</span> <span class="n">robot_pos</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">robot_pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>  <span class="c1"># row, col</span>
+                
+                <span class="c1"># Calculate laser measurement for visualization</span>
+                <span class="n">robot_r</span><span class="p">,</span> <span class="n">robot_c</span> <span class="o">=</span> <span class="n">robot_pos</span>
+                <span class="n">distance</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="n">ray_x</span><span class="p">,</span> <span class="n">ray_y</span> <span class="o">=</span> <span class="n">robot_r</span><span class="p">,</span> <span class="n">robot_c</span>
+                
+                <span class="c1"># Cast ray to find end point</span>
+                <span class="k">while</span> <span class="kc">True</span><span class="p">:</span>
+                    <span class="n">ray_r</span> <span class="o">=</span> <span class="n">robot_r</span> <span class="o">+</span> <span class="n">dr</span> <span class="o">*</span> <span class="p">(</span><span class="n">distance</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                    <span class="n">ray_c</span> <span class="o">=</span> <span class="n">robot_c</span> <span class="o">+</span> <span class="n">dc</span> <span class="o">*</span> <span class="p">(</span><span class="n">distance</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+                    
+                    <span class="c1"># Check bounds and walls</span>
+                    <span class="k">if</span> <span class="p">(</span><span class="n">ray_r</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">ray_r</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">or</span> 
+                        <span class="n">ray_c</span> <span class="o">&lt;</span> <span class="mi">0</span> <span class="ow">or</span> <span class="n">ray_c</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">floor_shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">or</span>
+                        <span class="p">(</span><span class="n">ray_r</span><span class="p">,</span> <span class="n">ray_c</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">walls</span><span class="p">):</span>
+                        <span class="k">break</span>
+                    <span class="n">distance</span> <span class="o">+=</span> <span class="mi">1</span>
+                
+                <span class="c1"># Draw laser ray</span>
+                <span class="n">end_x</span> <span class="o">=</span> <span class="n">robot_r</span> <span class="o">+</span> <span class="n">dr</span> <span class="o">*</span> <span class="n">distance</span>
+                <span class="n">end_y</span> <span class="o">=</span> <span class="n">robot_c</span> <span class="o">+</span> <span class="n">dc</span> <span class="o">*</span> <span class="n">distance</span>
+                <span class="n">line</span><span class="o">.</span><span class="n">set_data</span><span class="p">([</span><span class="n">start_x</span><span class="p">,</span> <span class="n">end_x</span><span class="p">],</span> <span class="p">[</span><span class="n">start_y</span><span class="p">,</span> <span class="n">end_y</span><span class="p">])</span>
+            
+            <span class="k">return</span> <span class="p">[</span><span class="n">robot_agent</span><span class="p">,</span> <span class="n">opponent_agent</span><span class="p">,</span> <span class="n">robot_path_line</span><span class="p">,</span> <span class="n">opponent_path_line</span><span class="p">,</span>
+                   <span class="n">action_arrow</span><span class="p">,</span> <span class="n">step_text</span><span class="p">,</span> <span class="n">action_text</span><span class="p">,</span> <span class="n">tag_text</span><span class="p">,</span> <span class="n">opponent_belief_scatter</span><span class="p">,</span> <span class="n">robot_belief_scatter</span><span class="p">]</span> <span class="o">+</span> <span class="n">laser_lines</span>
+        
+        <span class="c1"># Create animation</span>
+        <span class="n">anim</span> <span class="o">=</span> <span class="n">animation</span><span class="o">.</span><span class="n">FuncAnimation</span><span class="p">(</span>
+            <span class="n">fig</span><span class="p">,</span> <span class="n">update</span><span class="p">,</span> <span class="n">frames</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">robot_path</span><span class="p">),</span> <span class="n">init_func</span><span class="o">=</span><span class="n">init</span><span class="p">,</span>
+            <span class="n">blit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">repeat</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">interval</span><span class="o">=</span><span class="mi">1000</span>  <span class="c1"># 1 second per frame</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Save animation with proper layout</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        <span class="n">anim</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">cache_path</span><span class="p">,</span> <span class="n">writer</span><span class="o">=</span><span class="s1">&#39;pillow&#39;</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Saved LaserTag visualization to </span><span class="si">{</span><span class="n">cache_path</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

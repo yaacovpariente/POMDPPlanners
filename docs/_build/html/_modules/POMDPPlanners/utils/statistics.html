@@ -1,0 +1,695 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.utils.statistics &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.utils.statistics</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.utils.statistics</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy</span><span class="w"> </span><span class="kn">import</span> <span class="n">stats</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">binom</span>
+
+<div class="viewcode-block" id="cvar_estimator">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.statistics.html#POMDPPlanners.utils.statistics.cvar_estimator">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">cvar_estimator</span><span class="p">(</span><span class="n">vec</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculate Conditional Value at Risk (CVaR) for risk-sensitive POMDP evaluation.</span>
+<span class="sd">    </span>
+<span class="sd">    CVaR measures the expected value of the worst-case outcomes, providing a</span>
+<span class="sd">    risk-sensitive performance metric that goes beyond simple mean rewards.</span>
+<span class="sd">    This is particularly valuable for safety-critical applications where</span>
+<span class="sd">    tail risk matters more than average performance.</span>
+<span class="sd">    </span>
+<span class="sd">    Mathematical Definition:</span>
+<span class="sd">        CVaR_α(X) = E[X | X ≥ VaR_α(X)]</span>
+<span class="sd">        </span>
+<span class="sd">    Where VaR_α is the Value at Risk at confidence level α.</span>
+<span class="sd">    </span>
+<span class="sd">    The implementation uses a vectorized approach for computational efficiency,</span>
+<span class="sd">    calculating CVaR by integrating over the tail distribution above the α-quantile.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        vec: Array of values (typically returns, costs, or performance metrics)  </span>
+<span class="sd">        alpha: Confidence level (0 &lt; α ≤ 1), where higher values focus on worse outcomes</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        CVaR value representing expected worst-case performance</span>
+<span class="sd">        </span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If alpha not in [0,1] or vec is empty</span>
+<span class="sd">        </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Risk analysis of POMDP algorithm performance::</span>
+<span class="sd">        </span>
+<span class="sd">            import numpy as np</span>
+<span class="sd">            from POMDPPlanners.utils.statistics import cvar_estimator</span>
+<span class="sd">            </span>
+<span class="sd">            # Simulate algorithm returns from multiple episodes  </span>
+<span class="sd">            returns = np.array([12.5, 8.3, 15.7, -2.1, 9.8, 13.2, 6.4, 11.0, -1.5, 14.3])</span>
+<span class="sd">            </span>
+<span class="sd">            # Calculate risk metrics</span>
+<span class="sd">            mean_return = np.mean(returns)</span>
+<span class="sd">            cvar_90 = cvar_estimator(returns, alpha=0.9)  # Worst 10% outcomes</span>
+<span class="sd">            cvar_95 = cvar_estimator(returns, alpha=0.95) # Worst 5% outcomes</span>
+<span class="sd">            </span>
+<span class="sd">            print(f&quot;Mean return: {mean_return:.2f}&quot;)</span>
+<span class="sd">            print(f&quot;CVaR (90%): {cvar_90:.2f}&quot;)  # Focus on worst 10%</span>
+<span class="sd">            print(f&quot;CVaR (95%): {cvar_95:.2f}&quot;)  # Focus on worst 5% </span>
+<span class="sd">            </span>
+<span class="sd">            # Lower CVaR indicates higher tail risk</span>
+<span class="sd">            </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Comparing algorithm risk profiles::</span>
+<span class="sd">        </span>
+<span class="sd">            # Algorithm performance data from experiments</span>
+<span class="sd">            pomcp_returns = np.array([10.2, 12.8, 9.5, 11.3, 8.7, 12.1, 10.9, 9.8, 11.5, 10.4])</span>
+<span class="sd">            pft_returns = np.array([15.1, 7.2, 14.8, 13.3, 6.9, 15.5, 8.1, 14.2, 12.7, 9.3])</span>
+<span class="sd">            </span>
+<span class="sd">            # Compare risk-adjusted performance</span>
+<span class="sd">            pomcp_mean = np.mean(pomcp_returns)</span>
+<span class="sd">            pft_mean = np.mean(pft_returns) </span>
+<span class="sd">            </span>
+<span class="sd">            pomcp_cvar = cvar_estimator(pomcp_returns, alpha=0.9)</span>
+<span class="sd">            pft_cvar = cvar_estimator(pft_returns, alpha=0.9)</span>
+<span class="sd">            </span>
+<span class="sd">            print(&quot;Algorithm Risk Comparison:&quot;)</span>
+<span class="sd">            print(f&quot;POMCP - Mean: {pomcp_mean:.2f}, CVaR(90%): {pomcp_cvar:.2f}&quot;)</span>
+<span class="sd">            print(f&quot;PFT-DPW - Mean: {pft_mean:.2f}, CVaR(90%): {pft_cvar:.2f}&quot;)</span>
+<span class="sd">            </span>
+<span class="sd">            # Interpretation:</span>
+<span class="sd">            # - Higher mean = better average performance  </span>
+<span class="sd">            # - Higher CVaR = better worst-case performance (lower risk)</span>
+<span class="sd">            </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Safety-critical application analysis::</span>
+<span class="sd">        </span>
+<span class="sd">            # Safety constraint violations (negative rewards)</span>
+<span class="sd">            safety_violations = np.array([-50, -20, -10, -100, -5, -30, -15, -25, -40, -60])</span>
+<span class="sd">            </span>
+<span class="sd">            # Assess safety risk with different confidence levels</span>
+<span class="sd">            risk_metrics = {}</span>
+<span class="sd">            for alpha in [0.8, 0.9, 0.95, 0.99]:</span>
+<span class="sd">                risk_metrics[alpha] = cvar_estimator(safety_violations, alpha)</span>
+<span class="sd">                </span>
+<span class="sd">            for alpha, cvar in risk_metrics.items():</span>
+<span class="sd">                worst_pct = (1 - alpha) * 100</span>
+<span class="sd">                print(f&quot;CVaR({alpha:.0%}): {cvar:.1f} (worst {worst_pct:.0f}% avg)&quot;)</span>
+<span class="sd">                </span>
+<span class="sd">            # Use CVaR to set safety thresholds and compare algorithms</span>
+<span class="sd">            </span>
+<span class="sd">    Risk Assessment Applications:</span>
+<span class="sd">        **Portfolio Analysis**: Compare multiple algorithms&#39; risk-return profiles</span>
+<span class="sd">        </span>
+<span class="sd">        **Safety-Critical Systems**: Evaluate worst-case performance guarantees</span>
+<span class="sd">        </span>
+<span class="sd">        **Robust Planning**: Select algorithms with acceptable tail risk</span>
+<span class="sd">        </span>
+<span class="sd">        **Performance Bounds**: Establish confidence intervals for worst-case scenarios</span>
+<span class="sd">        </span>
+<span class="sd">    Mathematical Properties:</span>
+<span class="sd">        - **Monotonic**: CVaR_α ≥ VaR_α (CVaR is always at least as large as VaR)</span>
+<span class="sd">        - **Coherent**: Satisfies subadditivity, monotonicity, positive homogeneity</span>
+<span class="sd">        - **Tail Sensitivity**: Higher α values emphasize extreme outcomes more</span>
+<span class="sd">        - **Computational**: More stable than VaR, especially for small samples</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate the Conditional Value at Risk (CVaR) for a given vector of values.</span>
+<span class="sd">    CVaR is the expected value of the worst (1-alpha)% of cases, where &quot;worst&quot;</span>
+<span class="sd">    means the highest values (assuming these represent costs or risks).</span>
+
+<span class="sd">    Args:</span>
+<span class="sd">        vec: Array of values</span>
+<span class="sd">        alpha: Confidence level (between 0 and 1)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        float: The CVaR value</span>
+
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If alpha is not between 0 and 1 or if vec is empty</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">alpha</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;alpha must be between 0 and 1&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">vec</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Input vector must not be empty&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">vec</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">vec</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="n">sorted_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">vec</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">sorted_vec</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">alpha</span> <span class="o">==</span> <span class="mf">1.0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">sorted_vec</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">alpha</span> <span class="o">==</span> <span class="mf">0.0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">sorted_vec</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">sorted_vec</span><span class="p">)</span>  <span class="c1"># Get the number of elements</span>
+
+    <span class="c1"># Create indices and weights vectorized</span>
+    <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">)</span>  <span class="c1"># 1 to n-1</span>
+    <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="n">indices</span> <span class="o">/</span> <span class="n">n</span><span class="p">)</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">alpha</span><span class="p">))</span>
+
+    <span class="c1"># Calculate differences vectorized</span>
+    <span class="n">diffs</span> <span class="o">=</span> <span class="n">sorted_vec</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">sorted_vec</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="c1"># Calculate final result vectorized</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="n">sorted_vec</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span> <span class="o">*</span> <span class="n">diffs</span><span class="p">)</span> <span class="o">/</span> <span class="n">alpha</span>
+
+    <span class="k">return</span> <span class="n">s</span></div>
+
+
+
+<div class="viewcode-block" id="confidence_interval">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.statistics.html#POMDPPlanners.utils.statistics.confidence_interval">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Calculate confidence interval for the mean using t-distribution.</span>
+<span class="sd">    </span>
+<span class="sd">    Computes confidence intervals for algorithm performance means, providing</span>
+<span class="sd">    statistical bounds on the true expected performance. This is essential</span>
+<span class="sd">    for making statistically sound comparisons between POMDP algorithms.</span>
+<span class="sd">    </span>
+<span class="sd">    Uses the t-distribution to account for sample size uncertainty, which is</span>
+<span class="sd">    more appropriate than normal distribution for small to moderate sample sizes</span>
+<span class="sd">    common in POMDP experiments.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        data: Sample data (algorithm returns, rewards, or performance metrics)</span>
+<span class="sd">        confidence: Confidence level (0 &lt; confidence &lt; 1, typically 0.95)</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        Tuple of (lower_bound, upper_bound) for the confidence interval</span>
+<span class="sd">        </span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If insufficient data or contains NaN values</span>
+<span class="sd">        </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Statistical comparison of algorithm performance::</span>
+<span class="sd">        </span>
+<span class="sd">            import numpy as np</span>
+<span class="sd">            from POMDPPlanners.utils.statistics import confidence_interval</span>
+<span class="sd">            </span>
+<span class="sd">            # Algorithm performance from multiple runs</span>
+<span class="sd">            pomcp_rewards = [12.3, 11.8, 13.1, 12.7, 11.9, 12.5, 13.0, 12.1, 12.8, 12.4]</span>
+<span class="sd">            pft_rewards = [11.5, 13.2, 12.8, 11.9, 12.3, 13.5, 12.1, 12.9, 11.7, 12.6]</span>
+<span class="sd">            </span>
+<span class="sd">            # Calculate 95% confidence intervals</span>
+<span class="sd">            pomcp_ci = confidence_interval(pomcp_rewards, confidence=0.95)</span>
+<span class="sd">            pft_ci = confidence_interval(pft_rewards, confidence=0.95)</span>
+<span class="sd">            </span>
+<span class="sd">            print(f&quot;POMCP mean: {np.mean(pomcp_rewards):.2f}&quot;)</span>
+<span class="sd">            print(f&quot;POMCP 95% CI: [{pomcp_ci[0]:.2f}, {pomcp_ci[1]:.2f}]&quot;)</span>
+<span class="sd">            print(f&quot;PFT-DPW mean: {np.mean(pft_rewards):.2f}&quot;)  </span>
+<span class="sd">            print(f&quot;PFT-DPW 95% CI: [{pft_ci[0]:.2f}, {pft_ci[1]:.2f}]&quot;)</span>
+<span class="sd">            </span>
+<span class="sd">            # Check for statistical significance</span>
+<span class="sd">            if pomcp_ci[1] &lt; pft_ci[0]:</span>
+<span class="sd">                print(&quot;PFT-DPW significantly outperforms POMCP&quot;)</span>
+<span class="sd">            elif pft_ci[1] &lt; pomcp_ci[0]:</span>
+<span class="sd">                print(&quot;POMCP significantly outperforms PFT-DPW&quot;) </span>
+<span class="sd">            else:</span>
+<span class="sd">                print(&quot;No statistically significant difference&quot;)</span>
+<span class="sd">                </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Multi-algorithm performance study::</span>
+<span class="sd">        </span>
+<span class="sd">            # Results from comparative study</span>
+<span class="sd">            algorithms = {</span>
+<span class="sd">                &#39;POMCP&#39;: [15.2, 14.8, 15.5, 14.9, 15.1, 15.3, 14.7, 15.0, 15.2, 14.8],</span>
+<span class="sd">                &#39;PFT_DPW&#39;: [16.1, 15.9, 16.3, 15.7, 16.0, 16.2, 15.8, 16.1, 15.9, 16.0],</span>
+<span class="sd">                &#39;SparsePFT&#39;: [14.5, 14.9, 14.7, 14.3, 14.8, 14.6, 14.4, 14.7, 14.5, 14.6],</span>
+<span class="sd">                &#39;OpenLoop&#39;: [12.3, 12.7, 12.1, 12.5, 12.4, 12.6, 12.2, 12.8, 12.3, 12.5]</span>
+<span class="sd">            }</span>
+<span class="sd">            </span>
+<span class="sd">            # Statistical analysis with confidence intervals</span>
+<span class="sd">            print(&quot;Algorithm Performance Analysis (95% CI):&quot;)</span>
+<span class="sd">            print(&quot;-&quot; * 50)</span>
+<span class="sd">            for name, rewards in algorithms.items():</span>
+<span class="sd">                mean_reward = np.mean(rewards)</span>
+<span class="sd">                ci_lower, ci_upper = confidence_interval(rewards, confidence=0.95)</span>
+<span class="sd">                ci_width = ci_upper - ci_lower</span>
+<span class="sd">                </span>
+<span class="sd">                print(f&quot;{name:12}: {mean_reward:.2f} [{ci_lower:.2f}, {ci_upper:.2f}] (±{ci_width/2:.2f})&quot;)</span>
+<span class="sd">                </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Sample size analysis for experiment design::</span>
+<span class="sd">        </span>
+<span class="sd">            # Analyze how confidence interval width changes with sample size</span>
+<span class="sd">            true_mean = 12.0</span>
+<span class="sd">            std_dev = 2.0</span>
+<span class="sd">            </span>
+<span class="sd">            sample_sizes = [5, 10, 20, 50, 100]</span>
+<span class="sd">            print(&quot;Sample Size Effect on Confidence Interval Width:&quot;)</span>
+<span class="sd">            print(&quot;-&quot; * 50)</span>
+<span class="sd">            </span>
+<span class="sd">            for n in sample_sizes:</span>
+<span class="sd">                # Simulate data</span>
+<span class="sd">                np.random.seed(42)  # For reproducibility</span>
+<span class="sd">                data = np.random.normal(true_mean, std_dev, n)</span>
+<span class="sd">                </span>
+<span class="sd">                ci_lower, ci_upper = confidence_interval(data, confidence=0.95)</span>
+<span class="sd">                ci_width = ci_upper - ci_lower</span>
+<span class="sd">                </span>
+<span class="sd">                print(f&quot;n={n:3d}: CI width = {ci_width:.3f}&quot;)</span>
+<span class="sd">                </span>
+<span class="sd">            # Shows that larger samples give narrower, more precise intervals</span>
+<span class="sd">            </span>
+<span class="sd">    Statistical Interpretation:</span>
+<span class="sd">        **Confidence Level**: 95% confidence means that if we repeated the</span>
+<span class="sd">        experiment many times, 95% of computed intervals would contain the true mean.</span>
+<span class="sd">        </span>
+<span class="sd">        **Interval Width**: Narrower intervals indicate more precise estimates.</span>
+<span class="sd">        Width depends on sample size, variance, and confidence level.</span>
+<span class="sd">        </span>
+<span class="sd">        **Overlapping Intervals**: If confidence intervals overlap significantly,</span>
+<span class="sd">        there may not be a statistically meaningful difference between algorithms.</span>
+<span class="sd">        </span>
+<span class="sd">        **Non-overlapping Intervals**: Strong evidence of a real performance difference.</span>
+<span class="sd">        </span>
+<span class="sd">    Experimental Design Guidelines:</span>
+<span class="sd">        **Sample Size**: Larger samples give narrower confidence intervals</span>
+<span class="sd">        - n ≥ 30: Generally adequate for robust estimates  </span>
+<span class="sd">        - n ≥ 10: Minimum for t-distribution approximation</span>
+<span class="sd">        - n &lt; 10: Use with caution, consider bootstrap methods</span>
+<span class="sd">        </span>
+<span class="sd">        **Confidence Level Selection**:</span>
+<span class="sd">        - 90%: Less stringent, wider intervals, higher power</span>
+<span class="sd">        - 95%: Standard for most scientific applications  </span>
+<span class="sd">        - 99%: More stringent, narrower intervals, lower power</span>
+<span class="sd">        </span>
+<span class="sd">        **Multiple Comparisons**: When comparing many algorithms, consider</span>
+<span class="sd">        Bonferroni correction or other methods to control family-wise error rate.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate the confidence interval for the mean of a dataset using the t-distribution.</span>
+
+<span class="sd">    Parameters:</span>
+<span class="sd">        data (array-like): Sample data</span>
+<span class="sd">        confidence (float): Confidence level (default 0.95 for 95%)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple: (lower_bound, upper_bound) of the confidence interval</span>
+<span class="sd">        </span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If data contains NaN values or has insufficient samples</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Data must contain at least two elements&quot;</span><span class="p">)</span>
+        
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">data</span><span class="p">)):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Data contains NaN values&quot;</span><span class="p">)</span>
+
+    <span class="c1"># If all values are the same, return the value as both bounds</span>
+    <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">data</span> <span class="o">==</span> <span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+    <span class="n">mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>
+    <span class="n">sem</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">sem</span><span class="p">(</span><span class="n">data</span><span class="p">)</span>  <span class="c1"># Standard error of the mean</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>  <span class="c1"># Degrees of freedom</span>
+
+    <span class="c1"># Confidence interval</span>
+    <span class="n">ci</span> <span class="o">=</span> <span class="n">stats</span><span class="o">.</span><span class="n">t</span><span class="o">.</span><span class="n">interval</span><span class="p">(</span><span class="n">confidence</span><span class="p">,</span> <span class="n">df</span><span class="p">,</span> <span class="n">loc</span><span class="o">=</span><span class="n">mean</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="n">sem</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ci</span></div>
+
+
+
+<div class="viewcode-block" id="cvar_confidence_interval">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.statistics.html#POMDPPlanners.utils.statistics.cvar_confidence_interval">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">cvar_confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">delta</span><span class="o">=</span><span class="mf">0.05</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate the confidence interval for the CVaR of a dataset using the t-distribution.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        data: Array of values</span>
+<span class="sd">        confidence: Confidence level (default 0.95 for 95%)</span>
+
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple: (lower_bound, upper_bound) of the confidence interval</span>
+<span class="sd">        </span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If data contains NaN values or has insufficient samples</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">alpha</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;confidence must be between 0 and 1&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Input vector must not be empty&quot;</span><span class="p">)</span>
+    
+    <span class="n">lower_bound</span> <span class="o">=</span> <span class="n">cvar_probabilistic_lower_bound_thomas</span><span class="p">(</span><span class="n">vec</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">delta</span><span class="o">=</span><span class="n">delta</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">dist_lower_bound</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="n">upper_bound</span> <span class="o">=</span> <span class="n">cvar_probabilistic_upper_bound_thomas</span><span class="p">(</span><span class="n">vec</span><span class="o">=</span><span class="n">data</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">,</span> <span class="n">delta</span><span class="o">=</span><span class="n">delta</span><span class="o">/</span><span class="mi">2</span><span class="p">,</span> <span class="n">dist_upper_bound</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">lower_bound</span><span class="p">,</span> <span class="n">upper_bound</span></div>
+
+
+<div class="viewcode-block" id="cvar_probabilistic_lower_bound_thomas">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.statistics.html#POMDPPlanners.utils.statistics.cvar_probabilistic_lower_bound_thomas">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">cvar_probabilistic_lower_bound_thomas</span><span class="p">(</span><span class="n">vec</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">delta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">dist_lower_bound</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate a probabilistic lower bound for CVaR using Thomas&#39;s method.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        vec: Array of values</span>
+<span class="sd">        alpha: Confidence level (between 0 and 1)</span>
+<span class="sd">        delta: Probability of the bound holding (between 0 and 1)</span>
+<span class="sd">        dist_lower_bound: Lower bound of the distribution</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        float: The probabilistic lower bound for CVaR</span>
+<span class="sd">        </span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If alpha or delta are not between 0 and 1, or if vec is empty</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">alpha</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;alpha must be between 0 and 1&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">delta</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;delta must be between 0 and 1&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">vec</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Input vector must not be empty&quot;</span><span class="p">)</span>
+    
+    <span class="n">sorted_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">vec</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">sorted_vec</span><span class="p">)</span>
+    
+    <span class="c1"># Calculate weights vectorized</span>
+    <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>  <span class="c1"># 0 to n-1</span>
+    <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">minimum</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="p">(</span><span class="n">indices</span> <span class="o">/</span> <span class="n">n</span><span class="p">)</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="n">delta</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">n</span><span class="p">)))</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">alpha</span><span class="p">))</span>
+    
+    <span class="c1"># Calculate differences vectorized</span>
+    <span class="n">diffs</span> <span class="o">=</span> <span class="n">sorted_vec</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">sorted_vec</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    
+    <span class="c1"># Calculate final result vectorized</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="n">sorted_vec</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">*</span> <span class="n">diffs</span><span class="p">)</span> <span class="o">/</span> <span class="n">alpha</span>
+    
+    <span class="c1"># Add the lower bound term</span>
+    <span class="n">s</span> <span class="o">-=</span> <span class="n">weights</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="p">(</span><span class="n">sorted_vec</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">dist_lower_bound</span><span class="p">)</span> <span class="o">/</span> <span class="n">alpha</span>
+    
+    <span class="k">return</span> <span class="n">s</span></div>
+
+
+
+<div class="viewcode-block" id="cvar_probabilistic_upper_bound_thomas">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.statistics.html#POMDPPlanners.utils.statistics.cvar_probabilistic_upper_bound_thomas">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">cvar_probabilistic_upper_bound_thomas</span><span class="p">(</span><span class="n">vec</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">delta</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">dist_upper_bound</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate a probabilistic upper bound for CVaR using Thomas&#39;s method.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        vec: Array of values</span>
+<span class="sd">        alpha: Confidence level (between 0 and 1)</span>
+<span class="sd">        delta: Probability of the bound holding (between 0 and 1)</span>
+<span class="sd">        dist_upper_bound: Upper bound of the distribution</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        float: The probabilistic upper bound for CVaR</span>
+<span class="sd">        </span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If alpha or delta are not between 0 and 1, or if vec is empty</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">alpha</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;alpha must be between 0 and 1&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">delta</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;delta must be between 0 and 1&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">vec</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Input vector must not be empty&quot;</span><span class="p">)</span>
+        
+    <span class="n">sorted_vec</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">vec</span><span class="p">)</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">sorted_vec</span><span class="p">)</span>
+    
+    <span class="c1"># Calculate weights vectorized</span>
+    <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>  <span class="c1"># 1 to n</span>
+    <span class="n">weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">maximum</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="p">(</span><span class="n">indices</span> <span class="o">/</span> <span class="n">n</span><span class="p">)</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="mi">1</span><span class="o">/</span><span class="n">delta</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">2</span> <span class="o">*</span> <span class="n">n</span><span class="p">))</span> <span class="o">-</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">alpha</span><span class="p">))</span>
+    
+    <span class="c1"># Calculate differences vectorized</span>
+    <span class="n">diffs</span> <span class="o">=</span> <span class="n">sorted_vec</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span> <span class="o">-</span> <span class="n">sorted_vec</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    
+    <span class="c1"># Calculate initial term</span>
+    <span class="n">initial_weight</span> <span class="o">=</span> <span class="n">weights</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">s</span> <span class="o">=</span> <span class="n">dist_upper_bound</span> <span class="o">-</span> <span class="p">(</span><span class="n">dist_upper_bound</span> <span class="o">-</span> <span class="n">sorted_vec</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span> <span class="o">*</span> <span class="n">initial_weight</span> <span class="o">/</span> <span class="n">alpha</span>
+    
+    <span class="c1"># Calculate final result vectorized</span>
+    <span class="n">s</span> <span class="o">-=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">diffs</span><span class="p">)</span> <span class="o">/</span> <span class="n">alpha</span>
+    
+    <span class="k">return</span> <span class="n">s</span></div>
+
+
+
+<div class="viewcode-block" id="quantile_confidence_interval">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.statistics.html#POMDPPlanners.utils.statistics.quantile_confidence_interval">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">quantile_confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span> <span class="n">conf_level</span><span class="o">=</span><span class="mf">0.95</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    data: 1D array-like of samples</span>
+<span class="sd">    alpha: target quantile (e.g. 0.95 for 95% VaR)</span>
+<span class="sd">    conf_level: overall coverage (e.g. 0.95 for 95% CI)</span>
+<span class="sd">    Returns: (lower_value, upper_value, k1, k2)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">data</span><span class="p">))</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span>
+    <span class="n">delta</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">conf_level</span>
+
+    <span class="c1"># find smallest k1 such that P(Y &lt; k1) &gt;= delta/2</span>
+    <span class="n">k1</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">while</span> <span class="n">binom</span><span class="o">.</span><span class="n">cdf</span><span class="p">(</span><span class="n">k1</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">delta</span><span class="o">/</span><span class="mi">2</span> <span class="ow">and</span> <span class="n">k1</span> <span class="o">&lt;=</span> <span class="n">n</span><span class="p">:</span>
+        <span class="n">k1</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="c1"># find largest k2 such that P(Y &lt;= k2) &lt;= 1 - delta/2</span>
+    <span class="n">k2</span> <span class="o">=</span> <span class="n">n</span>
+    <span class="k">while</span> <span class="n">binom</span><span class="o">.</span><span class="n">cdf</span><span class="p">(</span><span class="n">k2</span><span class="p">,</span> <span class="n">n</span><span class="p">,</span> <span class="n">alpha</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">delta</span><span class="o">/</span><span class="mi">2</span> <span class="ow">and</span> <span class="n">k2</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">k2</span> <span class="o">-=</span> <span class="mi">1</span>
+
+    <span class="c1"># clip to valid index range and convert to 0-based indexing</span>
+    <span class="n">k1</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">k1</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span>      <span class="c1"># at least 1</span>
+    <span class="n">k2</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">min</span><span class="p">(</span><span class="n">k2</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span>      <span class="c1"># at least 1</span>
+
+    <span class="k">return</span> <span class="n">x</span><span class="p">[</span><span class="n">k1</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">x</span><span class="p">[</span><span class="n">k2</span><span class="o">-</span><span class="mi">1</span><span class="p">],</span> <span class="n">k1</span><span class="p">,</span> <span class="n">k2</span></div>
+
+
+<div class="viewcode-block" id="get_min_and_max_cost">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.statistics.html#POMDPPlanners.utils.statistics.get_min_and_max_cost">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">get_min_and_max_cost</span><span class="p">(</span><span class="n">min_immediate_cost</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">max_immediate_cost</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">max_depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">gamma</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate the minimum and maximum costs over a time horizon using a discount factor.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        min_immediate_cost: Minimum immediate cost</span>
+<span class="sd">        max_immediate_cost: Maximum immediate cost</span>
+<span class="sd">        depth: Current depth in the search tree</span>
+<span class="sd">        max_depth: Maximum depth of the search tree</span>
+<span class="sd">        gamma: Discount factor (between 0 and 1)</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple: (min_cost, max_cost) representing the minimum and maximum costs over the time horizon</span>
+<span class="sd">        </span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If gamma is not between 0 and 1</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">gamma</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;gamma must be between 0 and 1&quot;</span><span class="p">)</span>
+        
+    <span class="c1"># Create array of powers of gamma</span>
+    <span class="n">powers</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">max_depth</span> <span class="o">-</span> <span class="n">depth</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">gamma_powers</span> <span class="o">=</span> <span class="n">gamma</span> <span class="o">**</span> <span class="n">powers</span>
+    
+    <span class="c1"># Calculate min and max costs using vectorized operations</span>
+    <span class="n">min_cost</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">min_immediate_cost</span> <span class="o">*</span> <span class="n">gamma_powers</span><span class="p">)</span>
+    <span class="n">max_cost</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">max_immediate_cost</span> <span class="o">*</span> <span class="n">gamma_powers</span><span class="p">)</span>
+    
+    <span class="k">return</span> <span class="n">min_cost</span><span class="p">,</span> <span class="n">max_cost</span></div>
+
+
+
+<div class="viewcode-block" id="cvar_bound_const_eps">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.statistics.html#POMDPPlanners.utils.statistics.cvar_bound_const_eps">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">cvar_bound_const_eps</span><span class="p">(</span><span class="n">y_samp</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">y_sup</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">y_inf</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">eps</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.05</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate bounds for CVaR using a constant epsilon parameter.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        y_samp: Array of sample values</span>
+<span class="sd">        y_sup: Upper bound of the distribution</span>
+<span class="sd">        y_inf: Lower bound of the distribution</span>
+<span class="sd">        eps: Epsilon parameter for the bound calculation</span>
+<span class="sd">        alpha: Confidence level (default 0.05)</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        tuple: (lower_bound, upper_bound) representing the bounds for CVaR</span>
+<span class="sd">        </span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If alpha or eps are not between 0 and 1, or if y_samp is empty</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">alpha</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;alpha must be between 0 and 1&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">eps</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;eps must be between 0 and 1&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">y_samp</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Input vector must not be empty&quot;</span><span class="p">)</span>
+        
+    <span class="c1"># Calculate lower bound</span>
+    <span class="k">if</span> <span class="n">eps</span> <span class="o">+</span> <span class="n">alpha</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">lower_bound</span> <span class="o">=</span> <span class="p">(</span><span class="n">alpha</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span> <span class="o">/</span> <span class="n">alpha</span> <span class="o">*</span> <span class="n">cvar_estimator</span><span class="p">(</span><span class="n">y_samp</span><span class="p">,</span> <span class="n">alpha</span> <span class="o">+</span> <span class="n">eps</span><span class="p">)</span> <span class="o">-</span> <span class="n">eps</span> <span class="o">/</span> <span class="n">alpha</span> <span class="o">*</span> <span class="n">cvar_estimator</span><span class="p">(</span><span class="n">y_samp</span><span class="p">,</span> <span class="n">eps</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">y_samp_mean</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">y_samp</span><span class="p">)</span>
+        <span class="n">lower_bound</span> <span class="o">=</span> <span class="p">(</span><span class="n">alpha</span> <span class="o">+</span> <span class="n">eps</span> <span class="o">-</span> <span class="mi">1</span><span class="p">)</span> <span class="o">*</span> <span class="n">y_inf</span> <span class="o">+</span> <span class="n">y_samp_mean</span> <span class="o">-</span> <span class="n">eps</span> <span class="o">*</span> <span class="n">cvar_estimator</span><span class="p">(</span><span class="n">y_samp</span><span class="p">,</span> <span class="n">eps</span><span class="p">)</span>
+        <span class="n">lower_bound</span> <span class="o">/=</span> <span class="n">alpha</span>
+        
+    <span class="c1"># Calculate upper bound</span>
+    <span class="k">if</span> <span class="n">eps</span> <span class="o">&lt;</span> <span class="n">alpha</span><span class="p">:</span>
+        <span class="n">upper_bound</span> <span class="o">=</span> <span class="p">(</span><span class="n">alpha</span> <span class="o">-</span> <span class="n">eps</span><span class="p">)</span> <span class="o">/</span> <span class="n">alpha</span> <span class="o">*</span> <span class="n">cvar_estimator</span><span class="p">(</span><span class="n">y_samp</span><span class="p">,</span> <span class="n">alpha</span> <span class="o">-</span> <span class="n">eps</span><span class="p">)</span> <span class="o">+</span> <span class="n">eps</span> <span class="o">/</span> <span class="n">alpha</span> <span class="o">*</span> <span class="n">y_sup</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">upper_bound</span> <span class="o">=</span> <span class="n">y_sup</span>
+        
+    <span class="k">return</span> <span class="n">lower_bound</span><span class="p">,</span> <span class="n">upper_bound</span></div>
+
+
+
+<div class="viewcode-block" id="cvar_estimator_from_dist">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.statistics.html#POMDPPlanners.utils.statistics.cvar_estimator_from_dist">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">cvar_estimator_from_dist</span><span class="p">(</span><span class="n">values</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">weights</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">alpha</span><span class="p">:</span> <span class="nb">float</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate the Conditional Value at Risk (CVaR) from a discrete distribution.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        values: Array of values</span>
+<span class="sd">        weights: Array of corresponding weights/probabilities</span>
+<span class="sd">        alpha: Confidence level (between 0 and 1)</span>
+<span class="sd">        </span>
+<span class="sd">    Returns:</span>
+<span class="sd">        float: The CVaR value</span>
+<span class="sd">        </span>
+<span class="sd">    Raises:</span>
+<span class="sd">        ValueError: If alpha is not between 0 and 1, if arrays are empty, or if weights don&#39;t sum to 1</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">alpha</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;alpha must be between 0 and 1&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Input arrays must not be empty&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isclose</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">weights</span><span class="p">),</span> <span class="mf">1.0</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Weights must sum to 1&quot;</span><span class="p">)</span>
+        
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">values</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">values</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="c1"># Sort values and weights</span>
+    <span class="n">sort_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+    <span class="n">sorted_values</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+    <span class="n">sorted_weights</span> <span class="o">=</span> <span class="n">weights</span><span class="p">[</span><span class="n">sort_idx</span><span class="p">]</span>
+    
+    <span class="c1"># Calculate cumulative probabilities</span>
+    <span class="n">cumulative_probs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cumsum</span><span class="p">(</span><span class="n">sorted_weights</span><span class="p">)</span>
+    
+    <span class="c1"># Find value at risk index</span>
+    <span class="n">var_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">cumulative_probs</span> <span class="o">==</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">alpha</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">var_idx</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">var_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">cumulative_probs</span> <span class="o">&lt;</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">alpha</span><span class="p">))[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">var_idx</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">var_idx</span> <span class="o">=</span> <span class="n">var_idx</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">var_idx</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">var_idx</span> <span class="o">=</span> <span class="n">var_idx</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        
+    <span class="n">value_at_risk</span> <span class="o">=</span> <span class="n">sorted_values</span><span class="p">[</span><span class="n">var_idx</span><span class="p">]</span>
+    
+    <span class="c1"># Calculate correction value</span>
+    <span class="n">value_at_risk_tail_cdf_prob</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">sorted_weights</span><span class="p">[</span><span class="n">var_idx</span><span class="p">:])</span>
+    <span class="n">correction_val</span> <span class="o">=</span> <span class="p">(</span><span class="n">value_at_risk_tail_cdf_prob</span> <span class="o">-</span> <span class="n">alpha</span><span class="p">)</span> <span class="o">*</span> <span class="n">value_at_risk</span>
+    
+    <span class="c1"># Calculate CVaR</span>
+    <span class="n">mask</span> <span class="o">=</span> <span class="n">values</span> <span class="o">&gt;=</span> <span class="n">value_at_risk</span>
+    <span class="n">conditional_values</span> <span class="o">=</span> <span class="n">values</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+    <span class="n">conditional_weights</span> <span class="o">=</span> <span class="n">weights</span><span class="p">[</span><span class="n">mask</span><span class="p">]</span>
+    <span class="n">cvar</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">conditional_values</span> <span class="o">*</span> <span class="n">conditional_weights</span><span class="p">)</span> <span class="o">-</span> <span class="n">correction_val</span><span class="p">)</span> <span class="o">/</span> <span class="n">alpha</span>
+    
+    <span class="k">return</span> <span class="nb">float</span><span class="p">(</span><span class="n">cvar</span><span class="p">)</span></div>
+
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

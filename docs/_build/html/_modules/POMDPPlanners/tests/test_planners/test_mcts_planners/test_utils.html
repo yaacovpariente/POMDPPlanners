@@ -1,0 +1,285 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Shared test utilities for MCTS planners.</span>
+
+<span class="sd">This module provides common test functions that can be reused across different MCTS planner tests</span>
+<span class="sd">to ensure consistent validation and reduce code duplication.</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">anytree</span><span class="w"> </span><span class="kn">import</span> <span class="n">PostOrderIter</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">BeliefNode</span><span class="p">,</span> <span class="n">ActionNode</span>
+
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="validate_tree_structure_with_progressive_widening">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.tests.test_planners.test_mcts_planners.html#POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils.validate_tree_structure_with_progressive_widening">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">validate_tree_structure_with_progressive_widening</span><span class="p">(</span>
+    <span class="n">root_belief_node</span><span class="p">,</span> 
+    <span class="n">planner</span><span class="p">,</span>
+    <span class="n">n_simulations</span><span class="p">,</span> 
+    <span class="n">depth</span><span class="p">,</span> 
+    <span class="n">k_o</span><span class="p">,</span> 
+    <span class="n">k_a</span><span class="p">,</span> 
+    <span class="n">alpha_o</span><span class="p">,</span> 
+    <span class="n">alpha_a</span><span class="p">,</span> 
+    <span class="n">action_sampler</span><span class="p">,</span>
+    <span class="n">expected_belief_type</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+    <span class="n">planner_type</span><span class="o">=</span><span class="s2">&quot;POMCP_DPW&quot;</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Validates complete tree structure construction and node integrity for MCTS planners with progressive widening.</span>
+<span class="sd">    </span>
+<span class="sd">    This function provides comprehensive validation of MCTS tree structures with double progressive widening,</span>
+<span class="sd">    suitable for both POMCP_DPW and POMCPOW planners. It verifies tree structure, node integrity,</span>
+<span class="sd">    progressive widening constraints, and value propagation.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        root_belief_node: Root belief node of the constructed tree</span>
+<span class="sd">        planner: The MCTS planner instance (POMCP_DPW or POMCPOW)</span>
+<span class="sd">        n_simulations: Number of simulations used to build the tree</span>
+<span class="sd">        depth: Maximum search depth parameter</span>
+<span class="sd">        k_o: Observation progressive widening coefficient</span>
+<span class="sd">        k_a: Action progressive widening coefficient  </span>
+<span class="sd">        alpha_o: Observation progressive widening exponent</span>
+<span class="sd">        alpha_a: Action progressive widening exponent</span>
+<span class="sd">        action_sampler: Action sampler used by the planner</span>
+<span class="sd">        expected_belief_type: Expected belief type for non-root nodes (optional)</span>
+<span class="sd">        </span>
+<span class="sd">    Raises:</span>
+<span class="sd">        AssertionError: If any tree structure validation fails</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># ASSERT: Verify tree structure and node integrity</span>
+    <span class="c1"># Root node verification</span>
+    <span class="k">assert</span> <span class="n">root_belief_node</span><span class="o">.</span><span class="n">observation</span> <span class="ow">is</span> <span class="kc">None</span>  <span class="c1"># Root has no observation</span>
+    <span class="k">assert</span> <span class="n">root_belief_node</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="kc">None</span>      <span class="c1"># Root has no parent</span>
+    <span class="k">assert</span> <span class="n">root_belief_node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">==</span> <span class="n">n_simulations</span>  <span class="c1"># Root visited by all simulations</span>
+    <span class="k">assert</span> <span class="n">root_belief_node</span><span class="o">.</span><span class="n">v_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>  <span class="c1"># Root must have value</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">root_belief_node</span><span class="o">.</span><span class="n">children</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>    <span class="c1"># Root must have action children</span>
+    
+    <span class="c1"># Progressive widening verification for root actions</span>
+    <span class="c1"># Due to action progressive widening, creates multiple action nodes (can exceed unique actions)</span>
+    <span class="n">action_children</span> <span class="o">=</span> <span class="p">[</span><span class="n">child</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">root_belief_node</span><span class="o">.</span><span class="n">children</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">ActionNode</span><span class="p">)]</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">action_children</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span>
+    
+    <span class="c1"># Progressive widening creates action nodes based on k_a * n^alpha_a formula</span>
+    <span class="n">max_expected_actions</span> <span class="o">=</span> <span class="n">k_a</span> <span class="o">*</span> <span class="p">(</span><span class="n">n_simulations</span> <span class="o">**</span> <span class="n">alpha_a</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">action_children</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="n">max_expected_actions</span> <span class="o">+</span> <span class="mi">1</span>  <span class="c1"># Allow small variance</span>
+    
+    <span class="c1"># Actions in the nodes should be from the valid action space</span>
+    <span class="n">unique_actions</span> <span class="o">=</span> <span class="nb">set</span><span class="p">(</span><span class="n">child</span><span class="o">.</span><span class="n">action</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">action_children</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">action</span> <span class="ow">in</span> <span class="n">action_sampler</span><span class="o">.</span><span class="n">get_space</span><span class="p">()</span> <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">unique_actions</span><span class="p">)</span>
+    
+    <span class="c1"># Detailed tree structure verification using PostOrderIter</span>
+    <span class="n">belief_node_count</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">action_node_count</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">max_observed_depth</span> <span class="o">=</span> <span class="mi">0</span>
+    
+    <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">PostOrderIter</span><span class="p">(</span><span class="n">root_belief_node</span><span class="p">):</span>
+        <span class="c1"># Common node properties</span>
+        <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Node visit count </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">visit_count</span><span class="si">}</span><span class="s2"> must be non-negative&quot;</span>
+        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="s1">&#39;depth&#39;</span><span class="p">),</span> <span class="s2">&quot;All nodes must have depth attribute&quot;</span>
+        <span class="n">max_observed_depth</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">max_observed_depth</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">depth</span><span class="p">)</span>
+        
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">BeliefNode</span><span class="p">):</span>
+            <span class="n">belief_node_count</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+            <span class="c1"># BeliefNode-specific validations</span>
+            <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">belief</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;BeliefNode must have belief&quot;</span>
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">v_value</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)),</span> <span class="s2">&quot;BeliefNode must have a number v_value&quot;</span>
+            
+            <span class="c1"># Non-root belief nodes must have observations and proper structure</span>
+            <span class="k">if</span> <span class="n">node</span> <span class="o">!=</span> <span class="n">root_belief_node</span><span class="p">:</span>
+                <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">observation</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;Non-root BeliefNode must have observation&quot;</span>
+                <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;Non-root BeliefNode must have parent&quot;</span>
+                <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="n">ActionNode</span><span class="p">),</span> <span class="s2">&quot;BeliefNode parent must be ActionNode&quot;</span>
+
+            <span class="c1"># Verify belief type for specific planners if provided</span>
+            <span class="k">if</span> <span class="n">expected_belief_type</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">node</span><span class="o">.</span><span class="n">depth</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>  <span class="c1"># Non-root nodes created during tree construction</span>
+                <span class="c1"># Check if it&#39;s the expected type or a compatible belief type</span>
+                <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">belief</span><span class="p">,</span> <span class="n">expected_belief_type</span><span class="p">),</span> <span class="sa">f</span><span class="s2">&quot;Belief must be </span><span class="si">{</span><span class="n">expected_belief_type</span><span class="o">.</span><span class="vm">__name__</span><span class="si">}</span><span class="s2">&quot;</span>
+            
+            <span class="c1"># Visit count consistency for belief nodes</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">node</span><span class="o">.</span><span class="n">is_leaf</span> <span class="ow">and</span> <span class="n">node</span><span class="o">.</span><span class="n">depth</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">child_action_visits</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">child</span><span class="o">.</span><span class="n">visit_count</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">children</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">ActionNode</span><span class="p">))</span>
+                <span class="c1"># In MCTS with progressive widening, belief node visits should be consistent with action visits</span>
+                <span class="c1"># Allow some variance due to progressive widening and rollouts</span>
+                <span class="k">if</span> <span class="n">planner_type</span> <span class="o">==</span> <span class="s2">&quot;POMCP_DPW&quot;</span><span class="p">:</span>
+                    <span class="c1"># POMCP_DPW has strict visit count relationship due to rollouts</span>
+                    <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">==</span> <span class="n">child_action_visits</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> \
+                        <span class="sa">f</span><span class="s2">&quot;BeliefNode visit count </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">visit_count</span><span class="si">}</span><span class="s2"> should be &gt;= sum of child visits </span><span class="si">{</span><span class="n">child_action_visits</span><span class="si">}</span><span class="s2">&quot;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c1"># POMCPOW and other planners may have different visit count patterns</span>
+                    <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">&gt;=</span> <span class="n">child_action_visits</span><span class="p">,</span> \
+                        <span class="sa">f</span><span class="s2">&quot;BeliefNode visit count </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">visit_count</span><span class="si">}</span><span class="s2"> should be &gt;= sum of child visits </span><span class="si">{</span><span class="n">child_action_visits</span><span class="si">}</span><span class="s2">&quot;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">depth</span> <span class="o">==</span> <span class="n">node</span><span class="o">.</span><span class="n">depth</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">planner_type</span> <span class="o">==</span> <span class="s2">&quot;POMCP_DPW&quot;</span><span class="p">:</span>
+                        <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Leaf belief node visit count must be 1&quot;</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Leaf belief node visit count must be &gt;= 1&quot;</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">&gt;=</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;Leaf belief node visit count must be &gt;= 1&quot;</span>
+
+        <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ActionNode</span><span class="p">):</span>
+            <span class="n">action_node_count</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+            <span class="c1"># ActionNode-specific validations  </span>
+            <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">action</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;ActionNode must have action&quot;</span>
+            <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">q_value</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;ActionNode must have q_value&quot;</span>
+            <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">parent</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">,</span> <span class="s2">&quot;ActionNode must have parent&quot;</span>
+            <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">parent</span><span class="p">,</span> <span class="n">BeliefNode</span><span class="p">),</span> <span class="s2">&quot;ActionNode parent must be BeliefNode&quot;</span>
+            
+            <span class="c1"># Action must be from valid action space</span>
+            <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">action</span> <span class="ow">in</span> <span class="n">action_sampler</span><span class="o">.</span><span class="n">get_space</span><span class="p">(),</span> \
+                <span class="sa">f</span><span class="s2">&quot;Action </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2"> must be in action sampler space </span><span class="si">{</span><span class="n">action_sampler</span><span class="o">.</span><span class="n">get_space</span><span class="p">()</span><span class="si">}</span><span class="s2">&quot;</span>
+            
+            <span class="c1"># Non-leaf action nodes with visits should have meaningful q_values</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">node</span><span class="o">.</span><span class="n">is_leaf</span> <span class="ow">and</span> <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="c1"># Q-value should be a valid number (allow 0 but not None/NaN)</span>
+                <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">q_value</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)),</span> <span class="s2">&quot;Q-value must be numeric&quot;</span>
+                <span class="k">assert</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">q_value</span><span class="p">),</span> <span class="s2">&quot;Q-value cannot be NaN&quot;</span>
+            
+            <span class="c1"># Visit count consistency for action nodes</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">node</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
+                <span class="n">child_belief_visits</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">child</span><span class="o">.</span><span class="n">visit_count</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">children</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">BeliefNode</span><span class="p">))</span>
+                <span class="c1"># In MCTS, action visit count should equal sum of child belief visits</span>
+                <span class="k">assert</span> <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">==</span> <span class="n">child_belief_visits</span><span class="p">,</span> \
+                    <span class="sa">f</span><span class="s2">&quot;ActionNode visit count </span><span class="si">{</span><span class="n">node</span><span class="o">.</span><span class="n">visit_count</span><span class="si">}</span><span class="s2"> should equal sum of child visits </span><span class="si">{</span><span class="n">child_belief_visits</span><span class="si">}</span><span class="s2">&quot;</span>
+            
+            <span class="c1"># Progressive widening validation for observation nodes</span>
+            <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>  <span class="c1"># Only check nodes with sufficient visits</span>
+                <span class="n">max_allowed_observations</span> <span class="o">=</span> <span class="n">k_o</span> <span class="o">*</span> <span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">**</span> <span class="n">alpha_o</span><span class="p">)</span>
+                <span class="n">actual_observations</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">children</span><span class="p">)</span>
+                <span class="c1"># Allow small variance due to sampling and progressive widening mechanics</span>
+                <span class="k">assert</span> <span class="n">actual_observations</span> <span class="o">&lt;=</span> <span class="n">max_allowed_observations</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span> \
+                    <span class="sa">f</span><span class="s2">&quot;Observation progressive widening violated: </span><span class="si">{</span><span class="n">actual_observations</span><span class="si">}</span><span class="s2"> obs &gt; </span><span class="si">{</span><span class="n">max_allowed_observations</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2"> max allowed&quot;</span>
+    
+    <span class="c1"># Overall tree structure validations</span>
+    <span class="k">assert</span> <span class="n">belief_node_count</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Tree must contain belief nodes&quot;</span>
+    <span class="k">assert</span> <span class="n">action_node_count</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;Tree must contain action nodes&quot;</span>
+    <span class="k">assert</span> <span class="n">belief_node_count</span> <span class="o">&gt;=</span> <span class="n">action_node_count</span><span class="p">,</span> <span class="s2">&quot;Should have at least as many belief nodes as action nodes&quot;</span>
+    
+    <span class="c1"># Tree depth should be reasonable given the depth parameter</span>
+    <span class="c1"># In MCTS trees, depth can vary due to progressive widening and termination conditions</span>
+    <span class="k">assert</span> <span class="n">max_observed_depth</span> <span class="o">&lt;=</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">depth</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span> \
+        <span class="sa">f</span><span class="s2">&quot;Maximum observed depth </span><span class="si">{</span><span class="n">max_observed_depth</span><span class="si">}</span><span class="s2"> should not exceed 2*depth+2 = </span><span class="si">{</span><span class="mi">2</span><span class="o">*</span><span class="n">depth</span><span class="o">+</span><span class="mi">2</span><span class="si">}</span><span class="s2">&quot;</span>
+    
+    <span class="c1"># Progressive widening effectiveness check</span>
+    <span class="c1"># In MCTS planners with progressive widening, action nodes are created based on visit counts and alpha parameters</span>
+    <span class="c1"># This can actually create more action nodes than naive expansion due to multiple nodes per action</span>
+    <span class="c1"># Instead verify that the progressive widening constraint is respected at individual nodes</span>
+    <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">PostOrderIter</span><span class="p">(</span><span class="n">root_belief_node</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">BeliefNode</span><span class="p">)</span> <span class="ow">and</span> <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">action_children_count</span> <span class="o">=</span> <span class="nb">len</span><span class="p">([</span><span class="n">child</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">children</span> <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">child</span><span class="p">,</span> <span class="n">ActionNode</span><span class="p">)])</span>
+            <span class="n">max_allowed_actions_for_node</span> <span class="o">=</span> <span class="n">k_a</span> <span class="o">*</span> <span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">**</span> <span class="n">alpha_a</span><span class="p">)</span>
+            <span class="c1"># Allow some variance due to the discrete nature of progressive widening checks</span>
+            <span class="k">assert</span> <span class="n">action_children_count</span> <span class="o">&lt;=</span> <span class="n">max_allowed_actions_for_node</span> <span class="o">+</span> <span class="mi">2</span><span class="p">,</span> \
+                <span class="sa">f</span><span class="s2">&quot;Progressive widening violated at node: </span><span class="si">{</span><span class="n">action_children_count</span><span class="si">}</span><span class="s2"> &gt; </span><span class="si">{</span><span class="n">max_allowed_actions_for_node</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">&quot;</span>
+    
+    <span class="c1"># Value propagation verification - root should have reasonable value after many simulations</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">root_belief_node</span><span class="o">.</span><span class="n">v_value</span><span class="p">,</span> <span class="p">(</span><span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">)),</span> <span class="s2">&quot;Root v_value must be numeric&quot;</span>
+    <span class="k">assert</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">root_belief_node</span><span class="o">.</span><span class="n">v_value</span><span class="p">),</span> <span class="s2">&quot;Root v_value cannot be NaN&quot;</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

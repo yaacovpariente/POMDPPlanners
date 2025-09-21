@@ -1,0 +1,1366 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>&lt;no title&gt; &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">&lt;no title&gt;</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.core.belief.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <p id="module-POMDPPlanners.core.belief">Module for POMDP belief state representations.</p>
+<p>This module provides belief state abstractions for POMDP environments, including
+particle filter implementations for approximate belief tracking and belief update
+mechanisms.</p>
+<dl class="simple">
+<dt>Classes:</dt><dd><p>Belief: Abstract base class for belief representations
+WeightedParticleBelief: Weighted particle filter for continuous observation spaces
+UnweightedParticleBelief: Uniform particle filter for discrete observation spaces
+WeightedParticleBeliefReinvigoration: Extended weighted filter with reinvigoration
+WeightedParticleBeliefStateUpdate: Incremental weighted particle belief for online learning</p>
+</dd>
+<dt>Functions:</dt><dd><p>sample_next_belief: Simulate one step of belief evolution
+get_initial_belief: Create initial belief from environment’s initial distribution</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.Belief">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.belief.</span></span><span class="sig-name descname"><span class="pre">Belief</span></span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#Belief"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.Belief" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
+<p>Abstract base class for POMDP belief state representations.</p>
+<p>This class defines the interface for belief states in POMDP environments.
+Belief states represent probability distributions over the state space,
+capturing the agent’s uncertainty about the current state.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>This is an abstract base class and cannot be instantiated directly.
+Subclasses must implement the update() and sample() methods.</p>
+</div>
+<dl class="py property">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.Belief.config_id">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">config_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></em><a class="headerlink" href="#POMDPPlanners.core.belief.Belief.config_id" title="Link to this definition"></a></dt>
+<dd><p>Generate a deterministic identifier based on belief configuration.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.Belief.from_config">
+<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_config</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">config</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#Belief.from_config"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.Belief.from_config" title="Link to this definition"></a></dt>
+<dd><p>Create a belief instance from configuration.</p>
+<p>Factory method that dynamically creates belief instances based on
+configuration objects specifying the class name and parameters.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>config</strong> – Configuration object with class_name and params attributes</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>New belief instance of the specified type</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If the specified belief class is not found</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.Belief.sample">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#Belief.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.Belief.sample" title="Link to this definition"></a></dt>
+<dd><p>Sample a state from the current belief distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span></p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A state sampled according to the belief’s probability distribution</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to enable state sampling
+for planning and simulation purposes.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.Belief.update">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#Belief.update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.Belief.update" title="Link to this definition"></a></dt>
+<dd><p>Update belief given an action-observation pair.</p>
+<p>Performs Bayesian belief update using the environment’s transition
+and observation models.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Action that was executed</p></li>
+<li><p><strong>observation</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Observation that was received</p></li>
+<li><p><strong>pomdp</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></span>) – Environment providing transition and observation models</p></li>
+<li><p><strong>state</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a><em> | </em><em>None</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Updated belief state reflecting the new information</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method according to their
+specific belief representation and update strategy.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.UnweightedParticleBelief">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.belief.</span></span><span class="sig-name descname"><span class="pre">UnweightedParticleBelief</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">particles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reinvigoration_fraction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#UnweightedParticleBelief"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.UnweightedParticleBelief" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>particles</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a>)</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.UnweightedParticleBelief.reinvigorate">
+<span class="sig-name descname"><span class="pre">reinvigorate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#UnweightedParticleBelief.reinvigorate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.UnweightedParticleBelief.reinvigorate" title="Link to this definition"></a></dt>
+<dd><p>Simulate a new particle that matches the action-observation pair.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>observation</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>pomdp</strong> (<a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><em>Environment</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.UnweightedParticleBelief.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#UnweightedParticleBelief.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.UnweightedParticleBelief.sample" title="Link to this definition"></a></dt>
+<dd><p>Sample a state from the current belief distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A state sampled according to the belief’s probability distribution</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to enable state sampling
+for planning and simulation purposes.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.UnweightedParticleBelief.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_reinvigorate</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#UnweightedParticleBelief.update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.UnweightedParticleBelief.update" title="Link to this definition"></a></dt>
+<dd><p>Update belief given an action-observation pair.</p>
+<p>Performs Bayesian belief update using the environment’s transition
+and observation models.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Action that was executed</p></li>
+<li><p><strong>observation</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Observation that was received</p></li>
+<li><p><strong>pomdp</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></span>) – Environment providing transition and observation models</p></li>
+<li><p><strong>is_reinvigorate</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#POMDPPlanners.core.belief.UnweightedParticleBelief" title="POMDPPlanners.core.belief.UnweightedParticleBelief"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnweightedParticleBelief</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Updated belief state reflecting the new information</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method according to their
+specific belief representation and update strategy.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.belief.</span></span><span class="sig-name descname"><span class="pre">UnweightedParticleBeliefStateUpdate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">particles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[]</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#UnweightedParticleBeliefStateUpdate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></p>
+<p>Uniform particle belief for incremental state accumulation.</p>
+<p>This class implements a lightweight belief representation that maintains
+a collection of state particles with uniform probability distribution.
+Unlike weighted particle filters, all particles contribute equally to
+the belief state, making it suitable for discrete observation spaces
+where observation likelihoods are binary (match/no-match) rather than
+continuous probability distributions.</p>
+<p>UnweightedParticleBeliefStateUpdate is designed for online learning and
+planning algorithms that incrementally accumulate particles during tree
+expansion or sequential state estimation. It provides both in-place and
+immutable update operations for different algorithmic requirements.</p>
+<p>Key Features:
+- <strong>Uniform Weighting</strong>: All particles have equal probability weight
+- <strong>Incremental Accumulation</strong>: Add particles one-by-one without resampling
+- <strong>Memory Efficient</strong>: No weight storage, minimal memory overhead
+- <strong>Fast Sampling</strong>: Simple uniform random sampling from particle set
+- <strong>Efficient Updates</strong>: Both in-place and immutable update operations
+- <strong>Deterministic Config ID</strong>: Order-invariant identification for caching</p>
+<p>Mathematical Foundation:
+The belief represents a discrete uniform distribution over accumulated particles.
+Each particle has equal probability 1/N where N is the total number of particles.
+For particles with the same state value, the probability is proportional to
+their count:</p>
+<p>P(s) = count(s) / N = <a href="#id1"><span class="problematic" id="id2">|{i: s_i = s}|</span></a> / <a href="#id3"><span class="problematic" id="id4">|particles|</span></a></p>
+<p>This makes it ideal for discrete observation models where observations either
+match a state (probability 1) or don’t match (probability 0).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>particles</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a>)</p>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate.particles">
+<span class="sig-name descname"><span class="pre">particles</span></span><a class="headerlink" href="#POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate.particles" title="Link to this definition"></a></dt>
+<dd><p>List of state particles, each with uniform probability</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate.weights_sum">
+<span class="sig-name descname"><span class="pre">weights_sum</span></span><a class="headerlink" href="#POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate.weights_sum" title="Link to this definition"></a></dt>
+<dd><p>Total number of particles (equivalent to uniform weight sum)</p>
+</dd></dl>
+
+<p class="rubric">Examples</p>
+<p>Basic uniform belief construction:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnweightedParticleBeliefStateUpdate</span>
+
+<span class="c1"># Create environment and empty uniform belief</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">belief</span> <span class="o">=</span> <span class="n">UnweightedParticleBeliefStateUpdate</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="p">[])</span>
+
+<span class="c1"># Add states uniformly (all have equal probability)</span>
+<span class="n">belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_left&quot;</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="s2">&quot;tiger_left&quot;</span><span class="p">)</span>
+<span class="n">belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_right&quot;</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="s2">&quot;tiger_right&quot;</span><span class="p">)</span>
+<span class="n">belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_left&quot;</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="s2">&quot;tiger_left&quot;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Belief has </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span><span class="si">}</span><span class="s2"> particles&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Weights sum: </span><span class="si">{</span><span class="n">belief</span><span class="o">.</span><span class="n">weights_sum</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># Equal to number of particles</span>
+
+<span class="c1"># Sample uniformly from particles</span>
+<span class="n">sampled_state</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>  <span class="c1"># Each &quot;tiger_left&quot; has 2/3 prob, &quot;tiger_right&quot; has 1/3</span>
+</pre></div>
+</div>
+<p>Monte Carlo Tree Search with uniform beliefs:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.sanity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SanityPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnweightedParticleBeliefStateUpdate</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">BeliefNode</span><span class="p">,</span> <span class="n">ActionNode</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+<span class="n">env</span> <span class="o">=</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+<span class="c1"># Root belief with uniform initial distribution</span>
+<span class="n">root_belief</span> <span class="o">=</span> <span class="n">UnweightedParticleBeliefStateUpdate</span><span class="p">(</span>
+    <span class="n">particles</span><span class="o">=</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>  <span class="c1"># More 0s than 1s, but all weighted equally</span>
+<span class="p">)</span>
+<span class="n">root_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">root_belief</span><span class="p">)</span>
+
+<span class="c1"># Simulate MCTS node expansion</span>
+<span class="n">action</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Good action</span>
+<span class="n">possible_observations</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>  <span class="c1"># Discrete observations</span>
+
+<span class="c1"># Create action node</span>
+<span class="n">action_node</span> <span class="o">=</span> <span class="n">ActionNode</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="n">root_node</span><span class="p">)</span>
+
+<span class="c1"># For each observation, accumulate child belief</span>
+<span class="k">for</span> <span class="n">observation</span> <span class="ow">in</span> <span class="n">possible_observations</span><span class="p">:</span>
+    <span class="n">child_belief</span> <span class="o">=</span> <span class="n">UnweightedParticleBeliefStateUpdate</span><span class="p">([])</span>
+
+    <span class="c1"># Add particles uniformly based on environment dynamics</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>  <span class="c1"># Multiple simulations</span>
+        <span class="n">parent_state</span> <span class="o">=</span> <span class="n">root_belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="n">next_state</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">parent_state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">child_belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">next_state</span><span class="p">)</span>
+
+    <span class="c1"># Create belief node</span>
+    <span class="n">belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">child_belief</span><span class="p">,</span> <span class="n">observation</span><span class="o">=</span><span class="n">observation</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="n">action_node</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Child for obs </span><span class="si">{</span><span class="n">observation</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">child_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span><span class="si">}</span><span class="s2"> particles&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Comparing weighted vs unweighted belief updates:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.sanity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SanityPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">,</span> <span class="n">UnweightedParticleBeliefStateUpdate</span>
+<span class="p">)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
+
+<span class="n">env</span> <span class="o">=</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+<span class="c1"># Same particle sequence for both belief types</span>
+<span class="n">states</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>  <span class="c1"># More 0s (good states) than 1s (bad states)</span>
+<span class="n">observations</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>
+<span class="n">action</span> <span class="o">=</span> <span class="mi">0</span>
+
+<span class="c1"># Weighted belief considers observation likelihoods</span>
+<span class="n">weighted_belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">([],</span> <span class="p">[])</span>
+<span class="k">for</span> <span class="n">state</span><span class="p">,</span> <span class="n">obs</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">states</span><span class="p">,</span> <span class="n">observations</span><span class="p">):</span>
+    <span class="n">weighted_belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+
+<span class="c1"># Unweighted belief treats all particles equally</span>
+<span class="n">unweighted_belief</span> <span class="o">=</span> <span class="n">UnweightedParticleBeliefStateUpdate</span><span class="p">([])</span>
+<span class="k">for</span> <span class="n">state</span><span class="p">,</span> <span class="n">obs</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">states</span><span class="p">,</span> <span class="n">observations</span><span class="p">):</span>
+    <span class="n">unweighted_belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+
+<span class="c1"># Compare sampling distributions</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Weighted belief sampling:&quot;</span><span class="p">)</span>
+<span class="n">weighted_samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">weighted_belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)]</span>
+<span class="n">weighted_counts</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">Counter</span><span class="p">(</span><span class="n">weighted_samples</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">state</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">weighted_counts</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  State </span><span class="si">{</span><span class="n">state</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">count</span><span class="o">/</span><span class="mi">1000</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Unweighted belief sampling:&quot;</span><span class="p">)</span>
+<span class="n">unweighted_samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">unweighted_belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)]</span>
+<span class="n">unweighted_counts</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">Counter</span><span class="p">(</span><span class="n">unweighted_samples</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">state</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="nb">sorted</span><span class="p">(</span><span class="n">unweighted_counts</span><span class="o">.</span><span class="n">items</span><span class="p">()):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  State </span><span class="si">{</span><span class="n">state</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">count</span><span class="o">/</span><span class="mi">1000</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Discrete observation filtering:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnweightedParticleBeliefStateUpdate</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
+
+<span class="n">env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">belief</span> <span class="o">=</span> <span class="n">UnweightedParticleBeliefStateUpdate</span><span class="p">([])</span>
+
+<span class="c1"># Simulate multiple observations (discrete: hear_left or hear_right)</span>
+<span class="n">observation_sequence</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_left&quot;</span><span class="p">),</span>    <span class="c1"># Consistent evidence</span>
+    <span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_left&quot;</span><span class="p">),</span>    <span class="c1"># More consistent evidence</span>
+    <span class="p">(</span><span class="s2">&quot;tiger_right&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_left&quot;</span><span class="p">),</span>   <span class="c1"># Inconsistent evidence</span>
+    <span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_right&quot;</span><span class="p">),</span>   <span class="c1"># Inconsistent evidence</span>
+    <span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_left&quot;</span><span class="p">),</span>    <span class="c1"># Back to consistent</span>
+    <span class="p">(</span><span class="s2">&quot;tiger_right&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_right&quot;</span><span class="p">),</span>  <span class="c1"># Consistent for right</span>
+<span class="p">]</span>
+
+<span class="k">for</span> <span class="n">state</span><span class="p">,</span> <span class="n">obs</span> <span class="ow">in</span> <span class="n">observation_sequence</span><span class="p">:</span>
+    <span class="n">belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Final belief has </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span><span class="si">}</span><span class="s2"> particles&quot;</span><span class="p">)</span>
+
+<span class="c1"># Analyze uniform distribution over accumulated particles</span>
+<span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)]</span>
+<span class="n">sample_counts</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">Counter</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Uniform belief distribution:&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">state</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">sample_counts</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">probability</span> <span class="o">=</span> <span class="n">count</span> <span class="o">/</span> <span class="mi">1000</span>
+    <span class="n">particle_count</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">particles</span><span class="o">.</span><span class="n">count</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+    <span class="n">expected_prob</span> <span class="o">=</span> <span class="n">particle_count</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">state</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">probability</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> (expected: </span><span class="si">{</span><span class="n">expected_prob</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Immutable belief trees for planning:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.cartpole_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartPolePOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnweightedParticleBeliefStateUpdate</span>
+
+<span class="c1"># Create continuous state environment</span>
+<span class="n">noise_cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">])</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">CartPolePOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span> <span class="n">noise_cov</span><span class="o">=</span><span class="n">noise_cov</span><span class="p">)</span>
+
+<span class="c1"># Start with uniform belief over multiple initial states</span>
+<span class="n">initial_states</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>   <span class="c1"># Balanced pole</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>  <span class="c1"># Slightly right</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>  <span class="c1"># Slightly left</span>
+<span class="p">]</span>
+
+<span class="n">root_belief</span> <span class="o">=</span> <span class="n">UnweightedParticleBeliefStateUpdate</span><span class="p">(</span><span class="n">initial_states</span><span class="p">)</span>
+
+<span class="c1"># Generate child beliefs for different actions (functional style)</span>
+<span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span>  <span class="c1"># Push left or right</span>
+<span class="n">child_beliefs</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="n">actions</span><span class="p">:</span>
+    <span class="n">child_belief</span> <span class="o">=</span> <span class="n">UnweightedParticleBeliefStateUpdate</span><span class="p">([])</span>
+
+    <span class="c1"># Generate next states uniformly</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>  <span class="c1"># Multiple rollouts per action</span>
+        <span class="n">current_state</span> <span class="o">=</span> <span class="n">root_belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="n">next_state</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">current_state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="c1"># For simplicity, assume observation equals next state (fully observable case)</span>
+        <span class="n">child_belief</span> <span class="o">=</span> <span class="n">child_belief</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">next_state</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">next_state</span><span class="p">)</span>
+
+    <span class="n">child_beliefs</span><span class="p">[</span><span class="n">action</span><span class="p">]</span> <span class="o">=</span> <span class="n">child_belief</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Child belief for action </span><span class="si">{</span><span class="n">action</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">child_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span><span class="si">}</span><span class="s2"> particles&quot;</span><span class="p">)</span>
+
+<span class="c1"># All child beliefs maintain uniform distribution over their particles</span>
+<span class="k">for</span> <span class="n">action</span><span class="p">,</span> <span class="n">child_belief</span> <span class="ow">in</span> <span class="n">child_beliefs</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">sample</span> <span class="o">=</span> <span class="n">child_belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sample from action </span><span class="si">{</span><span class="n">action</span><span class="si">}</span><span class="s2"> belief: </span><span class="si">{</span><span class="n">sample</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>  <span class="c1"># First 2 components</span>
+</pre></div>
+</div>
+<p>Memory-efficient particle accumulation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.sanity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SanityPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">,</span> <span class="n">UnweightedParticleBeliefStateUpdate</span>
+<span class="p">)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+
+<span class="n">env</span> <span class="o">=</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+<span class="c1"># Compare memory usage between weighted and unweighted beliefs</span>
+<span class="n">weighted_belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">([],</span> <span class="p">[])</span>
+<span class="n">unweighted_belief</span> <span class="o">=</span> <span class="n">UnweightedParticleBeliefStateUpdate</span><span class="p">([])</span>
+
+<span class="c1"># Add many particles</span>
+<span class="n">states</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="mi">1000</span>  <span class="c1"># 2000 particles</span>
+<span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">states</span><span class="p">:</span>
+    <span class="n">weighted_belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+    <span class="n">unweighted_belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+
+<span class="c1"># Check memory usage (unweighted should use less memory)</span>
+<span class="n">weighted_size</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">getsizeof</span><span class="p">(</span><span class="n">weighted_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span> <span class="o">+</span> <span class="n">sys</span><span class="o">.</span><span class="n">getsizeof</span><span class="p">(</span><span class="n">weighted_belief</span><span class="o">.</span><span class="n">weights</span><span class="p">)</span>
+<span class="n">unweighted_size</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">getsizeof</span><span class="p">(</span><span class="n">unweighted_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Weighted belief memory: </span><span class="si">{</span><span class="n">weighted_size</span><span class="si">}</span><span class="s2"> bytes&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unweighted belief memory: </span><span class="si">{</span><span class="n">unweighted_size</span><span class="si">}</span><span class="s2"> bytes&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Memory savings: </span><span class="si">{</span><span class="p">((</span><span class="n">weighted_size</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">unweighted_size</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">weighted_size</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mi">100</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2">%&quot;</span><span class="p">)</span>
+
+<span class="c1"># Both have same number of particles but unweighted saves memory on weights</span>
+<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">weighted_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">unweighted_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Configuration caching and equality:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.sanity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SanityPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnweightedParticleBeliefStateUpdate</span>
+
+<span class="n">env</span> <span class="o">=</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+<span class="c1"># Create two beliefs with same particles in different orders</span>
+<span class="n">belief1</span> <span class="o">=</span> <span class="n">UnweightedParticleBeliefStateUpdate</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+<span class="n">belief2</span> <span class="o">=</span> <span class="n">UnweightedParticleBeliefStateUpdate</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+
+<span class="c1"># Config IDs should be equal (order-invariant)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Belief 1 config ID: </span><span class="si">{</span><span class="n">belief1</span><span class="o">.</span><span class="n">config_id</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Belief 2 config ID: </span><span class="si">{</span><span class="n">belief2</span><span class="o">.</span><span class="n">config_id</span><span class="p">[:</span><span class="mi">8</span><span class="p">]</span><span class="si">}</span><span class="s2">...&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;IDs match: </span><span class="si">{</span><span class="n">belief1</span><span class="o">.</span><span class="n">config_id</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">belief2</span><span class="o">.</span><span class="n">config_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Test belief equality</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Beliefs equal: </span><span class="si">{</span><span class="n">belief1</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">belief2</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Useful for caching in tree search algorithms</span>
+<span class="n">belief_cache</span> <span class="o">=</span> <span class="p">{</span><span class="n">belief1</span><span class="p">:</span> <span class="s2">&quot;cached_computation&quot;</span><span class="p">}</span>
+
+<span class="k">if</span> <span class="n">belief2</span> <span class="ow">in</span> <span class="n">belief_cache</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Cache hit! Beliefs are equivalent.&quot;</span><span class="p">)</span>
+<span class="k">else</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Cache miss - beliefs differ.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Large-scale particle accumulation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">UnweightedParticleBeliefStateUpdate</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">time</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
+
+<span class="n">env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">belief</span> <span class="o">=</span> <span class="n">UnweightedParticleBeliefStateUpdate</span><span class="p">([])</span>
+
+<span class="c1"># Time large-scale particle addition</span>
+<span class="n">start_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+<span class="c1"># Add 10000 particles uniformly</span>
+<span class="n">states</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;tiger_right&quot;</span><span class="p">]</span>
+<span class="n">observations</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;hear_left&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_right&quot;</span><span class="p">]</span>
+
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10000</span><span class="p">):</span>
+    <span class="n">state</span> <span class="o">=</span> <span class="n">states</span><span class="p">[</span><span class="n">i</span> <span class="o">%</span> <span class="mi">2</span><span class="p">]</span>  <span class="c1"># Alternate between states</span>
+    <span class="n">obs</span> <span class="o">=</span> <span class="n">observations</span><span class="p">[</span><span class="n">i</span> <span class="o">%</span> <span class="mi">2</span><span class="p">]</span>  <span class="c1"># Alternate between observations</span>
+    <span class="n">belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+
+<span class="n">end_time</span> <span class="o">=</span> <span class="n">time</span><span class="o">.</span><span class="n">time</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Added </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span><span class="si">}</span><span class="s2"> particles in </span><span class="si">{</span><span class="n">end_time</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start_time</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> seconds&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Rate: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="p">(</span><span class="n">end_time</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="n">start_time</span><span class="p">)</span><span class="si">:</span><span class="s2">.0f</span><span class="si">}</span><span class="s2"> particles/second&quot;</span><span class="p">)</span>
+
+<span class="c1"># Verify uniform distribution</span>
+<span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)]</span>
+<span class="n">sample_counts</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">Counter</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">state</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">sample_counts</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">state</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">count</span><span class="o">/</span><span class="mi">1000</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> (expected: 0.5)&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py property">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate.config_id">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">config_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></em><a class="headerlink" href="#POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate.config_id" title="Link to this definition"></a></dt>
+<dd><p>Generate a deterministic identifier based on belief configuration.</p>
+<p>This implementation ensures that config_id is invariant to the order
+of particles by sorting them.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate.inplace_update">
+<span class="sig-name descname"><span class="pre">inplace_update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#UnweightedParticleBeliefStateUpdate.inplace_update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate.inplace_update" title="Link to this definition"></a></dt>
+<dd><p>Add a state particle with uniform weight to current belief.</p>
+<p>This method modifies the current belief in-place by appending a new particle.
+Unlike weighted beliefs, no observation likelihood computation is performed;
+the new particle simply joins the uniform distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Action that was executed to reach the state (not used for weighting)</p></li>
+<li><p><strong>observation</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Observation received after executing the action (not used for weighting)</p></li>
+<li><p><strong>pomdp</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></span>) – Environment instance (not used for uniform weighting)</p></li>
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>]</span>) – State particle to add to the belief. If None, no particle is added.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<dl>
+<dt>Incrementally building uniform beliefs::</dt><dd><p>belief = UnweightedParticleBeliefStateUpdate([])</p>
+<p># Add particles one by one - all have equal weight
+belief.inplace_update(“action1”, “obs1”, env, “state_A”)
+belief.inplace_update(“action2”, “obs2”, env, “state_B”)
+belief.inplace_update(“action3”, “obs3”, env, “state_A”)</p>
+<p># Belief now has 3 particles: [“state_A”, “state_B”, “state_A”]
+# Sampling probabilities: state_A = 2/3, state_B = 1/3
+assert len(belief.particles) == 3
+assert belief.weights_sum == 3  # Equal to particle count</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#UnweightedParticleBeliefStateUpdate.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate.sample" title="Link to this definition"></a></dt>
+<dd><p>Sample a state uniformly from the current belief distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span></p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A state sampled uniformly from the particle set</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#IndexError" title="(in Python v3.13)"><strong>IndexError</strong></a> – If belief is empty (no particles to sample from)</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<dl>
+<dt>Uniform sampling from particle belief::</dt><dd><p># Create belief with repeated particles
+particles = [“A”, “B”, “A”, “A”, “C”]
+belief = UnweightedParticleBeliefStateUpdate(particles)</p>
+<p># Sample multiple times to see distribution
+samples = [belief.sample() for _ in range(1000)]
+from collections import Counter
+counts = Counter(samples)</p>
+<p># Should approximate: A: 60%, B: 20%, C: 20%
+for state, count in counts.items():</p>
+<blockquote>
+<div><p>print(f”{state}: {count/1000:.2f}”)</p>
+</div></blockquote>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#UnweightedParticleBeliefStateUpdate.update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate.update" title="Link to this definition"></a></dt>
+<dd><p>Create new belief by adding a state particle with uniform weight.</p>
+<p>This method creates a new belief instance without modifying the current one.
+Unlike weighted beliefs, all particles (including the new one) have equal
+probability in the resulting belief distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Action that was executed to reach the state (not used for weighting)</p></li>
+<li><p><strong>observation</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Observation received after executing the action (not used for weighting)</p></li>
+<li><p><strong>pomdp</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></span>) – Environment instance (not used for uniform weighting)</p></li>
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>]</span>) – State particle to add to the belief. If None, no particle is added.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate" title="POMDPPlanners.core.belief.UnweightedParticleBeliefStateUpdate"><code class="xref py py-class docutils literal notranslate"><span class="pre">UnweightedParticleBeliefStateUpdate</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>New UnweightedParticleBeliefStateUpdate instance with the additional particle.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<dl>
+<dt>Creating new beliefs immutably::</dt><dd><p># Original belief with 3 particles
+belief = UnweightedParticleBeliefStateUpdate([“state1”, “state2”, “state1”])</p>
+<p># Create new belief with additional particle
+new_belief = belief.update(“action”, “obs”, environment, “state3”)</p>
+<p># Original belief unchanged, new belief has 4 particles
+assert len(belief.particles) == 3
+assert len(new_belief.particles) == 4</p>
+<p># All particles have equal probability in new belief
+# state1: 2/4 = 0.5, state2: 1/4 = 0.25, state3: 1/4 = 0.25</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.belief.</span></span><span class="sig-name descname"><span class="pre">WeightedParticleBelief</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">particles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_weights</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resampling</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ess_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#WeightedParticleBelief"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></p>
+<p>Weighted particle filter implementation for POMDP belief states.</p>
+<p>This class implements a particle filter with weighted particles, suitable
+for continuous observation spaces. It supports automatic resampling based
+on effective sample size to maintain particle diversity.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>particles</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a>)</p></li>
+<li><p><strong>log_weights</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>resampling</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+<li><p><strong>ess_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief.particles">
+<span class="sig-name descname"><span class="pre">particles</span></span><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief.particles" title="Link to this definition"></a></dt>
+<dd><p>List of state particles representing the belief</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief.log_weights">
+<span class="sig-name descname"><span class="pre">log_weights</span></span><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief.log_weights" title="Link to this definition"></a></dt>
+<dd><p>Log-weights of particles in log space for numerical stability</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief.normalized_weights">
+<span class="sig-name descname"><span class="pre">normalized_weights</span></span><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief.normalized_weights" title="Link to this definition"></a></dt>
+<dd><p>Normalized probability weights (computed automatically)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief.resampling">
+<span class="sig-name descname"><span class="pre">resampling</span></span><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief.resampling" title="Link to this definition"></a></dt>
+<dd><p>Whether automatic resampling is enabled</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief.ess_factor">
+<span class="sig-name descname"><span class="pre">ess_factor</span></span><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief.ess_factor" title="Link to this definition"></a></dt>
+<dd><p>Effective sample size factor for resampling threshold</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief.ess_threshold">
+<span class="sig-name descname"><span class="pre">ess_threshold</span></span><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief.ess_threshold" title="Link to this definition"></a></dt>
+<dd><p>Computed threshold for triggering resampling</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief.eps">
+<span class="sig-name descname"><span class="pre">eps</span></span><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief.eps" title="Link to this definition"></a></dt>
+<dd><p>Small epsilon value for numerical stability in weight updates</p>
+</dd></dl>
+
+<p class="rubric">Example</p>
+<p>Creating and using a weighted particle belief:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="c1"># Create belief with 1000 particles</span>
+<span class="n">particles</span> <span class="o">=</span> <span class="p">[[</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">]</span> <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1000</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">randn</span><span class="p">(</span><span class="mi">1000</span><span class="p">))]</span>
+<span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">1000</span><span class="p">)</span> <span class="o">/</span> <span class="mi">1000</span><span class="p">)</span>  <span class="c1"># Uniform weights</span>
+
+<span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span>
+    <span class="n">particles</span><span class="o">=</span><span class="n">particles</span><span class="p">,</span>
+    <span class="n">log_weights</span><span class="o">=</span><span class="n">log_weights</span><span class="p">,</span>
+    <span class="n">resampling</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">ess_factor</span><span class="o">=</span><span class="mf">0.5</span>
+<span class="p">)</span>
+
+<span class="c1"># Sample a state and update belief</span>
+<span class="n">state</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+<span class="n">updated_belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">pomdp</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py property">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief.config_id">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">config_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></em><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief.config_id" title="Link to this definition"></a></dt>
+<dd><p>Generate a deterministic identifier based on belief configuration.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#WeightedParticleBelief.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief.sample" title="Link to this definition"></a></dt>
+<dd><p>Sample a state from the current belief distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A state sampled according to the belief’s probability distribution</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to enable state sampling
+for planning and simulation purposes.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#WeightedParticleBelief.to_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief.to_dict" title="Link to this definition"></a></dt>
+<dd><p>Convert the belief to a dictionary for serialization.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A dictionary containing all necessary fields for deserialization.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)">dict</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief.to_unique_support_distribution">
+<span class="sig-name descname"><span class="pre">to_unique_support_distribution</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#WeightedParticleBelief.to_unique_support_distribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief.to_unique_support_distribution" title="Link to this definition"></a></dt>
+<dd><p>Convert the belief to a DiscreteDistribution with unique particles.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A distribution where each particle appears only once,
+with its probability being the sum of all its occurrences in the original belief.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference internal" href="POMDPPlanners.core.distributions.html#POMDPPlanners.core.distributions.DiscreteDistribution" title="POMDPPlanners.core.distributions.DiscreteDistribution">DiscreteDistribution</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBelief.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#WeightedParticleBelief.update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBelief.update" title="Link to this definition"></a></dt>
+<dd><p>Update belief given an action-observation pair.</p>
+<p>Performs Bayesian belief update using the environment’s transition
+and observation models.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> – Action that was executed</p></li>
+<li><p><strong>observation</strong> – Observation that was received</p></li>
+<li><p><strong>pomdp</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></span>) – Environment providing transition and observation models</p></li>
+<li><p><strong>state</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a><em> | </em><em>None</em>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#POMDPPlanners.core.belief.WeightedParticleBelief" title="POMDPPlanners.core.belief.WeightedParticleBelief"><code class="xref py py-class docutils literal notranslate"><span class="pre">WeightedParticleBelief</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Updated belief state reflecting the new information</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method according to their
+specific belief representation and update strategy.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBeliefReinvigoration">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.belief.</span></span><span class="sig-name descname"><span class="pre">WeightedParticleBeliefReinvigoration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">particles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_weights</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resampling</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">ess_factor</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reinvigoration_fraction</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#WeightedParticleBeliefReinvigoration"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBeliefReinvigoration" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#POMDPPlanners.core.belief.WeightedParticleBelief" title="POMDPPlanners.core.belief.WeightedParticleBelief"><code class="xref py py-class docutils literal notranslate"><span class="pre">WeightedParticleBelief</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>particles</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a>)</p></li>
+<li><p><strong>log_weights</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>resampling</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+<li><p><strong>ess_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>reinvigoration_fraction</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBeliefReinvigoration.reinvigorate">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">reinvigorate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">belief</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#WeightedParticleBeliefReinvigoration.reinvigorate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBeliefReinvigoration.reinvigorate" title="Link to this definition"></a></dt>
+<dd><p>This function should be implemented for a specific POMDP environment.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>action</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>observation</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>pomdp</strong> (<a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><em>Environment</em></a>)</p></li>
+<li><p><strong>belief</strong> (<a class="reference internal" href="#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><em>Belief</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBeliefReinvigoration.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#WeightedParticleBeliefReinvigoration.update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBeliefReinvigoration.update" title="Link to this definition"></a></dt>
+<dd><p>Update belief given an action-observation pair.</p>
+<p>Performs Bayesian belief update using the environment’s transition
+and observation models.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> – Action that was executed</p></li>
+<li><p><strong>observation</strong> – Observation that was received</p></li>
+<li><p><strong>pomdp</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></span>) – Environment providing transition and observation models</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#POMDPPlanners.core.belief.WeightedParticleBelief" title="POMDPPlanners.core.belief.WeightedParticleBelief"><code class="xref py py-class docutils literal notranslate"><span class="pre">WeightedParticleBelief</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Updated belief state reflecting the new information</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method according to their
+specific belief representation and update strategy.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.belief.</span></span><span class="sig-name descname"><span class="pre">WeightedParticleBeliefStateUpdate</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">particles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">weights</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#WeightedParticleBeliefStateUpdate"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></p>
+<p>Incremental weighted particle belief for online state estimation.</p>
+<p>This class implements a lightweight belief representation that incrementally
+accumulates state particles with associated observation likelihood weights.
+It is designed for online learning and planning algorithms that build beliefs
+by sequentially adding individual state samples rather than maintaining a
+fixed-size particle set.</p>
+<p>Unlike traditional particle filters that maintain a fixed number of particles
+through resampling, WeightedParticleBeliefStateUpdate grows dynamically by
+accumulating particles with observation-based weights. This makes it particularly
+suitable for Monte Carlo Tree Search (MCTS) algorithms where beliefs are built
+incrementally during tree expansion.</p>
+<p>Key Features:
+- <strong>Incremental Accumulation</strong>: Add particles one-by-one without resampling
+- <strong>Observation Weighting</strong>: Each particle weighted by observation likelihood
+- <strong>Efficient Updates</strong>: Both in-place and immutable update operations
+- <strong>Weighted Sampling</strong>: Sample states proportionally to observation evidence
+- <strong>Memory Efficient</strong>: No fixed particle budget, grows as needed
+- <strong>Deterministic Config ID</strong>: Order-invariant identification for caching</p>
+<p>Mathematical Foundation:
+The belief represents a discrete probability distribution where each particle
+s_i has weight w_i = P(o|s_i,a), the observation likelihood. The probability
+of state s is proportional to the sum of weights for all particles with that state:</p>
+<p>P(s|o,a) ∝ Σ_{i: s_i=s} w_i</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>particles</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>weights</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em> | </em><em>None</em>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.particles">
+<span class="sig-name descname"><span class="pre">particles</span></span><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.particles" title="Link to this definition"></a></dt>
+<dd><p>List of state particles representing possible world states</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.weights">
+<span class="sig-name descname"><span class="pre">weights</span></span><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.weights" title="Link to this definition"></a></dt>
+<dd><p>List of observation likelihood weights for each particle</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.weights_sum">
+<span class="sig-name descname"><span class="pre">weights_sum</span></span><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.weights_sum" title="Link to this definition"></a></dt>
+<dd><p>Running sum of all weights for efficient normalization</p>
+</dd></dl>
+
+<p class="rubric">Examples</p>
+<p>Basic incremental belief construction:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBeliefStateUpdate</span>
+
+<span class="c1"># Create environment and empty belief</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">(</span><span class="n">particles</span><span class="o">=</span><span class="p">[],</span> <span class="n">weights</span><span class="o">=</span><span class="p">[])</span>
+
+<span class="c1"># Add states incrementally with observations</span>
+<span class="n">belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_left&quot;</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="s2">&quot;tiger_left&quot;</span><span class="p">)</span>
+<span class="n">belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_left&quot;</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="s2">&quot;tiger_right&quot;</span><span class="p">)</span>
+<span class="n">belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_left&quot;</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="s2">&quot;tiger_left&quot;</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Belief has </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span><span class="si">}</span><span class="s2"> particles&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total weight: </span><span class="si">{</span><span class="n">belief</span><span class="o">.</span><span class="n">weights_sum</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Sample weighted by observation probabilities</span>
+<span class="n">sampled_state</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>  <span class="c1"># More likely to be &quot;tiger_left&quot;</span>
+</pre></div>
+</div>
+<p>Immutable belief updates for tree search:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.cartpole_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartPolePOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBeliefStateUpdate</span>
+
+<span class="c1"># Create continuous state environment</span>
+<span class="n">noise_cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">])</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">CartPolePOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span> <span class="n">noise_cov</span><span class="o">=</span><span class="n">noise_cov</span><span class="p">)</span>
+
+<span class="c1"># Start with single particle</span>
+<span class="n">initial_state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>  <span class="c1"># [x, x_dot, theta, theta_dot]</span>
+<span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">([</span><span class="n">initial_state</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">])</span>
+
+<span class="c1"># Create child beliefs for different observations (tree expansion)</span>
+<span class="n">action</span> <span class="o">=</span> <span class="mi">1</span>  <span class="c1"># Apply force right</span>
+<span class="n">observations</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>  <span class="c1"># Likely observation</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>  <span class="c1"># Less likely observation</span>
+<span class="p">]</span>
+
+<span class="n">child_beliefs</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">obs</span> <span class="ow">in</span> <span class="n">observations</span><span class="p">:</span>
+    <span class="c1"># Generate potential next state</span>
+    <span class="n">next_state</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">initial_state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+    <span class="c1"># Create new belief (immutable update)</span>
+    <span class="n">child_belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">next_state</span><span class="p">)</span>
+    <span class="n">child_beliefs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">child_belief</span><span class="p">)</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Child belief weight: </span><span class="si">{</span><span class="n">child_belief</span><span class="o">.</span><span class="n">weights</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s2">.4f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Comparing belief update strategies:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.sanity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SanityPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBeliefStateUpdate</span>
+
+<span class="n">env</span> <span class="o">=</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+<span class="c1"># Strategy 1: In-place updates (memory efficient)</span>
+<span class="n">belief_inplace</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">([],</span> <span class="p">[])</span>
+<span class="n">states_observations</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">)</span>  <span class="c1"># (state, observation) pairs</span>
+<span class="p">]</span>
+
+<span class="k">for</span> <span class="n">state</span><span class="p">,</span> <span class="n">obs</span> <span class="ow">in</span> <span class="n">states_observations</span><span class="p">:</span>
+    <span class="n">belief_inplace</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;In-place belief: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">belief_inplace</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span><span class="si">}</span><span class="s2"> particles&quot;</span><span class="p">)</span>
+
+<span class="c1"># Strategy 2: Immutable updates (functional style)</span>
+<span class="n">belief_immutable</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">([],</span> <span class="p">[])</span>
+<span class="k">for</span> <span class="n">state</span><span class="p">,</span> <span class="n">obs</span> <span class="ow">in</span> <span class="n">states_observations</span><span class="p">:</span>
+    <span class="n">belief_immutable</span> <span class="o">=</span> <span class="n">belief_immutable</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="s2">&quot;action&quot;</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Immutable belief: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">belief_immutable</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span><span class="si">}</span><span class="s2"> particles&quot;</span><span class="p">)</span>
+
+<span class="c1"># Both should have same final state</span>
+<span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief_inplace</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief_immutable</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Monte Carlo Tree Search integration:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBeliefStateUpdate</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">BeliefNode</span><span class="p">,</span> <span class="n">ActionNode</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+
+<span class="n">env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+<span class="c1"># Root belief node with initial particles</span>
+<span class="n">root_belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">(</span>
+    <span class="n">particles</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;tiger_right&quot;</span><span class="p">],</span>
+    <span class="n">weights</span><span class="o">=</span><span class="p">[</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">]</span>
+<span class="p">)</span>
+<span class="n">root_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">root_belief</span><span class="p">)</span>
+
+<span class="c1"># Simulate MCTS expansion</span>
+<span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;listen&quot;</span>
+<span class="n">possible_observations</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;hear_left&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_right&quot;</span><span class="p">]</span>
+
+<span class="c1"># Create action node</span>
+<span class="n">action_node</span> <span class="o">=</span> <span class="n">ActionNode</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="n">root_node</span><span class="p">)</span>
+
+<span class="c1"># For each possible observation, create belief child</span>
+<span class="k">for</span> <span class="n">observation</span> <span class="ow">in</span> <span class="n">possible_observations</span><span class="p">:</span>
+    <span class="c1"># Sample particles and create child belief</span>
+    <span class="n">child_belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">([],</span> <span class="p">[])</span>
+
+    <span class="c1"># Add particles based on transition model</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">5</span><span class="p">):</span>  <span class="c1"># Multiple particles per observation</span>
+        <span class="n">parent_state</span> <span class="o">=</span> <span class="n">root_belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="n">next_state</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">parent_state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">child_belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">next_state</span><span class="p">)</span>
+
+    <span class="c1"># Create belief node for tree</span>
+    <span class="n">belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">child_belief</span><span class="p">,</span> <span class="n">observation</span><span class="o">=</span><span class="n">observation</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="n">action_node</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Child belief for </span><span class="si">{</span><span class="n">observation</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">child_belief</span><span class="o">.</span><span class="n">particles</span><span class="p">)</span><span class="si">}</span><span class="s2"> particles&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Weighted sampling and state estimation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBeliefStateUpdate</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">collections</span>
+
+<span class="n">env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">([],</span> <span class="p">[])</span>
+
+<span class="c1"># Add strongly biased evidence for tiger_left</span>
+<span class="n">evidence_sets</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_left&quot;</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span>    <span class="c1"># Strong evidence for left</span>
+    <span class="p">(</span><span class="s2">&quot;tiger_right&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_left&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">),</span>   <span class="c1"># Weak evidence for left from right</span>
+    <span class="p">(</span><span class="s2">&quot;tiger_left&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_right&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>   <span class="c1"># Weak evidence for right from left</span>
+    <span class="p">(</span><span class="s2">&quot;tiger_right&quot;</span><span class="p">,</span> <span class="s2">&quot;hear_right&quot;</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span>  <span class="c1"># Medium evidence for right</span>
+<span class="p">]</span>
+
+<span class="k">for</span> <span class="n">state</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">evidence_sets</span><span class="p">:</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">count</span><span class="p">):</span>
+        <span class="n">belief</span><span class="o">.</span><span class="n">inplace_update</span><span class="p">(</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="n">obs</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">state</span><span class="p">)</span>
+
+<span class="c1"># Analyze sampling distribution</span>
+<span class="n">samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1000</span><span class="p">)]</span>
+<span class="n">sample_counts</span> <span class="o">=</span> <span class="n">collections</span><span class="o">.</span><span class="n">Counter</span><span class="p">(</span><span class="n">samples</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Sampling distribution:&quot;</span><span class="p">)</span>
+<span class="k">for</span> <span class="n">state</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">sample_counts</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="n">probability</span> <span class="o">=</span> <span class="n">count</span> <span class="o">/</span> <span class="mi">1000</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">state</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">probability</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Should strongly favor tiger_left due to evidence weighting</span>
+</pre></div>
+</div>
+<p>Configuration ID and caching:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.sanity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SanityPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBeliefStateUpdate</span>
+
+<span class="n">env</span> <span class="o">=</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+<span class="c1"># Create two beliefs with same particles in different orders</span>
+<span class="n">belief1</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.8</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">])</span>
+<span class="n">belief2</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.8</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">])</span>
+
+<span class="c1"># Config IDs should be equal (order-invariant)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Belief 1 config ID: </span><span class="si">{</span><span class="n">belief1</span><span class="o">.</span><span class="n">config_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Belief 2 config ID: </span><span class="si">{</span><span class="n">belief2</span><span class="o">.</span><span class="n">config_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;IDs match: </span><span class="si">{</span><span class="n">belief1</span><span class="o">.</span><span class="n">config_id</span><span class="w"> </span><span class="o">==</span><span class="w"> </span><span class="n">belief2</span><span class="o">.</span><span class="n">config_id</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Useful for caching in planning algorithms</span>
+<span class="n">belief_cache</span> <span class="o">=</span> <span class="p">{</span><span class="n">belief1</span><span class="o">.</span><span class="n">config_id</span><span class="p">:</span> <span class="s2">&quot;cached_result&quot;</span><span class="p">}</span>
+
+<span class="k">if</span> <span class="n">belief2</span><span class="o">.</span><span class="n">config_id</span> <span class="ow">in</span> <span class="n">belief_cache</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Cache hit! Reusing computation.&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Advanced: Custom particle types:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.cartpole_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartPolePOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBeliefStateUpdate</span>
+
+<span class="c1"># Works with any particle type - numpy arrays, custom objects, etc.</span>
+<span class="n">noise_cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">])</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">CartPolePOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span> <span class="n">noise_cov</span><span class="o">=</span><span class="n">noise_cov</span><span class="p">)</span>
+
+<span class="c1"># Numpy array particles</span>
+<span class="n">particles</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.08</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">]),</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.12</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>
+<span class="p">]</span>
+<span class="n">weights</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.4</span><span class="p">,</span> <span class="mf">0.35</span><span class="p">,</span> <span class="mf">0.25</span><span class="p">]</span>
+
+<span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBeliefStateUpdate</span><span class="p">(</span><span class="n">particles</span><span class="p">,</span> <span class="n">weights</span><span class="p">)</span>
+
+<span class="c1"># Add more complex state</span>
+<span class="n">complex_state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.05</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.09</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.05</span><span class="p">])</span>
+<span class="n">action</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">])</span>  <span class="c1"># Force right</span>
+<span class="n">observation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.06</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.088</span><span class="p">,</span> <span class="o">-</span><span class="mf">0.05</span><span class="p">])</span>
+
+<span class="n">new_belief</span> <span class="o">=</span> <span class="n">belief</span><span class="o">.</span><span class="n">update</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="n">observation</span><span class="p">,</span> <span class="n">env</span><span class="p">,</span> <span class="n">complex_state</span><span class="p">)</span>
+<span class="n">sampled_state</span> <span class="o">=</span> <span class="n">new_belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sampled state shape: </span><span class="si">{</span><span class="n">sampled_state</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Sampled state: </span><span class="si">{</span><span class="n">sampled_state</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py property">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.config_id">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">config_id</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><span class="pre">str</span></a></em><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.config_id" title="Link to this definition"></a></dt>
+<dd><p>Generate a deterministic identifier based on belief configuration.</p>
+<p>This implementation ensures that config_id is invariant to the order
+of particles and weights, similar to WeightedParticleBelief.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.inplace_update">
+<span class="sig-name descname"><span class="pre">inplace_update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#WeightedParticleBeliefStateUpdate.inplace_update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.inplace_update" title="Link to this definition"></a></dt>
+<dd><p>Add a state particle with observation weight to current belief.</p>
+<p>This method modifies the current belief in-place by appending a new particle
+and its corresponding observation likelihood weight. The weight is computed
+using the environment’s observation model and efficiently updates the
+running weight sum.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Action that was executed to reach the state</p></li>
+<li><p><strong>observation</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Observation received after executing the action</p></li>
+<li><p><strong>pomdp</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></span>) – Environment providing the observation model for weight computation</p></li>
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>]</span>) – State particle to add to the belief. If None, no particle is added.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/constants.html#None" title="(in Python v3.13)"><code class="xref py py-obj docutils literal notranslate"><span class="pre">None</span></code></a></span></p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<dl>
+<dt>Incrementally building a belief::</dt><dd><p>belief = WeightedParticleBeliefStateUpdate([], [])</p>
+<p># Add particles one by one
+belief.inplace_update(“listen”, “hear_left”, env, “tiger_left”)
+belief.inplace_update(“listen”, “hear_right”, env, “tiger_right”)
+belief.inplace_update(“listen”, “hear_left”, env, “tiger_left”)</p>
+<p># Belief now contains 3 particles with observation-based weights
+assert len(belief.particles) == 3
+assert belief.weights_sum &gt; 0</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#WeightedParticleBeliefStateUpdate.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.sample" title="Link to this definition"></a></dt>
+<dd><p>Sample a state from the current belief distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span></p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>A state sampled according to the belief’s probability distribution</p>
+</dd>
+<dt class="field-odd">Raises<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If belief is empty or has zero weights.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.update">
+<span class="sig-name descname"><span class="pre">update</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#WeightedParticleBeliefStateUpdate.update"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate.update" title="Link to this definition"></a></dt>
+<dd><p>Create new belief by adding a state particle with observation weight.</p>
+<p>This method creates a new belief instance without modifying the current one.
+The new particle’s weight is computed as the observation likelihood given
+the state and action using the environment’s observation model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Action that was executed to reach the state</p></li>
+<li><p><strong>observation</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Observation received after executing the action</p></li>
+<li><p><strong>pomdp</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></span>) – Environment providing the observation model for weight computation</p></li>
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>]</span>) – State particle to add to the belief. If None, no particle is added.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate" title="POMDPPlanners.core.belief.WeightedParticleBeliefStateUpdate"><code class="xref py py-class docutils literal notranslate"><span class="pre">WeightedParticleBeliefStateUpdate</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>New WeightedParticleBeliefStateUpdate instance with the additional particle
+and updated weights.</p>
+</dd>
+</dl>
+<p class="rubric">Example</p>
+<dl>
+<dt>Creating a new belief with an additional particle::</dt><dd><p># Original belief with 2 particles
+belief = WeightedParticleBeliefStateUpdate(</p>
+<blockquote>
+<div><p>particles=[“state1”, “state2”],
+weights=[0.7, 0.3]</p>
+</div></blockquote>
+<p>)</p>
+<p># Create new belief with additional particle
+new_belief = belief.update(</p>
+<blockquote>
+<div><p>action=”action1”,
+observation=”obs1”,
+pomdp=environment,
+state=”state3”</p>
+</div></blockquote>
+<p>)</p>
+<p># Original belief unchanged, new belief has 3 particles
+assert len(belief.particles) == 2
+assert len(new_belief.particles) == 3</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.get_initial_belief">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.belief.</span></span><span class="sig-name descname"><span class="pre">get_initial_belief</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_particles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">resampling</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#get_initial_belief"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.get_initial_belief" title="Link to this definition"></a></dt>
+<dd><p>Create initial belief from environment’s initial state distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>pomdp</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></span>) – Environment to get initial distribution from</p></li>
+<li><p><strong>n_particles</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></span>) – Number of particles to generate for the belief</p></li>
+<li><p><strong>resampling</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span>) – Enable resampling in the created belief. Defaults to True.</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>WeightedParticleBelief with uniform weights over initial states</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#TypeError" title="(in Python v3.13)"><strong>TypeError</strong></a> – If n_particles is not an integer</p></li>
+<li><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#ValueError" title="(in Python v3.13)"><strong>ValueError</strong></a> – If n_particles is not positive</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.is_terminal_belief">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.belief.</span></span><span class="sig-name descname"><span class="pre">is_terminal_belief</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">belief</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">env</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#is_terminal_belief"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.is_terminal_belief" title="Link to this definition"></a></dt>
+<dd><p>Check if the belief is terminal.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>belief</strong> (<a class="reference internal" href="#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><em>Belief</em></a>)</p></li>
+<li><p><strong>env</strong> (<a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><em>Environment</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.core.belief.sample_next_belief">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.belief.</span></span><span class="sig-name descname"><span class="pre">sample_next_belief</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">belief</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/belief.html#sample_next_belief"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.belief.sample_next_belief" title="Link to this definition"></a></dt>
+<dd><p>Simulate one step of belief evolution.</p>
+<p>This function samples a state from the current belief, simulates the
+environment dynamics, and updates the belief with the resulting observation.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>belief</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></span>) – Current belief state</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Action to execute</p></li>
+<li><p><strong>pomdp</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></span>) – Environment providing dynamics models</p></li>
+</ul>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p><ul class="simple">
+<li><p>Updated belief after incorporating the observation</p></li>
+<li><p>Observation that was generated</p></li>
+</ul>
+</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Tuple containing</p>
+</dd>
+</dl>
+</dd></dl>
+
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

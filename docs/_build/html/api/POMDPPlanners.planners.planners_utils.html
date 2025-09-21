@@ -1,0 +1,813 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.planners.planners_utils package &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="POMDPPlanners.simulations package" href="POMDPPlanners.simulations.html" />
+    <link rel="prev" title="POMDPPlanners.planners.open_loop_planners package" href="POMDPPlanners.planners.open_loop_planners.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.html">POMDPPlanners package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.core.html">POMDPPlanners.core package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.environments.html">POMDPPlanners.environments package</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="POMDPPlanners.planners.html">POMDPPlanners.planners package</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.planners.html#POMDPPlanners.planners.DiscreteActionSequencesPlanner"><code class="docutils literal notranslate"><span class="pre">DiscreteActionSequencesPlanner</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.planners.html#POMDPPlanners.planners.PFT_DPW"><code class="docutils literal notranslate"><span class="pre">PFT_DPW</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.planners.html#POMDPPlanners.planners.POMCP"><code class="docutils literal notranslate"><span class="pre">POMCP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.planners.html#POMDPPlanners.planners.POMCPOW"><code class="docutils literal notranslate"><span class="pre">POMCPOW</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.planners.html#POMDPPlanners.planners.POMCP_DPW"><code class="docutils literal notranslate"><span class="pre">POMCP_DPW</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.planners.html#POMDPPlanners.planners.PathSimulationPolicy"><code class="docutils literal notranslate"><span class="pre">PathSimulationPolicy</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.planners.html#POMDPPlanners.planners.SparsePFT"><code class="docutils literal notranslate"><span class="pre">SparsePFT</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.planners.html#POMDPPlanners.planners.StandardSparseSamplingDiscreteActionsPlanner"><code class="docutils literal notranslate"><span class="pre">StandardSparseSamplingDiscreteActionsPlanner</span></code></a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="POMDPPlanners.planners.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.planners.mcts_planners.html">POMDPPlanners.planners.mcts_planners package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.planners.open_loop_planners.html">POMDPPlanners.planners.open_loop_planners package</a></li>
+<li class="toctree-l4 current"><a class="current reference internal" href="#">POMDPPlanners.planners.planners_utils package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.planners.html#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.planners.html#module-POMDPPlanners.planners.sparse_sampling_planner">POMDPPlanners.planners.sparse_sampling_planner module</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.simulations.html">POMDPPlanners.simulations package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.utils.html">POMDPPlanners.utils package</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="POMDPPlanners.html">POMDPPlanners package</a></li>
+          <li class="breadcrumb-item"><a href="POMDPPlanners.planners.html">POMDPPlanners.planners package</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.planners.planners_utils package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.planners.planners_utils.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-POMDPPlanners.planners.planners_utils">
+<span id="pomdpplanners-planners-planners-utils-package"></span><h1>POMDPPlanners.planners.planners_utils package<a class="headerlink" href="#module-POMDPPlanners.planners.planners_utils" title="Link to this heading"></a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="module-POMDPPlanners.planners.planners_utils.dpw">
+<span id="pomdpplanners-planners-planners-utils-dpw-module"></span><h2>POMDPPlanners.planners.planners_utils.dpw module<a class="headerlink" href="#module-POMDPPlanners.planners.planners_utils.dpw" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.planners_utils.dpw.ActionSampler">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.planners.planners_utils.dpw.</span></span><span class="sig-name descname"><span class="pre">ActionSampler</span></span><a class="reference internal" href="../_modules/POMDPPlanners/planners/planners_utils/dpw.html#ActionSampler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.planners.planners_utils.dpw.ActionSampler" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
+<p>Abstract base class for action sampling strategies in PFT-DPW.</p>
+<p>Action samplers provide domain-specific strategies for generating new actions
+during progressive widening. This allows PFT-DPW to work with continuous or
+large discrete action spaces by intelligently sampling promising actions.</p>
+<p>The ActionSampler interface enables flexible action space exploration by allowing
+custom sampling strategies that can incorporate domain knowledge, belief state
+information, or specialized sampling distributions.</p>
+<p>The class is serializable and can be safely pickled/unpickled for distributed
+computing, caching, or saving/loading configurations.</p>
+<p class="rubric">Examples</p>
+<p>Basic continuous control action sampler:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">ContinuousControlSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action_bounds</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">),</span> <span class="n">action_dim</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_bounds</span> <span class="o">=</span> <span class="n">action_bounds</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_dim</span> <span class="o">=</span> <span class="n">action_dim</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># Sample uniformly from action space</span>
+        <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_bounds</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="n">low</span><span class="p">,</span> <span class="n">high</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">action_dim</span><span class="p">)</span>
+
+<span class="c1"># Usage with PFT-DPW</span>
+<span class="n">sampler</span> <span class="o">=</span> <span class="n">ContinuousControlSampler</span><span class="p">(</span><span class="n">action_bounds</span><span class="o">=</span><span class="p">(</span><span class="o">-</span><span class="mf">2.0</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">),</span> <span class="n">action_dim</span><span class="o">=</span><span class="mi">4</span><span class="p">)</span>
+<span class="n">action</span> <span class="o">=</span> <span class="n">sampler</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>  <span class="c1"># Returns 4D action vector</span>
+
+<span class="c1"># Serialization works automatically</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pickle</span>
+<span class="n">serialized</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">dumps</span><span class="p">(</span><span class="n">sampler</span><span class="p">)</span>
+<span class="n">restored_sampler</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">loads</span><span class="p">(</span><span class="n">serialized</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Discrete action sampler with custom distribution:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">WeightedDiscreteActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">actions</span><span class="p">,</span> <span class="n">probabilities</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="n">actions</span>
+        <span class="c1"># Use uniform probabilities if none provided</span>
+        <span class="k">if</span> <span class="n">probabilities</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">probabilities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">))</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">probabilities</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">probabilities</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">probabilities</span> <span class="o">/=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">probabilities</span><span class="p">)</span>  <span class="c1"># Normalize</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actions</span><span class="p">,</span> <span class="n">p</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">probabilities</span><span class="p">)</span>
+
+<span class="c1"># Prefer certain actions over others</span>
+<span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;up&quot;</span><span class="p">,</span> <span class="s2">&quot;down&quot;</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="s2">&quot;stay&quot;</span><span class="p">]</span>
+<span class="n">probs</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">,</span> <span class="mf">0.2</span><span class="p">]</span>  <span class="c1"># Uniform</span>
+<span class="n">sampler</span> <span class="o">=</span> <span class="n">WeightedDiscreteActionSampler</span><span class="p">(</span><span class="n">actions</span><span class="p">,</span> <span class="n">probs</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Belief-informed action sampler:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">AdaptiveActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_actions</span><span class="p">,</span> <span class="n">exploration_noise</span><span class="o">=</span><span class="mf">0.1</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">base_actions</span> <span class="o">=</span> <span class="n">base_actions</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">exploration_noise</span> <span class="o">=</span> <span class="n">exploration_noise</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">belief_node</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span> <span class="ow">and</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">&gt;</span> <span class="mi">10</span><span class="p">:</span>
+            <span class="c1"># Use belief state to inform sampling</span>
+            <span class="n">best_action</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_best_action_from_belief</span><span class="p">(</span><span class="n">belief_node</span><span class="p">)</span>
+            <span class="c1"># Add exploration noise</span>
+            <span class="n">noise</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">exploration_noise</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">best_action</span><span class="p">))</span>
+            <span class="k">return</span> <span class="n">best_action</span> <span class="o">+</span> <span class="n">noise</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Random exploration for new nodes</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_actions</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_get_best_action_from_belief</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="p">):</span>
+        <span class="c1"># Simplified: return action from best child</span>
+        <span class="k">if</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+            <span class="n">best_child</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">belief_node</span><span class="o">.</span><span class="n">children</span><span class="p">,</span> <span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="o">.</span><span class="n">q_value</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">best_child</span><span class="o">.</span><span class="n">action</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">base_actions</span><span class="p">)</span>
+
+<span class="n">sampler</span> <span class="o">=</span> <span class="n">AdaptiveActionSampler</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">],</span> <span class="n">exploration_noise</span><span class="o">=</span><span class="mf">0.05</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Multi-modal action sampler for hybrid control:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">MultiModalActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discrete_actions</span><span class="p">,</span> <span class="n">continuous_bounds</span><span class="p">,</span> <span class="n">mode_prob</span><span class="o">=</span><span class="mf">0.5</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">discrete_actions</span> <span class="o">=</span> <span class="n">discrete_actions</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">continuous_bounds</span> <span class="o">=</span> <span class="n">continuous_bounds</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mode_prob</span> <span class="o">=</span> <span class="n">mode_prob</span>  <span class="c1"># Probability of discrete vs continuous</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">mode_prob</span><span class="p">:</span>
+            <span class="c1"># Sample discrete action</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;discrete&quot;</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">discrete_actions</span><span class="p">)}</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Sample continuous action</span>
+            <span class="n">low</span><span class="p">,</span> <span class="n">high</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">continuous_bounds</span>
+            <span class="n">continuous_action</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="n">low</span><span class="p">,</span> <span class="n">high</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+            <span class="k">return</span> <span class="p">{</span><span class="s2">&quot;type&quot;</span><span class="p">:</span> <span class="s2">&quot;continuous&quot;</span><span class="p">,</span> <span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="n">continuous_action</span><span class="p">}</span>
+
+<span class="c1"># For environments with both discrete and continuous actions</span>
+<span class="n">discrete_acts</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;stop&quot;</span><span class="p">,</span> <span class="s2">&quot;emergency_brake&quot;</span><span class="p">,</span> <span class="s2">&quot;lane_change&quot;</span><span class="p">]</span>
+<span class="n">continuous_bounds</span> <span class="o">=</span> <span class="p">(</span><span class="o">-</span><span class="mf">5.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">)</span>  <span class="c1"># Steering/acceleration range</span>
+<span class="n">sampler</span> <span class="o">=</span> <span class="n">MultiModalActionSampler</span><span class="p">(</span><span class="n">discrete_acts</span><span class="p">,</span> <span class="n">continuous_bounds</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Goal-directed action sampler:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">GoalDirectedActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">goal_position</span><span class="p">,</span> <span class="n">action_magnitude</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">goal_bias</span><span class="o">=</span><span class="mf">0.7</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">goal_position</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">goal_position</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_magnitude</span> <span class="o">=</span> <span class="n">action_magnitude</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">goal_bias</span> <span class="o">=</span> <span class="n">goal_bias</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">goal_bias</span> <span class="ow">and</span> <span class="n">belief_node</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="c1"># Sample action towards goal based on current belief</span>
+            <span class="n">current_position</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_estimate_position</span><span class="p">(</span><span class="n">belief_node</span><span class="p">)</span>
+            <span class="n">direction</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">goal_position</span> <span class="o">-</span> <span class="n">current_position</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">direction</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">direction</span> <span class="o">=</span> <span class="n">direction</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">direction</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">direction</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_magnitude</span>
+
+        <span class="c1"># Random exploration</span>
+        <span class="n">angle</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_magnitude</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span><span class="p">)])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_estimate_position</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="p">):</span>
+        <span class="c1"># Simplified: use mean of particles in belief</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">belief_node</span><span class="o">.</span><span class="n">belief</span><span class="p">,</span> <span class="s1">&#39;particles&#39;</span><span class="p">):</span>
+            <span class="n">positions</span> <span class="o">=</span> <span class="p">[</span><span class="n">p</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">belief</span><span class="o">.</span><span class="n">particles</span><span class="p">]</span>  <span class="c1"># First 2D as position</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">positions</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>
+
+<span class="c1"># Navigation towards specific goal</span>
+<span class="n">goal</span> <span class="o">=</span> <span class="p">[</span><span class="mf">10.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">]</span>
+<span class="n">sampler</span> <span class="o">=</span> <span class="n">GoalDirectedActionSampler</span><span class="p">(</span><span class="n">goal</span><span class="p">,</span> <span class="n">action_magnitude</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span> <span class="n">goal_bias</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.planners_utils.dpw.ActionSampler.sample">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">belief_node</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/planners/planners_utils/dpw.html#ActionSampler.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.planners.planners_utils.dpw.ActionSampler.sample" title="Link to this definition"></a></dt>
+<dd><p>Sample a new action for progressive widening.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>belief_node</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.tree.html#POMDPPlanners.core.tree.BeliefNode" title="POMDPPlanners.core.tree.BeliefNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">BeliefNode</span></code></a></span>) – Optional belief node context for informed sampling</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>A sampled action compatible with the environment’s action space</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.planners_utils.dpw.action_progressive_widening">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.planners.planners_utils.dpw.</span></span><span class="sig-name descname"><span class="pre">action_progressive_widening</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">belief_node</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_a</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action_sampler</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exploration_constant</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_a</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/planners/planners_utils/dpw.html#action_progressive_widening"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.planners.planners_utils.dpw.action_progressive_widening" title="Link to this definition"></a></dt>
+<dd><p>Select or add action using progressive widening strategy.</p>
+<p>Progressive widening gradually expands the action space based on visit counts.
+New actions are added when ⌊n^α_a⌋ &gt; ⌊(n-1)^α_a⌋, where n is the visit count.
+Otherwise, existing actions are selected using UCB1.</p>
+<p>The progressive widening mechanism balances exploration and exploitation by:
+1. Initially adding new actions frequently (exploration phase)
+2. Gradually reducing the rate of new actions as visit count increases
+3. Eventually relying primarily on UCB1 selection (exploitation phase)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>belief_node</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.tree.html#POMDPPlanners.core.tree.BeliefNode" title="POMDPPlanners.core.tree.BeliefNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">BeliefNode</span></code></a></span>) – Current belief node to select action from</p></li>
+<li><p><strong>alpha_a</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></span>) – Progressive widening exponent (0 &lt; alpha_a ≤ 1). Lower values
+create fewer actions, higher values create more actions.</p></li>
+<li><p><strong>action_sampler</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#POMDPPlanners.planners.planners_utils.dpw.ActionSampler" title="POMDPPlanners.planners.planners_utils.dpw.ActionSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActionSampler</span></code></a></span>) – Action sampler for generating new actions</p></li>
+<li><p><strong>exploration_constant</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></span>) – UCB1 exploration constant for existing actions</p></li>
+<li><p><strong>k_a</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.tree.html#POMDPPlanners.core.tree.ActionNode" title="POMDPPlanners.core.tree.ActionNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActionNode</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Selected or newly created action node</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Basic usage with continuous action sampler:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ActionSampler</span><span class="p">,</span> <span class="n">action_progressive_widening</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">BeliefNode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBelief</span>
+
+<span class="c1"># Create action sampler</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SimpleActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="c1"># Create belief node</span>
+<span class="n">particles</span> <span class="o">=</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]]</span>
+<span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">]))</span>
+<span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="p">)</span>
+<span class="n">belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">belief</span><span class="p">)</span>
+
+<span class="c1"># Progressive widening</span>
+<span class="n">action_sampler</span> <span class="o">=</span> <span class="n">SimpleActionSampler</span><span class="p">()</span>
+<span class="n">action_node</span> <span class="o">=</span> <span class="n">action_progressive_widening</span><span class="p">(</span>
+    <span class="n">belief_node</span><span class="o">=</span><span class="n">belief_node</span><span class="p">,</span>
+    <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>  <span class="c1"># Moderate exploration</span>
+    <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+    <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.0</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Comparing different alpha_a values:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Conservative exploration (fewer new actions)</span>
+<span class="n">conservative_action</span> <span class="o">=</span> <span class="n">action_progressive_widening</span><span class="p">(</span>
+    <span class="n">belief_node</span><span class="o">=</span><span class="n">belief_node</span><span class="p">,</span>
+    <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.25</span><span class="p">,</span>  <span class="c1"># Low alpha = fewer actions</span>
+    <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+    <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.0</span>
+<span class="p">)</span>
+
+<span class="c1"># Aggressive exploration (more new actions)</span>
+<span class="n">aggressive_action</span> <span class="o">=</span> <span class="n">action_progressive_widening</span><span class="p">(</span>
+    <span class="n">belief_node</span><span class="o">=</span><span class="n">belief_node</span><span class="p">,</span>
+    <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.75</span><span class="p">,</span>  <span class="c1"># High alpha = more actions</span>
+    <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+    <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.0</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Progressive widening in a loop (simulating MCTS):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span><span class="p">,</span> <span class="n">action_progressive_widening</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">BeliefNode</span><span class="p">,</span> <span class="n">ActionNode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBelief</span>
+
+<span class="c1"># Setup</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DiscreteActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">actions</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="n">actions</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span>
+
+<span class="n">particles</span> <span class="o">=</span> <span class="p">[[</span><span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">2</span><span class="p">]]</span>
+<span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="o">/</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="o">/</span><span class="mi">3</span><span class="p">,</span> <span class="mi">1</span><span class="o">/</span><span class="mi">3</span><span class="p">]))</span>
+<span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="p">)</span>
+<span class="n">root_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">belief</span><span class="p">)</span>
+
+<span class="n">sampler</span> <span class="o">=</span> <span class="n">DiscreteActionSampler</span><span class="p">([</span><span class="s1">&#39;up&#39;</span><span class="p">,</span> <span class="s1">&#39;down&#39;</span><span class="p">,</span> <span class="s1">&#39;left&#39;</span><span class="p">,</span> <span class="s1">&#39;right&#39;</span><span class="p">])</span>
+
+<span class="c1"># Simulate multiple selections</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">10</span><span class="p">):</span>
+    <span class="n">root_node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">=</span> <span class="n">i</span>  <span class="c1"># Simulate increasing visits</span>
+    <span class="n">action_node</span> <span class="o">=</span> <span class="n">action_progressive_widening</span><span class="p">(</span>
+        <span class="n">belief_node</span><span class="o">=</span><span class="n">root_node</span><span class="p">,</span>
+        <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">sampler</span><span class="p">,</span>
+        <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span>  <span class="c1"># sqrt(2)</span>
+    <span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Visit </span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">root_node</span><span class="o">.</span><span class="n">children</span><span class="p">)</span><span class="si">}</span><span class="s2"> actions, selected </span><span class="si">{</span><span class="n">action_node</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Tuning progressive widening parameters:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Effect of alpha_a on action creation</span>
+<span class="n">visit_counts</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">21</span><span class="p">)</span>
+<span class="n">alpha_values</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.25</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.75</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]</span>
+
+<span class="k">for</span> <span class="n">alpha</span> <span class="ow">in</span> <span class="n">alpha_values</span><span class="p">:</span>
+    <span class="n">action_counts</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">visit_counts</span><span class="p">:</span>
+        <span class="c1"># Calculate when new actions would be created</span>
+        <span class="n">should_create</span> <span class="o">=</span> <span class="n">floor</span><span class="p">(</span><span class="n">n</span> <span class="o">**</span> <span class="n">alpha</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">floor</span><span class="p">((</span><span class="n">n</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span> <span class="o">**</span> <span class="n">alpha</span><span class="p">)</span> <span class="k">if</span> <span class="n">n</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="kc">True</span>
+        <span class="n">action_counts</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">should_create</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+
+    <span class="n">total_new_actions</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">action_counts</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Alpha </span><span class="si">{</span><span class="n">alpha</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">total_new_actions</span><span class="si">}</span><span class="s2"> new actions in 20 visits&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.planners_utils.dpw.ucb1_exploration">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.planners.planners_utils.dpw.</span></span><span class="sig-name descname"><span class="pre">ucb1_exploration</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">belief_node</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exploration_constant</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/planners/planners_utils/dpw.html#ucb1_exploration"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.planners.planners_utils.dpw.ucb1_exploration" title="Link to this definition"></a></dt>
+<dd><p>Select action from existing children using UCB1 criterion.</p>
+<p>Uses Upper Confidence Bounds (UCB1) to balance exploration and exploitation:
+UCB1(a) = Q(a) + c * sqrt(log(N) / N(a))
+where Q(a) is the average reward, N is parent visits, N(a) is action visits,
+and c is the exploration constant.</p>
+<p>The UCB1 algorithm provides theoretical guarantees for multi-armed bandit problems
+and is widely used in Monte Carlo Tree Search algorithms. It automatically balances
+exploitation of good actions (high Q-values) with exploration of uncertain actions
+(low visit counts).</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>belief_node</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.tree.html#POMDPPlanners.core.tree.BeliefNode" title="POMDPPlanners.core.tree.BeliefNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">BeliefNode</span></code></a></span>) – Belief node with existing action children</p></li>
+<li><p><strong>exploration_constant</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></span>) – Controls exploration vs exploitation trade-off.
+Higher values favor exploration, lower values favor exploitation.
+Common values: √2 ≈ 1.41 (theoretical optimum), 0.5-2.0 (practical range)</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.tree.html#POMDPPlanners.core.tree.ActionNode" title="POMDPPlanners.core.tree.ActionNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActionNode</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Action node with highest UCB1 value</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Basic UCB1 action selection:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ucb1_exploration</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">BeliefNode</span><span class="p">,</span> <span class="n">ActionNode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">WeightedParticleBelief</span>
+
+<span class="c1"># Create belief node with action children</span>
+<span class="n">particles</span> <span class="o">=</span> <span class="p">[[</span><span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">]]</span>
+<span class="n">log_weights</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">]))</span>
+<span class="n">belief</span> <span class="o">=</span> <span class="n">WeightedParticleBelief</span><span class="p">(</span><span class="n">particles</span><span class="p">,</span> <span class="n">log_weights</span><span class="p">)</span>
+<span class="n">belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">belief</span><span class="p">)</span>
+<span class="n">belief_node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">=</span> <span class="mi">100</span>
+
+<span class="c1"># Add action nodes with different Q-values and visit counts</span>
+<span class="n">actions_data</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span><span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="s2">&quot;up&quot;</span><span class="p">,</span> <span class="s2">&quot;q_value&quot;</span><span class="p">:</span> <span class="mf">0.8</span><span class="p">,</span> <span class="s2">&quot;visits&quot;</span><span class="p">:</span> <span class="mi">30</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="s2">&quot;down&quot;</span><span class="p">,</span> <span class="s2">&quot;q_value&quot;</span><span class="p">:</span> <span class="mf">0.6</span><span class="p">,</span> <span class="s2">&quot;visits&quot;</span><span class="p">:</span> <span class="mi">20</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="s2">&quot;left&quot;</span><span class="p">,</span> <span class="s2">&quot;q_value&quot;</span><span class="p">:</span> <span class="mf">0.9</span><span class="p">,</span> <span class="s2">&quot;visits&quot;</span><span class="p">:</span> <span class="mi">40</span><span class="p">},</span>
+    <span class="p">{</span><span class="s2">&quot;action&quot;</span><span class="p">:</span> <span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="s2">&quot;q_value&quot;</span><span class="p">:</span> <span class="mf">0.4</span><span class="p">,</span> <span class="s2">&quot;visits&quot;</span><span class="p">:</span> <span class="mi">10</span><span class="p">}</span>
+<span class="p">]</span>
+
+<span class="k">for</span> <span class="n">data</span> <span class="ow">in</span> <span class="n">actions_data</span><span class="p">:</span>
+    <span class="n">action_node</span> <span class="o">=</span> <span class="n">ActionNode</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;action&quot;</span><span class="p">],</span> <span class="n">parent</span><span class="o">=</span><span class="n">belief_node</span><span class="p">)</span>
+    <span class="n">action_node</span><span class="o">.</span><span class="n">q_value</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;q_value&quot;</span><span class="p">]</span>
+    <span class="n">action_node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;visits&quot;</span><span class="p">]</span>
+
+<span class="c1"># Select action using UCB1</span>
+<span class="n">selected_action</span> <span class="o">=</span> <span class="n">ucb1_exploration</span><span class="p">(</span>
+    <span class="n">belief_node</span><span class="o">=</span><span class="n">belief_node</span><span class="p">,</span>
+    <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span>  <span class="c1"># sqrt(2)</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Selected action: </span><span class="si">{</span><span class="n">selected_action</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Comparing exploration constants:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Low exploration (favor exploitation)</span>
+<span class="n">conservative_action</span> <span class="o">=</span> <span class="n">ucb1_exploration</span><span class="p">(</span>
+    <span class="n">belief_node</span><span class="o">=</span><span class="n">belief_node</span><span class="p">,</span>
+    <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">0.1</span>
+<span class="p">)</span>
+
+<span class="c1"># High exploration (favor exploration)</span>
+<span class="n">exploratory_action</span> <span class="o">=</span> <span class="n">ucb1_exploration</span><span class="p">(</span>
+    <span class="n">belief_node</span><span class="o">=</span><span class="n">belief_node</span><span class="p">,</span>
+    <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">3.0</span>
+<span class="p">)</span>
+
+<span class="c1"># Balanced approach (theoretical optimum)</span>
+<span class="n">balanced_action</span> <span class="o">=</span> <span class="n">ucb1_exploration</span><span class="p">(</span>
+    <span class="n">belief_node</span><span class="o">=</span><span class="n">belief_node</span><span class="p">,</span>
+    <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span>  <span class="c1"># sqrt(2)</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Manual UCB1 calculation and verification:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ucb1_exploration</span>
+
+<span class="c1"># Calculate UCB1 values manually</span>
+<span class="n">exploration_constant</span> <span class="o">=</span> <span class="mf">1.0</span>
+<span class="n">ucb1_values</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+    <span class="n">exploration_term</span> <span class="o">=</span> <span class="n">exploration_constant</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span>
+        <span class="n">np</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">belief_node</span><span class="o">.</span><span class="n">visit_count</span><span class="p">)</span> <span class="o">/</span> <span class="n">child</span><span class="o">.</span><span class="n">visit_count</span>
+    <span class="p">)</span>
+    <span class="n">ucb1</span> <span class="o">=</span> <span class="n">child</span><span class="o">.</span><span class="n">q_value</span> <span class="o">+</span> <span class="n">exploration_term</span>
+    <span class="n">ucb1_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">ucb1</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Action </span><span class="si">{</span><span class="n">child</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2">: Q=</span><span class="si">{</span><span class="n">child</span><span class="o">.</span><span class="n">q_value</span><span class="si">:</span><span class="s2">.2f</span><span class="si">}</span><span class="s2">, &quot;</span>
+          <span class="sa">f</span><span class="s2">&quot;exploration=</span><span class="si">{</span><span class="n">exploration_term</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, UCB1=</span><span class="si">{</span><span class="n">ucb1</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+<span class="c1"># Verify our function selects the highest UCB1</span>
+<span class="n">expected_best_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">ucb1_values</span><span class="p">)</span>
+<span class="n">selected_action</span> <span class="o">=</span> <span class="n">ucb1_exploration</span><span class="p">(</span><span class="n">belief_node</span><span class="p">,</span> <span class="n">exploration_constant</span><span class="p">)</span>
+<span class="n">actual_best_idx</span> <span class="o">=</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">children</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">selected_action</span><span class="p">)</span>
+
+<span class="k">assert</span> <span class="n">expected_best_idx</span> <span class="o">==</span> <span class="n">actual_best_idx</span><span class="p">,</span> <span class="s2">&quot;UCB1 selection mismatch&quot;</span>
+</pre></div>
+</div>
+<p>UCB1 in dynamic scenarios:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ucb1_exploration</span>
+
+<span class="c1"># Simulate how UCB1 selection changes over time</span>
+<span class="n">belief_node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">=</span> <span class="mi">1</span>
+
+<span class="k">for</span> <span class="n">round_num</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">11</span><span class="p">):</span>
+    <span class="n">belief_node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">=</span> <span class="n">round_num</span> <span class="o">*</span> <span class="mi">10</span>
+
+    <span class="c1"># Select action</span>
+    <span class="n">selected</span> <span class="o">=</span> <span class="n">ucb1_exploration</span><span class="p">(</span><span class="n">belief_node</span><span class="p">,</span> <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span><span class="p">)</span>
+
+    <span class="c1"># Update the selected action (simulate learning)</span>
+    <span class="n">selected</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="n">selected</span><span class="o">.</span><span class="n">q_value</span> <span class="o">+=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">)</span> <span class="o">-</span> <span class="n">selected</span><span class="o">.</span><span class="n">q_value</span><span class="p">)</span> <span class="o">/</span> <span class="n">selected</span><span class="o">.</span><span class="n">visit_count</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Round </span><span class="si">{</span><span class="n">round_num</span><span class="si">}</span><span class="s2">: Selected </span><span class="si">{</span><span class="n">selected</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2">, &quot;</span>
+          <span class="sa">f</span><span class="s2">&quot;Q=</span><span class="si">{</span><span class="n">selected</span><span class="o">.</span><span class="n">q_value</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, visits=</span><span class="si">{</span><span class="n">selected</span><span class="o">.</span><span class="n">visit_count</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Exploration vs exploitation analysis:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Create scenario with clear best action vs uncertain actions</span>
+<span class="n">exploration_constants</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.41</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="mf">5.0</span><span class="p">]</span>
+<span class="n">selection_counts</span> <span class="o">=</span> <span class="p">{</span><span class="n">c</span><span class="p">:</span> <span class="p">{</span><span class="s2">&quot;up&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;down&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">exploration_constants</span><span class="p">}</span>
+
+<span class="k">for</span> <span class="n">exploration_c</span> <span class="ow">in</span> <span class="n">exploration_constants</span><span class="p">:</span>
+    <span class="c1"># Run multiple selections</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+        <span class="n">selected</span> <span class="o">=</span> <span class="n">ucb1_exploration</span><span class="p">(</span><span class="n">belief_node</span><span class="p">,</span> <span class="n">exploration_c</span><span class="p">)</span>
+        <span class="n">selection_counts</span><span class="p">[</span><span class="n">exploration_c</span><span class="p">][</span><span class="n">selected</span><span class="o">.</span><span class="n">action</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Exploration constant </span><span class="si">{</span><span class="n">exploration_c</span><span class="si">}</span><span class="s2">:&quot;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">action</span><span class="p">,</span> <span class="n">count</span> <span class="ow">in</span> <span class="n">selection_counts</span><span class="p">[</span><span class="n">exploration_c</span><span class="p">]</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  </span><span class="si">{</span><span class="n">action</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">count</span><span class="si">}</span><span class="s2">% selections&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>UCB1 with confidence intervals:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">math</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ucb1_exploration</span>
+
+<span class="c1"># Calculate confidence intervals for each action</span>
+<span class="n">exploration_constant</span> <span class="o">=</span> <span class="mf">1.41</span>
+<span class="n">confidence_level</span> <span class="o">=</span> <span class="mf">0.95</span>
+
+<span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">children</span><span class="p">:</span>
+    <span class="c1"># UCB1 upper confidence bound</span>
+    <span class="n">confidence_radius</span> <span class="o">=</span> <span class="n">exploration_constant</span> <span class="o">*</span> <span class="n">math</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span>
+        <span class="n">math</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="n">belief_node</span><span class="o">.</span><span class="n">visit_count</span><span class="p">)</span> <span class="o">/</span> <span class="n">child</span><span class="o">.</span><span class="n">visit_count</span>
+    <span class="p">)</span>
+
+    <span class="n">lower_bound</span> <span class="o">=</span> <span class="n">child</span><span class="o">.</span><span class="n">q_value</span> <span class="o">-</span> <span class="n">confidence_radius</span>
+    <span class="n">upper_bound</span> <span class="o">=</span> <span class="n">child</span><span class="o">.</span><span class="n">q_value</span> <span class="o">+</span> <span class="n">confidence_radius</span>
+
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Action </span><span class="si">{</span><span class="n">child</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2">: &quot;</span>
+          <span class="sa">f</span><span class="s2">&quot;Q=</span><span class="si">{</span><span class="n">child</span><span class="o">.</span><span class="n">q_value</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> ± </span><span class="si">{</span><span class="n">confidence_radius</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> &quot;</span>
+          <span class="sa">f</span><span class="s2">&quot;[</span><span class="si">{</span><span class="n">lower_bound</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, </span><span class="si">{</span><span class="n">upper_bound</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">]&quot;</span><span class="p">)</span>
+
+<span class="c1"># The selected action has the highest upper bound</span>
+<span class="n">selected</span> <span class="o">=</span> <span class="n">ucb1_exploration</span><span class="p">(</span><span class="n">belief_node</span><span class="p">,</span> <span class="n">exploration_constant</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Selected: </span><span class="si">{</span><span class="n">selected</span><span class="o">.</span><span class="n">action</span><span class="si">}</span><span class="s2"> (highest upper confidence bound)&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+<section id="module-POMDPPlanners.planners.planners_utils.rollout">
+<span id="pomdpplanners-planners-planners-utils-rollout-module"></span><h2>POMDPPlanners.planners.planners_utils.rollout module<a class="headerlink" href="#module-POMDPPlanners.planners.planners_utils.rollout" title="Link to this heading"></a></h2>
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.planners_utils.rollout.random_rollout_action_sampler">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.planners.planners_utils.rollout.</span></span><span class="sig-name descname"><span class="pre">random_rollout_action_sampler</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action_sampler</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">discount_factor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">max_depth</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/planners/planners_utils/rollout.html#random_rollout_action_sampler"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.planners.planners_utils.rollout.random_rollout_action_sampler" title="Link to this definition"></a></dt>
+<dd><p>Perform random rollout to estimate value from leaf node.</p>
+<p>Rollout policy samples random actions using the action_sampler until
+reaching maximum depth or terminal state. This provides value estimates
+for leaf nodes in the search tree during Monte Carlo Tree Search.</p>
+<p>The rollout uses a random policy (via action_sampler) to quickly estimate
+the value of a state without expensive planning. This is a key component
+of MCTS algorithms where accurate value estimation is traded off against
+computational efficiency.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Current state to rollout from</p></li>
+<li><p><strong>depth</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></span>) – Current depth in rollout (starts at 0)</p></li>
+<li><p><strong>action_sampler</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#POMDPPlanners.planners.planners_utils.dpw.ActionSampler" title="POMDPPlanners.planners.planners_utils.dpw.ActionSampler"><code class="xref py py-class docutils literal notranslate"><span class="pre">ActionSampler</span></code></a></span>) – Action sampler for selecting rollout actions</p></li>
+<li><p><strong>environment</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></span>) – POMDP environment to simulate in</p></li>
+<li><p><strong>discount_factor</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></span>) – Discount factor for future rewards (0 &lt; γ ≤ 1)</p></li>
+<li><p><strong>max_depth</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></span>) – Maximum rollout depth to prevent infinite loops</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Total discounted return from rollout simulation</p>
+</dd>
+</dl>
+<p class="rubric">Examples</p>
+<p>Basic rollout with discrete actions:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.rollout</span><span class="w"> </span><span class="kn">import</span> <span class="n">random_rollout_action_sampler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+
+<span class="c1"># Simple action sampler for Tiger POMDP</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">TigerActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">])</span>
+
+<span class="c1"># Create environment and sampler</span>
+<span class="n">tiger</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">action_sampler</span> <span class="o">=</span> <span class="n">TigerActionSampler</span><span class="p">()</span>
+
+<span class="c1"># Perform rollout from initial state</span>
+<span class="n">initial_state</span> <span class="o">=</span> <span class="s2">&quot;tiger_left&quot;</span>
+<span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+    <span class="n">state</span><span class="o">=</span><span class="n">initial_state</span><span class="p">,</span>
+    <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+    <span class="n">environment</span><span class="o">=</span><span class="n">tiger</span><span class="p">,</span>
+    <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+    <span class="n">max_depth</span><span class="o">=</span><span class="mi">10</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Rollout value estimate: </span><span class="si">{</span><span class="n">rollout_value</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Rollout with continuous actions:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.rollout</span><span class="w"> </span><span class="kn">import</span> <span class="n">random_rollout_action_sampler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.cartpole_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartPolePOMDP</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">CartPoleActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>  <span class="c1"># Left or right force</span>
+
+<span class="c1"># Create CartPole environment</span>
+<span class="n">noise_cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">])</span>
+<span class="n">cartpole</span> <span class="o">=</span> <span class="n">CartPolePOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span> <span class="n">noise_cov</span><span class="o">=</span><span class="n">noise_cov</span><span class="p">)</span>
+<span class="n">action_sampler</span> <span class="o">=</span> <span class="n">CartPoleActionSampler</span><span class="p">()</span>
+
+<span class="c1"># Sample initial state and perform rollout</span>
+<span class="n">initial_state_dist</span> <span class="o">=</span> <span class="n">cartpole</span><span class="o">.</span><span class="n">initial_state_dist</span><span class="p">()</span>
+<span class="n">state</span> <span class="o">=</span> <span class="n">initial_state_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="n">rollout_value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+    <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+    <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+    <span class="n">environment</span><span class="o">=</span><span class="n">cartpole</span><span class="p">,</span>
+    <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+    <span class="n">max_depth</span><span class="o">=</span><span class="mi">20</span>  <span class="c1"># Longer horizon for control task</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Multiple rollouts for value estimation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.rollout</span><span class="w"> </span><span class="kn">import</span> <span class="n">random_rollout_action_sampler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.sanity_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">SanityPOMDP</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">SanityActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+
+<span class="n">sanity</span> <span class="o">=</span> <span class="n">SanityPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">action_sampler</span> <span class="o">=</span> <span class="n">SanityActionSampler</span><span class="p">()</span>
+
+<span class="c1"># Perform multiple rollouts to reduce variance</span>
+<span class="n">state</span> <span class="o">=</span> <span class="mi">0</span>  <span class="c1"># Good state</span>
+<span class="n">n_rollouts</span> <span class="o">=</span> <span class="mi">100</span>
+<span class="n">rollout_values</span> <span class="o">=</span> <span class="p">[]</span>
+
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_rollouts</span><span class="p">):</span>
+    <span class="n">value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+        <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+        <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+        <span class="n">environment</span><span class="o">=</span><span class="n">sanity</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+        <span class="n">max_depth</span><span class="o">=</span><span class="mi">15</span>
+    <span class="p">)</span>
+    <span class="n">rollout_values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+<span class="c1"># Estimate value with confidence intervals</span>
+<span class="n">mean_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">rollout_values</span><span class="p">)</span>
+<span class="n">std_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">rollout_values</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Value estimate: </span><span class="si">{</span><span class="n">mean_value</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> ± </span><span class="si">{</span><span class="mf">1.96</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="n">std_value</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">n_rollouts</span><span class="p">)</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Comparing different rollout depths:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.rollout</span><span class="w"> </span><span class="kn">import</span> <span class="n">random_rollout_action_sampler</span>
+
+<span class="c1"># Test effect of max_depth on value estimates</span>
+<span class="n">depths</span> <span class="o">=</span> <span class="p">[</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">,</span> <span class="mi">20</span><span class="p">,</span> <span class="mi">50</span><span class="p">]</span>
+<span class="n">depth_results</span> <span class="o">=</span> <span class="p">{}</span>
+
+<span class="k">for</span> <span class="n">max_depth</span> <span class="ow">in</span> <span class="n">depths</span><span class="p">:</span>
+    <span class="n">values</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">50</span><span class="p">):</span>  <span class="c1"># Multiple rollouts per depth</span>
+        <span class="n">value</span> <span class="o">=</span> <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">action_sampler</span><span class="p">,</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">sanity</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">max_depth</span><span class="o">=</span><span class="n">max_depth</span>
+        <span class="p">)</span>
+        <span class="n">values</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">value</span><span class="p">)</span>
+
+    <span class="n">depth_results</span><span class="p">[</span><span class="n">max_depth</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span>
+        <span class="s1">&#39;mean&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">values</span><span class="p">),</span>
+        <span class="s1">&#39;std&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+    <span class="p">}</span>
+
+<span class="k">for</span> <span class="n">depth</span><span class="p">,</span> <span class="n">stats</span> <span class="ow">in</span> <span class="n">depth_results</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Depth </span><span class="si">{</span><span class="n">depth</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;mean&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2"> ± </span><span class="si">{</span><span class="n">stats</span><span class="p">[</span><span class="s1">&#39;std&#39;</span><span class="p">]</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p>Custom rollout policy with domain knowledge:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.rollout</span><span class="w"> </span><span class="kn">import</span> <span class="n">random_rollout_action_sampler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">InformedActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&#39;&#39;&#39;Action sampler that uses domain knowledge for better rollouts&#39;&#39;&#39;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">environment</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">environment</span> <span class="o">=</span> <span class="n">environment</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># For Tiger POMDP: listen more often early, then choose door</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">random</span><span class="p">()</span> <span class="o">&lt;</span> <span class="mf">0.7</span><span class="p">:</span>
+            <span class="k">return</span> <span class="s2">&quot;listen&quot;</span>  <span class="c1"># Gather information first</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">])</span>
+
+<span class="c1"># Compare random vs informed rollouts</span>
+<span class="n">tiger</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">random_sampler</span> <span class="o">=</span> <span class="n">TigerActionSampler</span><span class="p">()</span>  <span class="c1"># From earlier example</span>
+<span class="n">informed_sampler</span> <span class="o">=</span> <span class="n">InformedActionSampler</span><span class="p">(</span><span class="n">tiger</span><span class="p">)</span>
+
+<span class="n">initial_state</span> <span class="o">=</span> <span class="s2">&quot;tiger_left&quot;</span>
+<span class="n">n_trials</span> <span class="o">=</span> <span class="mi">100</span>
+
+<span class="n">random_values</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">initial_state</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">random_sampler</span><span class="p">,</span> <span class="n">tiger</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">,</span> <span class="mi">15</span>
+    <span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_trials</span><span class="p">)</span>
+<span class="p">]</span>
+
+<span class="n">informed_values</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="n">random_rollout_action_sampler</span><span class="p">(</span>
+        <span class="n">initial_state</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">informed_sampler</span><span class="p">,</span> <span class="n">tiger</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">,</span> <span class="mi">15</span>
+    <span class="p">)</span> <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_trials</span><span class="p">)</span>
+<span class="p">]</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Random policy: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">random_values</span><span class="p">)</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Informed policy: </span><span class="si">{</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">informed_values</span><span class="p">)</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="POMDPPlanners.planners.open_loop_planners.html" class="btn btn-neutral float-left" title="POMDPPlanners.planners.open_loop_planners package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="POMDPPlanners.simulations.html" class="btn btn-neutral float-right" title="POMDPPlanners.simulations package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

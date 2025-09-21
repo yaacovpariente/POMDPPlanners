@@ -1,0 +1,173 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>&lt;no title&gt; &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">&lt;no title&gt;</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.tests.test_core.test_distributions.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <p id="module-POMDPPlanners.tests.test_core.test_distributions">Tests for distribution implementations.</p>
+<p>This module tests the distribution implementations, focusing on:
+- Basic distribution functionality
+- Sampling operations
+- Probability calculations
+- Distribution types</p>
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_core.test_distributions.test_discrete_distribution_initialization">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_core.test_distributions.</span></span><span class="sig-name descname"><span class="pre">test_discrete_distribution_initialization</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_core/test_distributions.html#test_discrete_distribution_initialization"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_core.test_distributions.test_discrete_distribution_initialization" title="Link to this definition"></a></dt>
+<dd><p>Test discrete distribution initialization.</p>
+<p>Purpose: Validates proper initialization of discrete distribution</p>
+<p>Given: Constructor parameters and initial conditions
+When: Object is initialized
+Then: Object is properly constructed with expected attributes</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_core.test_distributions.test_discrete_distribution_probability">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_core.test_distributions.</span></span><span class="sig-name descname"><span class="pre">test_discrete_distribution_probability</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_core/test_distributions.html#test_discrete_distribution_probability"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_core.test_distributions.test_discrete_distribution_probability" title="Link to this definition"></a></dt>
+<dd><p>Test that DiscreteDistribution correctly calculates probabilities for single and multiple values.</p>
+<p>Purpose: Validates that discrete distribution probability method returns correct probability values for known distribution</p>
+<p>Given: DiscreteDistribution with values [1, 2, 3] and probabilities [0.2, 0.5, 0.3]
+When: probability method is called with single values, multiple values, and values not in the distribution
+Then: Correct probabilities are returned (0.5 for value 2, 0.0 for values not in distribution)</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_core.test_distributions.test_discrete_distribution_sample">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_core.test_distributions.</span></span><span class="sig-name descname"><span class="pre">test_discrete_distribution_sample</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_core/test_distributions.html#test_discrete_distribution_sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_core.test_distributions.test_discrete_distribution_sample" title="Link to this definition"></a></dt>
+<dd><p>Test discrete distribution sample.</p>
+<p>Purpose: Validates sampling behavior for discrete distribution</p>
+<p>Given: Configured object with sampling capabilities
+When: Sample method is called
+Then: Valid samples are returned according to distribution</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_core.test_distributions.test_numpy2d_distribution_initialization">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_core.test_distributions.</span></span><span class="sig-name descname"><span class="pre">test_numpy2d_distribution_initialization</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_core/test_distributions.html#test_numpy2d_distribution_initialization"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_core.test_distributions.test_numpy2d_distribution_initialization" title="Link to this definition"></a></dt>
+<dd><p>Test numpy2d distribution initialization.</p>
+<p>Purpose: Validates proper initialization of numpy2d distribution</p>
+<p>Given: Constructor parameters and initial conditions
+When: Object is initialized
+Then: Object is properly constructed with expected attributes</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_core.test_distributions.test_numpy2d_distribution_probability">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_core.test_distributions.</span></span><span class="sig-name descname"><span class="pre">test_numpy2d_distribution_probability</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_core/test_distributions.html#test_numpy2d_distribution_probability"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_core.test_distributions.test_numpy2d_distribution_probability" title="Link to this definition"></a></dt>
+<dd><p>Test that Numpy2DDistribution correctly calculates probabilities for multi-dimensional arrays.</p>
+<p>Purpose: Validates that numpy2d distribution probability method returns correct probability values for 2D array distribution</p>
+<p>Given: Numpy2DDistribution with 2D values [[1,2,3],[4,5,6]] and probabilities [0.2, 0.5, 0.3]
+When: probability method is called with single arrays, multiple arrays, and arrays not in the distribution
+Then: Correct probabilities are returned (0.5 for [2,5], 0.0 for arrays not in distribution)</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_core.test_distributions.test_numpy2d_distribution_sample">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_core.test_distributions.</span></span><span class="sig-name descname"><span class="pre">test_numpy2d_distribution_sample</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_core/test_distributions.html#test_numpy2d_distribution_sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_core.test_distributions.test_numpy2d_distribution_sample" title="Link to this definition"></a></dt>
+<dd><p>Test numpy2d distribution sample.</p>
+<p>Purpose: Validates sampling behavior for numpy2d distribution</p>
+<p>Given: Configured object with sampling capabilities
+When: Sample method is called
+Then: Valid samples are returned according to distribution</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

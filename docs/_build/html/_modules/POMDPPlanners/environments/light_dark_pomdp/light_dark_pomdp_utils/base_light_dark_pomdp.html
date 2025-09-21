@@ -1,0 +1,638 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Union</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">hashlib</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.animation</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">animation</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.environment</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">Environment</span><span class="p">,</span>
+    <span class="n">SpaceInfo</span><span class="p">,</span>
+    <span class="n">SpaceType</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteDistribution</span><span class="p">,</span> <span class="n">Distribution</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">StepData</span><span class="p">,</span> <span class="n">MetricValue</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.statistics</span><span class="w"> </span><span class="kn">import</span> <span class="n">confidence_interval</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">Belief</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.config_to_id</span><span class="w"> </span><span class="kn">import</span> <span class="n">config_to_id</span>
+
+
+<div class="viewcode-block" id="BaseLightDarkPOMDP">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseLightDarkPOMDP</span><span class="p">(</span><span class="n">Environment</span><span class="p">,</span> <span class="n">ABC</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">space_info</span><span class="p">:</span> <span class="n">SpaceInfo</span><span class="p">,</span>
+        <span class="n">reward_range</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">beacons</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">)],</span>
+        <span class="n">goal_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+        <span class="n">start_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+        <span class="n">obstacles</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">7</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">)],</span>
+        <span class="n">obstacle_hit_probability</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">obstacle_reward</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="o">-</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">obstacle_radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">goal_reward</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">beacon_radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">fuel_cost</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">grid_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">11</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">__type_check</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="n">discount_factor</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">beacons</span><span class="o">=</span><span class="n">beacons</span><span class="p">,</span>
+            <span class="n">goal_state</span><span class="o">=</span><span class="n">goal_state</span><span class="p">,</span>
+            <span class="n">start_state</span><span class="o">=</span><span class="n">start_state</span><span class="p">,</span>
+            <span class="n">obstacles</span><span class="o">=</span><span class="n">obstacles</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="n">obstacle_hit_probability</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=</span><span class="n">obstacle_reward</span><span class="p">,</span>
+            <span class="n">obstacle_radius</span><span class="o">=</span><span class="n">obstacle_radius</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="n">goal_reward</span><span class="p">,</span>
+            <span class="n">beacon_radius</span><span class="o">=</span><span class="n">beacon_radius</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="n">fuel_cost</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="n">grid_size</span><span class="p">,</span>
+        <span class="p">)</span>
+        
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="n">discount_factor</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">space_info</span><span class="o">=</span><span class="n">space_info</span><span class="p">,</span> <span class="n">reward_range</span><span class="o">=</span><span class="n">reward_range</span><span class="p">)</span>
+        
+        <span class="c1"># Convert lists of tuples to numpy arrays (maintaining internal representation)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">beacons</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_beacons_to_array</span><span class="p">(</span><span class="n">beacons</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">goal_state</span> <span class="o">=</span> <span class="n">goal_state</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">start_state</span> <span class="o">=</span> <span class="n">start_state</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_convert_obstacles_to_array</span><span class="p">(</span><span class="n">obstacles</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obstacle_hit_probability</span> <span class="o">=</span> <span class="n">obstacle_hit_probability</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obstacle_reward</span> <span class="o">=</span> <span class="n">obstacle_reward</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">obstacle_radius</span> <span class="o">=</span> <span class="n">obstacle_radius</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">goal_reward</span> <span class="o">=</span> <span class="n">goal_reward</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">beacon_radius</span> <span class="o">=</span> <span class="n">beacon_radius</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fuel_cost</span> <span class="o">=</span> <span class="n">fuel_cost</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grid_size</span> <span class="o">=</span> <span class="n">grid_size</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_convert_beacons_to_array</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">beacons_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert list of (x, y) tuples to 2xN numpy array format for beacons.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            beacons_list: List of (x, y) coordinate tuples</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            2xN numpy array where first row is x coordinates, second row is y coordinates</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">beacons_list</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        
+        <span class="c1"># Convert list of tuples to numpy array and transpose to get 2xN format</span>
+        <span class="n">coords_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">beacons_list</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>  <span class="c1"># Shape: (2, N)</span>
+        <span class="k">return</span> <span class="n">coords_array</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">_convert_obstacles_to_array</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obstacles_list</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Convert list of (x, y) tuples to 2xN numpy array format for obstacles.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            obstacles_list: List of (x, y) coordinate tuples</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            2xN numpy array where first row is x coordinates, second row is y coordinates</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">obstacles_list</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">2</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+        
+        <span class="c1"># Convert list of tuples to numpy array and transpose to get 2xN format (same as beacons)</span>
+        <span class="n">coords_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">obstacles_list</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>  <span class="c1"># Shape: (2, N)</span>
+        <span class="k">return</span> <span class="n">coords_array</span>
+        
+    <span class="k">def</span><span class="w"> </span><span class="nf">__type_check</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">beacons</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]],</span>
+        <span class="n">goal_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">start_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">obstacles</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]],</span>
+        <span class="n">obstacle_hit_probability</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">obstacle_reward</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">obstacle_radius</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">goal_reward</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">beacon_radius</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">fuel_cost</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">grid_size</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="c1"># Type checks</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">discount_factor</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;discount_factor must be a float&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;name must be a string&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">beacons</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;beacons must be a list of tuples&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">beacons</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">beacon</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">beacon</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span> <span class="k">for</span> <span class="n">beacon</span> <span class="ow">in</span> <span class="n">beacons</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;beacons must be a list of (x, y) coordinate tuples&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">goal_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;goal_state must be a numpy array&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">start_state</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;start_state must be a numpy array&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obstacles</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;obstacles must be a list of tuples&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">obstacles</span> <span class="ow">and</span> <span class="ow">not</span> <span class="nb">all</span><span class="p">(</span><span class="nb">isinstance</span><span class="p">(</span><span class="n">obstacle</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">obstacle</span><span class="p">)</span> <span class="o">==</span> <span class="mi">2</span> <span class="k">for</span> <span class="n">obstacle</span> <span class="ow">in</span> <span class="n">obstacles</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;obstacles must be a list of (x, y) coordinate tuples&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obstacle_hit_probability</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;obstacle_hit_probability must be a float&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">obstacle_reward</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;obstacle_reward must be a float&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">goal_reward</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;goal_reward must be a float&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">beacon_radius</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;beacon_radius must be a float&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">fuel_cost</span><span class="p">,</span> <span class="nb">float</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;fuel_cost must be a float&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">grid_size</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;grid_size must be an integer&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Value range checks</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">discount_factor</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;discount_factor must be between 0 and 1&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">obstacle_hit_probability</span> <span class="o">&lt;=</span> <span class="mi">1</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;obstacle_hit_probability must be between 0 and 1&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">grid_size</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;grid_size must be positive&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">beacon_radius</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;beacon_radius must be positive&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">obstacle_radius</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;obstacle_radius must be positive&quot;</span><span class="p">)</span>
+        <span class="c1"># Shape checks</span>
+        <span class="k">if</span> <span class="n">goal_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;goal_state must be a 2D vector&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">start_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;start_state must be a 2D vector&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Range checks for states</span>
+        <span class="k">for</span> <span class="n">beacon</span> <span class="ow">in</span> <span class="n">beacons</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">beacon</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">grid_size</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">beacon</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">grid_size</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;beacons coordinates must be within grid&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">goal_state</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">goal_state</span> <span class="o">&lt;=</span> <span class="n">grid_size</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;goal_state must be within grid&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">start_state</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">start_state</span> <span class="o">&lt;=</span> <span class="n">grid_size</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;start_state must be within grid&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">obstacle</span> <span class="ow">in</span> <span class="n">obstacles</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">obstacle</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">grid_size</span> <span class="ow">and</span> <span class="mi">0</span> <span class="o">&lt;=</span> <span class="n">obstacle</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">&lt;=</span> <span class="n">grid_size</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;obstacles coordinates must be within grid&quot;</span><span class="p">)</span>
+        
+<div class="viewcode-block" id="BaseLightDarkPOMDP.state_transition_model">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.state_transition_model">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_transition_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="k">pass</span></div>
+
+    
+<div class="viewcode-block" id="BaseLightDarkPOMDP.observation_model">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.observation_model">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observation_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="k">pass</span></div>
+
+    
+<div class="viewcode-block" id="BaseLightDarkPOMDP.reward">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.reward">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="k">pass</span></div>
+
+    
+<div class="viewcode-block" id="BaseLightDarkPOMDP.is_terminal">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.is_terminal">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_terminal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">pass</span></div>
+
+    
+<div class="viewcode-block" id="BaseLightDarkPOMDP.compute_metrics">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.compute_metrics">[docs]</a>
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">histories</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">History</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">MetricValue</span><span class="p">]:</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="BaseLightDarkPOMDP.initial_state_dist">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.initial_state_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_state_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">DiscreteDistribution</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">start_state</span><span class="p">],</span> <span class="n">probs</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">]))</span></div>
+
+
+<div class="viewcode-block" id="BaseLightDarkPOMDP.initial_observation_dist">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.initial_observation_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_observation_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">DiscreteDistribution</span><span class="p">(</span><span class="n">values</span><span class="o">=</span><span class="p">[</span><span class="mf">1.0</span><span class="p">],</span> <span class="n">probs</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">]))</span></div>
+
+    
+<div class="viewcode-block" id="BaseLightDarkPOMDP.visualize_path">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.visualize_path">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">visualize_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">],</span> <span class="n">agent_belief_path</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">DiscreteDistribution</span><span class="p">],</span> <span class="n">actions</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="nb">str</span><span class="p">],</span> <span class="n">cache_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cache_path</span><span class="p">,</span> <span class="n">Path</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;cache_path must be a Path object&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">)</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.gif&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cache_path must end with .gif&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Control belief particles color</span>
+        <span class="n">belief_particles_color</span> <span class="o">=</span> <span class="s1">&#39;#FFFF00&#39;</span>  <span class="c1"># Yellow color</span>
+
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_size</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_size</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xticks</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_size</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_yticks</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_size</span> <span class="o">+</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_facecolor</span><span class="p">(</span><span class="s1">&#39;#696969&#39;</span><span class="p">)</span>  <span class="c1"># Darker grey</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># Remove the grid from the background</span>
+
+        <span class="c1"># Plot circles around beacons with white background and light fade effect</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">beacons</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+            <span class="n">beacon_x</span><span class="p">,</span> <span class="n">beacon_y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">beacons</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">i</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">beacons</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span>
+            <span class="c1"># Create multiple circles with exponential decay for realistic light fade</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">15</span><span class="p">):</span>  <span class="c1"># More circles for smoother gradient</span>
+                <span class="n">radius</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">beacon_radius</span> <span class="o">+</span> <span class="n">j</span> <span class="o">*</span> <span class="mf">0.05</span>  <span class="c1"># Smaller radius increments</span>
+                <span class="c1"># Exponential decay for more realistic light fade</span>
+                <span class="n">alpha</span> <span class="o">=</span> <span class="mf">0.9</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="o">-</span><span class="n">j</span> <span class="o">*</span> <span class="mf">0.3</span><span class="p">)</span>  <span class="c1"># Exponential decay from 0.9 to near 0</span>
+                <span class="n">circle</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">((</span><span class="n">beacon_x</span><span class="p">,</span> <span class="n">beacon_y</span><span class="p">),</span> <span class="n">radius</span><span class="p">,</span> 
+                                  <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="n">alpha</span><span class="p">)</span>
+                <span class="n">ax</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span><span class="n">circle</span><span class="p">)</span>
+        
+        <span class="c1"># Plot the beacons</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">beacons</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">beacons</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;blue&quot;</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;^&#39;</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">100</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Beacons&quot;</span><span class="p">)</span>
+        <span class="c1"># Plot the goal state</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">goal_state</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">goal_state</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;green&quot;</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;*&#39;</span><span class="p">,</span> <span class="n">s</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Goal State&quot;</span>
+        <span class="p">)</span>
+        <span class="c1"># Plot the start state</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">start_state</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">start_state</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;red&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Start State&quot;</span>
+        <span class="p">)</span>
+        <span class="c1"># Plot circles around obstacles with transparent red background</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>  <span class="c1"># obstacles.shape[1] is number of obstacles</span>
+            <span class="n">obstacle_x</span><span class="p">,</span> <span class="n">obstacle_y</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span><span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="n">i</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span><span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">i</span><span class="p">]</span>  <span class="c1"># obstacles[0,i] is x, obstacles[1,i] is y</span>
+            <span class="n">circle</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">((</span><span class="n">obstacle_x</span><span class="p">,</span> <span class="n">obstacle_y</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">obstacle_radius</span><span class="p">,</span> 
+                              <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;none&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">)</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span><span class="n">circle</span><span class="p">)</span>
+        
+        <span class="c1"># Plot the obstacles</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="s2">&quot;black&quot;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;Obstacles&quot;</span>
+            <span class="p">)</span>
+
+        <span class="c1"># Initialize the agent&#39;s position and path line</span>
+        <span class="p">(</span><span class="n">agent</span><span class="p">,)</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">([],</span> <span class="p">[],</span> <span class="s2">&quot;ro&quot;</span><span class="p">,</span> <span class="n">markersize</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+        <span class="p">(</span><span class="n">path_line</span><span class="p">,)</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">plot</span><span class="p">([],</span> <span class="p">[],</span> <span class="s2">&quot;r-&quot;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+        <span class="c1"># Initialize the action arrow</span>
+        <span class="n">arrow</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">arrow</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">head_width</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">head_length</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">length_includes_head</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="c1"># Initialize belief particles scatter plots for different time steps</span>
+        <span class="n">belief_scatters</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">max_history</span> <span class="o">=</span> <span class="nb">min</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="mi">10</span><span class="p">)</span>  <span class="c1"># Show up to 10 previous time steps</span>
+        <span class="c1"># Create gradient from yellow to red</span>
+        <span class="n">yellow_color</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>  <span class="c1"># Yellow RGB</span>
+        <span class="n">red_color</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>     <span class="c1"># Red RGB</span>
+        <span class="n">colors</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_history</span><span class="p">):</span>
+            <span class="c1"># Interpolate between yellow (current) and red (old)</span>
+            <span class="n">t</span> <span class="o">=</span> <span class="p">(</span><span class="n">max_history</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">i</span><span class="p">)</span> <span class="o">/</span> <span class="n">max_history</span>  <span class="c1"># 0 for current, 1 for oldest</span>
+            <span class="n">color</span> <span class="o">=</span> <span class="n">yellow_color</span> <span class="o">*</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">t</span><span class="p">)</span> <span class="o">+</span> <span class="n">red_color</span> <span class="o">*</span> <span class="n">t</span>
+            <span class="c1"># Apply additional intensity decay</span>
+            <span class="n">alpha_factor</span> <span class="o">=</span> <span class="mf">0.1</span> <span class="o">+</span> <span class="mf">0.9</span> <span class="o">*</span> <span class="p">(</span><span class="n">i</span> <span class="o">/</span> <span class="n">max_history</span><span class="p">)</span>  <span class="c1"># 0.1 to 1.0 - more extreme decay</span>
+            <span class="n">color</span> <span class="o">=</span> <span class="n">color</span> <span class="o">*</span> <span class="n">alpha_factor</span>
+            <span class="n">colors</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">color</span><span class="p">)</span>
+        
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">max_history</span><span class="p">):</span>
+            <span class="n">scatter</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">scatter</span><span class="p">([],</span> <span class="p">[],</span> <span class="n">c</span><span class="o">=</span><span class="p">[</span><span class="n">colors</span><span class="p">[</span><span class="n">i</span><span class="p">]],</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span> <span class="o">+</span> <span class="mf">0.3</span> <span class="o">*</span> <span class="p">(</span><span class="n">i</span> <span class="o">/</span> <span class="n">max_history</span><span class="p">),</span> 
+                               <span class="n">s</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">)</span>
+            <span class="n">belief_scatters</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">scatter</span><span class="p">)</span>
+        
+        <span class="c1"># Create a proper legend entry for belief particles</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">matplotlib.lines</span><span class="w"> </span><span class="kn">import</span> <span class="n">Line2D</span>
+        <span class="n">legend_element</span> <span class="o">=</span> <span class="n">Line2D</span><span class="p">([],</span> <span class="p">[],</span> <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;o&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="n">belief_particles_color</span><span class="p">,</span> 
+                               <span class="n">markersize</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.7</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Belief Particles&#39;</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">add_artist</span><span class="p">(</span><span class="n">legend_element</span><span class="p">)</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">init</span><span class="p">():</span>
+            <span class="n">agent</span><span class="o">.</span><span class="n">set_data</span><span class="p">([],</span> <span class="p">[])</span>
+            <span class="n">path_line</span><span class="o">.</span><span class="n">set_data</span><span class="p">([],</span> <span class="p">[])</span>
+            <span class="n">arrow</span><span class="o">.</span><span class="n">set_data</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">dx</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">dy</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">scatter</span> <span class="ow">in</span> <span class="n">belief_scatters</span><span class="p">:</span>
+                <span class="n">scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+                <span class="n">scatter</span><span class="o">.</span><span class="n">set_sizes</span><span class="p">([])</span>
+            <span class="k">return</span> <span class="p">[</span><span class="n">agent</span><span class="p">,</span> <span class="n">path_line</span><span class="p">,</span> <span class="n">arrow</span><span class="p">]</span> <span class="o">+</span> <span class="n">belief_scatters</span>
+
+        <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="n">frame</span><span class="p">):</span>
+            <span class="c1"># Update current position</span>
+            <span class="n">x</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">path</span><span class="p">[</span><span class="n">frame</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">y</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">path</span><span class="p">[</span><span class="n">frame</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">agent</span><span class="o">.</span><span class="n">set_data</span><span class="p">([</span><span class="n">x</span><span class="p">],</span> <span class="p">[</span><span class="n">y</span><span class="p">])</span>
+
+            <span class="c1"># Update path line up to current position</span>
+            <span class="n">path_x</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">path</span><span class="p">[:</span> <span class="n">frame</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]]</span>
+            <span class="n">path_y</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">p</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">path</span><span class="p">[:</span> <span class="n">frame</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]]</span>
+            <span class="n">path_line</span><span class="o">.</span><span class="n">set_data</span><span class="p">(</span><span class="n">path_x</span><span class="p">,</span> <span class="n">path_y</span><span class="p">)</span>
+
+            <span class="c1"># Update action arrow based on the action vector</span>
+            <span class="k">if</span> <span class="n">frame</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">):</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="n">actions</span><span class="p">[</span><span class="n">frame</span><span class="p">]</span>
+                <span class="k">if</span> <span class="n">action</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                    <span class="c1"># Handle None actions (e.g., terminal step)</span>
+                    <span class="n">dx</span><span class="p">,</span> <span class="n">dy</span> <span class="o">=</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span>
+                <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">action</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+                    <span class="n">dx</span><span class="p">,</span> <span class="n">dy</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="n">action</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">dx</span><span class="p">,</span> <span class="n">dy</span> <span class="o">=</span> <span class="n">action</span>
+                <span class="n">arrow</span><span class="o">.</span><span class="n">set_data</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">dx</span><span class="o">=</span><span class="n">dx</span><span class="p">,</span> <span class="n">dy</span><span class="o">=</span><span class="n">dy</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">arrow</span><span class="o">.</span><span class="n">set_data</span><span class="p">(</span><span class="n">x</span><span class="o">=</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">=</span><span class="n">y</span><span class="p">,</span> <span class="n">dx</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">dy</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+
+            <span class="c1"># Update belief particles with history</span>
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">scatter</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">belief_scatters</span><span class="p">):</span>
+                <span class="n">history_frame</span> <span class="o">=</span> <span class="n">frame</span> <span class="o">-</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">belief_scatters</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">i</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">history_frame</span> <span class="o">&gt;=</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">history_frame</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">agent_belief_path</span><span class="p">):</span>
+                    <span class="n">belief</span> <span class="o">=</span> <span class="n">agent_belief_path</span><span class="p">[</span><span class="n">history_frame</span><span class="p">]</span>
+                    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">values</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                        <span class="c1"># Convert belief values to array of positions</span>
+                        <span class="n">positions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+                        <span class="c1"># Scale probabilities to reasonable sizes for visualization (multiply by 200)</span>
+                        <span class="n">sizes</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">belief</span><span class="o">.</span><span class="n">probs</span><span class="p">)</span> <span class="o">*</span> <span class="mi">600</span>
+                        <span class="n">scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">positions</span><span class="p">)</span>
+                        <span class="n">scatter</span><span class="o">.</span><span class="n">set_sizes</span><span class="p">(</span><span class="n">sizes</span><span class="p">)</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+                        <span class="n">scatter</span><span class="o">.</span><span class="n">set_sizes</span><span class="p">([])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))</span>
+                    <span class="n">scatter</span><span class="o">.</span><span class="n">set_sizes</span><span class="p">([])</span>
+
+            <span class="k">return</span> <span class="p">[</span><span class="n">agent</span><span class="p">,</span> <span class="n">path_line</span><span class="p">,</span> <span class="n">arrow</span><span class="p">]</span> <span class="o">+</span> <span class="n">belief_scatters</span>
+
+        <span class="n">ani</span> <span class="o">=</span> <span class="n">animation</span><span class="o">.</span><span class="n">FuncAnimation</span><span class="p">(</span>
+            <span class="n">fig</span><span class="p">,</span> <span class="n">update</span><span class="p">,</span> <span class="n">frames</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">path</span><span class="p">),</span> <span class="n">init_func</span><span class="o">=</span><span class="n">init</span><span class="p">,</span> <span class="n">blit</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">repeat</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mf">1.05</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">loc</span><span class="o">=</span><span class="s1">&#39;upper left&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s2">&quot;Agent Path&quot;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+
+        <span class="c1"># Save the animation</span>
+        <span class="k">if</span> <span class="n">cache_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">ani</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">cache_path</span><span class="p">,</span> <span class="n">writer</span><span class="o">=</span><span class="s2">&quot;pillow&quot;</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>  <span class="c1"># Use pillow instead of ffmpeg</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="BaseLightDarkPOMDP.cache_visualization">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.cache_visualization">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cache_visualization</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">history</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">StepData</span><span class="p">],</span> <span class="n">cache_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Cache visualization of agent&#39;s path and belief.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            history: List of step data from an episode</span>
+<span class="sd">            cache_path: Path where to save the visualization</span>
+<span class="sd">            </span>
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If history is empty or contains invalid data</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">history</span><span class="p">,</span> <span class="n">List</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;history must be a List object&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">history</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot visualize empty history&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">history</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">StepData</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;history must be a List of StepData objects&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cache_path</span><span class="p">,</span> <span class="n">Path</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;cache_path must be a Path object&quot;</span><span class="p">)</span>
+            
+        <span class="c1"># Extract data with validation</span>
+        <span class="n">agent_path</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">agent_belief_path</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[]</span>
+        
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">history</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s1">&#39;state&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s1">&#39;belief&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="s1">&#39;action&#39;</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;History step missing required attributes: </span><span class="si">{</span><span class="n">step</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+                
+            <span class="n">agent_path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="p">)</span>
+            <span class="n">agent_belief_path</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">belief</span><span class="o">.</span><span class="n">to_unique_support_distribution</span><span class="p">())</span>
+            <span class="n">actions</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">action</span><span class="p">)</span>
+            
+        <span class="c1"># Validate all lists have same length</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">agent_path</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">agent_belief_path</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Mismatched lengths: path=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">agent_path</span><span class="p">)</span><span class="si">}</span><span class="s2">, belief=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">agent_belief_path</span><span class="p">)</span><span class="si">}</span><span class="s2">, actions=</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            
+        <span class="c1"># Create directory if it doesn&#39;t exist</span>
+        <span class="n">cache_path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">visualize_path</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">agent_path</span><span class="p">,</span> <span class="n">agent_belief_path</span><span class="o">=</span><span class="n">agent_belief_path</span><span class="p">,</span> <span class="n">actions</span><span class="o">=</span><span class="n">actions</span><span class="p">,</span> <span class="n">cache_path</span><span class="o">=</span><span class="n">cache_path</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="BaseLightDarkPOMDP.is_equal_observation">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.is_equal_observation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_equal_observation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation1</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">observation2</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">observation1</span><span class="p">,</span> <span class="n">observation2</span><span class="p">)</span></div>
+
+    
+    <span class="nd">@property</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">config_id</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Generate a deterministic identifier based on environment configuration.</span>
+<span class="sd">        This implementation ensures that the config_id is invariant to the order of beacons and obstacles.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">config_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        
+        <span class="c1"># Include all public attributes that aren&#39;t callables</span>
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="vm">__dict__</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">key</span><span class="o">.</span><span class="n">startswith</span><span class="p">(</span><span class="s1">&#39;_&#39;</span><span class="p">)</span> <span class="ow">or</span> <span class="nb">callable</span><span class="p">(</span><span class="n">value</span><span class="p">):</span>
+                <span class="k">continue</span>
+                
+            <span class="c1"># Handle numpy arrays</span>
+            <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">key</span> <span class="o">==</span> <span class="s1">&#39;beacons&#39;</span><span class="p">:</span>
+                    <span class="c1"># Beacons are in 2xN format: [[x1,x2,...], [y1,y2,...]]</span>
+                    <span class="c1"># Transpose to get Nx2 format, sort, then transpose back</span>
+                    <span class="n">sorted_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+                    <span class="n">config_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">sorted_array</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                <span class="k">elif</span> <span class="n">key</span> <span class="o">==</span> <span class="s1">&#39;obstacles&#39;</span><span class="p">:</span>
+                    <span class="c1"># Obstacles are in 2xN format: [[x1,x2,...], [y1,y2,...]]</span>
+                    <span class="c1"># Transpose to get Nx2 format, sort, then transpose back</span>
+                    <span class="n">sorted_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">value</span><span class="o">.</span><span class="n">T</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+                    <span class="n">config_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">sorted_array</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">config_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="c1"># Handle basic Python types</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+                <span class="n">config_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">value</span>
+            <span class="c1"># Handle dictionaries</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">value</span><span class="p">,</span> <span class="nb">dict</span><span class="p">):</span>
+                <span class="c1"># Only include serializable values</span>
+                <span class="n">serializable_dict</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">value</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="p">(</span><span class="nb">str</span><span class="p">,</span> <span class="nb">int</span><span class="p">,</span> <span class="nb">float</span><span class="p">,</span> <span class="nb">bool</span><span class="p">,</span> <span class="nb">list</span><span class="p">,</span> <span class="nb">tuple</span><span class="p">)):</span>
+                        <span class="n">serializable_dict</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+                    <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+                        <span class="n">serializable_dict</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                <span class="n">config_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">serializable_dict</span>
+                
+        <span class="c1"># Sort dictionary to ensure consistent ordering</span>
+        <span class="n">config_dict</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">config_dict</span><span class="o">.</span><span class="n">items</span><span class="p">()))</span>
+        
+        <span class="k">return</span> <span class="n">config_to_id</span><span class="p">(</span><span class="n">config_dict</span><span class="p">)</span></div>
+
+
+
+<div class="viewcode-block" id="BaseLightDarkPOMDPDiscreteActions">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDPDiscreteActions">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">BaseLightDarkPOMDPDiscreteActions</span><span class="p">(</span><span class="n">BaseLightDarkPOMDP</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">is_discrete_observations</span><span class="p">:</span> <span class="nb">bool</span><span class="p">,</span>
+        <span class="n">reward_range</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">beacons</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">)],</span>
+        <span class="n">goal_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+        <span class="n">start_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+        <span class="n">obstacles</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">7</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">)],</span>
+        <span class="n">obstacle_hit_probability</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">obstacle_reward</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="o">-</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">goal_reward</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">beacon_radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">fuel_cost</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">grid_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">11</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">space_info</span> <span class="o">=</span> <span class="n">SpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span> <span class="k">if</span> <span class="n">is_discrete_observations</span> <span class="k">else</span> <span class="n">SpaceType</span><span class="o">.</span><span class="n">CONTINUOUS</span>
+        <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="n">discount_factor</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">space_info</span><span class="o">=</span><span class="n">space_info</span><span class="p">,</span>
+            <span class="n">reward_range</span><span class="o">=</span><span class="n">reward_range</span><span class="p">,</span>
+            <span class="n">beacons</span><span class="o">=</span><span class="n">beacons</span><span class="p">,</span>
+            <span class="n">goal_state</span><span class="o">=</span><span class="n">goal_state</span><span class="p">,</span>
+            <span class="n">start_state</span><span class="o">=</span><span class="n">start_state</span><span class="p">,</span>
+            <span class="n">obstacles</span><span class="o">=</span><span class="n">obstacles</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="n">obstacle_hit_probability</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=</span><span class="n">obstacle_reward</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="n">goal_reward</span><span class="p">,</span>
+            <span class="n">beacon_radius</span><span class="o">=</span><span class="n">beacon_radius</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="n">fuel_cost</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="n">grid_size</span><span class="p">,</span>
+        <span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;up&quot;</span><span class="p">,</span> <span class="s2">&quot;down&quot;</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_to_vector</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;up&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>
+            <span class="s2">&quot;down&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
+            <span class="s2">&quot;right&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span>
+            <span class="s2">&quot;left&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span>
+        <span class="p">}</span>
+
+<div class="viewcode-block" id="BaseLightDarkPOMDPDiscreteActions.get_actions">
+<a class="viewcode-back" href="../../../../../api/POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDPDiscreteActions.get_actions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">actions</span></div>
+</div>
+
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

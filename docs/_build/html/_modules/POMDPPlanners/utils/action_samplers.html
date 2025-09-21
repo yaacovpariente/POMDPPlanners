@@ -1,0 +1,304 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.utils.action_samplers &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.utils.action_samplers</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.utils.action_samplers</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">BeliefNode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.pft_dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+
+
+<div class="viewcode-block" id="UnitCircleActionSampler">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.action_samplers.html#POMDPPlanners.utils.action_samplers.UnitCircleActionSampler">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">UnitCircleActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Action sampler for 2D continuous action spaces within a unit circle.</span>
+<span class="sd">    </span>
+<span class="sd">    This sampler generates 2D action vectors uniformly distributed within a circle</span>
+<span class="sd">    of specified maximum magnitude. It&#39;s particularly useful for navigation and</span>
+<span class="sd">    continuous control problems where actions represent velocities or forces</span>
+<span class="sd">    constrained to a circular region.</span>
+<span class="sd">    </span>
+<span class="sd">    The sampler uses polar coordinate generation to ensure uniform distribution</span>
+<span class="sd">    within the circle, avoiding the clustering near the center that would occur</span>
+<span class="sd">    with naive rectangular sampling.</span>
+<span class="sd">    </span>
+<span class="sd">    Mathematical Foundation:</span>
+<span class="sd">        - Angle θ ~ Uniform(0, 2π)</span>
+<span class="sd">        - Radius r ~ √Uniform(0, 1) × max_magnitude</span>
+<span class="sd">        - Action = [r·cos(θ), r·sin(θ)]</span>
+<span class="sd">        </span>
+<span class="sd">    The square root transformation for radius ensures uniform area distribution</span>
+<span class="sd">    within the circle rather than biasing toward the center.</span>
+<span class="sd">    </span>
+<span class="sd">    Args:</span>
+<span class="sd">        max_action_magnitude: Maximum magnitude of action vectors (circle radius)</span>
+<span class="sd">        </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Basic usage with PFT-DPW for 2D navigation::</span>
+<span class="sd">        </span>
+<span class="sd">            import numpy as np</span>
+<span class="sd">            from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler</span>
+<span class="sd">            from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW</span>
+<span class="sd">            from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (</span>
+<span class="sd">                ContinuousLightDarkPOMDP</span>
+<span class="sd">            )</span>
+<span class="sd">            from POMDPPlanners.core.belief import get_initial_belief</span>
+<span class="sd">            </span>
+<span class="sd">            # Create 2D navigation environment</span>
+<span class="sd">            nav_env = ContinuousLightDarkPOMDP(</span>
+<span class="sd">                discount_factor=0.99,</span>
+<span class="sd">                goal_state=np.array([10, 0]),</span>
+<span class="sd">                start_state=np.array([0, 0])</span>
+<span class="sd">            )</span>
+<span class="sd">            </span>
+<span class="sd">            # Create unit circle action sampler</span>
+<span class="sd">            action_sampler = UnitCircleActionSampler(max_action_magnitude=2.0)</span>
+<span class="sd">            </span>
+<span class="sd">            # Test action sampling</span>
+<span class="sd">            actions = [action_sampler.sample() for _ in range(5)]</span>
+<span class="sd">            for i, action in enumerate(actions):</span>
+<span class="sd">                magnitude = np.linalg.norm(action)</span>
+<span class="sd">                print(f&quot;Action {i}: [{action[0]:.3f}, {action[1]:.3f}], magnitude: {magnitude:.3f}&quot;)</span>
+<span class="sd">            </span>
+<span class="sd">            # Use with PFT-DPW planner</span>
+<span class="sd">            planner = PFT_DPW(</span>
+<span class="sd">                environment=nav_env,</span>
+<span class="sd">                discount_factor=0.99,</span>
+<span class="sd">                depth=10,</span>
+<span class="sd">                name=&quot;PFT_DPW_Navigation&quot;,</span>
+<span class="sd">                action_sampler=action_sampler,</span>
+<span class="sd">                n_simulations=100</span>
+<span class="sd">            )</span>
+<span class="sd">            </span>
+<span class="sd">            initial_belief = get_initial_belief(nav_env, n_particles=200)</span>
+<span class="sd">            action, run_data = planner.action(initial_belief)</span>
+<span class="sd">            </span>
+<span class="sd">            print(f&quot;Selected navigation action: [{action[0][0]:.3f}, {action[0][1]:.3f}]&quot;)</span>
+<span class="sd">            </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Comparing different action magnitudes for robot control::</span>
+<span class="sd">        </span>
+<span class="sd">            # Conservative movement sampler</span>
+<span class="sd">            conservative_sampler = UnitCircleActionSampler(max_action_magnitude=0.5)</span>
+<span class="sd">            </span>
+<span class="sd">            # Aggressive movement sampler  </span>
+<span class="sd">            aggressive_sampler = UnitCircleActionSampler(max_action_magnitude=2.0)</span>
+<span class="sd">            </span>
+<span class="sd">            # Compare action distributions</span>
+<span class="sd">            conservative_actions = [conservative_sampler.sample() for _ in range(100)]</span>
+<span class="sd">            aggressive_actions = [aggressive_sampler.sample() for _ in range(100)]</span>
+<span class="sd">            </span>
+<span class="sd">            conservative_magnitudes = [np.linalg.norm(a) for a in conservative_actions]</span>
+<span class="sd">            aggressive_magnitudes = [np.linalg.norm(a) for a in aggressive_actions]</span>
+<span class="sd">            </span>
+<span class="sd">            print(f&quot;Conservative: max={max(conservative_magnitudes):.3f}, avg={np.mean(conservative_magnitudes):.3f}&quot;)</span>
+<span class="sd">            print(f&quot;Aggressive: max={max(aggressive_magnitudes):.3f}, avg={np.mean(aggressive_magnitudes):.3f}&quot;)</span>
+<span class="sd">            </span>
+<span class="sd">    Visualization Example:</span>
+<span class="sd">        Plotting sampled actions to verify uniform distribution::</span>
+<span class="sd">        </span>
+<span class="sd">            import matplotlib.pyplot as plt</span>
+<span class="sd">            </span>
+<span class="sd">            sampler = UnitCircleActionSampler(max_action_magnitude=1.0)</span>
+<span class="sd">            actions = np.array([sampler.sample() for _ in range(1000)])</span>
+<span class="sd">            </span>
+<span class="sd">            plt.figure(figsize=(8, 8))</span>
+<span class="sd">            plt.scatter(actions[:, 0], actions[:, 1], alpha=0.6, s=10)</span>
+<span class="sd">            plt.xlim(-1.2, 1.2)</span>
+<span class="sd">            plt.ylim(-1.2, 1.2)</span>
+<span class="sd">            plt.xlabel(&#39;Action X&#39;)</span>
+<span class="sd">            plt.ylabel(&#39;Action Y&#39;) </span>
+<span class="sd">            plt.title(&#39;Unit Circle Action Sampler Distribution&#39;)</span>
+<span class="sd">            plt.grid(True, alpha=0.3)</span>
+<span class="sd">            </span>
+<span class="sd">            # Add unit circle boundary</span>
+<span class="sd">            theta = np.linspace(0, 2*np.pi, 100)</span>
+<span class="sd">            plt.plot(np.cos(theta), np.sin(theta), &#39;r--&#39;, linewidth=2, label=&#39;Unit Circle&#39;)</span>
+<span class="sd">            plt.legend()</span>
+<span class="sd">            plt.axis(&#39;equal&#39;)</span>
+<span class="sd">            plt.show()</span>
+<span class="sd">            </span>
+<span class="sd">    Algorithm Integration:</span>
+<span class="sd">        This sampler integrates seamlessly with PFT-DPW for progressive widening</span>
+<span class="sd">        in continuous action spaces. The uniform circular distribution provides</span>
+<span class="sd">        good exploration coverage while respecting action magnitude constraints.</span>
+<span class="sd">        </span>
+<span class="sd">        **Comparison with other sampling strategies:**</span>
+<span class="sd">        - **vs Gaussian sampling**: Better boundary behavior, no tail effects</span>
+<span class="sd">        - **vs Rectangle sampling**: More natural for navigation/control tasks</span>
+<span class="sd">        - **vs Custom domain sampling**: General-purpose, works across domains</span>
+<span class="sd">        </span>
+<span class="sd">    Performance Characteristics:</span>
+<span class="sd">        - **Time complexity**: O(1) per sample</span>
+<span class="sd">        - **Memory usage**: Minimal (generates one action at a time)</span>
+<span class="sd">        - **Quality**: Uniform distribution within circle constraint</span>
+<span class="sd">        - **Scalability**: Excellent for 2D problems, extend for higher dimensions</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_action_magnitude</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Initialize the unit circle action sampler.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            max_action_magnitude: Maximum magnitude of the action vector (default: 1.0)</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_action_magnitude</span> <span class="o">=</span> <span class="n">max_action_magnitude</span>
+    
+<div class="viewcode-block" id="UnitCircleActionSampler.sample">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.action_samplers.html#POMDPPlanners.utils.action_samplers.UnitCircleActionSampler.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="p">:</span> <span class="n">BeliefNode</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Sample an action from a unit circle.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            belief_node: The current belief node (not used in this implementation)</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            np.ndarray: A 2D action vector within the unit circle</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Generate random angle in [0, 2π]</span>
+        <span class="n">theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+        
+        <span class="c1"># Generate random radius in [0, 1] using square root for uniform distribution</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">))</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_action_magnitude</span>
+        
+        <span class="c1"># Convert polar coordinates to Cartesian</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="n">r</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">r</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">])</span></div>
+</div>
+
+
+<div class="viewcode-block" id="DiscreteActionSampler">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.action_samplers.html#POMDPPlanners.utils.action_samplers.DiscreteActionSampler">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DiscreteActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Simple action sampler for discrete action spaces.</span>
+<span class="sd">    </span>
+<span class="sd">    This class is designed to be fully serializable for use in parallel</span>
+<span class="sd">    processing environments like joblib.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">actions</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the sampler with a list of discrete actions.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            actions: List of discrete actions to sample from</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span>
+    
+<div class="viewcode-block" id="DiscreteActionSampler.sample">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.utils.action_samplers.html#POMDPPlanners.utils.action_samplers.DiscreteActionSampler.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Any</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Sample a random action from the discrete action space.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            belief_node: Optional belief node (unused in this implementation)</span>
+<span class="sd">            </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            Randomly sampled action from the action space</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actions</span><span class="p">)</span></div>
+
+    
+    <span class="k">def</span><span class="w"> </span><span class="nf">__reduce__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Support for pickle serialization via __reduce__.&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="vm">__class__</span><span class="p">,</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">actions</span><span class="p">,))</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

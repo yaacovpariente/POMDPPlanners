@@ -1,0 +1,378 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.planners.sparse_sampling_planner &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.planners.sparse_sampling_planner</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.planners.sparse_sampling_planner</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Sparse Sampling POMDP Planning Algorithm Implementation.</span>
+
+<span class="sd">This module implements the sparse sampling algorithm for POMDP planning, which builds</span>
+<span class="sd">a finite-depth lookahead tree by sampling a limited number of outcomes at each node.</span>
+<span class="sd">The algorithm provides theoretical guarantees on the quality of the computed policy.</span>
+
+<span class="sd">The sparse sampling approach works by:</span>
+<span class="sd">1. Building a finite-depth tree from the current belief</span>
+<span class="sd">2. Sampling a fixed number of next states and observations at each node</span>
+<span class="sd">3. Computing value estimates using dynamic programming</span>
+<span class="sd">4. Selecting the action with the best estimated value</span>
+
+<span class="sd">Classes:</span>
+<span class="sd">    SparseSamplingDiscreteActionsPlanner: Abstract base class for sparse sampling algorithms</span>
+<span class="sd">    StandardSparseSamplingDiscreteActionsPlanner: Concrete implementation with standard value updates</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span><span class="p">,</span> <span class="n">List</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">abc</span><span class="w"> </span><span class="kn">import</span> <span class="n">ABC</span><span class="p">,</span> <span class="n">abstractmethod</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">anytree</span><span class="w"> </span><span class="kn">import</span> <span class="n">PostOrderIter</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">Policy</span><span class="p">,</span> <span class="n">PolicySpaceInfo</span><span class="p">,</span> <span class="n">PolicyRunData</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.environment</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteActionsEnvironment</span><span class="p">,</span> <span class="n">SpaceType</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.environment</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteActionsEnvironment</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">Belief</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.tree</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionNode</span><span class="p">,</span> <span class="n">BeliefNode</span><span class="p">,</span> <span class="n">get_optimal_action_cost_setting</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.cost</span><span class="w"> </span><span class="kn">import</span> <span class="n">belief_expectation_cost</span>
+
+<div class="viewcode-block" id="SparseSamplingDiscreteActionsPlanner">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.planners.sparse_sampling_planner.html#POMDPPlanners.planners.SparseSamplingDiscreteActionsPlanner">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SparseSamplingDiscreteActionsPlanner</span><span class="p">(</span><span class="n">Policy</span><span class="p">,</span> <span class="n">ABC</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Abstract base class for sparse sampling POMDP planners.</span>
+<span class="sd">    </span>
+<span class="sd">    This class implements the core sparse sampling algorithm for POMDP planning.</span>
+<span class="sd">    It builds a finite-depth lookahead tree by sampling a limited number of outcomes</span>
+<span class="sd">    at each node, providing theoretical guarantees on policy quality.</span>
+<span class="sd">    </span>
+<span class="sd">    The algorithm works by building a tree where:</span>
+<span class="sd">    - Each belief node represents a belief state</span>
+<span class="sd">    - Each action node represents taking an action from a belief</span>
+<span class="sd">    - The tree depth is limited to control computational complexity</span>
+<span class="sd">    - Value estimates are computed using dynamic programming</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes:</span>
+<span class="sd">        environment: The POMDP environment to plan for</span>
+<span class="sd">        branching_factor: Number of samples at each node (controls tree width)</span>
+<span class="sd">        depth: Maximum planning depth (controls tree height)</span>
+<span class="sd">        resampling: Whether to resample particles during belief updates</span>
+<span class="sd">        </span>
+<span class="sd">    Note:</span>
+<span class="sd">        This is an abstract base class. Subclasses must implement the value</span>
+<span class="sd">        update methods for leaf and non-leaf nodes.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">environment</span><span class="p">:</span> <span class="n">DiscreteActionsEnvironment</span><span class="p">,</span>
+        <span class="n">branching_factor</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">resampling</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;SparseSamplingDiscreteActionsPlanner&quot;</span><span class="p">,</span>
+        <span class="n">log_path</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">DiscreteActionsEnvironment</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;environment must be a DiscreteActionsEnvironment instance&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">branching_factor</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;branching_factor must be an int&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">depth</span><span class="p">,</span> <span class="nb">int</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;depth must be an int&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">resampling</span><span class="p">,</span> <span class="nb">bool</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;resampling must be a bool&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">depth</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Depth must be greater than 0&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">branching_factor</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Branching factor must be greater than 0&quot;</span><span class="p">)</span>
+
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span> 
+            <span class="n">discount_factor</span><span class="o">=</span><span class="n">environment</span><span class="o">.</span><span class="n">discount_factor</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">log_path</span><span class="o">=</span><span class="n">log_path</span><span class="p">,</span>
+            <span class="n">debug</span><span class="o">=</span><span class="n">debug</span>
+        <span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">branching_factor</span> <span class="o">=</span> <span class="n">branching_factor</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">depth</span> <span class="o">=</span> <span class="n">depth</span>
+
+<div class="viewcode-block" id="SparseSamplingDiscreteActionsPlanner.action">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.planners.sparse_sampling_planner.html#POMDPPlanners.planners.SparseSamplingDiscreteActionsPlanner.action">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">action</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief</span><span class="p">:</span> <span class="n">Belief</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">],</span> <span class="n">PolicyRunData</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">belief</span><span class="p">,</span> <span class="n">Belief</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;belief must be a Belief instance&quot;</span><span class="p">)</span>
+
+        <span class="n">tree</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_learn_belief_tree</span><span class="p">(</span><span class="n">belief</span><span class="p">)</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">get_optimal_action_cost_setting</span><span class="p">(</span><span class="n">tree</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">action</span><span class="p">],</span> <span class="n">PolicyRunData</span><span class="p">(</span><span class="n">info_variables</span><span class="o">=</span><span class="p">[])</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_learn_belief_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief</span><span class="p">:</span> <span class="n">Belief</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BeliefNode</span><span class="p">:</span>
+        <span class="n">tree</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span><span class="n">belief</span><span class="o">=</span><span class="n">belief</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_build_tree</span><span class="p">(</span><span class="n">belief_node</span><span class="o">=</span><span class="n">tree</span><span class="p">,</span> <span class="n">current_depth</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_node_statistics</span><span class="p">(</span><span class="n">tree</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">tree</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_build_tree</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="p">:</span> <span class="n">BeliefNode</span><span class="p">,</span> <span class="n">current_depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">current_depth</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">depth</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_set_last_belief_node</span><span class="p">(</span><span class="n">belief_node</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">get_actions</span><span class="p">():</span>
+            <span class="n">child</span> <span class="o">=</span> <span class="n">ActionNode</span><span class="p">(</span>
+                <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="n">belief_node</span><span class="p">,</span> <span class="n">children</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">data</span><span class="o">=</span><span class="kc">None</span>
+            <span class="p">)</span>
+
+            <span class="n">state</span> <span class="o">=</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+            <span class="n">next_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">next_observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span>
+                <span class="n">next_state</span><span class="p">,</span> <span class="n">action</span>
+            <span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+            <span class="n">next_belief</span> <span class="o">=</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">belief</span><span class="o">.</span><span class="n">update</span><span class="p">(</span>
+                <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">observation</span><span class="o">=</span><span class="n">next_observation</span><span class="p">,</span> <span class="n">pomdp</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">environment</span>
+            <span class="p">)</span>
+            <span class="n">next_belief_node</span> <span class="o">=</span> <span class="n">BeliefNode</span><span class="p">(</span>
+                <span class="n">belief</span><span class="o">=</span><span class="n">next_belief</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="n">child</span><span class="p">,</span> <span class="n">children</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">data</span><span class="o">=</span><span class="kc">None</span>
+            <span class="p">)</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">_build_tree</span><span class="p">(</span>
+                <span class="n">belief_node</span><span class="o">=</span><span class="n">next_belief_node</span><span class="p">,</span> <span class="n">current_depth</span><span class="o">=</span><span class="n">current_depth</span> <span class="o">+</span> <span class="mi">1</span>
+            <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_node_statistics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">tree</span><span class="p">:</span> <span class="n">BeliefNode</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">PostOrderIter</span><span class="p">(</span><span class="n">tree</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">is_leaf</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_leaf_node_statistics</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ActionNode</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_non_leaf_action_node_statistics</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">BeliefNode</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_update_belief_node_statistics</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown node type: </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">node</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_leaf_node_statistics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">ActionNode</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">ActionNode</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;node must be an ActionNode instance&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">height</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;node.height must be 0&quot;</span><span class="p">)</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">=</span> <span class="mi">1</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_leaf_node_q_value</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_leaf_node_q_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">ActionNode</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_non_leaf_action_node_statistics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">ActionNode</span><span class="p">):</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_non_leaf_action_node_q_value</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_non_leaf_action_node_q_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">ActionNode</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_belief_node_statistics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">BeliefNode</span><span class="p">):</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">visit_count</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">([</span><span class="n">child</span><span class="o">.</span><span class="n">visit_count</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">children</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_update_belief_node_v_value</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+
+    <span class="nd">@abstractmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_belief_node_v_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">BeliefNode</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_set_last_belief_node</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">BeliefNode</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">action</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">get_actions</span><span class="p">():</span>
+            <span class="n">child</span> <span class="o">=</span> <span class="n">ActionNode</span><span class="p">(</span><span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span> <span class="n">parent</span><span class="o">=</span><span class="n">node</span><span class="p">,</span> <span class="n">children</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(),</span> <span class="n">data</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span>
+            
+<div class="viewcode-block" id="SparseSamplingDiscreteActionsPlanner.get_space_info">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.planners.sparse_sampling_planner.html#POMDPPlanners.planners.SparseSamplingDiscreteActionsPlanner.get_space_info">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_space_info</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PolicySpaceInfo</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">PolicySpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">MIXED</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SparseSamplingDiscreteActionsPlanner.random_rollout">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.planners.sparse_sampling_planner.html#POMDPPlanners.planners.SparseSamplingDiscreteActionsPlanner.random_rollout">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">random_rollout</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="p">:</span> <span class="n">BeliefNode</span><span class="p">,</span> <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">depth</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="mf">0.0</span>
+
+        <span class="n">state</span> <span class="o">=</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="n">action</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">get_actions</span><span class="p">())</span>
+        <span class="n">next_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">next_observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">next_state</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">state</span> <span class="o">=</span> <span class="n">belief_node</span><span class="o">.</span><span class="n">belief</span><span class="o">.</span><span class="n">sample</span><span class="p">()</span>
+        <span class="n">next_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">next_observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">next_state</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span></div>
+</div>
+
+
+<div class="viewcode-block" id="StandardSparseSamplingDiscreteActionsPlanner">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.planners.sparse_sampling_planner.html#POMDPPlanners.planners.StandardSparseSamplingDiscreteActionsPlanner">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StandardSparseSamplingDiscreteActionsPlanner</span><span class="p">(</span>
+    <span class="n">SparseSamplingDiscreteActionsPlanner</span>
+<span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Standard implementation of sparse sampling for POMDP planning.</span>
+<span class="sd">    </span>
+<span class="sd">    This concrete implementation of sparse sampling uses standard value updates:</span>
+<span class="sd">    - Q-values for actions are computed as immediate cost plus discounted future value</span>
+<span class="sd">    - V-values for beliefs are computed as the minimum Q-value over actions (cost formulation)</span>
+<span class="sd">    - Leaf nodes use only immediate cost estimates</span>
+<span class="sd">    </span>
+<span class="sd">    The algorithm provides theoretical guarantees: with probability 1-δ, the computed</span>
+<span class="sd">    policy is ε-optimal, where ε decreases with increasing depth and branching factor.</span>
+<span class="sd">    </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Creating and using a sparse sampling planner::</span>
+<span class="sd">        </span>
+<span class="sd">            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP</span>
+<span class="sd">            from POMDPPlanners.core.belief import get_initial_belief</span>
+<span class="sd">            </span>
+<span class="sd">            # Create environment and planner</span>
+<span class="sd">            env = TigerPOMDP(discount_factor=0.95)</span>
+<span class="sd">            planner = StandardSparseSamplingDiscreteActionsPlanner(</span>
+<span class="sd">                environment=env,</span>
+<span class="sd">                branching_factor=10,  # Sample 10 outcomes per node</span>
+<span class="sd">                depth=2,              # Plan 5 steps ahead</span>
+<span class="sd">                name=&quot;SparseSampling_Tiger&quot;</span>
+<span class="sd">            )</span>
+<span class="sd">            </span>
+<span class="sd">            # Plan action from initial belief</span>
+<span class="sd">            initial_belief = get_initial_belief(env, n_particles=1000)</span>
+<span class="sd">            action, run_data = planner.action(initial_belief)</span>
+<span class="sd">            </span>
+<span class="sd">            print(f&quot;Selected action: {action[0]}&quot;)</span>
+<span class="sd">            print(f&quot;Planning completed with info: {run_data.info_variables}&quot;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">environment</span><span class="p">:</span> <span class="n">DiscreteActionsEnvironment</span><span class="p">,</span> <span class="n">branching_factor</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">depth</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;StandardSparseSamplingDiscreteActionsPlanner&quot;</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">environment</span><span class="p">,</span> <span class="n">branching_factor</span><span class="o">=</span><span class="n">branching_factor</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="n">depth</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_leaf_node_q_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">ActionNode</span><span class="p">):</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">immediate_cost</span> <span class="o">=</span> <span class="n">belief_expectation_cost</span><span class="p">(</span>
+            <span class="n">belief</span><span class="o">=</span><span class="n">node</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">belief</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">node</span><span class="o">.</span><span class="n">action</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">environment</span>
+        <span class="p">)</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">q_value</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">immediate_cost</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_non_leaf_action_node_q_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">ActionNode</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">node</span><span class="o">.</span><span class="n">immediate_cost</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">node</span><span class="o">.</span><span class="n">immediate_cost</span> <span class="o">=</span> <span class="n">belief_expectation_cost</span><span class="p">(</span>
+                <span class="n">belief</span><span class="o">=</span><span class="n">node</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">belief</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">node</span><span class="o">.</span><span class="n">action</span><span class="p">,</span> <span class="n">env</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">environment</span>
+            <span class="p">)</span>
+        <span class="n">children_q_values</span> <span class="o">=</span> <span class="p">[</span><span class="n">child</span><span class="o">.</span><span class="n">v_value</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">children</span><span class="p">]</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">q_value</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">immediate_cost</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">environment</span><span class="o">.</span><span class="n">discount_factor</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span>
+            <span class="n">children_q_values</span>
+        <span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_update_belief_node_v_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">node</span><span class="p">:</span> <span class="n">BeliefNode</span><span class="p">):</span>
+        <span class="n">node</span><span class="o">.</span><span class="n">v_value</span> <span class="o">=</span> <span class="nb">min</span><span class="p">([</span><span class="n">child</span><span class="o">.</span><span class="n">q_value</span> <span class="k">for</span> <span class="n">child</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">children</span><span class="p">])</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

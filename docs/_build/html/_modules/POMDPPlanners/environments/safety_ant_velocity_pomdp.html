@@ -1,0 +1,843 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.environments.safety_ant_velocity_pomdp &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.environments.safety_ant_velocity_pomdp</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.environments.safety_ant_velocity_pomdp</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Safety Ant Velocity POMDP Environment Implementation.</span>
+
+<span class="sd">This module implements a safety-critical velocity control task where an agent</span>
+<span class="sd">must navigate while avoiding unsafe velocities. The challenge is balancing</span>
+<span class="sd">exploration and movement rewards with safety constraints under partial observability.</span>
+
+<span class="sd">The Safety Ant Velocity POMDP features:</span>
+<span class="sd">- Continuous 4D state space: [position_x, position_y, velocity_x, velocity_y]</span>
+<span class="sd">- Discrete action space: [0 (no force), 1 (small), 2 (medium), 3 (large force)]</span>
+<span class="sd">- Physics-based dynamics with force application and damping</span>
+<span class="sd">- Noisy observations of both position and velocity</span>
+<span class="sd">- Safety constraints on maximum velocity magnitude</span>
+<span class="sd">- Safety-focused metrics tracking violation rates</span>
+
+<span class="sd">Key aspects:</span>
+<span class="sd">- Rewards encourage movement but heavily penalize safety violations</span>
+<span class="sd">- Episode terminates if velocity becomes critically high</span>
+<span class="sd">- Force direction is randomized to create uncertainty</span>
+<span class="sd">- Safety metrics track violation rates over episodes</span>
+
+<span class="sd">Classes:</span>
+<span class="sd">    SafeAntVelocityStateTransition: Physics simulation with force control</span>
+<span class="sd">    SafeAntVelocityObservation: Noisy position and velocity observations</span>
+<span class="sd">    SafeAntVelocityPOMDP: Main safety-critical velocity control environment</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Tuple</span><span class="p">,</span> <span class="n">Optional</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.environment</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ObservationModel</span><span class="p">,</span>
+    <span class="n">StateTransitionModel</span><span class="p">,</span>
+    <span class="n">DiscreteActionsEnvironment</span><span class="p">,</span>
+    <span class="n">SpaceInfo</span><span class="p">,</span>
+    <span class="n">SpaceType</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">Distribution</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span><span class="p">,</span> <span class="n">StepData</span><span class="p">,</span> <span class="n">MetricValue</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.statistics</span><span class="w"> </span><span class="kn">import</span> <span class="n">confidence_interval</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.animation</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">animation</span>
+
+
+<div class="viewcode-block" id="SafeAntVelocityStateTransition">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityStateTransition">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SafeAntVelocityStateTransition</span><span class="p">(</span><span class="n">StateTransitionModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Physics-based state transition model for Safety Ant Velocity POMDP.</span>
+<span class="sd">    </span>
+<span class="sd">    This model simulates simplified physics with force application, damping, and</span>
+<span class="sd">    random force directions. The agent can choose different force magnitudes</span>
+<span class="sd">    but cannot control the direction, creating uncertainty in the outcomes.</span>
+<span class="sd">    </span>
+<span class="sd">    Physics equations:</span>
+<span class="sd">    - acceleration = (force - damping * velocity) / mass</span>
+<span class="sd">    - velocity += acceleration * dt</span>
+<span class="sd">    - position += velocity * dt</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes:</span>
+<span class="sd">        state: Current state [position_x, position_y, velocity_x, velocity_y]</span>
+<span class="sd">        action: Force magnitude index (0=no force, 1=small, 2=medium, 3=large)</span>
+<span class="sd">        dt: Time step for physics integration</span>
+<span class="sd">        mass: Mass of the agent (affects acceleration)</span>
+<span class="sd">        damping: Damping coefficient (opposes velocity)</span>
+<span class="sd">        max_force: Maximum force magnitude</span>
+<span class="sd">        force_scales: Force scaling factors for each action [0.0, 0.33, 0.67, 1.0]</span>
+<span class="sd">        position: Current position [x, y]</span>
+<span class="sd">        velocity: Current velocity [vx, vy]</span>
+<span class="sd">        </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Using the Safety Ant Velocity state transition model::</span>
+<span class="sd">        </span>
+<span class="sd">            import numpy as np</span>
+<span class="sd">            </span>
+<span class="sd">            # Define current state [pos_x, pos_y, vel_x, vel_y]</span>
+<span class="sd">            state = np.array([0.5, -0.2, 1.0, 0.5])</span>
+<span class="sd">            action = 2  # Apply medium force</span>
+<span class="sd">            </span>
+<span class="sd">            # Create transition model</span>
+<span class="sd">            transition = SafeAntVelocityStateTransition(</span>
+<span class="sd">                state=state,</span>
+<span class="sd">                action=action,</span>
+<span class="sd">                dt=0.1,</span>
+<span class="sd">                mass=1.0,</span>
+<span class="sd">                damping=0.1,</span>
+<span class="sd">                max_force=1.0</span>
+<span class="sd">            )</span>
+<span class="sd">            </span>
+<span class="sd">            # Simulate physics step with random force direction</span>
+<span class="sd">            next_state = transition.sample()[0]</span>
+<span class="sd">            # Returns new [pos_x, pos_y, vel_x, vel_y] after physics</span>
+<span class="sd">            new_pos = next_state[:2]</span>
+<span class="sd">            new_vel = next_state[2:4]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">action</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">mass</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">damping</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">max_force</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dt</span> <span class="o">=</span> <span class="n">dt</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">=</span> <span class="n">mass</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">damping</span> <span class="o">=</span> <span class="n">damping</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span> <span class="o">=</span> <span class="n">max_force</span>
+        
+        <span class="c1"># Convert action index to force magnitude</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">force_scales</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.33</span><span class="p">,</span> <span class="mf">0.67</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]</span>  <span class="c1"># Different force magnitudes</span>
+        
+        <span class="c1"># State components</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">=</span> <span class="n">state</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+
+<div class="viewcode-block" id="SafeAntVelocityStateTransition.sample">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityStateTransition.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+        <span class="n">next_states</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_samples</span><span class="p">):</span>
+            <span class="c1"># Get force magnitude from action</span>
+            <span class="n">force_magnitude</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">force_scales</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">action</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span>
+            
+            <span class="c1"># Random force direction</span>
+            <span class="n">force_direction</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+            <span class="n">force</span> <span class="o">=</span> <span class="n">force_magnitude</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">force_direction</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">force_direction</span><span class="p">)])</span>
+            
+            <span class="c1"># Physics simulation (simplified)</span>
+            <span class="n">acceleration</span> <span class="o">=</span> <span class="p">(</span><span class="n">force</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">damping</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span>
+            <span class="n">new_velocity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span> <span class="o">+</span> <span class="n">acceleration</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span>
+            <span class="n">new_position</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">+</span> <span class="n">new_velocity</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">dt</span>
+            
+            <span class="c1"># Combine into new state</span>
+            <span class="n">next_state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">new_position</span><span class="p">,</span> <span class="n">new_velocity</span><span class="p">])</span>
+            <span class="n">next_states</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">next_state</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">next_states</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="SafeAntVelocityObservation">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityObservation">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SafeAntVelocityObservation</span><span class="p">(</span><span class="n">ObservationModel</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Noisy observation model for Safety Ant Velocity POMDP.</span>
+<span class="sd">    </span>
+<span class="sd">    This model adds Gaussian noise to both position and velocity measurements,</span>
+<span class="sd">    creating partial observability that makes velocity estimation challenging.</span>
+<span class="sd">    Higher noise in velocity measurements reflects the difficulty of measuring</span>
+<span class="sd">    velocity precisely in practice.</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes:</span>
+<span class="sd">        next_state: True state after action execution</span>
+<span class="sd">        action: Action that was taken (not used in observation generation)</span>
+<span class="sd">        position_noise: Standard deviation of Gaussian noise for position</span>
+<span class="sd">        velocity_noise: Standard deviation of Gaussian noise for velocity</span>
+<span class="sd">        position: True position [x, y]</span>
+<span class="sd">        velocity: True velocity [vx, vy]</span>
+<span class="sd">        </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Using the Safety Ant Velocity observation model::</span>
+<span class="sd">        </span>
+<span class="sd">            import numpy as np</span>
+<span class="sd">            </span>
+<span class="sd">            # True state after physics simulation</span>
+<span class="sd">            true_state = np.array([0.6, -0.1, 1.2, 0.8])  # [x, y, vx, vy]</span>
+<span class="sd">            action = 2</span>
+<span class="sd">            </span>
+<span class="sd">            # Create observation model</span>
+<span class="sd">            obs_model = SafeAntVelocityObservation(</span>
+<span class="sd">                next_state=true_state,</span>
+<span class="sd">                action=action,</span>
+<span class="sd">                position_noise=0.1,</span>
+<span class="sd">                velocity_noise=0.2</span>
+<span class="sd">            )</span>
+<span class="sd">            </span>
+<span class="sd">            # Sample noisy observation</span>
+<span class="sd">            observation = obs_model.sample()[0]</span>
+<span class="sd">            # Returns [noisy_x, noisy_y, noisy_vx, noisy_vy]</span>
+<span class="sd">            # Position noise: ±0.1, velocity noise: ±0.2</span>
+<span class="sd">            </span>
+<span class="sd">            # Calculate observation probability</span>
+<span class="sd">            prob = obs_model.probability(observation)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">next_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">action</span><span class="p">:</span> <span class="nb">int</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">next_state</span><span class="o">=</span><span class="n">next_state</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">position_noise</span> <span class="o">=</span> <span class="n">position_noise</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">velocity_noise</span> <span class="o">=</span> <span class="n">velocity_noise</span>
+        
+        <span class="c1"># State components</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">=</span> <span class="n">next_state</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span> <span class="o">=</span> <span class="n">next_state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+
+<div class="viewcode-block" id="SafeAntVelocityObservation.sample">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityObservation.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+        <span class="n">observations</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_samples</span><span class="p">):</span>
+            <span class="c1"># Add noise to position and velocity observations</span>
+            <span class="n">noisy_position</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">position_noise</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">noisy_velocity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span> <span class="o">+</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">velocity_noise</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+            
+            <span class="c1"># Combine observations</span>
+            <span class="n">observation</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">noisy_position</span><span class="p">,</span> <span class="n">noisy_velocity</span><span class="p">])</span>
+            <span class="n">observations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">observations</span></div>
+
+
+<div class="viewcode-block" id="SafeAntVelocityObservation.probability">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityObservation.probability">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probability</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observations</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="c1"># Calculate probabilities based on Gaussian noise model for list of observations</span>
+        <span class="n">probabilities</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">observation</span> <span class="ow">in</span> <span class="n">observations</span><span class="p">:</span>
+            <span class="c1"># Ensure observation is numpy array with correct shape</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="ow">or</span> <span class="n">observation</span><span class="o">.</span><span class="n">size</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected non-empty numpy array observation, got </span><span class="si">{</span><span class="nb">type</span><span class="p">(</span><span class="n">observation</span><span class="p">)</span><span class="si">}</span><span class="s2"> with shape </span><span class="si">{</span><span class="nb">getattr</span><span class="p">(</span><span class="n">observation</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;shape&#39;</span><span class="p">,</span><span class="w"> </span><span class="s1">&#39;unknown&#39;</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            
+            <span class="k">if</span> <span class="n">observation</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">4</span><span class="p">,):</span>
+                <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Expected observation shape (4,), got </span><span class="si">{</span><span class="n">observation</span><span class="o">.</span><span class="n">shape</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            
+            <span class="n">position_diff</span> <span class="o">=</span> <span class="n">observation</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">position</span>
+            <span class="n">velocity_diff</span> <span class="o">=</span> <span class="n">observation</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span>
+            
+            <span class="n">position_log_prob</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">position_diff</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">position_noise</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="n">velocity_log_prob</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">velocity_diff</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">velocity_noise</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            
+            <span class="n">prob</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">exp</span><span class="p">(</span><span class="n">position_log_prob</span> <span class="o">+</span> <span class="n">velocity_log_prob</span><span class="p">)</span>
+            <span class="n">probabilities</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">prob</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">probabilities</span><span class="p">)</span></div>
+</div>
+
+
+
+<div class="viewcode-block" id="SafeAntVelocityPOMDP">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityPOMDP">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">SafeAntVelocityPOMDP</span><span class="p">(</span><span class="n">DiscreteActionsEnvironment</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Safety-critical velocity control task formulated as a POMDP.</span>
+<span class="sd">    </span>
+<span class="sd">    This environment presents a safety-critical control problem where an agent</span>
+<span class="sd">    must navigate while keeping velocity below a safety threshold. The challenge</span>
+<span class="sd">    comes from balancing exploration rewards with safety constraints under noisy</span>
+<span class="sd">    velocity observations.</span>
+<span class="sd">    </span>
+<span class="sd">    Problem Structure:</span>
+<span class="sd">    - State: [position_x, position_y, velocity_x, velocity_y] (continuous)</span>
+<span class="sd">    - Actions: [0=no force, 1=small, 2=medium, 3=large force] (discrete)</span>
+<span class="sd">    - Observations: Noisy position and velocity measurements (continuous)</span>
+<span class="sd">    - Rewards: Movement reward - safety violation penalty (if unsafe)</span>
+<span class="sd">    - Safety constraint: velocity magnitude ≤ safe_velocity_threshold</span>
+<span class="sd">    - Termination: Velocity exceeds 1.5x safety threshold</span>
+<span class="sd">    </span>
+<span class="sd">    Safety Features:</span>
+<span class="sd">    - Tracks safety and critical violation rates</span>
+<span class="sd">    - Heavy penalties for constraint violations</span>
+<span class="sd">    - Configurable safety thresholds and penalties</span>
+<span class="sd">    - Physics simulation with uncertainty in force direction</span>
+<span class="sd">    </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Creating and using a Safety Ant Velocity POMDP::</span>
+<span class="sd">        </span>
+<span class="sd">            # Create safety-critical environment</span>
+<span class="sd">            safe_env = SafeAntVelocityPOMDP(</span>
+<span class="sd">                discount_factor=0.99,</span>
+<span class="sd">                safe_velocity_threshold=2.0,</span>
+<span class="sd">                safety_violation_penalty=-100.0,</span>
+<span class="sd">                movement_reward_scale=1.0</span>
+<span class="sd">            )</span>
+<span class="sd">            </span>
+<span class="sd">            # Get initial state</span>
+<span class="sd">            initial_state_dist = safe_env.initial_state_dist()</span>
+<span class="sd">            state = initial_state_dist.sample()[0]  # [x, y, vx, vy]</span>
+<span class="sd">            </span>
+<span class="sd">            # Choose force magnitude action</span>
+<span class="sd">            actions = safe_env.get_actions()  # [0, 1, 2, 3]</span>
+<span class="sd">            action = 1  # Apply small force</span>
+<span class="sd">            reward = safe_env.reward(state, action)</span>
+<span class="sd">            </span>
+<span class="sd">            # Check safety constraint</span>
+<span class="sd">            velocity = state[2:4]</span>
+<span class="sd">            speed = np.linalg.norm(velocity)</span>
+<span class="sd">            is_safe = speed &lt;= safe_env.safe_velocity_threshold</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">safe_velocity_threshold</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">max_force</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">dt</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">mass</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">damping</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">position_noise</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">,</span>
+        <span class="n">velocity_noise</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">safety_violation_penalty</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="o">-</span><span class="mf">100.0</span><span class="p">,</span>
+        <span class="n">movement_reward_scale</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;SafeVelocityPOMDP&quot;</span><span class="p">,</span>
+        <span class="n">output_dir</span><span class="p">:</span> <span class="n">Optional</span><span class="p">[</span><span class="n">Path</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">,</span>
+        <span class="n">use_queue_logger</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">=</span> <span class="n">safe_velocity_threshold</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span> <span class="o">=</span> <span class="n">max_force</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dt</span> <span class="o">=</span> <span class="n">dt</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">=</span> <span class="n">mass</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">damping</span> <span class="o">=</span> <span class="n">damping</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">position_noise</span> <span class="o">=</span> <span class="n">position_noise</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">velocity_noise</span> <span class="o">=</span> <span class="n">velocity_noise</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">safety_violation_penalty</span> <span class="o">=</span> <span class="n">safety_violation_penalty</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">movement_reward_scale</span> <span class="o">=</span> <span class="n">movement_reward_scale</span>
+        
+        <span class="c1"># Define actions (different force magnitudes)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>  <span class="c1"># 0: no force, 1: small, 2: medium, 3: large</span>
+
+        <span class="c1"># Calculate reward range based on parameters</span>
+        <span class="c1"># Minimum: no movement reward + safety penalty</span>
+        <span class="n">min_reward</span> <span class="o">=</span> <span class="mf">0.0</span> <span class="o">+</span> <span class="n">safety_violation_penalty</span>
+        <span class="c1"># Maximum: maximum safe speed (termination threshold) * movement scale</span>
+        <span class="n">max_reward</span> <span class="o">=</span> <span class="n">safe_velocity_threshold</span> <span class="o">*</span> <span class="mf">1.5</span> <span class="o">*</span> <span class="n">movement_reward_scale</span>
+        
+        <span class="c1"># Create space info with appropriate bounds</span>
+        <span class="n">space_info</span> <span class="o">=</span> <span class="n">SpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span>  <span class="c1"># Action space is discrete force magnitudes</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">CONTINUOUS</span>  <span class="c1"># Observation space is positions and velocities with noise</span>
+        <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="n">discount_factor</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">space_info</span><span class="o">=</span><span class="n">space_info</span><span class="p">,</span> 
+                        <span class="n">reward_range</span><span class="o">=</span><span class="p">(</span><span class="n">min_reward</span><span class="p">,</span> <span class="n">max_reward</span><span class="p">),</span> <span class="n">output_dir</span><span class="o">=</span><span class="n">output_dir</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="n">debug</span><span class="p">,</span> <span class="n">use_queue_logger</span><span class="o">=</span><span class="n">use_queue_logger</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SafeAntVelocityPOMDP.state_transition_model">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityPOMDP.state_transition_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_transition_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">StateTransitionModel</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">SafeAntVelocityStateTransition</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">dt</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dt</span><span class="p">,</span>
+            <span class="n">mass</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="p">,</span>
+            <span class="n">damping</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">damping</span><span class="p">,</span>
+            <span class="n">max_force</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">max_force</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SafeAntVelocityPOMDP.observation_model">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityPOMDP.observation_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observation_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">ObservationModel</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">SafeAntVelocityObservation</span><span class="p">(</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">next_state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">position_noise</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">position_noise</span><span class="p">,</span>
+            <span class="n">velocity_noise</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">velocity_noise</span><span class="p">,</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SafeAntVelocityPOMDP.reward">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityPOMDP.reward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="nb">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="c1"># Extract velocity components</span>
+        <span class="n">velocity</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+        <span class="n">speed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">velocity</span><span class="p">)</span>
+        
+        <span class="c1"># Base reward is proportional to movement (encourage exploration)</span>
+        <span class="n">reward</span> <span class="o">=</span> <span class="n">speed</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">movement_reward_scale</span>
+        
+        <span class="c1"># Penalty for exceeding safe velocity</span>
+        <span class="k">if</span> <span class="n">speed</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span><span class="p">:</span>
+            <span class="n">reward</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">safety_violation_penalty</span>
+            
+        <span class="k">return</span> <span class="n">reward</span></div>
+
+
+<div class="viewcode-block" id="SafeAntVelocityPOMDP.is_terminal">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityPOMDP.is_terminal">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_terminal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="c1"># Episode ends if velocity exceeds safe threshold by too much</span>
+        <span class="n">velocity</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+        <span class="n">speed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">velocity</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">speed</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">*</span> <span class="mf">1.5</span>  <span class="c1"># 50% margin</span></div>
+
+
+<div class="viewcode-block" id="SafeAntVelocityPOMDP.initial_state_dist">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityPOMDP.initial_state_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_state_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="k">class</span><span class="w"> </span><span class="nc">InitialState</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+                <span class="n">initial_states</span> <span class="o">=</span> <span class="p">[]</span>
+                <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n_samples</span><span class="p">):</span>
+                    <span class="c1"># Start with zero velocity and random position</span>
+                    <span class="n">position</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">size</span><span class="o">=</span><span class="mi">2</span><span class="p">)</span>
+                    <span class="n">velocity</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+                    <span class="n">initial_state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">([</span><span class="n">position</span><span class="p">,</span> <span class="n">velocity</span><span class="p">])</span>
+                    <span class="n">initial_states</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">initial_state</span><span class="p">)</span>
+                <span class="k">return</span> <span class="n">initial_states</span>
+        
+        <span class="k">return</span> <span class="n">InitialState</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="SafeAntVelocityPOMDP.initial_observation_dist">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityPOMDP.initial_observation_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_observation_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">initial_state_dist</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="SafeAntVelocityPOMDP.get_actions">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityPOMDP.get_actions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="nb">int</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">actions</span></div>
+
+
+<div class="viewcode-block" id="SafeAntVelocityPOMDP.is_equal_observation">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityPOMDP.is_equal_observation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_equal_observation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation1</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">observation2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">observation1</span><span class="p">,</span> <span class="n">observation2</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="SafeAntVelocityPOMDP.cache_visualization">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityPOMDP.cache_visualization">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">cache_visualization</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">history</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">StepData</span><span class="p">],</span> <span class="n">cache_path</span><span class="p">:</span> <span class="n">Path</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Cache animated visualization of the safety ant velocity episode.</span>
+<span class="sd">        </span>
+<span class="sd">        Creates an animated GIF showing the ant&#39;s movement trajectory with velocity vectors,</span>
+<span class="sd">        safety zones, force applications, and safety constraint violations.</span>
+<span class="sd">        </span>
+<span class="sd">        Args:</span>
+<span class="sd">            history: Episode history containing states, actions, and rewards</span>
+<span class="sd">            cache_path: Path where to save the visualization (must end with .gif)</span>
+<span class="sd">            </span>
+<span class="sd">        Raises:</span>
+<span class="sd">            ValueError: If history is empty or cache_path doesn&#39;t end with .gif</span>
+<span class="sd">            TypeError: If cache_path is not a Path object</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">history</span><span class="p">,</span> <span class="n">List</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;history must be a List object&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">history</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;Cannot visualize empty history&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">history</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">step</span><span class="p">,</span> <span class="n">StepData</span><span class="p">):</span>
+                <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;history must be a List of StepData objects&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">cache_path</span><span class="p">,</span> <span class="n">Path</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">TypeError</span><span class="p">(</span><span class="s2">&quot;cache_path must be a Path object&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">str</span><span class="p">(</span><span class="n">cache_path</span><span class="p">)</span><span class="o">.</span><span class="n">endswith</span><span class="p">(</span><span class="s2">&quot;.gif&quot;</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;cache_path must end with .gif&quot;</span><span class="p">)</span>
+            
+        <span class="c1"># Extract episode data</span>
+        <span class="n">states</span> <span class="o">=</span> <span class="p">[</span><span class="n">step</span><span class="o">.</span><span class="n">state</span> <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">history</span><span class="p">]</span>
+        <span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="n">step</span><span class="o">.</span><span class="n">action</span> <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">history</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]]</span>  <span class="c1"># Last step has no action</span>
+        <span class="n">rewards</span> <span class="o">=</span> <span class="p">[</span><span class="n">step</span><span class="o">.</span><span class="n">reward</span> <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">history</span><span class="p">]</span>
+        
+        <span class="c1"># Calculate position bounds for visualization</span>
+        <span class="n">all_positions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">state</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">states</span><span class="p">])</span>
+        <span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span> <span class="o">=</span> <span class="n">all_positions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">all_positions</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
+        <span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span> <span class="o">=</span> <span class="n">all_positions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">min</span><span class="p">()</span> <span class="o">-</span> <span class="mi">1</span><span class="p">,</span> <span class="n">all_positions</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">max</span><span class="p">()</span> <span class="o">+</span> <span class="mi">1</span>
+        
+        <span class="c1"># Set up the plot with dual panels</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="p">(</span><span class="n">ax_main</span><span class="p">,</span> <span class="n">ax_speed</span><span class="p">)</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="n">figsize</span><span class="o">=</span><span class="p">(</span><span class="mi">16</span><span class="p">,</span> <span class="mi">8</span><span class="p">))</span>
+        
+        <span class="c1"># Main trajectory plot</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">y_min</span><span class="p">,</span> <span class="n">y_max</span><span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">set_aspect</span><span class="p">(</span><span class="s1">&#39;equal&#39;</span><span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;X Position&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Y Position&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Safety Ant Velocity POMDP: Trajectory &amp; Safety Zones&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># Speed plot</span>
+        <span class="n">ax_speed</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">states</span><span class="p">))</span>
+        <span class="n">max_speed</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">])</span> <span class="k">for</span> <span class="n">state</span> <span class="ow">in</span> <span class="n">states</span><span class="p">)</span> <span class="k">if</span> <span class="n">states</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="n">ax_speed</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="nb">max</span><span class="p">(</span><span class="n">max_speed</span> <span class="o">*</span> <span class="mf">1.1</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">*</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="n">ax_speed</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="kc">True</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.3</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mf">0.5</span><span class="p">)</span>
+        <span class="n">ax_speed</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;Time Step&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+        <span class="n">ax_speed</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Speed (Velocity Magnitude)&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">)</span>
+        <span class="n">ax_speed</span><span class="o">.</span><span class="n">set_title</span><span class="p">(</span><span class="s1">&#39;Speed Over Time&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># Safety threshold lines on speed plot</span>
+        <span class="n">ax_speed</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;orange&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> 
+                        <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Safety Threshold (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
+        <span class="n">ax_speed</span><span class="o">.</span><span class="n">axhline</span><span class="p">(</span><span class="n">y</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">*</span> <span class="mf">1.5</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> 
+                        <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="sa">f</span><span class="s1">&#39;Critical Threshold (</span><span class="si">{</span><span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">1.5</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">)&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># Initialize visual elements for main plot</span>
+        <span class="n">ant_scatter</span> <span class="o">=</span> <span class="n">ax_main</span><span class="o">.</span><span class="n">scatter</span><span class="p">([],</span> <span class="p">[],</span> <span class="n">s</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="s1">&#39;blue&#39;</span><span class="p">,</span> <span class="n">marker</span><span class="o">=</span><span class="s1">&#39;o&#39;</span><span class="p">,</span> 
+                                     <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;darkblue&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">zorder</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Ant&#39;</span><span class="p">)</span>
+        <span class="n">path_line</span><span class="p">,</span> <span class="o">=</span> <span class="n">ax_main</span><span class="o">.</span><span class="n">plot</span><span class="p">([],</span> <span class="p">[],</span> <span class="s1">&#39;b-&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Trajectory&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># Velocity vector arrow</span>
+        <span class="n">velocity_arrow</span> <span class="o">=</span> <span class="n">ax_main</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">xy</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">xytext</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                                         <span class="n">arrowprops</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">arrowstyle</span><span class="o">=</span><span class="s1">&#39;-&gt;&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;green&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">),</span>
+                                         <span class="n">zorder</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">visible</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        
+        <span class="c1"># Force vector arrow (different color)</span>
+        <span class="n">force_arrow</span> <span class="o">=</span> <span class="n">ax_main</span><span class="o">.</span><span class="n">annotate</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">xy</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="n">xytext</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                                      <span class="n">arrowprops</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">arrowstyle</span><span class="o">=</span><span class="s1">&#39;-&gt;&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;purple&#39;</span><span class="p">,</span> <span class="n">lw</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">),</span>
+                                      <span class="n">zorder</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">visible</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        
+        <span class="c1"># Safety zone circles (concentric circles around current position)</span>
+        <span class="n">safety_circle</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">0</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;orange&#39;</span><span class="p">,</span> 
+                                  <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;--&#39;</span><span class="p">,</span> <span class="n">visible</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">critical_circle</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">Circle</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="mi">0</span><span class="p">,</span> <span class="n">fill</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;red&#39;</span><span class="p">,</span> 
+                                    <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">linestyle</span><span class="o">=</span><span class="s1">&#39;-&#39;</span><span class="p">,</span> <span class="n">visible</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span><span class="n">safety_circle</span><span class="p">)</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">add_patch</span><span class="p">(</span><span class="n">critical_circle</span><span class="p">)</span>
+        
+        <span class="c1"># Speed plot elements</span>
+        <span class="n">speed_line</span><span class="p">,</span> <span class="o">=</span> <span class="n">ax_speed</span><span class="o">.</span><span class="n">plot</span><span class="p">([],</span> <span class="p">[],</span> <span class="s1">&#39;b-&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="s1">&#39;Speed&#39;</span><span class="p">)</span>
+        <span class="n">speed_points</span> <span class="o">=</span> <span class="n">ax_speed</span><span class="o">.</span><span class="n">scatter</span><span class="p">([],</span> <span class="p">[],</span> <span class="n">s</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span> <span class="n">c</span><span class="o">=</span><span class="p">[],</span> <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;RdYlGn_r&#39;</span><span class="p">,</span> 
+                                       <span class="n">vmin</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">*</span> <span class="mf">1.5</span><span class="p">,</span> 
+                                       <span class="n">edgecolor</span><span class="o">=</span><span class="s1">&#39;black&#39;</span><span class="p">,</span> <span class="n">linewidth</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">zorder</span><span class="o">=</span><span class="mi">5</span><span class="p">)</span>
+        
+        <span class="c1"># Text displays for main plot</span>
+        <span class="n">step_text</span> <span class="o">=</span> <span class="n">ax_main</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.98</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">ax_main</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span>
+                                <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.5&#39;</span><span class="p">,</span> <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;lightblue&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">),</span>
+                                <span class="n">verticalalignment</span><span class="o">=</span><span class="s1">&#39;top&#39;</span><span class="p">,</span> <span class="n">horizontalalignment</span><span class="o">=</span><span class="s1">&#39;left&#39;</span><span class="p">)</span>
+        
+        <span class="n">velocity_text</span> <span class="o">=</span> <span class="n">ax_main</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.88</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">ax_main</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+                                    <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.3&#39;</span><span class="p">,</span> <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;lightyellow&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">),</span>
+                                    <span class="n">verticalalignment</span><span class="o">=</span><span class="s1">&#39;top&#39;</span><span class="p">,</span> <span class="n">horizontalalignment</span><span class="o">=</span><span class="s1">&#39;left&#39;</span><span class="p">)</span>
+        
+        <span class="n">reward_text</span> <span class="o">=</span> <span class="n">ax_main</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.02</span><span class="p">,</span> <span class="mf">0.78</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">ax_main</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">11</span><span class="p">,</span>
+                                  <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.3&#39;</span><span class="p">,</span> <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;lightgreen&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">),</span>
+                                  <span class="n">verticalalignment</span><span class="o">=</span><span class="s1">&#39;top&#39;</span><span class="p">,</span> <span class="n">horizontalalignment</span><span class="o">=</span><span class="s1">&#39;left&#39;</span><span class="p">)</span>
+        
+        <span class="c1"># Safety status banner</span>
+        <span class="n">safety_text</span> <span class="o">=</span> <span class="n">ax_main</span><span class="o">.</span><span class="n">text</span><span class="p">(</span><span class="mf">0.5</span><span class="p">,</span> <span class="mf">0.95</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">transform</span><span class="o">=</span><span class="n">ax_main</span><span class="o">.</span><span class="n">transAxes</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">14</span><span class="p">,</span> 
+                                  <span class="n">fontweight</span><span class="o">=</span><span class="s1">&#39;bold&#39;</span><span class="p">,</span> <span class="n">color</span><span class="o">=</span><span class="s1">&#39;white&#39;</span><span class="p">,</span>
+                                  <span class="n">bbox</span><span class="o">=</span><span class="nb">dict</span><span class="p">(</span><span class="n">boxstyle</span><span class="o">=</span><span class="s1">&#39;round,pad=0.5&#39;</span><span class="p">,</span> <span class="n">facecolor</span><span class="o">=</span><span class="s1">&#39;green&#39;</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.9</span><span class="p">),</span>
+                                  <span class="n">horizontalalignment</span><span class="o">=</span><span class="s1">&#39;center&#39;</span><span class="p">,</span> <span class="n">verticalalignment</span><span class="o">=</span><span class="s1">&#39;top&#39;</span><span class="p">,</span>
+                                  <span class="n">visible</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">zorder</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+        
+        <span class="c1"># Add legends</span>
+        <span class="n">ax_main</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mf">1.05</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">loc</span><span class="o">=</span><span class="s1">&#39;upper left&#39;</span><span class="p">)</span>
+        <span class="n">ax_speed</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">bbox_to_anchor</span><span class="o">=</span><span class="p">(</span><span class="mf">1.05</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">loc</span><span class="o">=</span><span class="s1">&#39;upper left&#39;</span><span class="p">)</span>
+        
+        <span class="k">def</span><span class="w"> </span><span class="nf">animate</span><span class="p">(</span><span class="n">frame</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">frame</span> <span class="o">&gt;=</span> <span class="nb">len</span><span class="p">(</span><span class="n">states</span><span class="p">):</span>
+                <span class="k">return</span> <span class="p">(</span><span class="n">ant_scatter</span><span class="p">,</span> <span class="n">path_line</span><span class="p">,</span> <span class="n">velocity_arrow</span><span class="p">,</span> <span class="n">force_arrow</span><span class="p">,</span> 
+                       <span class="n">speed_line</span><span class="p">,</span> <span class="n">speed_points</span><span class="p">,</span> <span class="n">step_text</span><span class="p">,</span> <span class="n">velocity_text</span><span class="p">,</span> 
+                       <span class="n">reward_text</span><span class="p">,</span> <span class="n">safety_text</span><span class="p">)</span>
+            
+            <span class="n">state</span> <span class="o">=</span> <span class="n">states</span><span class="p">[</span><span class="n">frame</span><span class="p">]</span>
+            <span class="n">position</span> <span class="o">=</span> <span class="n">state</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+            <span class="n">velocity</span> <span class="o">=</span> <span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>
+            <span class="n">speed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">velocity</span><span class="p">)</span>
+            
+            <span class="c1"># Update ant position</span>
+            <span class="n">ant_scatter</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">([</span><span class="n">position</span><span class="p">])</span>
+            
+            <span class="c1"># Update trajectory path</span>
+            <span class="n">path_positions</span> <span class="o">=</span> <span class="p">[</span><span class="n">s</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">states</span><span class="p">[:</span><span class="n">frame</span><span class="o">+</span><span class="mi">1</span><span class="p">]]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">path_positions</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">path_x</span> <span class="o">=</span> <span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">path_positions</span><span class="p">]</span>
+                <span class="n">path_y</span> <span class="o">=</span> <span class="p">[</span><span class="n">pos</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="k">for</span> <span class="n">pos</span> <span class="ow">in</span> <span class="n">path_positions</span><span class="p">]</span>
+                <span class="n">path_line</span><span class="o">.</span><span class="n">set_data</span><span class="p">(</span><span class="n">path_x</span><span class="p">,</span> <span class="n">path_y</span><span class="p">)</span>
+            
+            <span class="c1"># Update velocity vector</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">velocity</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mf">0.01</span><span class="p">:</span>  <span class="c1"># Only show if significant velocity</span>
+                <span class="n">velocity_arrow</span><span class="o">.</span><span class="n">set_position</span><span class="p">(</span><span class="n">position</span><span class="p">)</span>
+                <span class="n">velocity_arrow</span><span class="o">.</span><span class="n">xy</span> <span class="o">=</span> <span class="n">position</span> <span class="o">+</span> <span class="n">velocity</span> <span class="o">*</span> <span class="mf">0.5</span>  <span class="c1"># Scale for visibility</span>
+                <span class="n">velocity_arrow</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">velocity_arrow</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+            
+            <span class="c1"># Update force vector (if action is applied)</span>
+            <span class="k">if</span> <span class="n">frame</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">):</span>
+                <span class="n">action</span> <span class="o">=</span> <span class="n">actions</span><span class="p">[</span><span class="n">frame</span><span class="p">]</span>
+                <span class="n">force_scales</span> <span class="o">=</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.33</span><span class="p">,</span> <span class="mf">0.67</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]</span>
+                <span class="n">force_magnitude</span> <span class="o">=</span> <span class="n">force_scales</span><span class="p">[</span><span class="n">action</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_force</span>
+                <span class="k">if</span> <span class="n">force_magnitude</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="c1"># Show force direction (simplified representation since actual direction is random)</span>
+                    <span class="c1"># Use a representative direction that shows the relative force magnitude</span>
+                    <span class="n">force_direction</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">])</span>  <span class="c1"># Simplified representation</span>
+                    <span class="n">force_direction</span> <span class="o">=</span> <span class="n">force_direction</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">force_direction</span><span class="p">)</span>
+                    <span class="n">force_arrow</span><span class="o">.</span><span class="n">set_position</span><span class="p">(</span><span class="n">position</span><span class="p">)</span>
+                    <span class="n">force_arrow</span><span class="o">.</span><span class="n">xy</span> <span class="o">=</span> <span class="n">position</span> <span class="o">+</span> <span class="n">force_direction</span> <span class="o">*</span> <span class="n">force_magnitude</span> <span class="o">*</span> <span class="mf">0.8</span>
+                    <span class="n">force_arrow</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">force_arrow</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">force_arrow</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+            
+            <span class="c1"># Update safety circles (showing velocity-based danger zones)</span>
+            <span class="c1"># Circle radius represents how close the ant is to safety limits</span>
+            <span class="n">safety_radius</span> <span class="o">=</span> <span class="n">speed</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">*</span> <span class="mf">1.0</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.1</span>
+            <span class="n">critical_radius</span> <span class="o">=</span> <span class="n">speed</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">*</span> <span class="mf">1.5</span><span class="p">)</span> <span class="o">*</span> <span class="mf">1.5</span> <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mf">0.1</span>
+            
+            <span class="n">safety_circle</span><span class="o">.</span><span class="n">center</span> <span class="o">=</span> <span class="n">position</span>
+            <span class="n">safety_circle</span><span class="o">.</span><span class="n">set_radius</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">safety_radius</span><span class="p">))</span>
+            <span class="n">safety_circle</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+            
+            <span class="n">critical_circle</span><span class="o">.</span><span class="n">center</span> <span class="o">=</span> <span class="n">position</span>  
+            <span class="n">critical_circle</span><span class="o">.</span><span class="n">set_radius</span><span class="p">(</span><span class="nb">max</span><span class="p">(</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">critical_radius</span><span class="p">))</span>
+            <span class="n">critical_circle</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="n">speed</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span><span class="p">)</span>
+            
+            <span class="c1"># Update speed plot</span>
+            <span class="n">speeds</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">s</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">])</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">states</span><span class="p">[:</span><span class="n">frame</span><span class="o">+</span><span class="mi">1</span><span class="p">]]</span>
+            <span class="n">time_steps</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">speeds</span><span class="p">)))</span>
+            <span class="n">speed_line</span><span class="o">.</span><span class="n">set_data</span><span class="p">(</span><span class="n">time_steps</span><span class="p">,</span> <span class="n">speeds</span><span class="p">)</span>
+            
+            <span class="c1"># Color-code speed points based on safety</span>
+            <span class="n">colors</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;green&#39;</span> <span class="k">if</span> <span class="n">s</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> 
+                     <span class="k">else</span> <span class="s1">&#39;orange&#39;</span> <span class="k">if</span> <span class="n">s</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">*</span> <span class="mf">1.5</span> 
+                     <span class="k">else</span> <span class="s1">&#39;red&#39;</span> <span class="k">for</span> <span class="n">s</span> <span class="ow">in</span> <span class="n">speeds</span><span class="p">]</span>
+            <span class="k">if</span> <span class="n">speeds</span><span class="p">:</span>
+                <span class="n">speed_points</span><span class="o">.</span><span class="n">set_offsets</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="nb">zip</span><span class="p">(</span><span class="n">time_steps</span><span class="p">,</span> <span class="n">speeds</span><span class="p">)))</span>
+                <span class="n">speed_points</span><span class="o">.</span><span class="n">set_color</span><span class="p">(</span><span class="n">colors</span><span class="p">)</span>
+            
+            <span class="c1"># Update text displays</span>
+            <span class="n">action_name</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">&quot;Force Level </span><span class="si">{</span><span class="n">actions</span><span class="p">[</span><span class="n">frame</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span> <span class="k">if</span> <span class="n">frame</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">actions</span><span class="p">)</span> <span class="k">else</span> <span class="s1">&#39;Terminal&#39;</span>
+            <span class="n">step_text</span><span class="o">.</span><span class="n">set_text</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Step: </span><span class="si">{</span><span class="n">frame</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s1">/</span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">states</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="s1">Action: </span><span class="si">{</span><span class="n">action_name</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+            
+            <span class="n">velocity_text</span><span class="o">.</span><span class="n">set_text</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Velocity: [</span><span class="si">{</span><span class="n">velocity</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">, </span><span class="si">{</span><span class="n">velocity</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">]</span><span class="se">\n</span><span class="s1">&#39;</span> <span class="o">+</span>
+                                  <span class="sa">f</span><span class="s1">&#39;Speed: </span><span class="si">{</span><span class="n">speed</span><span class="si">:</span><span class="s1">.2f</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+            
+            <span class="n">current_reward</span> <span class="o">=</span> <span class="n">rewards</span><span class="p">[</span><span class="n">frame</span><span class="p">]</span> <span class="k">if</span> <span class="n">frame</span> <span class="o">&lt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">rewards</span><span class="p">)</span> <span class="k">else</span> <span class="mf">0.0</span>
+            <span class="n">total_reward</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">rewards</span><span class="p">[:</span><span class="n">frame</span><span class="o">+</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">reward_text</span><span class="o">.</span><span class="n">set_text</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;Step Reward: </span><span class="si">{</span><span class="n">current_reward</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="se">\n</span><span class="s1">Total Reward: </span><span class="si">{</span><span class="n">total_reward</span><span class="si">:</span><span class="s1">.1f</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+            
+            <span class="c1"># Update safety status</span>
+            <span class="k">if</span> <span class="n">speed</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">*</span> <span class="mf">1.5</span><span class="p">:</span>
+                <span class="n">safety_text</span><span class="o">.</span><span class="n">set_text</span><span class="p">(</span><span class="s1">&#39;⚠ CRITICAL VIOLATION ⚠</span><span class="se">\n</span><span class="s1">Terminal State!&#39;</span><span class="p">)</span>
+                <span class="n">safety_text</span><span class="o">.</span><span class="n">get_bbox_patch</span><span class="p">()</span><span class="o">.</span><span class="n">set_facecolor</span><span class="p">(</span><span class="s1">&#39;red&#39;</span><span class="p">)</span>
+                <span class="n">safety_text</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">elif</span> <span class="n">speed</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span><span class="p">:</span>
+                <span class="n">safety_text</span><span class="o">.</span><span class="n">set_text</span><span class="p">(</span><span class="s1">&#39;⚠ SAFETY VIOLATION ⚠&#39;</span><span class="p">)</span>
+                <span class="n">safety_text</span><span class="o">.</span><span class="n">get_bbox_patch</span><span class="p">()</span><span class="o">.</span><span class="n">set_facecolor</span><span class="p">(</span><span class="s1">&#39;orange&#39;</span><span class="p">)</span>
+                <span class="n">safety_text</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">safety_text</span><span class="o">.</span><span class="n">set_text</span><span class="p">(</span><span class="s1">&#39;✓ SAFE OPERATION ✓&#39;</span><span class="p">)</span>
+                <span class="n">safety_text</span><span class="o">.</span><span class="n">get_bbox_patch</span><span class="p">()</span><span class="o">.</span><span class="n">set_facecolor</span><span class="p">(</span><span class="s1">&#39;green&#39;</span><span class="p">)</span>
+                <span class="n">safety_text</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">True</span><span class="p">)</span>
+            
+            <span class="k">return</span> <span class="p">(</span><span class="n">ant_scatter</span><span class="p">,</span> <span class="n">path_line</span><span class="p">,</span> <span class="n">velocity_arrow</span><span class="p">,</span> <span class="n">force_arrow</span><span class="p">,</span> 
+                   <span class="n">speed_line</span><span class="p">,</span> <span class="n">speed_points</span><span class="p">,</span> <span class="n">step_text</span><span class="p">,</span> <span class="n">velocity_text</span><span class="p">,</span> 
+                   <span class="n">reward_text</span><span class="p">,</span> <span class="n">safety_text</span><span class="p">)</span>
+        
+        <span class="c1"># Create animation</span>
+        <span class="n">ani</span> <span class="o">=</span> <span class="n">animation</span><span class="o">.</span><span class="n">FuncAnimation</span><span class="p">(</span><span class="n">fig</span><span class="p">,</span> <span class="n">animate</span><span class="p">,</span> <span class="n">frames</span><span class="o">=</span><span class="nb">len</span><span class="p">(</span><span class="n">states</span><span class="p">),</span> 
+                                    <span class="n">interval</span><span class="o">=</span><span class="mi">1200</span><span class="p">,</span> <span class="n">blit</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">repeat</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        
+        <span class="n">plt</span><span class="o">.</span><span class="n">tight_layout</span><span class="p">()</span>
+        
+        <span class="c1"># Save animation</span>
+        <span class="n">cache_path</span><span class="o">.</span><span class="n">parent</span><span class="o">.</span><span class="n">mkdir</span><span class="p">(</span><span class="n">parents</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">exist_ok</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+        <span class="n">ani</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">cache_path</span><span class="p">,</span> <span class="n">writer</span><span class="o">=</span><span class="s2">&quot;pillow&quot;</span><span class="p">,</span> <span class="n">fps</span><span class="o">=</span><span class="mf">0.8</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">close</span><span class="p">(</span><span class="n">fig</span><span class="p">)</span>  <span class="c1"># Free memory</span></div>
+
+
+<div class="viewcode-block" id="SafeAntVelocityPOMDP.compute_metrics">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityPOMDP.compute_metrics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">histories</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">History</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">MetricValue</span><span class="p">]:</span>
+        <span class="c1"># Initialize metrics</span>
+        <span class="n">safety_violations</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">critical_violations</span> <span class="o">=</span> <span class="p">[]</span>
+        
+        <span class="c1"># Process each history</span>
+        <span class="k">for</span> <span class="n">history</span> <span class="ow">in</span> <span class="n">histories</span><span class="p">:</span>
+            <span class="n">history_safety_violations</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">history_critical_violations</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">total_steps</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">)</span>
+            
+            <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">:</span>
+                <span class="c1"># Get velocity from state</span>
+                <span class="n">velocity</span> <span class="o">=</span> <span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="p">[</span><span class="mi">2</span><span class="p">:</span><span class="mi">4</span><span class="p">]</span>  <span class="c1"># [vx, vy]</span>
+                <span class="n">speed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">velocity</span><span class="p">)</span>
+                
+                <span class="c1"># Count safety violations</span>
+                <span class="k">if</span> <span class="n">speed</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span><span class="p">:</span>
+                    <span class="n">history_safety_violations</span> <span class="o">+=</span> <span class="mi">1</span>
+                
+                <span class="c1"># Count critical violations (termination condition)</span>
+                <span class="k">if</span> <span class="n">speed</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">safe_velocity_threshold</span> <span class="o">*</span> <span class="mf">1.5</span><span class="p">:</span>
+                    <span class="n">history_critical_violations</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+            <span class="c1"># Convert to rates for this history</span>
+            <span class="k">if</span> <span class="n">total_steps</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">safety_violations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">history_safety_violations</span><span class="p">)</span>
+                <span class="n">critical_violations</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">history_critical_violations</span><span class="p">)</span>
+        
+        <span class="c1"># Calculate average rates and confidence intervals</span>
+        <span class="n">total_steps</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">)</span> <span class="k">for</span> <span class="n">history</span> <span class="ow">in</span> <span class="n">histories</span><span class="p">)</span>
+        <span class="n">avg_safety_violations</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">safety_violations</span><span class="p">)</span> <span class="o">/</span> <span class="n">total_steps</span> <span class="k">if</span> <span class="n">total_steps</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span>
+        <span class="n">avg_critical_violations</span> <span class="o">=</span> <span class="nb">sum</span><span class="p">(</span><span class="n">critical_violations</span><span class="p">)</span> <span class="o">/</span> <span class="n">total_steps</span> <span class="k">if</span> <span class="n">total_steps</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="k">else</span> <span class="mi">0</span>
+        
+        <span class="c1"># Calculate confidence intervals using bootstrap</span>
+        <span class="n">safety_rates</span> <span class="o">=</span> <span class="p">[</span><span class="n">v</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span><span class="p">,</span> <span class="n">history</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">safety_violations</span><span class="p">,</span> <span class="n">histories</span><span class="p">)]</span>
+        <span class="n">critical_rates</span> <span class="o">=</span> <span class="p">[</span><span class="n">v</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">)</span> <span class="k">for</span> <span class="n">v</span><span class="p">,</span> <span class="n">history</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">critical_violations</span><span class="p">,</span> <span class="n">histories</span><span class="p">)]</span>
+        
+        <span class="n">safety_violations_ci</span> <span class="o">=</span> <span class="n">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">safety_rates</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">critical_violations_ci</span> <span class="o">=</span> <span class="n">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">critical_rates</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        
+        <span class="c1"># Calculate confidence intervals for total violations</span>
+        <span class="n">total_safety_violations_ci</span> <span class="o">=</span> <span class="n">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">safety_violations</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">total_critical_violations_ci</span> <span class="o">=</span> <span class="n">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">critical_violations</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="n">MetricValue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;safety_violation_rate&quot;</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">avg_safety_violations</span><span class="p">,</span>
+                <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="n">safety_violations_ci</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="n">safety_violations_ci</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="p">),</span>
+            <span class="n">MetricValue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;critical_violation_rate&quot;</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">avg_critical_violations</span><span class="p">,</span>
+                <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="n">critical_violations_ci</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="n">critical_violations_ci</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="p">),</span>
+            <span class="n">MetricValue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;total_safety_violations&quot;</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="nb">sum</span><span class="p">(</span><span class="n">safety_violations</span><span class="p">),</span>
+                <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="n">total_safety_violations_ci</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="n">total_safety_violations_ci</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="p">),</span>
+            <span class="n">MetricValue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;total_critical_violations&quot;</span><span class="p">,</span> 
+                <span class="n">value</span><span class="o">=</span><span class="nb">sum</span><span class="p">(</span><span class="n">critical_violations</span><span class="p">),</span>
+                <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="n">total_critical_violations_ci</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="n">total_critical_violations_ci</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+            <span class="p">)</span>
+        <span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="SafeAntVelocityPOMDP.sample_next_step">
+<a class="viewcode-back" href="../../../api/POMDPPlanners.environments.safety_ant_velocity_pomdp.html#POMDPPlanners.environments.SafeAntVelocityPOMDP.sample_next_step">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample_next_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Tuple</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="nb">float</span><span class="p">]:</span>
+        <span class="n">next_state</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">next_observation</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">next_state</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action</span>
+        <span class="p">)</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">reward</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="o">=</span><span class="n">next_state</span><span class="p">,</span> <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">next_state</span><span class="p">,</span> <span class="n">next_observation</span><span class="p">,</span> <span class="n">reward</span> </div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

@@ -1,0 +1,505 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_planners.test_planners_usage_examples &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_planners.test_planners_usage_examples</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_planners.test_planners_usage_examples</h1><div class="highlight"><pre>
+<span></span><span class="ch">#!/usr/bin/env python3</span>
+<span class="sd">&quot;&quot;&quot;Test script to verify all usage examples from planner classes work correctly.&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">traceback</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="c1"># Add the current directory to Python path for relative imports</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="vm">__file__</span><span class="p">)))</span>
+
+<div class="viewcode-block" id="test_pomcp_usage_example">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_planners.test_planners_usage_examples.html#POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_pomcp_usage_example">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_pomcp_usage_example</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test the POMCP usage example from the class docstring.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that POMCP planner correctly works with TigerPOMDP environment and returns valid actions</span>
+<span class="sd">    </span>
+<span class="sd">    Given: TigerPOMDP environment with discount_factor=0.95, POMCP planner with depth=5, n_simulations=10, and initial belief with 100 particles</span>
+<span class="sd">    When: POMCP planner.action() is called with initial belief</span>
+<span class="sd">    Then: Returns single action from valid action space [&quot;listen&quot;, &quot;open_left&quot;, &quot;open_right&quot;] and run_data with info_variables</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: example</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing POMCP usage example...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_initial_belief</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.pomcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">POMCP</span>
+        
+        <span class="c1"># Create environment and planner (using smaller parameters for testing)</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">planner</span> <span class="o">=</span> <span class="n">POMCP</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="n">env</span><span class="o">.</span><span class="n">discount_factor</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>                   <span class="c1"># Reduced for testing</span>
+            <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;POMCP_Tiger&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">10</span>          <span class="c1"># Reduced for testing</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Plan action from initial belief</span>
+        <span class="n">initial_belief</span> <span class="o">=</span> <span class="n">get_initial_belief</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>  <span class="c1"># Reduced for testing</span>
+        <span class="n">action</span><span class="p">,</span> <span class="n">run_data</span> <span class="o">=</span> <span class="n">planner</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">initial_belief</span><span class="p">)</span>
+        
+        <span class="c1"># Verify results</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected single action, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">],</span> <span class="sa">f</span><span class="s2">&quot;Unexpected action: </span><span class="si">{</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">run_data</span><span class="p">,</span> <span class="s1">&#39;info_variables&#39;</span><span class="p">),</span> <span class="s2">&quot;Missing info_variables in run_data&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✓ Selected action: </span><span class="si">{</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✓ Tree stats available: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">run_data</span><span class="o">.</span><span class="n">info_variables</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">0</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ POMCP usage example passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ POMCP usage example failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="test_pft_dpw_usage_example">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_planners.test_planners_usage_examples.html#POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_pft_dpw_usage_example">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_pft_dpw_usage_example</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test the PFT-DPW usage example with a custom action sampler.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that PFT-DPW planner works correctly with CartPole environment and custom action sampler</span>
+<span class="sd">    </span>
+<span class="sd">    Given: CartPolePOMDP environment with noise_cov, PFT-DPW planner with depth=3, n_simulations=5, custom CartPoleActionSampler, and initial belief with 50 particles</span>
+<span class="sd">    When: PFT-DPW planner.action() is called with initial belief</span>
+<span class="sd">    Then: Returns single action from valid action space [0, 1] and run_data with info_variables, confirming custom action sampler integration</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: example</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing PFT-DPW usage example...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.pft_dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">PFT_DPW</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.cartpole_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartPolePOMDP</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_initial_belief</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+        
+        <span class="c1"># Custom action sampler for CartPole</span>
+        <span class="k">class</span><span class="w"> </span><span class="nc">CartPoleActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>  <span class="c1"># Left or right force</span>
+        
+        <span class="c1"># Create CartPole environment</span>
+        <span class="n">noise_cov</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">])</span>
+        <span class="n">cartpole</span> <span class="o">=</span> <span class="n">CartPolePOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+            <span class="n">noise_cov</span><span class="o">=</span><span class="n">noise_cov</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Create PFT-DPW planner with custom action sampler</span>
+        <span class="n">pft_planner</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">cartpole</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>                  <span class="c1"># Reduced for testing</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_CartPole&quot;</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">CartPoleActionSampler</span><span class="p">(),</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">5</span>          <span class="c1"># Reduced for testing</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Plan action</span>
+        <span class="n">initial_belief</span> <span class="o">=</span> <span class="n">get_initial_belief</span><span class="p">(</span><span class="n">cartpole</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>  <span class="c1"># Reduced for testing</span>
+        <span class="n">action</span><span class="p">,</span> <span class="n">run_data</span> <span class="o">=</span> <span class="n">pft_planner</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">initial_belief</span><span class="p">)</span>
+        
+        <span class="c1"># Verify results</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected single action, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="sa">f</span><span class="s2">&quot;Expected action 0 or 1, got </span><span class="si">{</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">run_data</span><span class="p">,</span> <span class="s1">&#39;info_variables&#39;</span><span class="p">),</span> <span class="s2">&quot;Missing info_variables in run_data&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✓ Selected action: </span><span class="si">{</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✓ Action sampler working correctly&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ PFT-DPW usage example passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ PFT-DPW usage example failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="test_sparse_sampling_usage_example">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_planners.test_planners_usage_examples.html#POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_sparse_sampling_usage_example">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_sparse_sampling_usage_example</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test the StandardSparseSamplingDiscreteActionsPlanner usage example.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that Sparse Sampling planner correctly works with TigerPOMDP environment</span>
+<span class="sd">    </span>
+<span class="sd">    Given: TigerPOMDP environment with discount_factor=0.95, StandardSparseSamplingDiscreteActionsPlanner with branching_factor=3, depth=3, and initial belief with 100 particles</span>
+<span class="sd">    When: Sparse sampling planner.action() is called with initial belief</span>
+<span class="sd">    Then: Returns single action from valid action space [&quot;listen&quot;, &quot;open_left&quot;, &quot;open_right&quot;] and run_data with info_variables, confirming sparse sampling completion</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: example</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing Sparse Sampling usage example...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_initial_belief</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.sparse_sampling_planner</span><span class="w"> </span><span class="kn">import</span> <span class="n">StandardSparseSamplingDiscreteActionsPlanner</span>
+        
+        <span class="c1"># Create environment and planner</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">planner</span> <span class="o">=</span> <span class="n">StandardSparseSamplingDiscreteActionsPlanner</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
+            <span class="n">branching_factor</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>       <span class="c1"># Reduced for testing</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>                  <span class="c1"># Reduced for testing</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;SparseSampling_Tiger&quot;</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Plan action from initial belief</span>
+        <span class="n">initial_belief</span> <span class="o">=</span> <span class="n">get_initial_belief</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>  <span class="c1"># Reduced for testing</span>
+        <span class="n">action</span><span class="p">,</span> <span class="n">run_data</span> <span class="o">=</span> <span class="n">planner</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">initial_belief</span><span class="p">)</span>
+        
+        <span class="c1"># Verify results</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected single action, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">],</span> <span class="sa">f</span><span class="s2">&quot;Unexpected action: </span><span class="si">{</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">run_data</span><span class="p">,</span> <span class="s1">&#39;info_variables&#39;</span><span class="p">),</span> <span class="s2">&quot;Missing info_variables in run_data&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✓ Selected action: </span><span class="si">{</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✓ Sparse sampling completed successfully&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ Sparse Sampling usage example passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ Sparse Sampling usage example failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="test_sparse_pft_usage_example">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_planners.test_planners_usage_examples.html#POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_sparse_pft_usage_example">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_sparse_pft_usage_example</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test the Sparse-PFT usage example from the class docstring.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that Sparse-PFT planner correctly works with TigerPOMDP environment and controlled branching</span>
+<span class="sd">    </span>
+<span class="sd">    Given: TigerPOMDP environment with discount_factor=0.95, SparsePFT planner with depth=5, belief_child_num=3, n_simulations=10, and initial belief with 50 particles</span>
+<span class="sd">    When: Sparse-PFT planner.action() is called with initial belief</span>
+<span class="sd">    Then: Returns single action from valid action space [&quot;listen&quot;, &quot;open_left&quot;, &quot;open_right&quot;] and run_data with info_variables, confirming tree metrics collection</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: example</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing Sparse-PFT usage example...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.sparse_pft</span><span class="w"> </span><span class="kn">import</span> <span class="n">SparsePFT</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_initial_belief</span>
+        
+        <span class="c1"># Create Tiger POMDP environment</span>
+        <span class="n">tiger</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        
+        <span class="c1"># Create Sparse-PFT planner with controlled branching (using small parameters for testing)</span>
+        <span class="n">sparse_pft</span> <span class="o">=</span> <span class="n">SparsePFT</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">tiger</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">gamma</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>                  <span class="c1"># Discount for recursive calls</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">5</span><span class="p">,</span>                     <span class="c1"># Reduced for testing</span>
+            <span class="n">c_ucb</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>                   <span class="c1"># Base exploration constant</span>
+            <span class="n">beta_ucb</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>                <span class="c1"># Enhanced exploration parameter</span>
+            <span class="n">belief_child_num</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>          <span class="c1"># Reduced for testing</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>            <span class="c1"># Reduced for testing</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;SparsePFT_Tiger&quot;</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Plan action from initial belief</span>
+        <span class="n">initial_belief</span> <span class="o">=</span> <span class="n">get_initial_belief</span><span class="p">(</span><span class="n">tiger</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">50</span><span class="p">)</span>  <span class="c1"># Reduced for testing</span>
+        <span class="n">action</span><span class="p">,</span> <span class="n">run_data</span> <span class="o">=</span> <span class="n">sparse_pft</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">initial_belief</span><span class="p">)</span>
+        
+        <span class="c1"># Verify results</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected single action, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">],</span> <span class="sa">f</span><span class="s2">&quot;Unexpected action: </span><span class="si">{</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">run_data</span><span class="p">,</span> <span class="s1">&#39;info_variables&#39;</span><span class="p">),</span> <span class="s2">&quot;Missing info_variables in run_data&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✓ Selected action: </span><span class="si">{</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✓ Tree metrics collected: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">run_data</span><span class="o">.</span><span class="n">info_variables</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ Sparse-PFT usage example passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ Sparse-PFT usage example failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="test_discrete_action_sequences_planner_example">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_planners.test_planners_usage_examples.html#POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_discrete_action_sequences_planner_example">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_discrete_action_sequences_planner_example</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test the DiscreteActionSequencesPlanner if it exists.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that DiscreteActionSequencesPlanner correctly works with TigerPOMDP environment and short sequences</span>
+<span class="sd">    </span>
+<span class="sd">    Given: TigerPOMDP environment with discount_factor=0.95, DiscreteActionSequencesPlanner with sequence_length=2, and initial belief with 100 particles</span>
+<span class="sd">    When: Discrete action sequences planner.action() is called with initial belief</span>
+<span class="sd">    Then: Returns single action from valid action space [&quot;listen&quot;, &quot;open_left&quot;, &quot;open_right&quot;], confirming planner functionality</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: example</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing Discrete Action Sequences Planner example...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteActionSequencesPlanner</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_initial_belief</span>
+        
+        <span class="c1"># Create environment</span>
+        <span class="n">env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        
+        <span class="c1"># Create planner with short sequences for testing</span>
+        <span class="n">planner</span> <span class="o">=</span> <span class="n">DiscreteActionSequencesPlanner</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
+            <span class="n">sequence_length</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>        <span class="c1"># Short sequence for testing</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;DiscreteSequences_Tiger&quot;</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Plan action from initial belief</span>
+        <span class="n">initial_belief</span> <span class="o">=</span> <span class="n">get_initial_belief</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">100</span><span class="p">)</span>
+        <span class="n">action</span><span class="p">,</span> <span class="n">run_data</span> <span class="o">=</span> <span class="n">planner</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">initial_belief</span><span class="p">)</span>
+        
+        <span class="c1"># Verify results</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">,</span> <span class="sa">f</span><span class="s2">&quot;Expected single action, got </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">action</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span>
+        <span class="k">assert</span> <span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;listen&quot;</span><span class="p">,</span> <span class="s2">&quot;open_left&quot;</span><span class="p">,</span> <span class="s2">&quot;open_right&quot;</span><span class="p">],</span> <span class="sa">f</span><span class="s2">&quot;Unexpected action: </span><span class="si">{</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✓ Selected action: </span><span class="si">{</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ Discrete Action Sequences Planner example passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">ImportError</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ⚠ Discrete Action Sequences Planner not found, skipping...&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ Discrete Action Sequences Planner example failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="test_space_info_consistency">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_planners.test_planners_usage_examples.html#POMDPPlanners.tests.test_planners.test_planners_usage_examples.test_space_info_consistency">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_space_info_consistency</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Test that all planners report consistent space info.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that different planner types correctly report consistent space information for discrete and continuous environments</span>
+<span class="sd">    </span>
+<span class="sd">    Given: TigerPOMDP (discrete), CartPolePOMDP (continuous), POMCP, StandardSparseSamplingDiscreteActionsPlanner, PFT_DPW planners with SimpleActionSampler</span>
+<span class="sd">    When: get_space_info() is called on each planner</span>
+<span class="sd">    Then: Discrete planners report SpaceType.DISCRETE, continuous planners report SpaceType.CONTINUOUS, confirming space type consistency across planner implementations</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Testing planner space info consistency...&quot;</span><span class="p">)</span>
+    
+    <span class="k">try</span><span class="p">:</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.cartpole_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartPolePOMDP</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.pomcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">POMCP</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.sparse_sampling_planner</span><span class="w"> </span><span class="kn">import</span> <span class="n">StandardSparseSamplingDiscreteActionsPlanner</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.pft_dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">PFT_DPW</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.planners_utils.dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">ActionSampler</span>
+        <span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.environment</span><span class="w"> </span><span class="kn">import</span> <span class="n">SpaceType</span>
+        <span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+        
+        <span class="c1"># Simple action sampler</span>
+        <span class="k">class</span><span class="w"> </span><span class="nc">SimpleActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+            <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+                <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>
+        
+        <span class="c1"># Test discrete environment with discrete planners</span>
+        <span class="n">tiger_env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        
+        <span class="n">pomcp_discrete</span> <span class="o">=</span> <span class="n">POMCP</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">tiger_env</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span>
+            <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;POMCP_Discrete&quot;</span><span class="p">,</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">5</span>
+        <span class="p">)</span>
+        
+        <span class="n">sparse_discrete</span> <span class="o">=</span> <span class="n">StandardSparseSamplingDiscreteActionsPlanner</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">tiger_env</span><span class="p">,</span>
+            <span class="n">branching_factor</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;Sparse_Discrete&quot;</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Check space info for discrete planners</span>
+        <span class="n">pomcp_info</span> <span class="o">=</span> <span class="n">pomcp_discrete</span><span class="o">.</span><span class="n">get_space_info</span><span class="p">()</span>
+        <span class="n">sparse_info</span> <span class="o">=</span> <span class="n">sparse_discrete</span><span class="o">.</span><span class="n">get_space_info</span><span class="p">()</span>
+        
+        <span class="k">assert</span> <span class="n">pomcp_info</span><span class="o">.</span><span class="n">action_space</span> <span class="o">==</span> <span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span> <span class="s2">&quot;POMCP should handle discrete actions&quot;</span>
+        <span class="k">assert</span> <span class="n">sparse_info</span><span class="o">.</span><span class="n">action_space</span> <span class="o">==</span> <span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span> <span class="s2">&quot;Sparse sampling should handle discrete actions&quot;</span>
+        
+        <span class="c1"># Test continuous environment with continuous planner</span>
+        <span class="n">cartpole</span> <span class="o">=</span> <span class="n">CartPolePOMDP</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+            <span class="n">noise_cov</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">])</span>
+        <span class="p">)</span>
+        
+        <span class="n">pft_dpw_continuous</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+            <span class="n">environment</span><span class="o">=</span><span class="n">cartpole</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+            <span class="n">depth</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Continuous&quot;</span><span class="p">,</span>
+            <span class="n">action_sampler</span><span class="o">=</span><span class="n">SimpleActionSampler</span><span class="p">(),</span>
+            <span class="n">n_simulations</span><span class="o">=</span><span class="mi">3</span>
+        <span class="p">)</span>
+        
+        <span class="n">pft_info</span> <span class="o">=</span> <span class="n">pft_dpw_continuous</span><span class="o">.</span><span class="n">get_space_info</span><span class="p">()</span>
+        <span class="k">assert</span> <span class="n">pft_info</span><span class="o">.</span><span class="n">action_space</span> <span class="o">==</span> <span class="n">SpaceType</span><span class="o">.</span><span class="n">CONTINUOUS</span><span class="p">,</span> <span class="s2">&quot;PFT-DPW should handle continuous actions&quot;</span>
+        
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ All planners report consistent space information&quot;</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;  ✓ Space info consistency test passed!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span>
+        
+    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;  ✗ Space info consistency test failed: </span><span class="si">{</span><span class="n">e</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+        <span class="k">return</span> <span class="kc">False</span></div>
+
+
+<div class="viewcode-block" id="main">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_planners.test_planners_usage_examples.html#POMDPPlanners.tests.test_planners.test_planners_usage_examples.main">[docs]</a>
+<span class="k">def</span><span class="w"> </span><span class="nf">main</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Run all planner usage examples.&quot;&quot;&quot;</span>
+    <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Running ALL usage examples from planners directory classes...</span><span class="se">\n</span><span class="s2">&quot;</span><span class="p">)</span>
+    
+    <span class="n">tests</span> <span class="o">=</span> <span class="p">[</span>
+        <span class="n">test_pomcp_usage_example</span><span class="p">,</span>
+        <span class="n">test_pft_dpw_usage_example</span><span class="p">,</span>
+        <span class="n">test_sparse_sampling_usage_example</span><span class="p">,</span>
+        <span class="n">test_sparse_pft_usage_example</span><span class="p">,</span>
+        <span class="n">test_discrete_action_sequences_planner_example</span><span class="p">,</span>
+        <span class="n">test_space_info_consistency</span><span class="p">,</span>
+    <span class="p">]</span>
+    
+    <span class="n">passed</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">tests</span><span class="p">)</span>
+    
+    <span class="k">for</span> <span class="n">test_func</span> <span class="ow">in</span> <span class="n">tests</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">test_func</span><span class="p">():</span>
+            <span class="n">passed</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="nb">print</span><span class="p">()</span>
+    
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Results: </span><span class="si">{</span><span class="n">passed</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">total</span><span class="si">}</span><span class="s2"> planner test groups passed&quot;</span><span class="p">)</span>
+    
+    <span class="k">if</span> <span class="n">passed</span> <span class="o">==</span> <span class="n">total</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;🎉 ALL planner usage examples work correctly!&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">0</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">&quot;❌ Some planner usage examples have issues.&quot;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">1</span></div>
+
+
+<span class="k">if</span> <span class="vm">__name__</span> <span class="o">==</span> <span class="s2">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

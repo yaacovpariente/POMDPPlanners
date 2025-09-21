@@ -1,0 +1,1377 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.core.simulation package &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="POMDPPlanners.environments package" href="POMDPPlanners.environments.html" />
+    <link rel="prev" title="POMDPPlanners.core package" href="POMDPPlanners.core.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.html">POMDPPlanners package</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="POMDPPlanners.core.html">POMDPPlanners.core package</a><ul class="current">
+<li class="toctree-l3 current"><a class="reference internal" href="POMDPPlanners.core.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4 current"><a class="current reference internal" href="#">POMDPPlanners.core.simulation package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.core.html#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.core.html#module-POMDPPlanners.core.belief">POMDPPlanners.core.belief module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.core.html#module-POMDPPlanners.core.config_types">POMDPPlanners.core.config_types module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.core.html#module-POMDPPlanners.core.cost">POMDPPlanners.core.cost module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.core.html#module-POMDPPlanners.core.distributions">POMDPPlanners.core.distributions module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.core.html#module-POMDPPlanners.core.environment">POMDPPlanners.core.environment module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.core.html#module-POMDPPlanners.core.policy">POMDPPlanners.core.policy module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.core.html#module-POMDPPlanners.core.tree">POMDPPlanners.core.tree module</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.environments.html">POMDPPlanners.environments package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.planners.html">POMDPPlanners.planners package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.simulations.html">POMDPPlanners.simulations package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.utils.html">POMDPPlanners.utils package</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="POMDPPlanners.html">POMDPPlanners package</a></li>
+          <li class="breadcrumb-item"><a href="POMDPPlanners.core.html">POMDPPlanners.core package</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.core.simulation package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.core.simulation.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-POMDPPlanners.core.simulation">
+<span id="pomdpplanners-core-simulation-package"></span><h1>POMDPPlanners.core.simulation package<a class="headerlink" href="#module-POMDPPlanners.core.simulation" title="Link to this heading"></a></h1>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.CategoricalHyperParameter">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.</span></span><span class="sig-name descname"><span class="pre">CategoricalHyperParameter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">choices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/hyperparameter_tuning.html#CategoricalHyperParameter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.CategoricalHyperParameter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.NamedTuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>choices</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a><em>]</em>)</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.CategoricalHyperParameter.choices">
+<span class="sig-name descname"><span class="pre">choices</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.CategoricalHyperParameter.choices" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.CategoricalHyperParameter.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.CategoricalHyperParameter.name" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.DataBaseInterface">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.</span></span><span class="sig-name descname"><span class="pre">DataBaseInterface</span></span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#DataBaseInterface"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.DataBaseInterface" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.DataBaseInterface.clear">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#DataBaseInterface.clear"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.DataBaseInterface.clear" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.DataBaseInterface.get">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#DataBaseInterface.get"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.DataBaseInterface.get" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.DataBaseInterface.is_key_in_cache">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_key_in_cache</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#DataBaseInterface.is_key_in_cache"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.DataBaseInterface.is_key_in_cache" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.DataBaseInterface.set">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#DataBaseInterface.set"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.DataBaseInterface.set" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.EnvironmentRunParams">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.</span></span><span class="sig-name descname"><span class="pre">EnvironmentRunParams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">belief</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policies</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_episodes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_steps</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/simulation_configs.html#EnvironmentRunParams"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.EnvironmentRunParams" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>environment</strong> (<a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><em>Environment</em></a>)</p></li>
+<li><p><strong>belief</strong> (<a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><em>Belief</em></a>)</p></li>
+<li><p><strong>policies</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.Policy" title="POMDPPlanners.core.policy.Policy"><em>Policy</em></a><em>]</em>)</p></li>
+<li><p><strong>num_episodes</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>num_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.EnvironmentRunParams.belief">
+<span class="sig-name descname"><span class="pre">belief</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.EnvironmentRunParams.belief" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.EnvironmentRunParams.environment">
+<span class="sig-name descname"><span class="pre">environment</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.EnvironmentRunParams.environment" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.EnvironmentRunParams.num_episodes">
+<span class="sig-name descname"><span class="pre">num_episodes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.EnvironmentRunParams.num_episodes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.EnvironmentRunParams.num_steps">
+<span class="sig-name descname"><span class="pre">num_steps</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.EnvironmentRunParams.num_steps" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.EnvironmentRunParams.policies">
+<span class="sig-name descname"><span class="pre">policies</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a><span class="pre">[</span><a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.Policy" title="POMDPPlanners.core.policy.Policy"><code class="xref py py-class docutils literal notranslate"><span class="pre">Policy</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.EnvironmentRunParams.policies" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.</span></span><span class="sig-name descname"><span class="pre">History</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">history</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">discount_factor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average_state_sampling_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average_action_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average_observation_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average_belief_update_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average_reward_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">actual_num_steps</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reach_terminal_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy_run_data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/history.html#History"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.History" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>history</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference internal" href="#POMDPPlanners.core.simulation.history.StepData" title="POMDPPlanners.core.simulation.history.StepData"><em>StepData</em></a><em>]</em>)</p></li>
+<li><p><strong>discount_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>average_state_sampling_time</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>average_action_time</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>average_observation_time</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>average_belief_update_time</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>average_reward_time</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>actual_num_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>reach_terminal_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+<li><p><strong>policy_run_data</strong> (<a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.PolicyRunData" title="POMDPPlanners.core.policy.PolicyRunData"><em>PolicyRunData</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History.actual_num_steps">
+<span class="sig-name descname"><span class="pre">actual_num_steps</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.History.actual_num_steps" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History.average_action_time">
+<span class="sig-name descname"><span class="pre">average_action_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.History.average_action_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History.average_belief_update_time">
+<span class="sig-name descname"><span class="pre">average_belief_update_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.History.average_belief_update_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History.average_observation_time">
+<span class="sig-name descname"><span class="pre">average_observation_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.History.average_observation_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History.average_reward_time">
+<span class="sig-name descname"><span class="pre">average_reward_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.History.average_reward_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History.average_state_sampling_time">
+<span class="sig-name descname"><span class="pre">average_state_sampling_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.History.average_state_sampling_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History.discount_factor">
+<span class="sig-name descname"><span class="pre">discount_factor</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.History.discount_factor" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History.from_dict">
+<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/history.html#History.from_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.History.from_dict" title="Link to this definition"></a></dt>
+<dd><p>Create a History instance from a dictionary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>data</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></a></span>) – Dictionary containing History data</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>New History instance</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#POMDPPlanners.core.simulation.History" title="POMDPPlanners.core.simulation.History">History</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History.history">
+<span class="sig-name descname"><span class="pre">history</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a><span class="pre">[</span><a class="reference internal" href="#POMDPPlanners.core.simulation.history.StepData" title="POMDPPlanners.core.simulation.history.StepData"><code class="xref py py-class docutils literal notranslate"><span class="pre">StepData</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.History.history" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History.policy_run_data">
+<span class="sig-name descname"><span class="pre">policy_run_data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.PolicyRunData" title="POMDPPlanners.core.policy.PolicyRunData"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyRunData</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.History.policy_run_data" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History.reach_terminal_state">
+<span class="sig-name descname"><span class="pre">reach_terminal_state</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.History.reach_terminal_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.History.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/history.html#History.to_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.History.to_dict" title="Link to this definition"></a></dt>
+<dd><p>Convert History object to dictionary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.</span></span><span class="sig-name descname"><span class="pre">HyperParameterRunParams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">belief</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policies</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_episodes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_steps</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hyper_parameters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b_trials</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_jobs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_visualizations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">experiment_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mlflow_tracking_uri</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mlruns_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/simulation_configs.html#HyperParameterRunParams"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>environment</strong> (<a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><em>Environment</em></a>)</p></li>
+<li><p><strong>belief</strong> (<a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><em>Belief</em></a>)</p></li>
+<li><p><strong>policies</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.Policy" title="POMDPPlanners.core.policy.Policy"><em>Policy</em></a><em>]</em>)</p></li>
+<li><p><strong>num_episodes</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>num_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>hyper_parameters</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter" title="POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter"><em>CategoricalHyperParameter</em></a><em> | </em><a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter" title="POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter"><em>NumericalHyperParameter</em></a><em>]</em>)</p></li>
+<li><p><strong>b_trials</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>n_jobs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>cache_visualizations</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+<li><p><strong>cache_dir_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><em>Path</em></a>)</p></li>
+<li><p><strong>experiment_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>mlflow_tracking_uri</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>mlruns_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><em>Path</em></a><em> | </em><em>None</em>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.b_trials">
+<span class="sig-name descname"><span class="pre">b_trials</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.b_trials" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.belief">
+<span class="sig-name descname"><span class="pre">belief</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.belief" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.cache_dir_path">
+<span class="sig-name descname"><span class="pre">cache_dir_path</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Path</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.cache_dir_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.cache_visualizations">
+<span class="sig-name descname"><span class="pre">cache_visualizations</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.cache_visualizations" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.environment">
+<span class="sig-name descname"><span class="pre">environment</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.environment" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.experiment_name">
+<span class="sig-name descname"><span class="pre">experiment_name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.experiment_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.hyper_parameters">
+<span class="sig-name descname"><span class="pre">hyper_parameters</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code></a><span class="pre">[</span><a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter" title="POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter"><code class="xref py py-class docutils literal notranslate"><span class="pre">CategoricalHyperParameter</span></code></a><span class="pre">,</span> <a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter" title="POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter"><code class="xref py py-class docutils literal notranslate"><span class="pre">NumericalHyperParameter</span></code></a><span class="pre">]]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.hyper_parameters" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.mlflow_tracking_uri">
+<span class="sig-name descname"><span class="pre">mlflow_tracking_uri</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.mlflow_tracking_uri" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.mlruns_path">
+<span class="sig-name descname"><span class="pre">mlruns_path</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Path</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.mlruns_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.n_jobs">
+<span class="sig-name descname"><span class="pre">n_jobs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.n_jobs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.num_episodes">
+<span class="sig-name descname"><span class="pre">num_episodes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.num_episodes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.num_steps">
+<span class="sig-name descname"><span class="pre">num_steps</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.num_steps" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.HyperParameterRunParams.policies">
+<span class="sig-name descname"><span class="pre">policies</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a><span class="pre">[</span><a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.Policy" title="POMDPPlanners.core.policy.Policy"><code class="xref py py-class docutils literal notranslate"><span class="pre">Policy</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.HyperParameterRunParams.policies" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.MetricValue">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.</span></span><span class="sig-name descname"><span class="pre">MetricValue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lower_confidence_bound</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">upper_confidence_bound</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/metrics.html#MetricValue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.MetricValue" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.NamedTuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>lower_confidence_bound</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>upper_confidence_bound</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.MetricValue.lower_confidence_bound">
+<span class="sig-name descname"><span class="pre">lower_confidence_bound</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.MetricValue.lower_confidence_bound" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.MetricValue.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.MetricValue.name" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.MetricValue.upper_confidence_bound">
+<span class="sig-name descname"><span class="pre">upper_confidence_bound</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.MetricValue.upper_confidence_bound" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 3</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.MetricValue.value">
+<span class="sig-name descname"><span class="pre">value</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.MetricValue.value" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.NumericalHyperParameter">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.</span></span><span class="sig-name descname"><span class="pre">NumericalHyperParameter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">low</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">high</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/hyperparameter_tuning.html#NumericalHyperParameter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.NumericalHyperParameter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.NamedTuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>low</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>high</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.NumericalHyperParameter.high">
+<span class="sig-name descname"><span class="pre">high</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a><span class="pre">,</span> <a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.NumericalHyperParameter.high" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.NumericalHyperParameter.low">
+<span class="sig-name descname"><span class="pre">low</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a><span class="pre">,</span> <a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.NumericalHyperParameter.low" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.NumericalHyperParameter.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.NumericalHyperParameter.name" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.SimulationTask">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.</span></span><span class="sig-name descname"><span class="pre">SimulationTask</span></span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#SimulationTask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.SimulationTask" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.SimulationTask.get_config_id">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_config_id</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#SimulationTask.get_config_id"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.SimulationTask.get_config_id" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.SimulationTask.run">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#SimulationTask.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.SimulationTask.run" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.StepData">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.</span></span><span class="sig-name descname"><span class="pre">StepData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">next_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reward</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">belief</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/history.html#StepData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.StepData" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.NamedTuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>action</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>next_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>observation</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>reward</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>belief</strong> (<a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><em>Belief</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.StepData.action">
+<span class="sig-name descname"><span class="pre">action</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.StepData.action" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.StepData.belief">
+<span class="sig-name descname"><span class="pre">belief</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.StepData.belief" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 5</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.StepData.next_state">
+<span class="sig-name descname"><span class="pre">next_state</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.StepData.next_state" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.StepData.observation">
+<span class="sig-name descname"><span class="pre">observation</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.StepData.observation" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 3</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.StepData.reward">
+<span class="sig-name descname"><span class="pre">reward</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.StepData.reward" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 4</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.StepData.state">
+<span class="sig-name descname"><span class="pre">state</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.StepData.state" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.TaskManager">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.</span></span><span class="sig-name descname"><span class="pre">TaskManager</span></span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#TaskManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.TaskManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.TaskManager.run_tasks">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run_tasks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tasks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_identifiers</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#TaskManager.run_tasks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.TaskManager.run_tasks" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>], <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a>]</span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>tasks</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference internal" href="#POMDPPlanners.core.simulation.tasks.SimulationTask" title="POMDPPlanners.core.simulation.tasks.SimulationTask"><em>SimulationTask</em></a><em>]</em>)</p></li>
+<li><p><strong>task_identifiers</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.TaskManagerExternalDB">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.</span></span><span class="sig-name descname"><span class="pre">TaskManagerExternalDB</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cache_db</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger_debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_queue_logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#TaskManagerExternalDB"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.TaskManagerExternalDB" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#POMDPPlanners.core.simulation.tasks.TaskManager" title="POMDPPlanners.core.simulation.tasks.TaskManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">TaskManager</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cache_db</strong> (<a class="reference internal" href="#POMDPPlanners.core.simulation.tasks.DataBaseInterface" title="POMDPPlanners.core.simulation.tasks.DataBaseInterface"><em>DataBaseInterface</em></a>)</p></li>
+<li><p><strong>cache_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><em>Path</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>logger_debug</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+<li><p><strong>use_queue_logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py property">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.TaskManagerExternalDB.logger">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">logger</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.13)"><span class="pre">Logger</span></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.TaskManagerExternalDB.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.TaskManagerExternalDB.run_tasks">
+<span class="sig-name descname"><span class="pre">run_tasks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tasks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_identifiers</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#TaskManagerExternalDB.run_tasks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.TaskManagerExternalDB.run_tasks" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>], <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a>]</span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>tasks</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference internal" href="#POMDPPlanners.core.simulation.tasks.SimulationTask" title="POMDPPlanners.core.simulation.tasks.SimulationTask"><em>SimulationTask</em></a><em>]</em>)</p></li>
+<li><p><strong>task_identifiers</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history_to_discounted_return_value">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.</span></span><span class="sig-name descname"><span class="pre">history_to_discounted_return_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">history</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/history.html#history_to_discounted_return_value"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.history_to_discounted_return_value" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>history</strong> (<a class="reference internal" href="#POMDPPlanners.core.simulation.history.History" title="POMDPPlanners.core.simulation.history.History"><em>History</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="module-POMDPPlanners.core.simulation.history">
+<span id="pomdpplanners-core-simulation-history-module"></span><h2>POMDPPlanners.core.simulation.history module<a class="headerlink" href="#module-POMDPPlanners.core.simulation.history" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.history.</span></span><span class="sig-name descname"><span class="pre">History</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">history</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">discount_factor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average_state_sampling_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average_action_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average_observation_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average_belief_update_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">average_reward_time</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">actual_num_steps</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reach_terminal_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy_run_data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/history.html#History"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>history</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference internal" href="#POMDPPlanners.core.simulation.history.StepData" title="POMDPPlanners.core.simulation.history.StepData"><em>StepData</em></a><em>]</em>)</p></li>
+<li><p><strong>discount_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>average_state_sampling_time</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>average_action_time</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>average_observation_time</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>average_belief_update_time</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>average_reward_time</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>actual_num_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>reach_terminal_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+<li><p><strong>policy_run_data</strong> (<a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.PolicyRunData" title="POMDPPlanners.core.policy.PolicyRunData"><em>PolicyRunData</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History.actual_num_steps">
+<span class="sig-name descname"><span class="pre">actual_num_steps</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History.actual_num_steps" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History.average_action_time">
+<span class="sig-name descname"><span class="pre">average_action_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History.average_action_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History.average_belief_update_time">
+<span class="sig-name descname"><span class="pre">average_belief_update_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History.average_belief_update_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History.average_observation_time">
+<span class="sig-name descname"><span class="pre">average_observation_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History.average_observation_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History.average_reward_time">
+<span class="sig-name descname"><span class="pre">average_reward_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History.average_reward_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History.average_state_sampling_time">
+<span class="sig-name descname"><span class="pre">average_state_sampling_time</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History.average_state_sampling_time" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History.discount_factor">
+<span class="sig-name descname"><span class="pre">discount_factor</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History.discount_factor" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History.from_dict">
+<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">from_dict</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">data</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/history.html#History.from_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History.from_dict" title="Link to this definition"></a></dt>
+<dd><p>Create a History instance from a dictionary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>data</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></a></span>) – Dictionary containing History data</p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>New History instance</p>
+</dd>
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><a class="reference internal" href="#POMDPPlanners.core.simulation.history.History" title="POMDPPlanners.core.simulation.history.History">History</a></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History.history">
+<span class="sig-name descname"><span class="pre">history</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a><span class="pre">[</span><a class="reference internal" href="#POMDPPlanners.core.simulation.history.StepData" title="POMDPPlanners.core.simulation.history.StepData"><code class="xref py py-class docutils literal notranslate"><span class="pre">StepData</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History.history" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History.policy_run_data">
+<span class="sig-name descname"><span class="pre">policy_run_data</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.PolicyRunData" title="POMDPPlanners.core.policy.PolicyRunData"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicyRunData</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History.policy_run_data" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History.reach_terminal_state">
+<span class="sig-name descname"><span class="pre">reach_terminal_state</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History.reach_terminal_state" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.History.to_dict">
+<span class="sig-name descname"><span class="pre">to_dict</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/history.html#History.to_dict"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.history.History.to_dict" title="Link to this definition"></a></dt>
+<dd><p>Convert History object to dictionary.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.StepData">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.history.</span></span><span class="sig-name descname"><span class="pre">StepData</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">next_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reward</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">belief</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/history.html#StepData"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.history.StepData" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.NamedTuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>action</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>next_state</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>observation</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>reward</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>belief</strong> (<a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><em>Belief</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.StepData.action">
+<span class="sig-name descname"><span class="pre">action</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.StepData.action" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.StepData.belief">
+<span class="sig-name descname"><span class="pre">belief</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.StepData.belief" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 5</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.StepData.next_state">
+<span class="sig-name descname"><span class="pre">next_state</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.StepData.next_state" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.StepData.observation">
+<span class="sig-name descname"><span class="pre">observation</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.StepData.observation" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 3</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.StepData.reward">
+<span class="sig-name descname"><span class="pre">reward</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.StepData.reward" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 4</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.StepData.state">
+<span class="sig-name descname"><span class="pre">state</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.history.StepData.state" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.history.history_to_discounted_return_value">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.history.</span></span><span class="sig-name descname"><span class="pre">history_to_discounted_return_value</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">history</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/history.html#history_to_discounted_return_value"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.history.history_to_discounted_return_value" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>history</strong> (<a class="reference internal" href="#POMDPPlanners.core.simulation.history.History" title="POMDPPlanners.core.simulation.history.History"><em>History</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</section>
+<section id="module-POMDPPlanners.core.simulation.hyperparameter_tuning">
+<span id="pomdpplanners-core-simulation-hyperparameter-tuning-module"></span><h2>POMDPPlanners.core.simulation.hyperparameter_tuning module<a class="headerlink" href="#module-POMDPPlanners.core.simulation.hyperparameter_tuning" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.hyperparameter_tuning.</span></span><span class="sig-name descname"><span class="pre">CategoricalHyperParameter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">choices</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/hyperparameter_tuning.html#CategoricalHyperParameter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.NamedTuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>choices</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a><em>]</em>)</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter.choices">
+<span class="sig-name descname"><span class="pre">choices</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter.choices" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter.name" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.hyperparameter_tuning.</span></span><span class="sig-name descname"><span class="pre">HyperParameterOptimizationDirection</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/hyperparameter_tuning.html#HyperParameterOptimizationDirection"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/enum.html#enum.Enum" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></a></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection.MAXIMIZE">
+<span class="sig-name descname"><span class="pre">MAXIMIZE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'maximize'</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection.MAXIMIZE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection.MINIMIZE">
+<span class="sig-name descname"><span class="pre">MINIMIZE</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'minimize'</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection.MINIMIZE" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.hyperparameter_tuning.</span></span><span class="sig-name descname"><span class="pre">HyperParameterRunParams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">belief</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy_cls</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hyper_parameters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">constant_parameters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_episodes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_steps</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_trials</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">direction</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter_to_optimize</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/hyperparameter_tuning.html#HyperParameterRunParams"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.NamedTuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>environment</strong> (<a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><em>Environment</em></a>)</p></li>
+<li><p><strong>belief</strong> (<a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><em>Belief</em></a>)</p></li>
+<li><p><strong>policy_cls</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Type" title="(in Python v3.13)"><em>Type</em></a><em>[</em><a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.Policy" title="POMDPPlanners.core.policy.Policy"><em>Policy</em></a><em>]</em>)</p></li>
+<li><p><strong>hyper_parameters</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter" title="POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter"><em>CategoricalHyperParameter</em></a><em> | </em><a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter" title="POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter"><em>NumericalHyperParameter</em></a><em>]</em>)</p></li>
+<li><p><strong>constant_parameters</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.13)"><em>Dict</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a><em>]</em>)</p></li>
+<li><p><strong>num_episodes</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>num_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>n_trials</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>direction</strong> (<a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection" title="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection"><em>HyperParameterOptimizationDirection</em></a>)</p></li>
+<li><p><strong>parameter_to_optimize</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.belief">
+<span class="sig-name descname"><span class="pre">belief</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Belief</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.belief" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.constant_parameters">
+<span class="sig-name descname"><span class="pre">constant_parameters</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a><span class="pre">,</span> <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.constant_parameters" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 4</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.direction">
+<span class="sig-name descname"><span class="pre">direction</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection" title="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection"><code class="xref py py-class docutils literal notranslate"><span class="pre">HyperParameterOptimizationDirection</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.direction" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 8</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.environment">
+<span class="sig-name descname"><span class="pre">environment</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Environment</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.environment" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.hyper_parameters">
+<span class="sig-name descname"><span class="pre">hyper_parameters</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code></a><span class="pre">[</span><a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter" title="POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter"><code class="xref py py-class docutils literal notranslate"><span class="pre">CategoricalHyperParameter</span></code></a><span class="pre">,</span> <a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter" title="POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter"><code class="xref py py-class docutils literal notranslate"><span class="pre">NumericalHyperParameter</span></code></a><span class="pre">]]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.hyper_parameters" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 3</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.n_trials">
+<span class="sig-name descname"><span class="pre">n_trials</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.n_trials" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 7</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.num_episodes">
+<span class="sig-name descname"><span class="pre">num_episodes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.num_episodes" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 5</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.num_steps">
+<span class="sig-name descname"><span class="pre">num_steps</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.num_steps" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 6</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.parameter_to_optimize">
+<span class="sig-name descname"><span class="pre">parameter_to_optimize</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.parameter_to_optimize" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 9</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.policy_cls">
+<span class="sig-name descname"><span class="pre">policy_cls</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Type" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Type</span></code></a><span class="pre">[Policy]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterRunParams.policy_cls" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.hyperparameter_tuning.</span></span><span class="sig-name descname"><span class="pre">NumericalHyperParameter</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">low</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">high</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/hyperparameter_tuning.html#NumericalHyperParameter"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.NamedTuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>low</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>high</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a><em> | </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter.high">
+<span class="sig-name descname"><span class="pre">high</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a><span class="pre">,</span> <a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter.high" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter.low">
+<span class="sig-name descname"><span class="pre">low</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a><span class="pre">,</span> <a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter.low" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter.name" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.hyperparameter_tuning.</span></span><span class="sig-name descname"><span class="pre">OptimizedPolicyResult</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policy</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">chosen_hyper_parameters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_episodes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_steps</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">direction</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">parameter_to_optimize</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/hyperparameter_tuning.html#OptimizedPolicyResult"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.NamedTuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>environment</strong> (<a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><em>Environment</em></a>)</p></li>
+<li><p><strong>policy</strong> (<a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.Policy" title="POMDPPlanners.core.policy.Policy"><em>Policy</em></a>)</p></li>
+<li><p><strong>chosen_hyper_parameters</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><em>dict</em></a>)</p></li>
+<li><p><strong>num_episodes</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>num_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>direction</strong> (<a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection" title="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection"><em>HyperParameterOptimizationDirection</em></a>)</p></li>
+<li><p><strong>parameter_to_optimize</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.chosen_hyper_parameters">
+<span class="sig-name descname"><span class="pre">chosen_hyper_parameters</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">dict</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.chosen_hyper_parameters" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.direction">
+<span class="sig-name descname"><span class="pre">direction</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection" title="POMDPPlanners.core.simulation.hyperparameter_tuning.HyperParameterOptimizationDirection"><code class="xref py py-class docutils literal notranslate"><span class="pre">HyperParameterOptimizationDirection</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.direction" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 5</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.environment">
+<span class="sig-name descname"><span class="pre">environment</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Environment</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.environment" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.num_episodes">
+<span class="sig-name descname"><span class="pre">num_episodes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.num_episodes" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 3</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.num_steps">
+<span class="sig-name descname"><span class="pre">num_steps</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.num_steps" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 4</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.parameter_to_optimize">
+<span class="sig-name descname"><span class="pre">parameter_to_optimize</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.parameter_to_optimize" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 6</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.policy">
+<span class="sig-name descname"><span class="pre">policy</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><span class="pre">Policy</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.OptimizedPolicyResult.policy" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-POMDPPlanners.core.simulation.metrics">
+<span id="pomdpplanners-core-simulation-metrics-module"></span><h2>POMDPPlanners.core.simulation.metrics module<a class="headerlink" href="#module-POMDPPlanners.core.simulation.metrics" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.metrics.MetricValue">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.metrics.</span></span><span class="sig-name descname"><span class="pre">MetricValue</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">lower_confidence_bound</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">upper_confidence_bound</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/metrics.html#MetricValue"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.metrics.MetricValue" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.NamedTuple" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">NamedTuple</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>lower_confidence_bound</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>upper_confidence_bound</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.metrics.MetricValue.lower_confidence_bound">
+<span class="sig-name descname"><span class="pre">lower_confidence_bound</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.metrics.MetricValue.lower_confidence_bound" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 2</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.metrics.MetricValue.name">
+<span class="sig-name descname"><span class="pre">name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.metrics.MetricValue.name" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 0</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.metrics.MetricValue.upper_confidence_bound">
+<span class="sig-name descname"><span class="pre">upper_confidence_bound</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.metrics.MetricValue.upper_confidence_bound" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 3</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.metrics.MetricValue.value">
+<span class="sig-name descname"><span class="pre">value</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.metrics.MetricValue.value" title="Link to this definition"></a></dt>
+<dd><p>Alias for field number 1</p>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-POMDPPlanners.core.simulation.simulation_configs">
+<span id="pomdpplanners-core-simulation-simulation-configs-module"></span><h2>POMDPPlanners.core.simulation.simulation_configs module<a class="headerlink" href="#module-POMDPPlanners.core.simulation.simulation_configs" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.EnvironmentRunParams">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.simulation_configs.</span></span><span class="sig-name descname"><span class="pre">EnvironmentRunParams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">belief</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policies</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_episodes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_steps</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/simulation_configs.html#EnvironmentRunParams"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.EnvironmentRunParams" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>environment</strong> (<a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><em>Environment</em></a>)</p></li>
+<li><p><strong>belief</strong> (<a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><em>Belief</em></a>)</p></li>
+<li><p><strong>policies</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.Policy" title="POMDPPlanners.core.policy.Policy"><em>Policy</em></a><em>]</em>)</p></li>
+<li><p><strong>num_episodes</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>num_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.EnvironmentRunParams.belief">
+<span class="sig-name descname"><span class="pre">belief</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.EnvironmentRunParams.belief" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.EnvironmentRunParams.environment">
+<span class="sig-name descname"><span class="pre">environment</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.EnvironmentRunParams.environment" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.EnvironmentRunParams.num_episodes">
+<span class="sig-name descname"><span class="pre">num_episodes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.EnvironmentRunParams.num_episodes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.EnvironmentRunParams.num_steps">
+<span class="sig-name descname"><span class="pre">num_steps</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.EnvironmentRunParams.num_steps" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.EnvironmentRunParams.policies">
+<span class="sig-name descname"><span class="pre">policies</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a><span class="pre">[</span><a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.Policy" title="POMDPPlanners.core.policy.Policy"><code class="xref py py-class docutils literal notranslate"><span class="pre">Policy</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.EnvironmentRunParams.policies" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.simulation_configs.</span></span><span class="sig-name descname"><span class="pre">HyperParameterRunParams</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">belief</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">policies</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_episodes</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">num_steps</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">hyper_parameters</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">b_trials</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_jobs</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_visualizations</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir_path</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">experiment_name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mlflow_tracking_uri</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">mlruns_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/simulation_configs.html#HyperParameterRunParams"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>environment</strong> (<a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><em>Environment</em></a>)</p></li>
+<li><p><strong>belief</strong> (<a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><em>Belief</em></a>)</p></li>
+<li><p><strong>policies</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.Policy" title="POMDPPlanners.core.policy.Policy"><em>Policy</em></a><em>]</em>)</p></li>
+<li><p><strong>num_episodes</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>num_steps</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>hyper_parameters</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a><em>[</em><a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter" title="POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter"><em>CategoricalHyperParameter</em></a><em> | </em><a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter" title="POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter"><em>NumericalHyperParameter</em></a><em>]</em>)</p></li>
+<li><p><strong>b_trials</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>n_jobs</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>cache_visualizations</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+<li><p><strong>cache_dir_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><em>Path</em></a>)</p></li>
+<li><p><strong>experiment_name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>mlflow_tracking_uri</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>mlruns_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><em>Path</em></a><em> | </em><em>None</em>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.b_trials">
+<span class="sig-name descname"><span class="pre">b_trials</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.b_trials" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.belief">
+<span class="sig-name descname"><span class="pre">belief</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="POMDPPlanners.core.belief.html#POMDPPlanners.core.belief.Belief" title="POMDPPlanners.core.belief.Belief"><code class="xref py py-class docutils literal notranslate"><span class="pre">Belief</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.belief" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.cache_dir_path">
+<span class="sig-name descname"><span class="pre">cache_dir_path</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Path</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.cache_dir_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.cache_visualizations">
+<span class="sig-name descname"><span class="pre">cache_visualizations</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.cache_visualizations" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.environment">
+<span class="sig-name descname"><span class="pre">environment</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><code class="xref py py-class docutils literal notranslate"><span class="pre">Environment</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.environment" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.experiment_name">
+<span class="sig-name descname"><span class="pre">experiment_name</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.experiment_name" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.hyper_parameters">
+<span class="sig-name descname"><span class="pre">hyper_parameters</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Union" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Union</span></code></a><span class="pre">[</span><a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter" title="POMDPPlanners.core.simulation.hyperparameter_tuning.CategoricalHyperParameter"><code class="xref py py-class docutils literal notranslate"><span class="pre">CategoricalHyperParameter</span></code></a><span class="pre">,</span> <a class="reference internal" href="#POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter" title="POMDPPlanners.core.simulation.hyperparameter_tuning.NumericalHyperParameter"><code class="xref py py-class docutils literal notranslate"><span class="pre">NumericalHyperParameter</span></code></a><span class="pre">]]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.hyper_parameters" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.mlflow_tracking_uri">
+<span class="sig-name descname"><span class="pre">mlflow_tracking_uri</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.mlflow_tracking_uri" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.mlruns_path">
+<span class="sig-name descname"><span class="pre">mlruns_path</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a><span class="pre">[</span><a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Path</span></code></a><span class="pre">]</span></em><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">None</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.mlruns_path" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.n_jobs">
+<span class="sig-name descname"><span class="pre">n_jobs</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.n_jobs" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.num_episodes">
+<span class="sig-name descname"><span class="pre">num_episodes</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.num_episodes" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.num_steps">
+<span class="sig-name descname"><span class="pre">num_steps</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.num_steps" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.policies">
+<span class="sig-name descname"><span class="pre">policies</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a><span class="pre">[</span><a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.Policy" title="POMDPPlanners.core.policy.Policy"><code class="xref py py-class docutils literal notranslate"><span class="pre">Policy</span></code></a><span class="pre">]</span></em><a class="headerlink" href="#POMDPPlanners.core.simulation.simulation_configs.HyperParameterRunParams.policies" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-POMDPPlanners.core.simulation.tasks">
+<span id="pomdpplanners-core-simulation-tasks-module"></span><h2>POMDPPlanners.core.simulation.tasks module<a class="headerlink" href="#module-POMDPPlanners.core.simulation.tasks" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.DataBaseInterface">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.tasks.</span></span><span class="sig-name descname"><span class="pre">DataBaseInterface</span></span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#DataBaseInterface"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.DataBaseInterface" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.DataBaseInterface.clear">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">clear</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#DataBaseInterface.clear"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.DataBaseInterface.clear" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.DataBaseInterface.get">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#DataBaseInterface.get"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.DataBaseInterface.get" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.DataBaseInterface.is_key_in_cache">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">is_key_in_cache</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#DataBaseInterface.is_key_in_cache"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.DataBaseInterface.is_key_in_cache" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.DataBaseInterface.set">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">set</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">key</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">value</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#DataBaseInterface.set"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.DataBaseInterface.set" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>key</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>value</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.SimulationTask">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.tasks.</span></span><span class="sig-name descname"><span class="pre">SimulationTask</span></span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#SimulationTask"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.SimulationTask" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.SimulationTask.get_config_id">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_config_id</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#SimulationTask.get_config_id"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.SimulationTask.get_config_id" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.SimulationTask.run">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#SimulationTask.run"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.SimulationTask.run" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.TaskManager">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.tasks.</span></span><span class="sig-name descname"><span class="pre">TaskManager</span></span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#TaskManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.TaskManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/abc.html#abc.ABC" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ABC</span></code></a></p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.TaskManager.run_tasks">
+<em class="property"><span class="k"><span class="pre">abstractmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">run_tasks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tasks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_identifiers</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#TaskManager.run_tasks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.TaskManager.run_tasks" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>], <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a>]</span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>tasks</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference internal" href="#POMDPPlanners.core.simulation.tasks.SimulationTask" title="POMDPPlanners.core.simulation.tasks.SimulationTask"><em>SimulationTask</em></a><em>]</em>)</p></li>
+<li><p><strong>task_identifiers</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.TaskManagerExternalDB">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.core.simulation.tasks.</span></span><span class="sig-name descname"><span class="pre">TaskManagerExternalDB</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">cache_db</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">logger_debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_queue_logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#TaskManagerExternalDB"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.TaskManagerExternalDB" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="#POMDPPlanners.core.simulation.tasks.TaskManager" title="POMDPPlanners.core.simulation.tasks.TaskManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">TaskManager</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>cache_db</strong> (<a class="reference internal" href="#POMDPPlanners.core.simulation.tasks.DataBaseInterface" title="POMDPPlanners.core.simulation.tasks.DataBaseInterface"><em>DataBaseInterface</em></a>)</p></li>
+<li><p><strong>cache_dir</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><em>Path</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>logger_debug</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+<li><p><strong>use_queue_logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py property">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.TaskManagerExternalDB.logger">
+<em class="property"><span class="k"><span class="pre">property</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">logger</span></span><em class="property"><span class="p"><span class="pre">:</span></span><span class="w"> </span><a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.13)"><span class="pre">Logger</span></a></em><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.TaskManagerExternalDB.logger" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.core.simulation.tasks.TaskManagerExternalDB.run_tasks">
+<span class="sig-name descname"><span class="pre">run_tasks</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tasks</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">task_identifiers</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/core/simulation/tasks.html#TaskManagerExternalDB.run_tasks"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.core.simulation.tasks.TaskManagerExternalDB.run_tasks" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Tuple</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>], <a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">list</span></code></a>]</span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>tasks</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference internal" href="#POMDPPlanners.core.simulation.tasks.SimulationTask" title="POMDPPlanners.core.simulation.tasks.SimulationTask"><em>SimulationTask</em></a><em>]</em>)</p></li>
+<li><p><strong>task_identifiers</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#list" title="(in Python v3.13)"><em>list</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="POMDPPlanners.core.html" class="btn btn-neutral float-left" title="POMDPPlanners.core package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="POMDPPlanners.environments.html" class="btn btn-neutral float-right" title="POMDPPlanners.environments package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

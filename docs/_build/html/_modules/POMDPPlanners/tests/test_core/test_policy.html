@@ -1,0 +1,510 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.tests.test_core.test_policy &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.tests.test_core.test_policy</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.tests.test_core.test_policy</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Tests for policy implementations.</span>
+
+<span class="sd">This module tests the policy implementations, focusing on:</span>
+<span class="sd">- Basic policy functionality</span>
+<span class="sd">- Policy execution</span>
+<span class="sd">- Policy data structures</span>
+<span class="sd">- Policy evaluation</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">pytest</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">random</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.policy</span><span class="w"> </span><span class="kn">import</span> <span class="n">Policy</span><span class="p">,</span> <span class="n">PolicySpaceInfo</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.environment</span><span class="w"> </span><span class="kn">import</span> <span class="n">Environment</span><span class="p">,</span> <span class="n">StateTransitionModel</span><span class="p">,</span> <span class="n">ObservationModel</span><span class="p">,</span> <span class="n">SpaceInfo</span><span class="p">,</span> <span class="n">SpaceType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">Belief</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.logger</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_logger</span><span class="p">,</span> <span class="n">reset_logger_state</span>
+
+<span class="c1"># Set seeds for reproducible tests</span>
+<span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+<span class="n">random</span><span class="o">.</span><span class="n">seed</span><span class="p">(</span><span class="mi">42</span><span class="p">)</span>
+
+<div class="viewcode-block" id="MockEnvironment">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockEnvironment">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MockEnvironment</span><span class="p">(</span><span class="n">Environment</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">space_info</span> <span class="o">=</span> <span class="n">SpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span>
+        <span class="p">)</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="n">discount_factor</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span> <span class="n">space_info</span><span class="o">=</span><span class="n">space_info</span><span class="p">,</span>
+                        <span class="n">use_queue_logger</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># Use individual logger for tests</span>
+    
+<div class="viewcode-block" id="MockEnvironment.state_transition_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockEnvironment.state_transition_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_transition_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.observation_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockEnvironment.observation_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observation_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_state</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.reward">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockEnvironment.reward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.is_terminal">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockEnvironment.is_terminal">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_terminal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.initial_state_dist">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockEnvironment.initial_state_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_state_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.initial_observation_dist">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockEnvironment.initial_observation_dist">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">initial_observation_dist</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+    
+<div class="viewcode-block" id="MockEnvironment.is_equal_observation">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockEnvironment.is_equal_observation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_equal_observation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">observation1</span><span class="p">,</span> <span class="n">observation2</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+</div>
+
+
+<div class="viewcode-block" id="MockBelief">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockBelief">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MockBelief</span><span class="p">(</span><span class="n">Belief</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">environment</span><span class="p">:</span> <span class="n">Environment</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">environment</span><span class="p">)</span>
+    
+<div class="viewcode-block" id="MockBelief.update">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockBelief.update">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="n">observation</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+    
+<div class="viewcode-block" id="MockBelief.sample">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockBelief.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+</div>
+
+
+<div class="viewcode-block" id="MockPolicy">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockPolicy">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">MockPolicy</span><span class="p">(</span><span class="n">Policy</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">environment</span><span class="p">:</span> <span class="n">Environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">custom_param</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;default&quot;</span><span class="p">,</span>
+        <span class="n">log_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">discount_factor</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">log_path</span><span class="o">=</span><span class="n">log_path</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="n">debug</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">custom_param</span> <span class="o">=</span> <span class="n">custom_param</span>
+    
+<div class="viewcode-block" id="MockPolicy.action">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockPolicy.action">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">action</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief</span><span class="p">:</span> <span class="n">Belief</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="MockPolicy.get_space_info">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.MockPolicy.get_space_info">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_space_info</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PolicySpaceInfo</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">PolicySpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span>
+        <span class="p">)</span></div>
+</div>
+
+
+<div class="viewcode-block" id="DifferentPolicy">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.DifferentPolicy">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">DifferentPolicy</span><span class="p">(</span><span class="n">Policy</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">environment</span><span class="p">:</span> <span class="n">Environment</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">log_path</span><span class="p">:</span> <span class="n">Path</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="n">debug</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span><span class="n">environment</span><span class="p">,</span> <span class="n">discount_factor</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">log_path</span><span class="o">=</span><span class="n">log_path</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="n">debug</span><span class="p">)</span>
+    
+<div class="viewcode-block" id="DifferentPolicy.action">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.DifferentPolicy.action">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">action</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief</span><span class="p">:</span> <span class="n">Belief</span><span class="p">):</span>
+        <span class="k">pass</span></div>
+
+
+<div class="viewcode-block" id="DifferentPolicy.get_space_info">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.DifferentPolicy.get_space_info">[docs]</a>
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_space_info</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">PolicySpaceInfo</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">PolicySpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span>
+        <span class="p">)</span></div>
+</div>
+
+
+<div class="viewcode-block" id="base_environment">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.base_environment">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">base_environment</span><span class="p">():</span>
+    <span class="k">return</span> <span class="n">MockEnvironment</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_env&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="base_belief">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.base_belief">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">base_belief</span><span class="p">(</span><span class="n">base_environment</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">MockBelief</span><span class="p">(</span><span class="n">base_environment</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="base_policy">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.base_policy">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">base_policy</span><span class="p">(</span><span class="n">base_environment</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">MockPolicy</span><span class="p">(</span><span class="n">base_environment</span><span class="p">,</span> <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="temp_log_dir">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.temp_log_dir">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">temp_log_dir</span><span class="p">(</span><span class="n">tmp_path</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Fixture to provide a temporary directory for log files.&quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">tmp_path</span> <span class="o">/</span> <span class="s2">&quot;logs&quot;</span></div>
+
+
+<div class="viewcode-block" id="cleanup_loggers">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.cleanup_loggers">[docs]</a>
+<span class="nd">@pytest</span><span class="o">.</span><span class="n">fixture</span><span class="p">(</span><span class="n">autouse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">cleanup_loggers</span><span class="p">():</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Automatically clean up logger state after each test.&quot;&quot;&quot;</span>
+    <span class="k">yield</span>  <span class="c1"># Run the test</span>
+    <span class="n">reset_logger_state</span><span class="p">()</span>  <span class="c1"># Clean up after the test</span></div>
+
+
+<div class="viewcode-block" id="TestPolicyLogger">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.TestPolicyLogger">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestPolicyLogger</span><span class="p">:</span>
+<div class="viewcode-block" id="TestPolicyLogger.test_logger_initialization">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.TestPolicyLogger.test_logger_initialization">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_logger_initialization</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment</span><span class="p">,</span> <span class="n">temp_log_dir</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that logger is properly initialized with different configurations.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates proper initialization of logger </span>
+<span class="sd">    </span>
+<span class="sd">    Given: Constructor parameters and initial conditions</span>
+<span class="sd">    When: Object is initialized</span>
+<span class="sd">    Then: Object is properly constructed with expected attributes</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="c1"># Test with default settings (console only)</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">MockPolicy</span><span class="p">(</span><span class="n">base_environment</span><span class="p">,</span> <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;policy.test_policy&quot;</span>
+        <span class="c1"># Queue-based logging uses queue handlers, not direct console handlers</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        
+        <span class="c1"># Test with log file</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">MockPolicy</span><span class="p">(</span>
+            <span class="n">base_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy_file&quot;</span><span class="p">,</span>
+            <span class="n">log_path</span><span class="o">=</span><span class="n">temp_log_dir</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;policy.test_policy_file&quot;</span>
+        <span class="c1"># Queue-based logging handles file creation asynchronously</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+
+        <span class="c1"># Log a message to trigger file creation by the writer thread</span>
+        <span class="n">policy</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Test message for file creation&quot;</span><span class="p">)</span>
+        <span class="c1"># Note: With queue-based logging, files are created asynchronously by writer thread</span>
+        
+        <span class="c1"># Test with debug mode</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">MockPolicy</span><span class="p">(</span>
+            <span class="n">base_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy_debug&quot;</span><span class="p">,</span>
+            <span class="n">log_path</span><span class="o">=</span><span class="n">temp_log_dir</span><span class="p">,</span>
+            <span class="n">debug</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">name</span> <span class="o">==</span> <span class="s2">&quot;policy.test_policy_debug&quot;</span>
+        <span class="c1"># Queue-based logging stores debug configuration rather than direct logger level</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">logger</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">debug</span> <span class="ow">is</span> <span class="kc">True</span></div>
+
+
+<div class="viewcode-block" id="TestPolicyLogger.test_logger_output">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.TestPolicyLogger.test_logger_output">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_logger_output</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment</span><span class="p">,</span> <span class="n">temp_log_dir</span><span class="p">,</span> <span class="n">caplog</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that logger produces expected output for different logging levels and debug modes.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates that policy logger correctly filters and outputs messages based on logging level and debug configuration</span>
+<span class="sd">    </span>
+<span class="sd">    Given: MockPolicy instances with different debug settings and log file configurations</span>
+<span class="sd">    When: Logger methods are called with different severity levels (debug, info, warning, error)</span>
+<span class="sd">    Then: Messages appear in console and log files according to the configured logging level (INFO filters debug, DEBUG shows all)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="c1"># Test normal mode (INFO level)</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">MockPolicy</span><span class="p">(</span>
+            <span class="n">base_environment</span><span class="p">,</span> 
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> 
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">log_path</span><span class="o">=</span><span class="n">temp_log_dir</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Test logging different levels</span>
+        <span class="k">with</span> <span class="n">caplog</span><span class="o">.</span><span class="n">at_level</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">):</span>  <span class="c1"># Capture all levels</span>
+            <span class="n">policy</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Debug message&quot;</span><span class="p">)</span>
+            <span class="n">policy</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Info message&quot;</span><span class="p">)</span>
+            <span class="n">policy</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Warning message&quot;</span><span class="p">)</span>
+            <span class="n">policy</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Error message&quot;</span><span class="p">)</span>
+        
+        <span class="c1"># Check console output - queue-based logging should still show messages in console</span>
+        <span class="k">assert</span> <span class="s2">&quot;Info message&quot;</span> <span class="ow">in</span> <span class="n">caplog</span><span class="o">.</span><span class="n">text</span>
+        <span class="k">assert</span> <span class="s2">&quot;Warning message&quot;</span> <span class="ow">in</span> <span class="n">caplog</span><span class="o">.</span><span class="n">text</span>
+        <span class="k">assert</span> <span class="s2">&quot;Error message&quot;</span> <span class="ow">in</span> <span class="n">caplog</span><span class="o">.</span><span class="n">text</span>
+        <span class="c1"># Debug message behavior depends on queue logger configuration</span>
+
+        <span class="c1"># With queue-based logging, file creation happens asynchronously</span>
+        <span class="c1"># Test that the policy configuration is correct instead</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">log_path</span> <span class="o">==</span> <span class="n">temp_log_dir</span>
+        
+        <span class="c1"># Test debug mode</span>
+        <span class="n">policy</span> <span class="o">=</span> <span class="n">MockPolicy</span><span class="p">(</span>
+            <span class="n">base_environment</span><span class="p">,</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy_debug&quot;</span><span class="p">,</span>
+            <span class="n">log_path</span><span class="o">=</span><span class="n">temp_log_dir</span><span class="p">,</span>
+            <span class="n">debug</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Clear previous logs</span>
+        <span class="n">caplog</span><span class="o">.</span><span class="n">clear</span><span class="p">()</span>
+
+        <span class="c1"># Test logging in debug mode</span>
+        <span class="k">with</span> <span class="n">caplog</span><span class="o">.</span><span class="n">at_level</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">DEBUG</span><span class="p">):</span>
+            <span class="n">policy</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Debug message in debug mode&quot;</span><span class="p">)</span>
+            <span class="n">policy</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Info message in debug mode&quot;</span><span class="p">)</span>
+            <span class="k">assert</span> <span class="s2">&quot;Info message in debug mode&quot;</span> <span class="ow">in</span> <span class="n">caplog</span><span class="o">.</span><span class="n">text</span>
+            <span class="c1"># Debug message visibility depends on queue logger debug configuration</span>
+
+        <span class="c1"># Test that debug mode is properly configured in the policy</span>
+        <span class="k">assert</span> <span class="n">policy</span><span class="o">.</span><span class="n">debug</span> <span class="ow">is</span> <span class="kc">True</span></div>
+
+
+<div class="viewcode-block" id="TestPolicyLogger.test_logger_initialization_message">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.TestPolicyLogger.test_logger_initialization_message">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_logger_initialization_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment</span><span class="p">,</span> <span class="n">caplog</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that the logger outputs the correct initialization message.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates proper initialization of logger  message</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Constructor parameters and initial conditions</span>
+<span class="sd">    When: Object is initialized</span>
+<span class="sd">    Then: Object is properly constructed with expected attributes</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: unit</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="k">with</span> <span class="n">caplog</span><span class="o">.</span><span class="n">at_level</span><span class="p">(</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">):</span>
+            <span class="n">policy</span> <span class="o">=</span> <span class="n">MockPolicy</span><span class="p">(</span>
+                <span class="n">base_environment</span><span class="p">,</span>
+                <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+                <span class="n">debug</span><span class="o">=</span><span class="kc">True</span>
+            <span class="p">)</span>
+            <span class="k">assert</span> <span class="s2">&quot;Initialized policy: test_policy (debug=True)&quot;</span> <span class="ow">in</span> <span class="n">caplog</span><span class="o">.</span><span class="n">text</span></div>
+</div>
+
+
+<div class="viewcode-block" id="TestPolicyConfigId">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.TestPolicyConfigId">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">TestPolicyConfigId</span><span class="p">:</span>
+<div class="viewcode-block" id="TestPolicyConfigId.test_config_id_generation">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.TestPolicyConfigId.test_config_id_generation">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_generation</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_policy</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that config_id generates a deterministic hash.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates config_id behavior for  generation</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Belief objects with specific configurations</span>
+<span class="sd">    When: Config IDs are generated or compared</span>
+<span class="sd">    Then: Config IDs behave as expected (deterministic, unique, etc.)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="n">config_id</span> <span class="o">=</span> <span class="n">base_policy</span><span class="o">.</span><span class="n">config_id</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">config_id</span><span class="p">,</span> <span class="nb">str</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">config_id</span><span class="p">)</span> <span class="o">==</span> <span class="mi">64</span>  <span class="c1"># SHA-256 produces 64 hex characters</span>
+        <span class="k">assert</span> <span class="nb">all</span><span class="p">(</span><span class="n">c</span> <span class="ow">in</span> <span class="s1">&#39;0123456789abcdef&#39;</span> <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">config_id</span><span class="p">)</span>  <span class="c1"># Valid hex characters</span></div>
+
+
+<div class="viewcode-block" id="TestPolicyConfigId.test_config_id_includes_logger_settings">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.tests.test_core.test_policy.html#POMDPPlanners.tests.test_core.test_policy.TestPolicyConfigId.test_config_id_includes_logger_settings">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">test_config_id_includes_logger_settings</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">base_environment</span><span class="p">,</span> <span class="n">temp_log_dir</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Test that logger settings are included in config_id.</span>
+<span class="sd">    </span>
+<span class="sd">    Purpose: Validates config_id behavior for  includes logger settings</span>
+<span class="sd">    </span>
+<span class="sd">    Given: Belief objects with specific configurations</span>
+<span class="sd">    When: Config IDs are generated or compared</span>
+<span class="sd">    Then: Config IDs behave as expected (deterministic, unique, etc.)</span>
+<span class="sd">    </span>
+<span class="sd">    Test type: configuration</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+        <span class="c1"># Create policies with different debug settings but same name</span>
+        <span class="n">policy1</span> <span class="o">=</span> <span class="n">MockPolicy</span><span class="p">(</span>
+            <span class="n">base_environment</span><span class="p">,</span> 
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> 
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">log_path</span><span class="o">=</span><span class="n">temp_log_dir</span><span class="p">,</span>
+            <span class="n">debug</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="n">policy2</span> <span class="o">=</span> <span class="n">MockPolicy</span><span class="p">(</span>
+            <span class="n">base_environment</span><span class="p">,</span> 
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> 
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">log_path</span><span class="o">=</span><span class="n">temp_log_dir</span><span class="p">,</span>
+            <span class="n">debug</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Create policies with different names but same debug settings</span>
+        <span class="n">policy3</span> <span class="o">=</span> <span class="n">MockPolicy</span><span class="p">(</span>
+            <span class="n">base_environment</span><span class="p">,</span> 
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> 
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy_alt&quot;</span><span class="p">,</span>
+            <span class="n">log_path</span><span class="o">=</span><span class="n">temp_log_dir</span><span class="p">,</span>
+            <span class="n">debug</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Different debug settings should produce different config_ids</span>
+        <span class="k">assert</span> <span class="n">policy1</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">policy2</span><span class="o">.</span><span class="n">config_id</span><span class="p">,</span> <span class="s2">&quot;Policies with different debug settings should have different config_ids&quot;</span>
+        
+        <span class="c1"># Different names should produce different config_ids</span>
+        <span class="k">assert</span> <span class="n">policy1</span><span class="o">.</span><span class="n">config_id</span> <span class="o">!=</span> <span class="n">policy3</span><span class="o">.</span><span class="n">config_id</span><span class="p">,</span> <span class="s2">&quot;Policies with different names should have different config_ids&quot;</span>
+        
+        <span class="c1"># Same settings should produce same config_ids</span>
+        <span class="n">policy4</span> <span class="o">=</span> <span class="n">MockPolicy</span><span class="p">(</span>
+            <span class="n">base_environment</span><span class="p">,</span> 
+            <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> 
+            <span class="n">name</span><span class="o">=</span><span class="s2">&quot;test_policy&quot;</span><span class="p">,</span>
+            <span class="n">log_path</span><span class="o">=</span><span class="n">temp_log_dir</span><span class="p">,</span>
+            <span class="n">debug</span><span class="o">=</span><span class="kc">True</span>
+        <span class="p">)</span>
+        <span class="k">assert</span> <span class="n">policy1</span><span class="o">.</span><span class="n">config_id</span> <span class="o">==</span> <span class="n">policy4</span><span class="o">.</span><span class="n">config_id</span><span class="p">,</span> <span class="s2">&quot;Policies with same settings should have same config_ids&quot;</span></div>
+</div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

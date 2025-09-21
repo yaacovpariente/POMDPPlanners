@@ -1,0 +1,444 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>&lt;no title&gt; &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">&lt;no title&gt;</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.tests.test_environments.test_tiger_pomdp.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <dl class="py class" id="module-POMDPPlanners.tests.test_environments.test_tiger_pomdp">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">TestTigerPOMDPConfigId</span></span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPConfigId"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test suite for TigerPOMDP config_id functionality.</p>
+<p>Purpose: Validates that TigerPOMDP config_id generates proper identifiers and changes with configuration differences</p>
+<p>Given: Various TigerPOMDP configurations with different parameters
+When: Config IDs are generated and compared
+Then: Config IDs behave correctly: consistent for same config, different for different configs, proper format, and deterministic</p>
+<p>Test type: configuration</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_consistency">
+<span class="sig-name descname"><span class="pre">test_config_id_consistency</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPConfigId.test_config_id_consistency"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_consistency" title="Link to this definition"></a></dt>
+<dd><p>Test that config_id is consistent for identical configurations.</p>
+<p>Purpose: Validates that TigerPOMDP config_id generates consistent identifiers for identical configurations</p>
+<p>Given: Two TigerPOMDP environments with identical discount_factor=0.95
+When: Config IDs are generated for both environments
+Then: Both environments have identical config_ids, demonstrating consistency for same configuration</p>
+<p>Test type: configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tiger_pomdp</strong> (<a class="reference internal" href="POMDPPlanners.environments.tiger_pomdp.html#POMDPPlanners.environments.tiger_pomdp.TigerPOMDP" title="POMDPPlanners.environments.tiger_pomdp.TigerPOMDP"><em>TigerPOMDP</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_deterministic">
+<span class="sig-name descname"><span class="pre">test_config_id_deterministic</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPConfigId.test_config_id_deterministic"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_deterministic" title="Link to this definition"></a></dt>
+<dd><p>Test that config_id is deterministic (same input always produces same output).</p>
+<p>Purpose: Validates that TigerPOMDP config_id generates deterministic identifiers for identical configurations</p>
+<p>Given: A TigerPOMDP environment with specific configuration
+When: Config ID is generated multiple times for the same environment
+Then: All generated config_ids are identical, demonstrating deterministic behavior</p>
+<p>Test type: unit</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tiger_pomdp</strong> (<a class="reference internal" href="POMDPPlanners.environments.tiger_pomdp.html#POMDPPlanners.environments.tiger_pomdp.TigerPOMDP" title="POMDPPlanners.environments.tiger_pomdp.TigerPOMDP"><em>TigerPOMDP</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_different_actions">
+<span class="sig-name descname"><span class="pre">test_config_id_different_actions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPConfigId.test_config_id_different_actions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_different_actions" title="Link to this definition"></a></dt>
+<dd><p>Test that config_id changes with different actions.</p>
+<p>Purpose: Validates that TigerPOMDP config_id generates different identifiers for different action configurations</p>
+<p>Given: Two TigerPOMDP environments with different actions (3 actions vs 4 actions including wait)
+When: Config IDs are generated for both environments
+Then: Environments have different config_ids, demonstrating uniqueness for different action configurations</p>
+<p>Test type: configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tiger_pomdp</strong> (<a class="reference internal" href="POMDPPlanners.environments.tiger_pomdp.html#POMDPPlanners.environments.tiger_pomdp.TigerPOMDP" title="POMDPPlanners.environments.tiger_pomdp.TigerPOMDP"><em>TigerPOMDP</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_different_discount_factor">
+<span class="sig-name descname"><span class="pre">test_config_id_different_discount_factor</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPConfigId.test_config_id_different_discount_factor"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_different_discount_factor" title="Link to this definition"></a></dt>
+<dd><p>Test that config_id changes with different discount factors.</p>
+<p>Purpose: Validates that TigerPOMDP config_id generates different identifiers for different discount factors</p>
+<p>Given: Two TigerPOMDP environments with different discount factors (0.95 vs 0.8)
+When: Config IDs are generated for both environments
+Then: Environments have different config_ids, demonstrating uniqueness for different configurations</p>
+<p>Test type: configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tiger_pomdp</strong> (<a class="reference internal" href="POMDPPlanners.environments.tiger_pomdp.html#POMDPPlanners.environments.tiger_pomdp.TigerPOMDP" title="POMDPPlanners.environments.tiger_pomdp.TigerPOMDP"><em>TigerPOMDP</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_different_observations">
+<span class="sig-name descname"><span class="pre">test_config_id_different_observations</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPConfigId.test_config_id_different_observations"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_different_observations" title="Link to this definition"></a></dt>
+<dd><p>Test that config_id changes with different observations.</p>
+<p>Purpose: Validates that TigerPOMDP config_id generates different identifiers for different observation configurations</p>
+<p>Given: Two TigerPOMDP environments with different observations (3 observations vs 4 observations including hear_both)
+When: Config IDs are generated for both environments
+Then: Environments have different config_ids, demonstrating uniqueness for different observation configurations</p>
+<p>Test type: configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tiger_pomdp</strong> (<a class="reference internal" href="POMDPPlanners.environments.tiger_pomdp.html#POMDPPlanners.environments.tiger_pomdp.TigerPOMDP" title="POMDPPlanners.environments.tiger_pomdp.TigerPOMDP"><em>TigerPOMDP</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_different_states">
+<span class="sig-name descname"><span class="pre">test_config_id_different_states</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPConfigId.test_config_id_different_states"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_different_states" title="Link to this definition"></a></dt>
+<dd><p>Test that config_id changes with different states.</p>
+<p>Purpose: Validates that TigerPOMDP config_id generates different identifiers for different state configurations</p>
+<p>Given: Two TigerPOMDP environments with different states (2 states vs 3 states including tiger_middle)
+When: Config IDs are generated for both environments
+Then: Environments have different config_ids, demonstrating uniqueness for different state configurations</p>
+<p>Test type: configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tiger_pomdp</strong> (<a class="reference internal" href="POMDPPlanners.environments.tiger_pomdp.html#POMDPPlanners.environments.tiger_pomdp.TigerPOMDP" title="POMDPPlanners.environments.tiger_pomdp.TigerPOMDP"><em>TigerPOMDP</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_format">
+<span class="sig-name descname"><span class="pre">test_config_id_format</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPConfigId.test_config_id_format"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPConfigId.test_config_id_format" title="Link to this definition"></a></dt>
+<dd><p>Test that config_id is a valid SHA-256 hash.</p>
+<p>Purpose: Validates that TigerPOMDP config_id generates properly formatted SHA-256 hash identifiers</p>
+<p>Given: A TigerPOMDP environment with specific configuration
+When: Config ID is generated for the environment
+Then: Returns a 64-character string containing only valid hexadecimal characters (0-9, a-f)</p>
+<p>Test type: configuration</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tiger_pomdp</strong> (<a class="reference internal" href="POMDPPlanners.environments.tiger_pomdp.html#POMDPPlanners.environments.tiger_pomdp.TigerPOMDP" title="POMDPPlanners.environments.tiger_pomdp.TigerPOMDP"><em>TigerPOMDP</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">TestTigerPOMDPMetrics</span></span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPMetrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Test suite for TigerPOMDP compute_metrics functionality.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics.test_compute_metrics_empty_histories">
+<span class="sig-name descname"><span class="pre">test_compute_metrics_empty_histories</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPMetrics.test_compute_metrics_empty_histories"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics.test_compute_metrics_empty_histories" title="Link to this definition"></a></dt>
+<dd><p>Test metrics with empty history list.</p>
+<p>Purpose: Validates that TigerPOMDP compute_metrics handles empty history lists correctly</p>
+<p>Given: A TigerPOMDP environment and empty history list []
+When: compute_metrics is called with empty histories
+Then: Returns 0% success rate and 0 listens, confirming proper handling of empty input</p>
+<p>Test type: unit</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tiger_pomdp</strong> (<a class="reference internal" href="POMDPPlanners.environments.tiger_pomdp.html#POMDPPlanners.environments.tiger_pomdp.TigerPOMDP" title="POMDPPlanners.environments.tiger_pomdp.TigerPOMDP"><em>TigerPOMDP</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics.test_compute_metrics_failing_agent">
+<span class="sig-name descname"><span class="pre">test_compute_metrics_failing_agent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPMetrics.test_compute_metrics_failing_agent"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics.test_compute_metrics_failing_agent" title="Link to this definition"></a></dt>
+<dd><p>Test metrics for an agent that always opens the wrong door.</p>
+<p>Purpose: Validates that TigerPOMDP compute_metrics correctly calculates success rate and average listens for failing performance</p>
+<p>Given: A TigerPOMDP environment and 10 failing agent histories (listen 2 times then open wrong door)
+When: compute_metrics is called with the failing agent histories
+Then: Returns 0% success rate and average of 2.0 listens, confirming failing agent metrics</p>
+<p>Test type: unit</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tiger_pomdp</strong> (<a class="reference internal" href="POMDPPlanners.environments.tiger_pomdp.html#POMDPPlanners.environments.tiger_pomdp.TigerPOMDP" title="POMDPPlanners.environments.tiger_pomdp.TigerPOMDP"><em>TigerPOMDP</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics.test_compute_metrics_mixed_performance">
+<span class="sig-name descname"><span class="pre">test_compute_metrics_mixed_performance</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPMetrics.test_compute_metrics_mixed_performance"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics.test_compute_metrics_mixed_performance" title="Link to this definition"></a></dt>
+<dd><p>Test metrics for an agent with mixed performance.</p>
+<p>Purpose: Validates that TigerPOMDP compute_metrics correctly calculates success rate and average listens for mixed performance</p>
+<p>Given: A TigerPOMDP environment and 10 mixed performance histories (varying listens, alternating correct/incorrect actions)
+When: compute_metrics is called with the mixed performance histories
+Then: Returns 50% success rate and average of 1.9 listens, confirming mixed performance metrics</p>
+<p>Test type: unit</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tiger_pomdp</strong> (<a class="reference internal" href="POMDPPlanners.environments.tiger_pomdp.html#POMDPPlanners.environments.tiger_pomdp.TigerPOMDP" title="POMDPPlanners.environments.tiger_pomdp.TigerPOMDP"><em>TigerPOMDP</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics.test_compute_metrics_perfect_agent">
+<span class="sig-name descname"><span class="pre">test_compute_metrics_perfect_agent</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#TestTigerPOMDPMetrics.test_compute_metrics_perfect_agent"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.TestTigerPOMDPMetrics.test_compute_metrics_perfect_agent" title="Link to this definition"></a></dt>
+<dd><p>Test metrics for a perfect agent that always opens the correct door.</p>
+<p>Purpose: Validates that TigerPOMDP compute_metrics correctly calculates success rate and average listens for perfect performance</p>
+<p>Given: A TigerPOMDP environment and 10 perfect agent histories (listen 3 times then open correct door)
+When: compute_metrics is called with the perfect agent histories
+Then: Returns 100% success rate and average of 3.0 listens, confirming perfect agent metrics</p>
+<p>Test type: unit</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>tiger_pomdp</strong> (<a class="reference internal" href="POMDPPlanners.environments.tiger_pomdp.html#POMDPPlanners.environments.tiger_pomdp.TigerPOMDP" title="POMDPPlanners.environments.tiger_pomdp.TigerPOMDP"><em>TigerPOMDP</em></a>)</p>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_get_actions">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_get_actions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_get_actions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_get_actions" title="Link to this definition"></a></dt>
+<dd><p>Test action space retrieval.</p>
+<p>Purpose: Validates that TigerPOMDP get_actions method returns the correct action space</p>
+<p>Given: A TigerPOMDP environment with default configuration
+When: get_actions method is called
+Then: Returns list of 3 actions: listen, open_left, open_right, representing all available actions in the Tiger environment</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_initial_observation_distribution">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_initial_observation_distribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_initial_observation_distribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_initial_observation_distribution" title="Link to this definition"></a></dt>
+<dd><p>Test initial observation distribution sampling.</p>
+<p>Purpose: Validates that TigerPOMDP initial observation distribution works correctly</p>
+<p>Given: A TigerPOMDP environment
+When: Initial observation distribution is sampled 10 times
+Then: All samples return “hear_nothing”, confirming that initial observations are always “hear_nothing”</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_initial_state_distribution">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_initial_state_distribution</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_initial_state_distribution"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_initial_state_distribution" title="Link to this definition"></a></dt>
+<dd><p>Test initial state distribution sampling.</p>
+<p>Purpose: Validates that TigerPOMDP initial state distribution works correctly</p>
+<p>Given: A TigerPOMDP environment
+When: Initial state distribution is sampled 100 times
+Then: All samples are valid states (tiger_left or tiger_right) and both states appear, demonstrating proper distribution</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_initialization">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_initialization</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_initialization"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_initialization" title="Link to this definition"></a></dt>
+<dd><p>Test TigerPOMDP environment initialization and basic attributes.</p>
+<p>Purpose: Validates that TigerPOMDP initializes correctly with expected states, actions, and observations</p>
+<p>Given: A TigerPOMDP environment with discount_factor=0.95
+When: Environment instance is created
+Then: Environment has correct attributes: discount_factor=0.95, states (tiger_left, tiger_right), actions (listen, open_left, open_right), observations (hear_left, hear_right, hear_nothing)</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_is_terminal">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_is_terminal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_is_terminal"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_is_terminal" title="Link to this definition"></a></dt>
+<dd><p>Test terminal state detection.</p>
+<p>Purpose: Validates that TigerPOMDP correctly identifies terminal states</p>
+<p>Given: A TigerPOMDP environment and all possible states
+When: is_terminal method is called for each state
+Then: All states return False, confirming that TigerPOMDP currently has no terminal states</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_metrics_confidence_intervals">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_metrics_confidence_intervals</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_metrics_confidence_intervals"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_metrics_confidence_intervals" title="Link to this definition"></a></dt>
+<dd><p>Test that metric values fall within their confidence intervals.</p>
+<p>Purpose: Validates that TigerPOMDP compute_metrics returns metric values within their confidence bounds</p>
+<p>Given: A TigerPOMDP environment and diverse performance histories
+When: compute_metrics is called with the histories
+Then: Each metric value falls within its lower_confidence_bound and upper_confidence_bound</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_observation_model_listen">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_observation_model_listen</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_observation_model_listen"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_observation_model_listen" title="Link to this definition"></a></dt>
+<dd><p>Test observation model for listen action.</p>
+<p>Purpose: Validates that TigerPOMDP listen action provides mostly correct observations with some noise</p>
+<p>Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)
+When: Observation model is created for listen action and observations are sampled 100 times
+Then: Most observations are correct (hear_left for tiger_left, hear_right for tiger_right) with approximately 85% accuracy</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_observation_model_open_door">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_observation_model_open_door</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_observation_model_open_door"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_observation_model_open_door" title="Link to this definition"></a></dt>
+<dd><p>Test observation model for open door actions.</p>
+<p>Purpose: Validates that TigerPOMDP open door actions always provide “hear_nothing” observations</p>
+<p>Given: A TigerPOMDP environment and both states (tiger_left, tiger_right) with both open actions (open_left, open_right)
+When: Observation model is created for open actions and observations are sampled 10 times
+Then: All samples return “hear_nothing”, confirming that opening doors provides no auditory information</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_reward_func_listen">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_reward_func_listen</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_reward_func_listen"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_reward_func_listen" title="Link to this definition"></a></dt>
+<dd><p>Test reward function for listen action.</p>
+<p>Purpose: Validates that TigerPOMDP listen action always provides -1.0 reward</p>
+<p>Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)
+When: Reward function is called with listen action for each state
+Then: All calls return -1.0, confirming that listening always incurs a small penalty</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_reward_func_open_door">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_reward_func_open_door</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_reward_func_open_door"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_reward_func_open_door" title="Link to this definition"></a></dt>
+<dd><p>Test reward function for open door actions.</p>
+<p>Purpose: Validates that TigerPOMDP open door actions provide correct rewards based on tiger location</p>
+<p>Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)
+When: Reward function is called with open actions for each state
+Then: Returns -100.0 for opening door with tiger, 10.0 for opening door with treasure, demonstrating correct reward structure</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_reward_range">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_reward_range</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_reward_range"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_reward_range" title="Link to this definition"></a></dt>
+<dd><p>Test that reward range is correctly set.</p>
+<p>Purpose: Validates that TigerPOMDP has the correct reward range parameters</p>
+<p>Given: A TigerPOMDP environment with default configuration
+When: Environment reward_range attribute is checked
+Then: Returns (-100.0, 10.0) representing the minimum (opening door with tiger) and maximum (opening door with treasure) rewards</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_state_transition_listen">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_state_transition_listen</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_state_transition_listen"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_state_transition_listen" title="Link to this definition"></a></dt>
+<dd><p>Test state transition for listen action.</p>
+<p>Purpose: Validates that TigerPOMDP listen action doesn’t change the state</p>
+<p>Given: A TigerPOMDP environment and both states (tiger_left, tiger_right)
+When: State transition model is created for listen action and next state is sampled
+Then: All samples return the same state as the input state, confirming that listening doesn’t change the tiger’s position</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_state_transition_open_door">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">test_state_transition_open_door</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">tiger_pomdp</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#test_state_transition_open_door"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.test_state_transition_open_door" title="Link to this definition"></a></dt>
+<dd><p>Test state transition for open door actions.</p>
+<p>Purpose: Validates that TigerPOMDP open door actions randomly place tiger behind either door</p>
+<p>Given: A TigerPOMDP environment starting from tiger_left state and both open actions (open_left, open_right)
+When: State transition model is created for open actions and next states are sampled 100 times
+Then: All samples are valid states and both states appear, demonstrating random placement after opening doors</p>
+<p>Test type: unit</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.tests.test_environments.test_tiger_pomdp.tiger_pomdp">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.tests.test_environments.test_tiger_pomdp.</span></span><span class="sig-name descname"><span class="pre">tiger_pomdp</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/tests/test_environments/test_tiger_pomdp.html#tiger_pomdp"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.tests.test_environments.test_tiger_pomdp.tiger_pomdp" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

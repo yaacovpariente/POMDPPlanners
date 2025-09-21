@@ -1,0 +1,700 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../../../../">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../../../../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../../../../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../../../../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../../../../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../../../../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../../../../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../../../../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../../../../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../../../../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../../../../api/index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../../../../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../../../../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="../../../index.html">Module code</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp</li>
+      <li class="wy-breadcrumbs-aside">
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <h1>Source code for POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp</h1><div class="highlight"><pre>
+<span></span><span class="sd">&quot;&quot;&quot;Continuous Light-Dark POMDP Environment Implementation.</span>
+
+<span class="sd">This module implements the continuous Light-Dark domain, a classic POMDP benchmark</span>
+<span class="sd">where an agent must navigate to a goal position in a continuous 2D space while</span>
+<span class="sd">dealing with position-dependent observation noise.</span>
+
+<span class="sd">The Continuous Light-Dark POMDP features:</span>
+<span class="sd">- Continuous 2D state space representing agent position</span>
+<span class="sd">- Discrete or continuous action space for movement</span>
+<span class="sd">- Light source at a specific location that affects observation quality</span>
+<span class="sd">- Observation noise that decreases closer to the light source</span>
+<span class="sd">- Goal region that agent must reach to maximize reward</span>
+<span class="sd">- Optional obstacles that cause negative rewards when hit</span>
+
+<span class="sd">Key characteristics:</span>
+<span class="sd">- State: [x, y] position in continuous 2D space</span>
+<span class="sd">- Actions: Movement vectors or discrete directions</span>
+<span class="sd">- Observations: Noisy position estimates (noise depends on distance from light)</span>
+<span class="sd">- Rewards: Goal reaching bonus, movement costs, obstacle penalties</span>
+<span class="sd">- Multiple reward model variants available</span>
+
+<span class="sd">Classes:</span>
+<span class="sd">    RewardModelType: Enumeration of available reward model types</span>
+<span class="sd">    StateTransitionModel: Continuous movement with Gaussian noise</span>
+<span class="sd">    ContinuousLightDarkPOMDP: Main environment class</span>
+<span class="sd">    ContinuousLightDarkPOMDPDiscreteActions: Discrete action variant</span>
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">List</span><span class="p">,</span> <span class="n">Any</span><span class="p">,</span> <span class="n">Tuple</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">enum</span><span class="w"> </span><span class="kn">import</span> <span class="n">Enum</span>
+
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.pyplot</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">plt</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">matplotlib.animation</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">animation</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">multivariate_normal</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.environment</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteActionsEnvironment</span><span class="p">,</span> <span class="n">ObservationModel</span><span class="p">,</span> <span class="n">SpaceInfo</span><span class="p">,</span> <span class="n">SpaceType</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.distributions</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscreteDistribution</span><span class="p">,</span> <span class="n">Distribution</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">History</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.simulation</span><span class="w"> </span><span class="kn">import</span> <span class="n">MetricValue</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.statistics</span><span class="w"> </span><span class="kn">import</span> <span class="n">confidence_interval</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">Belief</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseLightDarkPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models</span><span class="w"> </span><span class="kn">import</span> <span class="n">ContinuousLightDarkNormalNoiseObservationModel</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">ContinuousLightDarkRewardModel</span><span class="p">,</span>
+    <span class="n">ContinuousLightDarkDecayingHitProbabilityRewardModel</span><span class="p">,</span>
+    <span class="n">ContinuousLDDangerousStatesRewardModel</span>
+<span class="p">)</span>
+
+<div class="viewcode-block" id="RewardModelType">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.RewardModelType">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">RewardModelType</span><span class="p">(</span><span class="n">Enum</span><span class="p">):</span>
+    <span class="n">STANDARD</span> <span class="o">=</span> <span class="s2">&quot;standard&quot;</span>
+    <span class="n">DECAYING_HIT_PROBABILITY</span> <span class="o">=</span> <span class="s2">&quot;decaying_hit_probability&quot;</span>
+    <span class="n">DANGEROUS_STATES</span> <span class="o">=</span> <span class="s2">&quot;dangerous_states&quot;</span></div>
+
+
+<div class="viewcode-block" id="StateTransitionModel">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.StateTransitionModel">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">StateTransitionModel</span><span class="p">(</span><span class="n">Distribution</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;State transition model for Continuous Light-Dark POMDP.</span>
+<span class="sd">    </span>
+<span class="sd">    This model implements continuous movement in 2D space with Gaussian noise.</span>
+<span class="sd">    The agent&#39;s next position is determined by adding the action vector to the</span>
+<span class="sd">    current position, with additional Gaussian noise to model uncertainty.</span>
+<span class="sd">    </span>
+<span class="sd">    Attributes:</span>
+<span class="sd">        state: Current 2D position [x, y]</span>
+<span class="sd">        action: Movement vector [dx, dy]</span>
+<span class="sd">        state_transition_cov_matrix: Covariance matrix for transition noise</span>
+<span class="sd">        mean: Expected next position (state + action)</span>
+<span class="sd">        </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Using the Continuous Light-Dark state transition model::</span>
+<span class="sd">        </span>
+<span class="sd">            import numpy as np</span>
+<span class="sd">            </span>
+<span class="sd">            # Define current position and movement action</span>
+<span class="sd">            state = np.array([3.0, 4.0])  # Current position</span>
+<span class="sd">            action = np.array([1.0, 0.5])  # Move right and slightly up</span>
+<span class="sd">            </span>
+<span class="sd">            # Define movement noise</span>
+<span class="sd">            cov_matrix = np.eye(2) * 0.1  # Small movement noise</span>
+<span class="sd">            </span>
+<span class="sd">            # Create transition model</span>
+<span class="sd">            transition = StateTransitionModel(</span>
+<span class="sd">                state=state,</span>
+<span class="sd">                action=action,</span>
+<span class="sd">                state_transition_cov_matrix=cov_matrix</span>
+<span class="sd">            )</span>
+<span class="sd">            </span>
+<span class="sd">            # Sample next position with noise</span>
+<span class="sd">            next_position = transition.sample()[0]</span>
+<span class="sd">            # Returns position around [4.0, 4.5] ± noise</span>
+<span class="sd">            </span>
+<span class="sd">            # Calculate probability of specific next position</span>
+<span class="sd">            prob = transition.probability([next_position])</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">state_transition_cov_matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state</span> <span class="o">=</span> <span class="n">state</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action</span> <span class="o">=</span> <span class="n">action</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">state_transition_cov_matrix</span> <span class="o">=</span> <span class="n">state_transition_cov_matrix</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mean</span> <span class="o">=</span> <span class="n">state</span> <span class="o">+</span> <span class="n">action</span>
+        
+<div class="viewcode-block" id="StateTransitionModel.sample">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.StateTransitionModel.sample">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_samples</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">]:</span>
+        <span class="c1"># Vectorized sampling: generate all samples at once</span>
+        <span class="n">samples</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">multivariate_normal</span><span class="p">(</span>
+            <span class="n">mean</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mean</span><span class="p">,</span>
+            <span class="n">cov</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">state_transition_cov_matrix</span><span class="p">,</span>
+            <span class="n">size</span><span class="o">=</span><span class="n">n_samples</span>
+        <span class="p">)</span>
+        
+        <span class="c1"># Convert to list of arrays</span>
+        <span class="k">return</span> <span class="p">[</span><span class="n">sample</span> <span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">samples</span><span class="p">]</span></div>
+
+    
+<div class="viewcode-block" id="StateTransitionModel.probability">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.StateTransitionModel.probability">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">probability</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">values</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">:</span>
+        <span class="c1"># Convert list to numpy array for vectorized computation</span>
+        <span class="n">values_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">values</span><span class="p">)</span>
+        
+        <span class="c1"># Use scipy&#39;s built-in multivariate normal PDF</span>
+        <span class="k">return</span> <span class="n">multivariate_normal</span><span class="o">.</span><span class="n">pdf</span><span class="p">(</span><span class="n">values_array</span><span class="p">,</span> <span class="n">mean</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">mean</span><span class="p">,</span> <span class="n">cov</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">state_transition_cov_matrix</span><span class="p">)</span></div>
+</div>
+
+        
+
+<div class="viewcode-block" id="ContinuousLightDarkPOMDP">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.ContinuousLightDarkPOMDP">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ContinuousLightDarkPOMDP</span><span class="p">(</span><span class="n">BaseLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Continuous Light-Dark POMDP environment with continuous actions.</span>
+<span class="sd">    </span>
+<span class="sd">    This environment extends the base Light-Dark problem to continuous 2D space</span>
+<span class="sd">    with continuous action vectors. The agent navigates toward a goal while</span>
+<span class="sd">    dealing with position-dependent observation noise and optional obstacles.</span>
+<span class="sd">    </span>
+<span class="sd">    Key features:</span>
+<span class="sd">    - Continuous 2D state and action spaces</span>
+<span class="sd">    - Light beacons reduce observation noise when nearby  </span>
+<span class="sd">    - Multiple reward models available (standard, decaying hit probability, dangerous states)</span>
+<span class="sd">    - Optional obstacles with configurable hit penalties</span>
+<span class="sd">    - Terminal conditions for goal reaching, obstacle hits, and boundary violations</span>
+<span class="sd">    </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Creating and using a Continuous Light-Dark POMDP::</span>
+<span class="sd">        </span>
+<span class="sd">            import numpy as np</span>
+<span class="sd">            </span>
+<span class="sd">            # Create environment with custom parameters</span>
+<span class="sd">            env = ContinuousLightDarkPOMDP(</span>
+<span class="sd">                discount_factor=0.95,</span>
+<span class="sd">                goal_state=np.array([10, 5]),</span>
+<span class="sd">                start_state=np.array([0, 5]),</span>
+<span class="sd">                reward_model_type=RewardModelType.STANDARD</span>
+<span class="sd">            )</span>
+<span class="sd">            </span>
+<span class="sd">            # Sample initial state and take continuous action</span>
+<span class="sd">            state_dist = env.initial_state_dist()</span>
+<span class="sd">            state = state_dist.sample()[0]</span>
+<span class="sd">            </span>
+<span class="sd">            # Move toward goal with continuous action</span>
+<span class="sd">            action = np.array([1.0, 0.0])  # Move right</span>
+<span class="sd">            reward = env.reward(state, action)</span>
+<span class="sd">            </span>
+<span class="sd">            # Check termination</span>
+<span class="sd">            is_done = env.is_terminal(state)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> 
+        <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span> 
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;ContinuousLightDarkPOMDP&quot;</span><span class="p">,</span>
+        <span class="n">state_transition_cov_matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+        <span class="n">observation_cov_matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+        <span class="n">beacons</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">)],</span>
+        <span class="n">goal_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+        <span class="n">start_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+        <span class="n">obstacles</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">7</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">)],</span>
+        <span class="n">obstacle_hit_probability</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">obstacle_reward</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="o">-</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">goal_reward</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">fuel_cost</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">grid_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">11</span><span class="p">,</span>
+        <span class="n">goal_state_radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.5</span><span class="p">,</span>
+        <span class="n">beacon_radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">obstacle_radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.5</span><span class="p">,</span>
+        <span class="n">reward_model_type</span><span class="p">:</span> <span class="n">RewardModelType</span> <span class="o">=</span> <span class="n">RewardModelType</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">,</span>
+        <span class="n">penalty_decay</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">is_obstacle_hit_terminal</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="n">space_info</span> <span class="o">=</span> <span class="n">SpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">CONTINUOUS</span><span class="p">,</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">CONTINUOUS</span>
+        <span class="p">)</span>
+        <span class="c1"># Calculate reward range based on reward model type</span>
+        <span class="c1"># Maximum distance to goal is diagonal of grid: sqrt(2) * grid_size</span>
+        <span class="n">max_distance_to_goal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="n">grid_size</span>
+        
+        <span class="k">if</span> <span class="n">reward_model_type</span> <span class="o">==</span> <span class="n">RewardModelType</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">:</span>
+            <span class="c1"># Min: -fuel_cost - max_distance + obstacle_reward (always negative)</span>
+            <span class="c1"># Max: -fuel_cost - 0 + goal_reward (at goal)</span>
+            <span class="n">min_reward</span> <span class="o">=</span> <span class="o">-</span><span class="n">fuel_cost</span> <span class="o">-</span> <span class="n">max_distance_to_goal</span> <span class="o">+</span> <span class="n">obstacle_reward</span>
+            <span class="n">max_reward</span> <span class="o">=</span> <span class="o">-</span><span class="n">fuel_cost</span> <span class="o">+</span> <span class="n">goal_reward</span>
+        <span class="k">elif</span> <span class="n">reward_model_type</span> <span class="o">==</span> <span class="n">RewardModelType</span><span class="o">.</span><span class="n">DECAYING_HIT_PROBABILITY</span><span class="p">:</span>
+            <span class="c1"># Similar to standard but with distance-based penalties</span>
+            <span class="c1"># Min: -fuel_cost - max_distance + obstacle_reward (max penalty)</span>
+            <span class="c1"># Max: -fuel_cost - 0 + goal_reward (at goal, no penalty)</span>
+            <span class="n">min_reward</span> <span class="o">=</span> <span class="o">-</span><span class="n">fuel_cost</span> <span class="o">-</span> <span class="n">max_distance_to_goal</span> <span class="o">+</span> <span class="n">obstacle_reward</span>
+            <span class="n">max_reward</span> <span class="o">=</span> <span class="o">-</span><span class="n">fuel_cost</span> <span class="o">+</span> <span class="n">goal_reward</span>
+        <span class="k">elif</span> <span class="n">reward_model_type</span> <span class="o">==</span> <span class="n">RewardModelType</span><span class="o">.</span><span class="n">DANGEROUS_STATES</span><span class="p">:</span>
+            <span class="c1"># Min: -fuel_cost - max_distance + obstacle_reward (negative)</span>
+            <span class="c1"># Max: -fuel_cost - 0 + goal_reward OR -fuel_cost - distance - obstacle_reward (if obstacle_reward is negative)</span>
+            <span class="n">min_reward</span> <span class="o">=</span> <span class="o">-</span><span class="n">fuel_cost</span> <span class="o">-</span> <span class="n">max_distance_to_goal</span> <span class="o">+</span> <span class="n">obstacle_reward</span>
+            <span class="n">max_reward</span> <span class="o">=</span> <span class="nb">max</span><span class="p">(</span><span class="o">-</span><span class="n">fuel_cost</span> <span class="o">+</span> <span class="n">goal_reward</span><span class="p">,</span> <span class="o">-</span><span class="n">fuel_cost</span> <span class="o">-</span> <span class="n">obstacle_reward</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># Default fallback</span>
+            <span class="n">min_reward</span> <span class="o">=</span> <span class="o">-</span><span class="n">fuel_cost</span> <span class="o">-</span> <span class="n">max_distance_to_goal</span> <span class="o">+</span> <span class="n">obstacle_reward</span>
+            <span class="n">max_reward</span> <span class="o">=</span> <span class="o">-</span><span class="n">fuel_cost</span> <span class="o">+</span> <span class="n">goal_reward</span>
+            
+        <span class="n">calculated_reward_range</span> <span class="o">=</span> <span class="p">(</span><span class="n">min_reward</span><span class="p">,</span> <span class="n">max_reward</span><span class="p">)</span>
+        
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="n">discount_factor</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">space_info</span><span class="o">=</span><span class="n">space_info</span><span class="p">,</span>
+            <span class="n">reward_range</span><span class="o">=</span><span class="n">calculated_reward_range</span><span class="p">,</span>
+            <span class="n">beacons</span><span class="o">=</span><span class="n">beacons</span><span class="p">,</span>
+            <span class="n">goal_state</span><span class="o">=</span><span class="n">goal_state</span><span class="p">,</span>
+            <span class="n">start_state</span><span class="o">=</span><span class="n">start_state</span><span class="p">,</span>
+            <span class="n">obstacles</span><span class="o">=</span><span class="n">obstacles</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="n">obstacle_hit_probability</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=</span><span class="n">obstacle_reward</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="n">goal_reward</span><span class="p">,</span>
+            <span class="n">beacon_radius</span><span class="o">=</span><span class="n">beacon_radius</span><span class="p">,</span>
+            <span class="n">obstacle_radius</span><span class="o">=</span><span class="n">obstacle_radius</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="n">fuel_cost</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="n">grid_size</span><span class="p">,</span>
+        <span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">__type_check</span><span class="p">(</span>
+            <span class="n">state_transition_cov_matrix</span><span class="o">=</span><span class="n">state_transition_cov_matrix</span><span class="p">,</span>
+            <span class="n">observation_cov_matrix</span><span class="o">=</span><span class="n">observation_cov_matrix</span><span class="p">,</span>
+            <span class="n">goal_state_radius</span><span class="o">=</span><span class="n">goal_state_radius</span><span class="p">,</span>
+            <span class="n">beacon_radius</span><span class="o">=</span><span class="n">beacon_radius</span><span class="p">,</span>
+            <span class="n">obstacle_radius</span><span class="o">=</span><span class="n">obstacle_radius</span><span class="p">,</span>
+        <span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">state_transition_cov_matrix</span> <span class="o">=</span> <span class="n">state_transition_cov_matrix</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">observation_cov_matrix</span> <span class="o">=</span> <span class="n">observation_cov_matrix</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">goal_state_radius</span> <span class="o">=</span> <span class="n">goal_state_radius</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">beacon_radius</span> <span class="o">=</span> <span class="n">beacon_radius</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">penalty_decay</span> <span class="o">=</span> <span class="n">penalty_decay</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_obstacle_hit_terminal</span> <span class="o">=</span> <span class="n">is_obstacle_hit_terminal</span>
+        
+        <span class="c1"># Initialize reward model based on type</span>
+        <span class="k">if</span> <span class="n">reward_model_type</span> <span class="o">==</span> <span class="n">RewardModelType</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reward_model</span> <span class="o">=</span> <span class="n">ContinuousLightDarkRewardModel</span><span class="p">(</span>
+                <span class="n">goal_state</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">goal_state</span><span class="p">,</span>
+                <span class="n">obstacles</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span><span class="p">,</span>
+                <span class="n">goal_state_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">goal_state_radius</span><span class="p">,</span>
+                <span class="n">obstacle_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacle_radius</span><span class="p">,</span>
+                <span class="n">grid_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_size</span><span class="p">,</span>
+                <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacle_hit_probability</span><span class="p">,</span>
+                <span class="n">obstacle_reward</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacle_reward</span><span class="p">,</span>
+                <span class="n">goal_reward</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">goal_reward</span><span class="p">,</span>
+                <span class="n">fuel_cost</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fuel_cost</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">reward_model_type</span> <span class="o">==</span> <span class="n">RewardModelType</span><span class="o">.</span><span class="n">DECAYING_HIT_PROBABILITY</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reward_model</span> <span class="o">=</span> <span class="n">ContinuousLightDarkDecayingHitProbabilityRewardModel</span><span class="p">(</span>
+                <span class="n">goal_state</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">goal_state</span><span class="p">,</span>
+                <span class="n">obstacles</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span><span class="p">,</span>
+                <span class="n">goal_state_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">goal_state_radius</span><span class="p">,</span>
+                <span class="n">obstacle_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacle_radius</span><span class="p">,</span>
+                <span class="n">grid_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_size</span><span class="p">,</span>
+                <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacle_hit_probability</span><span class="p">,</span>
+                <span class="n">obstacle_reward</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacle_reward</span><span class="p">,</span>
+                <span class="n">goal_reward</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">goal_reward</span><span class="p">,</span>
+                <span class="n">fuel_cost</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fuel_cost</span><span class="p">,</span>
+                <span class="n">penalty_decay</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">penalty_decay</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">elif</span> <span class="n">reward_model_type</span> <span class="o">==</span> <span class="n">RewardModelType</span><span class="o">.</span><span class="n">DANGEROUS_STATES</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">reward_model</span> <span class="o">=</span> <span class="n">ContinuousLDDangerousStatesRewardModel</span><span class="p">(</span>
+                <span class="n">goal_state</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">goal_state</span><span class="p">,</span>
+                <span class="n">obstacles</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span><span class="p">,</span>
+                <span class="n">goal_state_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">goal_state_radius</span><span class="p">,</span>
+                <span class="n">obstacle_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacle_radius</span><span class="p">,</span>
+                <span class="n">grid_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_size</span><span class="p">,</span>
+                <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacle_hit_probability</span><span class="p">,</span>
+                <span class="n">obstacle_reward</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacle_reward</span><span class="p">,</span>
+                <span class="n">goal_reward</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">goal_reward</span><span class="p">,</span>
+                <span class="n">fuel_cost</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">fuel_cost</span><span class="p">,</span>
+            <span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Unknown reward model type: </span><span class="si">{</span><span class="n">reward_model_type</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">__type_check</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">state_transition_cov_matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">observation_cov_matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span>
+        <span class="n">goal_state_radius</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">beacon_radius</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">obstacle_radius</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="k">if</span> <span class="n">state_transition_cov_matrix</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;state_transition_cov_matrix must be a 2x2 matrix&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">observation_cov_matrix</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">2</span><span class="p">):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;observation_cov_matrix must be a 2x2 matrix&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">goal_state_radius</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;goal_state_radius must be greater than 0&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">beacon_radius</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;beacon_radius must be greater than 0&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">obstacle_radius</span> <span class="o">&lt;=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;obstacle_radius must be greater than 0&quot;</span><span class="p">)</span>
+    
+<div class="viewcode-block" id="ContinuousLightDarkPOMDP.state_transition_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.ContinuousLightDarkPOMDP.state_transition_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_transition_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;state must be a 2D vector&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;action must be a 2D vector&quot;</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">StateTransitionModel</span><span class="p">(</span>
+            <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">state_transition_cov_matrix</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">state_transition_cov_matrix</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContinuousLightDarkPOMDP.observation_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.ContinuousLightDarkPOMDP.observation_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observation_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">next_state</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;next_state must be a 2D vector&quot;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">action</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;action must be a 2D vector&quot;</span><span class="p">)</span>
+        
+        <span class="k">return</span> <span class="n">ContinuousLightDarkNormalNoiseObservationModel</span><span class="p">(</span>
+            <span class="n">next_state</span><span class="o">=</span><span class="n">next_state</span><span class="p">,</span>
+            <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+            <span class="n">observation_cov_matrix</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_cov_matrix</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_size</span><span class="p">,</span>
+            <span class="n">beacons</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">beacons</span><span class="p">,</span>
+            <span class="n">beacon_radius</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">beacon_radius</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContinuousLightDarkPOMDP.reward">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.ContinuousLightDarkPOMDP.reward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">reward_model</span><span class="o">.</span><span class="n">compute_reward</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContinuousLightDarkPOMDP.is_terminal">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.ContinuousLightDarkPOMDP.is_terminal">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">is_terminal</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">bool</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">state</span><span class="o">.</span><span class="n">shape</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">2</span><span class="p">,):</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;state must be a 2D vector&quot;</span><span class="p">)</span>
+
+        <span class="n">is_goal_state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">state</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">goal_state</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">goal_state_radius</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_obstacle_hit_terminal</span><span class="p">:</span>
+            <span class="c1"># Calculate distance to each obstacle (obstacles are 2xN format)</span>
+            <span class="n">distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">state</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">is_obstacle_hit</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">distances</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obstacle_radius</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">is_obstacle_hit</span> <span class="o">=</span> <span class="kc">False</span>
+
+        <span class="n">is_out_of_grid</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">state</span> <span class="o">&lt;</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">or</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">state</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_size</span><span class="p">)</span>
+
+        <span class="n">is_terminal</span> <span class="o">=</span> <span class="n">is_goal_state</span> <span class="ow">or</span> <span class="n">is_obstacle_hit</span> <span class="ow">or</span> <span class="n">is_out_of_grid</span>
+
+        <span class="k">return</span> <span class="n">is_terminal</span></div>
+
+
+<div class="viewcode-block" id="ContinuousLightDarkPOMDP.compute_metrics">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.ContinuousLightDarkPOMDP.compute_metrics">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">compute_metrics</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">histories</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">History</span><span class="p">])</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">MetricValue</span><span class="p">]:</span>
+        <span class="n">goal_reached</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">obstacle_hits</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">obstacle_hit_counter</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">history</span> <span class="ow">in</span> <span class="n">histories</span><span class="p">:</span>
+            <span class="n">goal_reached_in_history</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">obstacle_hit_in_history</span> <span class="o">=</span> <span class="kc">False</span>
+            <span class="n">obstacle_hit_counter_in_history</span> <span class="o">=</span> <span class="mi">0</span>
+            
+            <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">state</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">goal_state</span><span class="p">)</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">goal_state_radius</span><span class="p">:</span>
+                    <span class="n">goal_reached_in_history</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="k">break</span>
+                
+                <span class="c1"># Calculate distance to each obstacle (obstacles are 2xN format)</span>
+                <span class="n">distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">step</span><span class="o">.</span><span class="n">state</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">distances</span> <span class="o">&lt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obstacle_radius</span><span class="p">):</span>
+                    <span class="n">obstacle_hit_in_history</span> <span class="o">=</span> <span class="kc">True</span>
+                    <span class="n">obstacle_hit_counter_in_history</span> <span class="o">+=</span> <span class="mi">1</span>
+            
+            <span class="n">goal_reached</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">goal_reached_in_history</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">obstacle_hits</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mi">1</span> <span class="k">if</span> <span class="n">obstacle_hit_in_history</span> <span class="k">else</span> <span class="mi">0</span><span class="p">)</span>
+            <span class="n">obstacle_hit_counter</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obstacle_hit_counter_in_history</span><span class="p">)</span>
+
+        <span class="n">avg_goal_reached</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">goal_reached</span><span class="p">)</span>
+        <span class="n">avg_obstacle_hits</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">obstacle_hits</span><span class="p">)</span>
+        <span class="n">avg_obstacle_hit_counter</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">obstacle_hit_counter</span><span class="p">)</span>
+        <span class="n">goal_reached_ci</span> <span class="o">=</span> <span class="n">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">goal_reached</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">obstacle_hits_ci</span> <span class="o">=</span> <span class="n">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">obstacle_hits</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+        <span class="n">obstacle_hit_counter_ci</span> <span class="o">=</span> <span class="n">confidence_interval</span><span class="p">(</span><span class="n">data</span><span class="o">=</span><span class="n">obstacle_hit_counter</span><span class="p">,</span> <span class="n">confidence</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="p">[</span>
+            <span class="n">MetricValue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;goal_reaching_rate&quot;</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">avg_goal_reached</span><span class="p">,</span>
+                <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="n">goal_reached_ci</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="n">goal_reached_ci</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="p">),</span>
+            <span class="n">MetricValue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;obstacle_hit_rate&quot;</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">avg_obstacle_hits</span><span class="p">,</span>
+                <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="n">obstacle_hits_ci</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="n">obstacle_hits_ci</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="p">),</span>
+            <span class="n">MetricValue</span><span class="p">(</span>
+                <span class="n">name</span><span class="o">=</span><span class="s2">&quot;avg_obstacle_hit_counter&quot;</span><span class="p">,</span>
+                <span class="n">value</span><span class="o">=</span><span class="n">avg_obstacle_hit_counter</span><span class="p">,</span>
+                <span class="n">lower_confidence_bound</span><span class="o">=</span><span class="n">obstacle_hit_counter_ci</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                <span class="n">upper_confidence_bound</span><span class="o">=</span><span class="n">obstacle_hit_counter_ci</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+            <span class="p">)</span>
+        <span class="p">]</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">ContinuousLightDarkPOMDP</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__eq__</span><span class="p">(</span><span class="n">other</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state_transition_cov_matrix</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">state_transition_cov_matrix</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_cov_matrix</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">observation_cov_matrix</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">goal_state_radius</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">goal_state_radius</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">beacon_radius</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">beacon_radius</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">obstacle_radius</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">obstacle_radius</span>
+        <span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContinuousLightDarkPOMDPDiscreteActions">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.ContinuousLightDarkPOMDPDiscreteActions">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ContinuousLightDarkPOMDPDiscreteActions</span><span class="p">(</span><span class="n">ContinuousLightDarkPOMDP</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Continuous Light-Dark POMDP environment with discrete actions.</span>
+<span class="sd">    </span>
+<span class="sd">    This variant of the Continuous Light-Dark POMDP uses discrete directional actions</span>
+<span class="sd">    (up, down, left, right) instead of continuous action vectors. The continuous</span>
+<span class="sd">    state space and observation model are preserved.</span>
+<span class="sd">    </span>
+<span class="sd">    Actions are mapped to unit vectors:</span>
+<span class="sd">    - &quot;up&quot;: [0, 1]</span>
+<span class="sd">    - &quot;down&quot;: [0, -1]  </span>
+<span class="sd">    - &quot;right&quot;: [1, 0]</span>
+<span class="sd">    - &quot;left&quot;: [-1, 0]</span>
+<span class="sd">    </span>
+<span class="sd">    Example:</span>
+<span class="sd">        Creating and using a Discrete Actions Light-Dark POMDP::</span>
+<span class="sd">        </span>
+<span class="sd">            import numpy as np</span>
+<span class="sd">            </span>
+<span class="sd">            # Create environment with discrete actions</span>
+<span class="sd">            env = ContinuousLightDarkPOMDPDiscreteActions(</span>
+<span class="sd">                discount_factor=0.95,</span>
+<span class="sd">                goal_state=np.array([10, 5]),</span>
+<span class="sd">                start_state=np.array([0, 5])</span>
+<span class="sd">            )</span>
+<span class="sd">            </span>
+<span class="sd">            # Get available actions and take one</span>
+<span class="sd">            actions = env.get_actions()  # [&quot;up&quot;, &quot;down&quot;, &quot;right&quot;, &quot;left&quot;]</span>
+<span class="sd">            action = &quot;right&quot;  # Move right</span>
+<span class="sd">            </span>
+<span class="sd">            # Simulate step</span>
+<span class="sd">            state = env.start_state</span>
+<span class="sd">            reward = env.reward(state, action)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">discount_factor</span><span class="p">:</span> <span class="nb">float</span><span class="p">,</span>
+        <span class="n">state_transition_cov_matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+        <span class="n">observation_cov_matrix</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">),</span>
+        <span class="n">obstacle_hit_probability</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.2</span><span class="p">,</span>
+        <span class="n">obstacle_reward</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="o">-</span><span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">goal_reward</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">10.0</span><span class="p">,</span>
+        <span class="n">fuel_cost</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">2.0</span><span class="p">,</span>
+        <span class="n">grid_size</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">11</span><span class="p">,</span>
+        <span class="n">goal_state_radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.5</span><span class="p">,</span>
+        <span class="n">beacon_radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">obstacle_radius</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.5</span><span class="p">,</span>
+        <span class="n">name</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">&quot;ContinuousLightDarkPOMDPDiscreteActions&quot;</span><span class="p">,</span>
+        <span class="n">beacons</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">10</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">),</span> <span class="p">(</span><span class="mi">10</span><span class="p">,</span> <span class="mi">10</span><span class="p">)],</span>
+        <span class="n">goal_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+        <span class="n">start_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+        <span class="n">obstacles</span><span class="p">:</span> <span class="n">List</span><span class="p">[</span><span class="n">Tuple</span><span class="p">[</span><span class="nb">float</span><span class="p">,</span> <span class="nb">float</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">7</span><span class="p">),</span> <span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="mi">5</span><span class="p">)],</span>
+        <span class="n">reward_model_type</span><span class="p">:</span> <span class="n">RewardModelType</span> <span class="o">=</span> <span class="n">RewardModelType</span><span class="o">.</span><span class="n">STANDARD</span><span class="p">,</span>
+        <span class="n">penalty_decay</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1.0</span><span class="p">,</span>
+        <span class="n">is_obstacle_hit_terminal</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">True</span><span class="p">,</span>
+    <span class="p">):</span>
+        <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="fm">__init__</span><span class="p">(</span>
+            <span class="n">discount_factor</span><span class="o">=</span><span class="n">discount_factor</span><span class="p">,</span>
+            <span class="n">name</span><span class="o">=</span><span class="n">name</span><span class="p">,</span>
+            <span class="n">state_transition_cov_matrix</span><span class="o">=</span><span class="n">state_transition_cov_matrix</span><span class="p">,</span>
+            <span class="n">observation_cov_matrix</span><span class="o">=</span><span class="n">observation_cov_matrix</span><span class="p">,</span>
+            <span class="n">beacons</span><span class="o">=</span><span class="n">beacons</span><span class="p">,</span>
+            <span class="n">goal_state</span><span class="o">=</span><span class="n">goal_state</span><span class="p">,</span>
+            <span class="n">start_state</span><span class="o">=</span><span class="n">start_state</span><span class="p">,</span>
+            <span class="n">obstacles</span><span class="o">=</span><span class="n">obstacles</span><span class="p">,</span>
+            <span class="n">obstacle_hit_probability</span><span class="o">=</span><span class="n">obstacle_hit_probability</span><span class="p">,</span>
+            <span class="n">obstacle_reward</span><span class="o">=</span><span class="n">obstacle_reward</span><span class="p">,</span>
+            <span class="n">goal_reward</span><span class="o">=</span><span class="n">goal_reward</span><span class="p">,</span>
+            <span class="n">fuel_cost</span><span class="o">=</span><span class="n">fuel_cost</span><span class="p">,</span>
+            <span class="n">grid_size</span><span class="o">=</span><span class="n">grid_size</span><span class="p">,</span>
+            <span class="n">goal_state_radius</span><span class="o">=</span><span class="n">goal_state_radius</span><span class="p">,</span>
+            <span class="n">beacon_radius</span><span class="o">=</span><span class="n">beacon_radius</span><span class="p">,</span>
+            <span class="n">obstacle_radius</span><span class="o">=</span><span class="n">obstacle_radius</span><span class="p">,</span>
+            <span class="n">reward_model_type</span><span class="o">=</span><span class="n">reward_model_type</span><span class="p">,</span>
+            <span class="n">penalty_decay</span><span class="o">=</span><span class="n">penalty_decay</span><span class="p">,</span>
+            <span class="n">is_obstacle_hit_terminal</span><span class="o">=</span><span class="n">is_obstacle_hit_terminal</span><span class="p">,</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Override space info</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">space_info</span> <span class="o">=</span> <span class="n">SpaceInfo</span><span class="p">(</span>
+            <span class="n">action_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">DISCRETE</span><span class="p">,</span>
+            <span class="n">observation_space</span><span class="o">=</span><span class="n">SpaceType</span><span class="o">.</span><span class="n">CONTINUOUS</span>
+        <span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">actions</span> <span class="o">=</span> <span class="p">[</span><span class="s2">&quot;up&quot;</span><span class="p">,</span> <span class="s2">&quot;down&quot;</span><span class="p">,</span> <span class="s2">&quot;right&quot;</span><span class="p">,</span> <span class="s2">&quot;left&quot;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">action_to_vector</span> <span class="o">=</span> <span class="p">{</span>
+            <span class="s2">&quot;up&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]),</span>
+            <span class="s2">&quot;down&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">]),</span>
+            <span class="s2">&quot;right&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span>
+            <span class="s2">&quot;left&quot;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]),</span>
+        <span class="p">}</span>
+
+<div class="viewcode-block" id="ContinuousLightDarkPOMDPDiscreteActions.get_actions">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.ContinuousLightDarkPOMDPDiscreteActions.get_actions">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_actions</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">List</span><span class="p">[</span><span class="n">Any</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">actions</span></div>
+
+
+<div class="viewcode-block" id="ContinuousLightDarkPOMDPDiscreteActions.state_transition_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.ContinuousLightDarkPOMDPDiscreteActions.state_transition_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">state_transition_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="n">action_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="n">action</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">state_transition_model</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action_vector</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContinuousLightDarkPOMDPDiscreteActions.observation_model">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.ContinuousLightDarkPOMDPDiscreteActions.observation_model">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">observation_model</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">next_state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Distribution</span><span class="p">:</span>
+        <span class="n">action_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="n">action</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">observation_model</span><span class="p">(</span><span class="n">next_state</span><span class="p">,</span> <span class="n">action_vector</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ContinuousLightDarkPOMDPDiscreteActions.reward">
+<a class="viewcode-back" href="../../../../api/POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.ContinuousLightDarkPOMDPDiscreteActions.reward">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">reward</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">,</span> <span class="n">action</span><span class="p">:</span> <span class="n">Any</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">float</span><span class="p">:</span>
+        <span class="n">action_vector</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="n">action</span><span class="p">]</span>
+        <span class="k">return</span> <span class="nb">super</span><span class="p">()</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action_vector</span><span class="p">)</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="fm">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">other</span><span class="p">,</span> <span class="n">ContinuousLightDarkPOMDPDiscreteActions</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">False</span>
+        <span class="c1"># Compare only configuration parameters, ignoring internal objects like reward_model</span>
+        <span class="k">return</span> <span class="p">(</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">discount_factor</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">discount_factor</span> <span class="ow">and</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">state_transition_cov_matrix</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">state_transition_cov_matrix</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">observation_cov_matrix</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">observation_cov_matrix</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">beacons</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">beacons</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">goal_state</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">goal_state</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">start_state</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">start_state</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obstacles</span><span class="p">,</span> <span class="n">other</span><span class="o">.</span><span class="n">obstacles</span><span class="p">)</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">obstacle_hit_probability</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">obstacle_hit_probability</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">obstacle_reward</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">obstacle_reward</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">goal_reward</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">goal_reward</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">fuel_cost</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">fuel_cost</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">grid_size</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">grid_size</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">goal_state_radius</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">goal_state_radius</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">beacon_radius</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">beacon_radius</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">obstacle_radius</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">obstacle_radius</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">penalty_decay</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">penalty_decay</span> <span class="ow">and</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">actions</span> <span class="o">==</span> <span class="n">other</span><span class="o">.</span><span class="n">actions</span> <span class="ow">and</span>
+            <span class="nb">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="n">k</span><span class="p">],</span> <span class="n">other</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">[</span><span class="n">k</span><span class="p">])</span> <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">action_to_vector</span><span class="p">)</span>
+        <span class="p">)</span></div>
+
+</pre></div>
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

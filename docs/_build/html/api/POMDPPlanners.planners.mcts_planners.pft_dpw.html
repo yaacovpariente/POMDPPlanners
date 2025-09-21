@@ -1,0 +1,352 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>&lt;no title&gt; &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">&lt;no title&gt;</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.planners.mcts_planners.pft_dpw.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <p id="module-POMDPPlanners.planners.mcts_planners.pft_dpw">PFT-DPW (Progressive Function Transfer with Double Progressive Widening) Algorithm.</p>
+<p>This module implements PFT-DPW, a Monte Carlo Tree Search algorithm for continuous
+action spaces in POMDPs. The algorithm uses progressive widening to gradually expand
+the action and observation spaces during tree search, enabling effective planning
+in problems with continuous or large discrete action spaces.</p>
+<p>Key features:
+- Progressive widening for both actions and observations
+- Handles continuous action spaces through adaptive sampling
+- Uses UCB1-style exploration with progressive expansion
+- Supports custom action samplers for domain-specific action generation</p>
+<p>The algorithm progressively expands the tree by:
+1. Using action progressive widening to add new actions based on visit counts
+2. Using observation progressive widening to add new observation branches
+3. Balancing exploration of new actions with exploitation of promising ones
+4. Performing random rollouts from leaf nodes for value estimation</p>
+<dl class="simple">
+<dt>Classes:</dt><dd><p>ActionSampler: Abstract base class for action sampling strategies
+PFT_DPW: Main PFT-DPW planner with progressive widening for continuous actions</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.planners.mcts_planners.pft_dpw.</span></span><span class="sig-name descname"><span class="pre">PFT_DPW</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">environment</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">discount_factor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">depth</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action_sampler</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_a</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_a</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">k_o</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">alpha_o</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">exploration_constant</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">time_out_in_seconds</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">n_simulations</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_samples_per_node</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">min_visit_count_per_action</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">log_path</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_queue_logger</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/planners/mcts_planners/pft_dpw.html#PFT_DPW"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="POMDPPlanners.planners.mcts_planners.path_simulations_policy.html#POMDPPlanners.planners.mcts_planners.path_simulations_policy.PathSimulationPolicy" title="POMDPPlanners.planners.mcts_planners.path_simulations_policy.PathSimulationPolicy"><code class="xref py py-class docutils literal notranslate"><span class="pre">PathSimulationPolicy</span></code></a></p>
+<p>PFT-DPW (Progressive Function Transfer with Double Progressive Widening) Algorithm.</p>
+<p>PFT-DPW is a Monte Carlo Tree Search algorithm designed for continuous action spaces
+in POMDPs. It uses progressive widening to gradually expand both the action and
+observation spaces during tree search, enabling effective planning in problems with
+continuous or very large discrete action spaces.</p>
+<p>Algorithm Overview:
+The algorithm operates through progressive expansion:
+1. <strong>Action Progressive Widening</strong>: Gradually adds new actions based on visit counts
+2. <strong>Observation Progressive Widening</strong>: Gradually adds new observation branches
+3. <strong>UCB1 Exploration</strong>: Balances exploration of new actions with exploitation
+4. <strong>Random Rollouts</strong>: Estimates values from leaf nodes using random simulations</p>
+<p>Key Features:
+- Handles continuous action spaces through adaptive sampling
+- Uses UCB1-style exploration with progressive expansion
+- Supports custom action samplers for domain-specific action generation
+- Balances exploration of new actions with exploitation of promising ones
+- Performs random rollouts from leaf nodes for value estimation</p>
+<p>Progressive Widening Parameters:
+- k_a, alpha_a: Control action space expansion (more actions added as visit_count^alpha_a)
+- k_o, alpha_o: Control observation space expansion
+- exploration_constant: UCB1 exploration parameter (higher = more exploration)</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>environment</strong> (<a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.Environment" title="POMDPPlanners.core.environment.Environment"><em>Environment</em></a>)</p></li>
+<li><p><strong>discount_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>depth</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>action_sampler</strong> (<a class="reference internal" href="POMDPPlanners.planners.planners_utils.html#POMDPPlanners.planners.planners_utils.dpw.ActionSampler" title="POMDPPlanners.planners.planners_utils.dpw.ActionSampler"><em>ActionSampler</em></a>)</p></li>
+<li><p><strong>k_a</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>alpha_a</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>k_o</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>alpha_o</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>exploration_constant</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>time_out_in_seconds</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>n_simulations</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>min_samples_per_node</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>min_visit_count_per_action</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>log_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><em>Path</em></a><em> | </em><em>None</em>)</p></li>
+<li><p><strong>debug</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+<li><p><strong>use_queue_logger</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.environment">
+<span class="sig-name descname"><span class="pre">environment</span></span><a class="headerlink" href="#POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.environment" title="Link to this definition"></a></dt>
+<dd><p>The POMDP environment to plan for</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.discount_factor">
+<span class="sig-name descname"><span class="pre">discount_factor</span></span><a class="headerlink" href="#POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.discount_factor" title="Link to this definition"></a></dt>
+<dd><p>Discount factor for future rewards (0 &lt; γ ≤ 1)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.depth">
+<span class="sig-name descname"><span class="pre">depth</span></span><a class="headerlink" href="#POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.depth" title="Link to this definition"></a></dt>
+<dd><p>Maximum search depth for tree expansion</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.action_sampler">
+<span class="sig-name descname"><span class="pre">action_sampler</span></span><a class="headerlink" href="#POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.action_sampler" title="Link to this definition"></a></dt>
+<dd><p>Strategy for sampling new actions during progressive widening</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">k_a,</span> <span class="pre">alpha_a</span></span></dt>
+<dd><p>Action progressive widening parameters</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py">
+<span class="sig-name descname"><span class="pre">k_o,</span> <span class="pre">alpha_o</span></span></dt>
+<dd><p>Observation progressive widening parameters</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.exploration_constant">
+<span class="sig-name descname"><span class="pre">exploration_constant</span></span><a class="headerlink" href="#POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.exploration_constant" title="Link to this definition"></a></dt>
+<dd><p>UCB1 exploration parameter</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.n_simulations">
+<span class="sig-name descname"><span class="pre">n_simulations</span></span><a class="headerlink" href="#POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.n_simulations" title="Link to this definition"></a></dt>
+<dd><p>Number of simulations to run (mutually exclusive with timeout)</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.time_out_in_seconds">
+<span class="sig-name descname"><span class="pre">time_out_in_seconds</span></span><a class="headerlink" href="#POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.time_out_in_seconds" title="Link to this definition"></a></dt>
+<dd><p>Time limit for planning (mutually exclusive with n_simulations)</p>
+</dd></dl>
+
+<p class="rubric">Example</p>
+<p>Using PFT-DPW for continuous control in CartPole:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.pft_dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">PFT_DPW</span><span class="p">,</span> <span class="n">ActionSampler</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.cartpole_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">CartPolePOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_initial_belief</span>
+
+<span class="c1"># Custom action sampler for CartPole</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CartPoleActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">])</span>  <span class="c1"># Left or right force</span>
+
+<span class="c1"># Create CartPole environment</span>
+<span class="n">cartpole</span> <span class="o">=</span> <span class="n">CartPolePOMDP</span><span class="p">(</span>
+    <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+    <span class="n">noise_cov</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">([</span><span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">])</span>
+<span class="p">)</span>
+
+<span class="c1"># Create PFT-DPW planner</span>
+<span class="n">pft_planner</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+    <span class="n">environment</span><span class="o">=</span><span class="n">cartpole</span><span class="p">,</span>
+    <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.99</span><span class="p">,</span>
+    <span class="n">depth</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_CartPole&quot;</span><span class="p">,</span>
+    <span class="n">action_sampler</span><span class="o">=</span><span class="n">CartPoleActionSampler</span><span class="p">(),</span>
+    <span class="n">k_a</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>                    <span class="c1"># Action widening parameter</span>
+    <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>                <span class="c1"># Action widening exponent</span>
+    <span class="n">k_o</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>                    <span class="c1"># Observation widening parameter</span>
+    <span class="n">alpha_o</span><span class="o">=</span><span class="mf">0.5</span><span class="p">,</span>                <span class="c1"># Observation widening exponent</span>
+    <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.41</span><span class="p">,</span>   <span class="c1"># UCB1 exploration (√2)</span>
+    <span class="n">n_simulations</span><span class="o">=</span><span class="mi">1000</span>          <span class="c1"># Number of MCTS simulations</span>
+<span class="p">)</span>
+
+<span class="c1"># Plan from initial belief</span>
+<span class="n">initial_belief</span> <span class="o">=</span> <span class="n">get_initial_belief</span><span class="p">(</span><span class="n">cartpole</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">500</span><span class="p">)</span>
+<span class="n">action</span><span class="p">,</span> <span class="n">run_data</span> <span class="o">=</span> <span class="n">pft_planner</span><span class="o">.</span><span class="n">action</span><span class="p">(</span><span class="n">initial_belief</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Selected action: </span><span class="si">{</span><span class="n">action</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Planning completed with </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">run_data</span><span class="o">.</span><span class="n">info_variables</span><span class="p">)</span><span class="si">}</span><span class="s2"> metrics&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p class="rubric">Example</p>
+<p>Using PFT-DPW for 2D continuous navigation:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.pft_dpw</span><span class="w"> </span><span class="kn">import</span> <span class="n">PFT_DPW</span><span class="p">,</span> <span class="n">ActionSampler</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">NavigationActionSampler</span><span class="p">(</span><span class="n">ActionSampler</span><span class="p">):</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">max_velocity</span><span class="o">=</span><span class="mf">1.0</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_velocity</span> <span class="o">=</span> <span class="n">max_velocity</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">sample</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">belief_node</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="c1"># Sample 2D velocity vector</span>
+        <span class="n">angle</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">2</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">pi</span><span class="p">)</span>
+        <span class="n">speed</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_velocity</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">speed</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">angle</span><span class="p">),</span> <span class="n">speed</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">angle</span><span class="p">)])</span>
+
+<span class="c1"># Assume we have a 2D navigation environment</span>
+<span class="c1"># nav_env = NavigationPOMDP(...)</span>
+
+<span class="n">navigation_planner</span> <span class="o">=</span> <span class="n">PFT_DPW</span><span class="p">(</span>
+    <span class="n">environment</span><span class="o">=</span><span class="n">nav_env</span><span class="p">,</span>
+    <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+    <span class="n">depth</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;PFT_DPW_Navigation&quot;</span><span class="p">,</span>
+    <span class="n">action_sampler</span><span class="o">=</span><span class="n">NavigationActionSampler</span><span class="p">(</span><span class="n">max_velocity</span><span class="o">=</span><span class="mf">2.0</span><span class="p">),</span>
+    <span class="n">k_a</span><span class="o">=</span><span class="mf">3.0</span><span class="p">,</span>                    <span class="c1"># More aggressive action widening</span>
+    <span class="n">alpha_a</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span>                <span class="c1"># Faster action space expansion</span>
+    <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>    <span class="c1"># Higher exploration</span>
+    <span class="n">n_simulations</span><span class="o">=</span><span class="mi">2000</span>          <span class="c1"># More simulations for complex space</span>
+<span class="p">)</span>
+</pre></div>
+</div>
+<p>Mathematical Background:
+Action progressive widening condition:</p>
+<blockquote>
+<div><p>Add new action when: ⌊N(s)^α_a⌋ &gt; ⌊(N(s)-1)^α_a⌋
+where N(s) is the visit count of belief node s</p>
+</div></blockquote>
+<dl class="simple">
+<dt>Observation progressive widening condition:</dt><dd><p>Add new observation when: <a href="#id1"><span class="problematic" id="id2">|C(s,a)|</span></a> ≤ k_o * N(s,a)^α_o
+where <a href="#id3"><span class="problematic" id="id4">|C(s,a)|</span></a> is the number of observation children</p>
+</dd>
+<dt>UCB1 action selection:</dt><dd><p>UCB(s,a) = Q(s,a) + c * √(ln(N(s)) / N(s,a))
+where c is the exploration constant</p>
+</dd>
+</dl>
+<p>References:
+- Couëtoux, A., et al. “Continuous Upper Confidence Trees.” LION 2011.
+- Browne, C., et al. “A Survey of Monte Carlo Tree Search Methods.” IEEE TCIAIG 2012.</p>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.get_space_info">
+<em class="property"><span class="k"><span class="pre">classmethod</span></span><span class="w"> </span></em><span class="sig-name descname"><span class="pre">get_space_info</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/planners/mcts_planners/pft_dpw.html#PFT_DPW.get_space_info"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.get_space_info" title="Link to this definition"></a></dt>
+<dd><p>Get space type requirements for this policy class.</p>
+<p>This class method specifies what types of action and observation spaces
+this policy implementation can handle, enabling compatibility checking
+with environments.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.policy.html#POMDPPlanners.core.policy.PolicySpaceInfo" title="POMDPPlanners.core.policy.PolicySpaceInfo"><code class="xref py py-class docutils literal notranslate"><span class="pre">PolicySpaceInfo</span></code></a></span></p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>PolicySpaceInfo specifying required action and observation space types</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to declare their space compatibility.
+This is used for validation when pairing policies with environments.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.sample_existing_belief_node">
+<span class="sig-name descname"><span class="pre">sample_existing_belief_node</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">belief_node</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action_node</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/planners/mcts_planners/pft_dpw.html#PFT_DPW.sample_existing_belief_node"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.planners.mcts_planners.pft_dpw.PFT_DPW.sample_existing_belief_node" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Tuple</span></code></a>[<a class="reference internal" href="POMDPPlanners.core.tree.html#POMDPPlanners.core.tree.BeliefNode" title="POMDPPlanners.core.tree.BeliefNode"><code class="xref py py-class docutils literal notranslate"><span class="pre">BeliefNode</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a>]</span></p>
+</dd>
+<dt class="field-even">Parameters<span class="colon">:</span></dt>
+<dd class="field-even"><ul class="simple">
+<li><p><strong>belief_node</strong> (<a class="reference internal" href="POMDPPlanners.core.tree.html#POMDPPlanners.core.tree.BeliefNode" title="POMDPPlanners.core.tree.BeliefNode"><em>BeliefNode</em></a>)</p></li>
+<li><p><strong>action_node</strong> (<a class="reference internal" href="POMDPPlanners.core.tree.html#POMDPPlanners.core.tree.ActionNode" title="POMDPPlanners.core.tree.ActionNode"><em>ActionNode</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+</dd></dl>
+
+</dd></dl>
+
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

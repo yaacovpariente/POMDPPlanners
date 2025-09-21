@@ -1,0 +1,376 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>&lt;no title&gt; &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="index.html">API Reference</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+      <li class="breadcrumb-item active">&lt;no title&gt;</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.utils.logger.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <dl class="py class" id="module-POMDPPlanners.utils.logger">
+<dt class="sig sig-object py" id="POMDPPlanners.utils.logger.QueueLoggerManager">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.utils.logger.</span></span><span class="sig-name descname"><span class="pre">QueueLoggerManager</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">max_handlers</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">100</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cleanup_interval</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">60</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">handler_timeout</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">300</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/utils/logger.html#QueueLoggerManager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.utils.logger.QueueLoggerManager" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<p>Centralized queue-based logger manager with individual task log files.</p>
+<p>This manager solves the “too many open files” problem in heavy multiprocessing
+scenarios by using a single writer thread that handles all file I/O operations.
+Worker processes only interact with a memory queue, eliminating file descriptor
+leaks while maintaining individual log files per task.</p>
+<p>Key benefits:
+- Workers never open file handles directly (prevents FD leaks)
+- Single writer thread manages individual file handlers per task
+- Smart handler pooling and cleanup
+- Maintains individual log files as before
+- Scales to thousands of concurrent processes</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>max_handlers</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>cleanup_interval</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>handler_timeout</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.utils.logger.QueueLoggerManager.get_queue_logger">
+<span class="sig-name descname"><span class="pre">get_queue_logger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">task_id</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">cache_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">console_output</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/utils/logger.html#QueueLoggerManager.get_queue_logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.utils.logger.QueueLoggerManager.get_queue_logger" title="Link to this definition"></a></dt>
+<dd><p>Get a logger that writes to the centralized queue with individual task file.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>task_id</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – Unique task identifier for individual log file</p></li>
+<li><p><strong>cache_dir</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Path</span></code></a>]</span>) – Directory for log files</p></li>
+<li><p><strong>debug</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span>) – Enable debug mode with verbose logging</p></li>
+<li><p><strong>console_output</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span>) – Enable/disable console output</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Logger</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Configured logger instance that writes to the queue</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.utils.logger.QueueLoggerManager.start">
+<span class="sig-name descname"><span class="pre">start</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/utils/logger.html#QueueLoggerManager.start"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.utils.logger.QueueLoggerManager.start" title="Link to this definition"></a></dt>
+<dd><p>Start the background logging thread.</p>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.utils.logger.QueueLoggerManager.stop">
+<span class="sig-name descname"><span class="pre">stop</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/utils/logger.html#QueueLoggerManager.stop"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.utils.logger.QueueLoggerManager.stop" title="Link to this definition"></a></dt>
+<dd><p>Stop the background logging thread and cleanup resources.</p>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.utils.logger.cleanup_all_loggers">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.utils.logger.</span></span><span class="sig-name descname"><span class="pre">cleanup_all_loggers</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/utils/logger.html#cleanup_all_loggers"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.utils.logger.cleanup_all_loggers" title="Link to this definition"></a></dt>
+<dd><p>Emergency cleanup of all logging resources.</p>
+<p>This function should be called when shutting down the application
+to ensure all logging resources are properly cleaned up.</p>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.utils.logger.get_logger">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.utils.logger.</span></span><span class="sig-name descname"><span class="pre">get_logger</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">name</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">level</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">20</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">output_dir</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">None</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">debug</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">console_output</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">use_queue</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">False</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/utils/logger.html#get_logger"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.utils.logger.get_logger" title="Link to this definition"></a></dt>
+<dd><p>Get a configured logger for POMDP experiments and algorithm execution.</p>
+<p>This utility creates standardized loggers for tracking experimental progress,
+algorithm execution, and debugging information. It supports both console
+and file logging with configurable levels and formatting.</p>
+<p>The logger automatically handles timestamped log files, directory creation,
+and proper formatter configuration for both development and production use.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>name</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a></span>) – Logger identifier (typically module name or algorithm name)</p></li>
+<li><p><strong>level</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></span>) – Base logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)</p></li>
+<li><p><strong>output_dir</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Optional" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Optional</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/pathlib.html#pathlib.Path" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Path</span></code></a>]</span>) – Directory for log files (creates logs/ subdirectory if provided)</p></li>
+<li><p><strong>debug</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span>) – Enable debug mode with verbose logging and detailed formatting</p></li>
+<li><p><strong>console_output</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span>) – Enable/disable console output (useful for batch experiments)</p></li>
+<li><p><strong>use_queue</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span>) – Enable queue-based logging for heavy multiprocessing scenarios</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/logging.html#logging.Logger" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Logger</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Configured logger instance ready for use</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Queue-based logging is recommended for heavy multiprocessing workloads
+to prevent “too many open files” errors. It uses a single writer thread
+to handle all file I/O operations while workers only interact with a
+memory queue, maintaining individual log files per task.</p>
+</div>
+<p class="rubric">Example</p>
+<p>Basic logging setup for algorithm execution:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.utils.logger</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_logger</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">logging</span>
+
+<span class="c1"># Create logger for POMCP algorithm</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span><span class="s2">&quot;POMCP_Tiger&quot;</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+<span class="c1"># Log algorithm progress</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Starting POMCP planning on Tiger POMDP&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Tree construction complete: 1000 simulations&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s2">&quot;Low particle count detected: 50 particles&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s2">&quot;Planning failed: invalid belief state&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p class="rubric">Example</p>
+<p>File logging for experimental studies:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">pathlib</span><span class="w"> </span><span class="kn">import</span> <span class="n">Path</span>
+
+<span class="c1"># Setup file logging for experiment tracking</span>
+<span class="n">experiment_dir</span> <span class="o">=</span> <span class="n">Path</span><span class="p">(</span><span class="s2">&quot;experiments/tiger_study_2024&quot;</span><span class="p">)</span>
+<span class="n">logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;TigerExperiment&quot;</span><span class="p">,</span>
+    <span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span>
+    <span class="n">output_dir</span><span class="o">=</span><span class="n">experiment_dir</span><span class="p">,</span>
+    <span class="n">console_output</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
+
+<span class="c1"># Log files will be created at:</span>
+<span class="c1"># experiments/tiger_study_2024/logs/TigerExperiment_20240315_143022.log</span>
+
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Starting Tiger POMDP comparative study&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Environments: TigerPOMDP&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Planners: POMCP, PFT-DPW, SparsePFT&quot;</span><span class="p">)</span>
+<span class="n">logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Episodes per run: 100&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p class="rubric">Example</p>
+<p>Debug mode for algorithm development:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># Enable detailed debug logging</span>
+<span class="n">debug_logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;POMCP_Debug&quot;</span><span class="p">,</span>
+    <span class="n">debug</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>                <span class="c1"># Enables DEBUG level + detailed formatting</span>
+    <span class="n">output_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;debug_logs&quot;</span><span class="p">),</span>
+    <span class="n">console_output</span><span class="o">=</span><span class="kc">True</span>
+<span class="p">)</span>
+
+<span class="n">debug_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;UCB values: [0.45, 0.67, 0.23]&quot;</span><span class="p">)</span>
+<span class="n">debug_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Selected action: listen (index=0)&quot;</span><span class="p">)</span>
+<span class="n">debug_logger</span><span class="o">.</span><span class="n">debug</span><span class="p">(</span><span class="s2">&quot;Tree depth reached: 15/20&quot;</span><span class="p">)</span>
+<span class="n">debug_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="s2">&quot;Simulation complete: reward=8.5&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p class="rubric">Example</p>
+<p>Batch experiment logging (console disabled):</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="c1"># For batch experiments where console output clutters results</span>
+<span class="n">batch_logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;BatchExperiment&quot;</span><span class="p">,</span>
+    <span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">,</span>
+    <span class="n">output_dir</span><span class="o">=</span><span class="n">Path</span><span class="p">(</span><span class="s2">&quot;batch_results&quot;</span><span class="p">),</span>
+    <span class="n">console_output</span><span class="o">=</span><span class="kc">False</span>      <span class="c1"># Only file logging</span>
+<span class="p">)</span>
+
+<span class="c1"># All output goes to file only - clean console for batch processing</span>
+<span class="k">for</span> <span class="n">run</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">100</span><span class="p">):</span>
+    <span class="n">batch_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Run </span><span class="si">{</span><span class="n">run</span><span class="o">+</span><span class="mi">1</span><span class="si">}</span><span class="s2">: reward=</span><span class="si">{</span><span class="n">reward</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">, steps=</span><span class="si">{</span><span class="n">steps</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<p class="rubric">Example</p>
+<p>Integration with simulation framework:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.simulations.episodes</span><span class="w"> </span><span class="kn">import</span> <span class="n">run_episode</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.environments.tiger_pomdp</span><span class="w"> </span><span class="kn">import</span> <span class="n">TigerPOMDP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.planners.mcts_planners.pomcp</span><span class="w"> </span><span class="kn">import</span> <span class="n">POMCP</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">POMDPPlanners.core.belief</span><span class="w"> </span><span class="kn">import</span> <span class="n">get_initial_belief</span>
+
+<span class="c1"># Setup logging for episode execution</span>
+<span class="n">episode_logger</span> <span class="o">=</span> <span class="n">get_logger</span><span class="p">(</span><span class="s2">&quot;EpisodeRunner&quot;</span><span class="p">,</span> <span class="n">level</span><span class="o">=</span><span class="n">logging</span><span class="o">.</span><span class="n">INFO</span><span class="p">)</span>
+
+<span class="c1"># Create environment and planner</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">TigerPOMDP</span><span class="p">(</span><span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">)</span>
+<span class="n">planner</span> <span class="o">=</span> <span class="n">POMCP</span><span class="p">(</span>
+    <span class="n">environment</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
+    <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+    <span class="n">depth</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+    <span class="n">exploration_constant</span><span class="o">=</span><span class="mf">1.0</span><span class="p">,</span>
+    <span class="n">name</span><span class="o">=</span><span class="s2">&quot;POMCP_Tiger&quot;</span><span class="p">,</span>
+    <span class="n">n_simulations</span><span class="o">=</span><span class="mi">1000</span>
+<span class="p">)</span>
+
+<span class="n">initial_belief</span> <span class="o">=</span> <span class="n">get_initial_belief</span><span class="p">(</span><span class="n">env</span><span class="p">,</span> <span class="n">n_particles</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+
+<span class="c1"># Run episode with logging</span>
+<span class="n">history</span> <span class="o">=</span> <span class="n">run_episode</span><span class="p">(</span>
+    <span class="n">environment</span><span class="o">=</span><span class="n">env</span><span class="p">,</span>
+    <span class="n">policy</span><span class="o">=</span><span class="n">planner</span><span class="p">,</span>
+    <span class="n">initial_belief</span><span class="o">=</span><span class="n">initial_belief</span><span class="p">,</span>
+    <span class="n">num_steps</span><span class="o">=</span><span class="mi">50</span><span class="p">,</span>
+    <span class="n">logger</span><span class="o">=</span><span class="n">episode_logger</span>     <span class="c1"># Pass logger to episode runner</span>
+<span class="p">)</span>
+
+<span class="n">episode_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Episode completed: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">history</span><span class="o">.</span><span class="n">history</span><span class="p">)</span><span class="si">}</span><span class="s2"> steps&quot;</span><span class="p">)</span>
+<span class="n">episode_logger</span><span class="o">.</span><span class="n">info</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;Total reward: </span><span class="si">{</span><span class="n">history</span><span class="o">.</span><span class="n">total_return</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl>
+<dt>Logging Best Practices:</dt><dd><p><strong>Log Levels</strong>:
+- DEBUG: Detailed algorithm internals, variable values
+- INFO: Algorithm progress, major milestones, results
+- WARNING: Suboptimal conditions, parameter issues
+- ERROR: Algorithm failures, invalid inputs
+- CRITICAL: System failures, experiment termination</p>
+<p><strong>Message Format</strong>:
+- Use descriptive messages with context
+- Include relevant numerical values
+- Timestamp and location automatically included</p>
+<p><strong>Performance Considerations</strong>:
+- Disable debug logging in production experiments
+- Use file-only logging for batch processing
+- Consider log rotation for long-running experiments</p>
+</dd>
+<dt>File Organization:</dt><dd><p>Log files are automatically organized with timestamps:
+<a href="#id1"><span class="problematic" id="id2">``</span></a>`
+output_dir/
+└── logs/</p>
+<blockquote>
+<div><p>├── POMCP_Tiger_20240315_143022.log
+├── PFT_DPW_CartPole_20240315_143155.log
+└── Experiment_Batch_20240315_144301.log</p>
+</div></blockquote>
+<p><a href="#id3"><span class="problematic" id="id4">``</span></a><a href="#id5"><span class="problematic" id="id6">`</span></a></p>
+</dd>
+<dt>Thread Safety:</dt><dd><p>The logger is thread-safe and suitable for use with distributed
+computing frameworks like Dask or Joblib for parallel experiments.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.utils.logger.get_queue_logger_diagnostics">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.utils.logger.</span></span><span class="sig-name descname"><span class="pre">get_queue_logger_diagnostics</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/utils/logger.html#get_queue_logger_diagnostics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.utils.logger.get_queue_logger_diagnostics" title="Link to this definition"></a></dt>
+<dd><p>Get diagnostic information about the queue-based logging system.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Dict" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Dict</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">str</span></code></a>, <a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>]</span></p>
+</dd>
+<dt class="field-even">Returns<span class="colon">:</span></dt>
+<dd class="field-even"><p>Dictionary containing diagnostic information including queue size,
+handler count, writer thread status, and resource usage.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.utils.logger.get_queue_logger_manager">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.utils.logger.</span></span><span class="sig-name descname"><span class="pre">get_queue_logger_manager</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/utils/logger.html#get_queue_logger_manager"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.utils.logger.get_queue_logger_manager" title="Link to this definition"></a></dt>
+<dd><p>Get the global queue logger manager instance.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="#POMDPPlanners.utils.logger.QueueLoggerManager" title="POMDPPlanners.utils.logger.QueueLoggerManager"><code class="xref py py-class docutils literal notranslate"><span class="pre">QueueLoggerManager</span></code></a></span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py function">
+<dt class="sig sig-object py" id="POMDPPlanners.utils.logger.reset_logger_state">
+<span class="sig-prename descclassname"><span class="pre">POMDPPlanners.utils.logger.</span></span><span class="sig-name descname"><span class="pre">reset_logger_state</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/utils/logger.html#reset_logger_state"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.utils.logger.reset_logger_state" title="Link to this definition"></a></dt>
+<dd><p>Reset the global logger state for testing.</p>
+<p>This function ensures clean state between test runs by:
+- Stopping any running queue manager
+- Clearing the global singleton
+- Removing all Python loggers created by this module</p>
+</dd></dl>
+
+
+
+           </div>
+          </div>
+          <footer>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>

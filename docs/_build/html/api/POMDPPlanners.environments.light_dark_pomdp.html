@@ -1,0 +1,883 @@
+
+
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" data-content_root="../">
+<head>
+  <meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>POMDPPlanners.environments.light_dark_pomdp package &mdash; POMDPPlanners 1.0 documentation</title>
+      <link rel="stylesheet" type="text/css" href="../_static/pygments.css?v=b86133f3" />
+      <link rel="stylesheet" type="text/css" href="../_static/css/theme.css?v=e59714d7" />
+
+  
+      <script src="../_static/jquery.js?v=5d32c60e"></script>
+      <script src="../_static/_sphinx_javascript_frameworks_compat.js?v=2cd50e6c"></script>
+      <script src="../_static/documentation_options.js?v=f2a433a1"></script>
+      <script src="../_static/doctools.js?v=9bcbadda"></script>
+      <script src="../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils package" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html" />
+    <link rel="prev" title="POMDPPlanners.environments package" href="POMDPPlanners.environments.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+
+          
+          
+          <a href="../index.html" class="icon icon-home">
+            POMDPPlanners
+          </a>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption" role="heading"><span class="caption-text">Contents:</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="index.html">API Reference</a><ul class="current">
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.html">POMDPPlanners package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.core.html">POMDPPlanners.core package</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="POMDPPlanners.environments.html">POMDPPlanners.environments package</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#POMDPPlanners.environments.CartPolePOMDP"><code class="docutils literal notranslate"><span class="pre">CartPolePOMDP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#POMDPPlanners.environments.ContinuousLightDarkPOMDP"><code class="docutils literal notranslate"><span class="pre">ContinuousLightDarkPOMDP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#POMDPPlanners.environments.ContinuousLightDarkPOMDPDiscreteActions"><code class="docutils literal notranslate"><span class="pre">ContinuousLightDarkPOMDPDiscreteActions</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#POMDPPlanners.environments.DiscreteLightDarkPOMDP"><code class="docutils literal notranslate"><span class="pre">DiscreteLightDarkPOMDP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#POMDPPlanners.environments.LaserTagPOMDP"><code class="docutils literal notranslate"><span class="pre">LaserTagPOMDP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#POMDPPlanners.environments.MountainCarPOMDP"><code class="docutils literal notranslate"><span class="pre">MountainCarPOMDP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#POMDPPlanners.environments.PacManPOMDP"><code class="docutils literal notranslate"><span class="pre">PacManPOMDP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#POMDPPlanners.environments.PushPOMDP"><code class="docutils literal notranslate"><span class="pre">PushPOMDP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#POMDPPlanners.environments.RockSamplePOMDP"><code class="docutils literal notranslate"><span class="pre">RockSamplePOMDP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#POMDPPlanners.environments.SafeAntVelocityPOMDP"><code class="docutils literal notranslate"><span class="pre">SafeAntVelocityPOMDP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#POMDPPlanners.environments.SanityPOMDP"><code class="docutils literal notranslate"><span class="pre">SanityPOMDP</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#POMDPPlanners.environments.TigerPOMDP"><code class="docutils literal notranslate"><span class="pre">TigerPOMDP</span></code></a></li>
+<li class="toctree-l3 current"><a class="reference internal" href="POMDPPlanners.environments.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l4 current"><a class="current reference internal" href="#">POMDPPlanners.environments.light_dark_pomdp package</a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.pacman_pomdp.html">POMDPPlanners.environments.pacman_pomdp package</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#submodules">Submodules</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#module-POMDPPlanners.environments.cartpole_pomdp">POMDPPlanners.environments.cartpole_pomdp module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#module-POMDPPlanners.environments.laser_tag_pomdp">POMDPPlanners.environments.laser_tag_pomdp module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#module-POMDPPlanners.environments.mountain_car_pomdp">POMDPPlanners.environments.mountain_car_pomdp module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#module-POMDPPlanners.environments.push_pomdp">POMDPPlanners.environments.push_pomdp module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#module-POMDPPlanners.environments.rock_sample_pomdp">POMDPPlanners.environments.rock_sample_pomdp module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#module-POMDPPlanners.environments.safety_ant_velocity_pomdp">POMDPPlanners.environments.safety_ant_velocity_pomdp module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#module-POMDPPlanners.environments.sanity_pomdp">POMDPPlanners.environments.sanity_pomdp module</a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.html#module-POMDPPlanners.environments.tiger_pomdp">POMDPPlanners.environments.tiger_pomdp module</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.planners.html">POMDPPlanners.planners package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.simulations.html">POMDPPlanners.simulations package</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.utils.html">POMDPPlanners.utils package</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">POMDPPlanners</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home" aria-label="Home"></a></li>
+          <li class="breadcrumb-item"><a href="index.html">API Reference</a></li>
+          <li class="breadcrumb-item"><a href="POMDPPlanners.html">POMDPPlanners package</a></li>
+          <li class="breadcrumb-item"><a href="POMDPPlanners.environments.html">POMDPPlanners.environments package</a></li>
+      <li class="breadcrumb-item active">POMDPPlanners.environments.light_dark_pomdp package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/POMDPPlanners.environments.light_dark_pomdp.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="module-POMDPPlanners.environments.light_dark_pomdp">
+<span id="pomdpplanners-environments-light-dark-pomdp-package"></span><h1>POMDPPlanners.environments.light_dark_pomdp package<a class="headerlink" href="#module-POMDPPlanners.environments.light_dark_pomdp" title="Link to this heading"></a></h1>
+<section id="subpackages">
+<h2>Subpackages<a class="headerlink" href="#subpackages" title="Link to this heading"></a></h2>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html">POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#module-POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp">POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.cache_visualization"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP.cache_visualization()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.compute_metrics"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP.compute_metrics()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.config_id"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP.config_id</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.initial_observation_dist"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP.initial_observation_dist()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.initial_state_dist"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP.initial_state_dist()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.is_equal_observation"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP.is_equal_observation()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.is_terminal"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP.is_terminal()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.observation_model"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP.observation_model()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.reward"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP.reward()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.state_transition_model"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP.state_transition_model()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP.visualize_path"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP.visualize_path()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDPDiscreteActions"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDPDiscreteActions</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDPDiscreteActions.get_actions"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkPOMDPDiscreteActions.get_actions()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#module-POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models">POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models.ContinuousLightDarkNormalNoiseObservationModel"><code class="docutils literal notranslate"><span class="pre">ContinuousLightDarkNormalNoiseObservationModel</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models.ContinuousLightDarkNormalNoiseObservationModel.probability"><code class="docutils literal notranslate"><span class="pre">ContinuousLightDarkNormalNoiseObservationModel.probability()</span></code></a></li>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models.ContinuousLightDarkNormalNoiseObservationModel.sample"><code class="docutils literal notranslate"><span class="pre">ContinuousLightDarkNormalNoiseObservationModel.sample()</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#module-POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models">POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models module</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.BaseLightDarkRewardModel"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkRewardModel</span></code></a><ul>
+<li class="toctree-l4"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.BaseLightDarkRewardModel.compute_reward"><code class="docutils literal notranslate"><span class="pre">BaseLightDarkRewardModel.compute_reward()</span></code></a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLDDangerousStatesRewardModel"><code class="docutils literal notranslate"><span class="pre">ContinuousLDDangerousStatesRewardModel</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLightDarkDecayingHitProbabilityRewardModel"><code class="docutils literal notranslate"><span class="pre">ContinuousLightDarkDecayingHitProbabilityRewardModel</span></code></a></li>
+<li class="toctree-l3"><a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models.ContinuousLightDarkRewardModel"><code class="docutils literal notranslate"><span class="pre">ContinuousLightDarkRewardModel</span></code></a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</div>
+</section>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Link to this heading"></a></h2>
+</section>
+<section id="module-POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp">
+<span id="pomdpplanners-environments-light-dark-pomdp-continuous-light-dark-pomdp-module"></span><h2>POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp module<a class="headerlink" href="#module-POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp" title="Link to this heading"></a></h2>
+<p>Continuous Light-Dark POMDP Environment Implementation.</p>
+<p>This module implements the continuous Light-Dark domain, a classic POMDP benchmark
+where an agent must navigate to a goal position in a continuous 2D space while
+dealing with position-dependent observation noise.</p>
+<p>The Continuous Light-Dark POMDP features:
+- Continuous 2D state space representing agent position
+- Discrete or continuous action space for movement
+- Light source at a specific location that affects observation quality
+- Observation noise that decreases closer to the light source
+- Goal region that agent must reach to maximize reward
+- Optional obstacles that cause negative rewards when hit</p>
+<p>Key characteristics:
+- State: [x, y] position in continuous 2D space
+- Actions: Movement vectors or discrete directions
+- Observations: Noisy position estimates (noise depends on distance from light)
+- Rewards: Goal reaching bonus, movement costs, obstacle penalties
+- Multiple reward model variants available</p>
+<dl class="simple">
+<dt>Classes:</dt><dd><p>RewardModelType: Enumeration of available reward model types
+StateTransitionModel: Continuous movement with Gaussian noise
+ContinuousLightDarkPOMDP: Main environment class
+ContinuousLightDarkPOMDPDiscreteActions: Discrete action variant</p>
+</dd>
+</dl>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">ContinuousLightDarkPOMDP</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">discount_factor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'ContinuousLightDarkPOMDP'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_transition_cov_matrix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">numpy.eye</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation_cov_matrix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">numpy.eye</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beacons</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[(0,</span> <span class="pre">0),</span> <span class="pre">(0,</span> <span class="pre">5),</span> <span class="pre">(0,</span> <span class="pre">10),</span> <span class="pre">(5,</span> <span class="pre">0),</span> <span class="pre">(5,</span> <span class="pre">5),</span> <span class="pre">(5,</span> <span class="pre">10),</span> <span class="pre">(10,</span> <span class="pre">0),</span> <span class="pre">(10,</span> <span class="pre">5),</span> <span class="pre">(10,</span> <span class="pre">10)]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goal_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">numpy.array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">numpy.array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[(3,</span> <span class="pre">7),</span> <span class="pre">(5,</span> <span class="pre">5)]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacle_hit_probability</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacle_reward</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goal_reward</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fuel_cost</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">11</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goal_state_radius</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beacon_radius</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacle_radius</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reward_model_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">RewardModelType.STANDARD</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">penalty_decay</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_obstacle_hit_terminal</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#ContinuousLightDarkPOMDP"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP" title="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDP"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseLightDarkPOMDP</span></code></a></p>
+<p>Continuous Light-Dark POMDP environment with continuous actions.</p>
+<p>This environment extends the base Light-Dark problem to continuous 2D space
+with continuous action vectors. The agent navigates toward a goal while
+dealing with position-dependent observation noise and optional obstacles.</p>
+<p>Key features:
+- Continuous 2D state and action spaces
+- Light beacons reduce observation noise when nearby
+- Multiple reward models available (standard, decaying hit probability, dangerous states)
+- Optional obstacles with configurable hit penalties
+- Terminal conditions for goal reaching, obstacle hits, and boundary violations</p>
+<p class="rubric">Example</p>
+<p>Creating and using a Continuous Light-Dark POMDP:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="c1"># Create environment with custom parameters</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">ContinuousLightDarkPOMDP</span><span class="p">(</span>
+    <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+    <span class="n">goal_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+    <span class="n">start_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+    <span class="n">reward_model_type</span><span class="o">=</span><span class="n">RewardModelType</span><span class="o">.</span><span class="n">STANDARD</span>
+<span class="p">)</span>
+
+<span class="c1"># Sample initial state and take continuous action</span>
+<span class="n">state_dist</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">initial_state_dist</span><span class="p">()</span>
+<span class="n">state</span> <span class="o">=</span> <span class="n">state_dist</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+
+<span class="c1"># Move toward goal with continuous action</span>
+<span class="n">action</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">])</span>  <span class="c1"># Move right</span>
+<span class="n">reward</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+
+<span class="c1"># Check termination</span>
+<span class="n">is_done</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">is_terminal</span><span class="p">(</span><span class="n">state</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>discount_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>state_transition_cov_matrix</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>observation_cov_matrix</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>beacons</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><em>Tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>]</em><em>]</em>)</p></li>
+<li><p><strong>goal_state</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>start_state</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>obstacles</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><em>Tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>]</em><em>]</em>)</p></li>
+<li><p><strong>obstacle_hit_probability</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>obstacle_reward</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>goal_reward</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>fuel_cost</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>grid_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>goal_state_radius</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>beacon_radius</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>obstacle_radius</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>reward_model_type</strong> (<a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.RewardModelType" title="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.RewardModelType"><em>RewardModelType</em></a>)</p></li>
+<li><p><strong>penalty_decay</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>is_obstacle_hit_terminal</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP.compute_metrics">
+<span class="sig-name descname"><span class="pre">compute_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">histories</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#ContinuousLightDarkPOMDP.compute_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP.compute_metrics" title="Link to this definition"></a></dt>
+<dd><p>Compute environment-specific metrics from episode histories.</p>
+<p>This method can be overridden by subclasses to provide custom
+metric calculations beyond standard return and episode length.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>histories</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference internal" href="POMDPPlanners.core.simulation.html#POMDPPlanners.core.simulation.history.History" title="POMDPPlanners.core.simulation.history.History"><code class="xref py py-class docutils literal notranslate"><span class="pre">History</span></code></a>]</span>) – List of episode histories to analyze</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference internal" href="POMDPPlanners.core.simulation.html#POMDPPlanners.core.simulation.metrics.MetricValue" title="POMDPPlanners.core.simulation.metrics.MetricValue"><code class="xref py py-class docutils literal notranslate"><span class="pre">MetricValue</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of computed metrics with confidence intervals</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP.is_terminal">
+<span class="sig-name descname"><span class="pre">is_terminal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#ContinuousLightDarkPOMDP.is_terminal"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP.is_terminal" title="Link to this definition"></a></dt>
+<dd><p>Check if a state is terminal.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – State to check for terminal condition</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>True if the state is terminal, False otherwise</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define terminal conditions.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP.observation_model">
+<span class="sig-name descname"><span class="pre">observation_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">next_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#ContinuousLightDarkPOMDP.observation_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP.observation_model" title="Link to this definition"></a></dt>
+<dd><p>Get the observation model for a given next state and action.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>next_state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – The resulting state after taking an action</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – The action that was executed</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.distributions.html#POMDPPlanners.core.distributions.Distribution" title="POMDPPlanners.core.distributions.Distribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">Distribution</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Observation model that can sample observations</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define observation generation.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP.reward">
+<span class="sig-name descname"><span class="pre">reward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#ContinuousLightDarkPOMDP.reward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP.reward" title="Link to this definition"></a></dt>
+<dd><p>Calculate the immediate reward for a state-action pair.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – Current state</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – Action executed from the state</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Immediate reward value</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define reward structure.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP.state_transition_model">
+<span class="sig-name descname"><span class="pre">state_transition_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#ContinuousLightDarkPOMDP.state_transition_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP.state_transition_model" title="Link to this definition"></a></dt>
+<dd><p>Get the state transition model for a given state-action pair.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – Current state</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – Action to be executed</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.distributions.html#POMDPPlanners.core.distributions.Distribution" title="POMDPPlanners.core.distributions.Distribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">Distribution</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>State transition model that can sample next states</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define state dynamics.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">ContinuousLightDarkPOMDPDiscreteActions</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">discount_factor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_transition_cov_matrix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">numpy.eye</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation_cov_matrix</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">numpy.eye</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacle_hit_probability</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacle_reward</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goal_reward</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fuel_cost</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">11</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goal_state_radius</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beacon_radius</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacle_radius</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.5</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'ContinuousLightDarkPOMDPDiscreteActions'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beacons</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[(0,</span> <span class="pre">0),</span> <span class="pre">(0,</span> <span class="pre">5),</span> <span class="pre">(0,</span> <span class="pre">10),</span> <span class="pre">(5,</span> <span class="pre">0),</span> <span class="pre">(5,</span> <span class="pre">5),</span> <span class="pre">(5,</span> <span class="pre">10),</span> <span class="pre">(10,</span> <span class="pre">0),</span> <span class="pre">(10,</span> <span class="pre">5),</span> <span class="pre">(10,</span> <span class="pre">10)]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goal_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">numpy.array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">numpy.array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[(3,</span> <span class="pre">7),</span> <span class="pre">(5,</span> <span class="pre">5)]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">reward_model_type</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">RewardModelType.STANDARD</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">penalty_decay</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_obstacle_hit_terminal</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#ContinuousLightDarkPOMDPDiscreteActions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP" title="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDP"><code class="xref py py-class docutils literal notranslate"><span class="pre">ContinuousLightDarkPOMDP</span></code></a></p>
+<p>Continuous Light-Dark POMDP environment with discrete actions.</p>
+<p>This variant of the Continuous Light-Dark POMDP uses discrete directional actions
+(up, down, left, right) instead of continuous action vectors. The continuous
+state space and observation model are preserved.</p>
+<p>Actions are mapped to unit vectors:
+- “up”: [0, 1]
+- “down”: [0, -1]
+- “right”: [1, 0]
+- “left”: [-1, 0]</p>
+<p class="rubric">Example</p>
+<p>Creating and using a Discrete Actions Light-Dark POMDP:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="c1"># Create environment with discrete actions</span>
+<span class="n">env</span> <span class="o">=</span> <span class="n">ContinuousLightDarkPOMDPDiscreteActions</span><span class="p">(</span>
+    <span class="n">discount_factor</span><span class="o">=</span><span class="mf">0.95</span><span class="p">,</span>
+    <span class="n">goal_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">10</span><span class="p">,</span> <span class="mi">5</span><span class="p">]),</span>
+    <span class="n">start_state</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">5</span><span class="p">])</span>
+<span class="p">)</span>
+
+<span class="c1"># Get available actions and take one</span>
+<span class="n">actions</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">get_actions</span><span class="p">()</span>  <span class="c1"># [&quot;up&quot;, &quot;down&quot;, &quot;right&quot;, &quot;left&quot;]</span>
+<span class="n">action</span> <span class="o">=</span> <span class="s2">&quot;right&quot;</span>  <span class="c1"># Move right</span>
+
+<span class="c1"># Simulate step</span>
+<span class="n">state</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">start_state</span>
+<span class="n">reward</span> <span class="o">=</span> <span class="n">env</span><span class="o">.</span><span class="n">reward</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">action</span><span class="p">)</span>
+</pre></div>
+</div>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>discount_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>state_transition_cov_matrix</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>observation_cov_matrix</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>obstacle_hit_probability</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>obstacle_reward</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>goal_reward</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>fuel_cost</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>grid_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>goal_state_radius</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>beacon_radius</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>obstacle_radius</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>beacons</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><em>Tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>]</em><em>]</em>)</p></li>
+<li><p><strong>goal_state</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>start_state</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>obstacles</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><em>Tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>]</em><em>]</em>)</p></li>
+<li><p><strong>reward_model_type</strong> (<a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.RewardModelType" title="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.RewardModelType"><em>RewardModelType</em></a>)</p></li>
+<li><p><strong>penalty_decay</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>is_obstacle_hit_terminal</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions.get_actions">
+<span class="sig-name descname"><span class="pre">get_actions</span></span><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#ContinuousLightDarkPOMDPDiscreteActions.get_actions"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions.get_actions" title="Link to this definition"></a></dt>
+<dd><dl class="field-list simple">
+<dt class="field-odd">Return type<span class="colon">:</span></dt>
+<dd class="field-odd"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>]</span></p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions.observation_model">
+<span class="sig-name descname"><span class="pre">observation_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">next_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#ContinuousLightDarkPOMDPDiscreteActions.observation_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions.observation_model" title="Link to this definition"></a></dt>
+<dd><p>Get the observation model for a given next state and action.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>next_state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – The resulting state after taking an action</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – The action that was executed</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.distributions.html#POMDPPlanners.core.distributions.Distribution" title="POMDPPlanners.core.distributions.Distribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">Distribution</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Observation model that can sample observations</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define observation generation.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions.reward">
+<span class="sig-name descname"><span class="pre">reward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#ContinuousLightDarkPOMDPDiscreteActions.reward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions.reward" title="Link to this definition"></a></dt>
+<dd><p>Calculate the immediate reward for a state-action pair.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – Current state</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Action executed from the state</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Immediate reward value</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define reward structure.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions.state_transition_model">
+<span class="sig-name descname"><span class="pre">state_transition_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#ContinuousLightDarkPOMDPDiscreteActions.state_transition_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.ContinuousLightDarkPOMDPDiscreteActions.state_transition_model" title="Link to this definition"></a></dt>
+<dd><p>Get the state transition model for a given state-action pair.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – Current state</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Action to be executed</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.distributions.html#POMDPPlanners.core.distributions.Distribution" title="POMDPPlanners.core.distributions.Distribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">Distribution</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>State transition model that can sample next states</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define state dynamics.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.RewardModelType">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">RewardModelType</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="o"><span class="pre">*</span></span><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#RewardModelType"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.RewardModelType" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/enum.html#enum.Enum" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">Enum</span></code></a></p>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.RewardModelType.DANGEROUS_STATES">
+<span class="sig-name descname"><span class="pre">DANGEROUS_STATES</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'dangerous_states'</span></em><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.RewardModelType.DANGEROUS_STATES" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.RewardModelType.DECAYING_HIT_PROBABILITY">
+<span class="sig-name descname"><span class="pre">DECAYING_HIT_PROBABILITY</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'decaying_hit_probability'</span></em><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.RewardModelType.DECAYING_HIT_PROBABILITY" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.RewardModelType.STANDARD">
+<span class="sig-name descname"><span class="pre">STANDARD</span></span><em class="property"><span class="w"> </span><span class="p"><span class="pre">=</span></span><span class="w"> </span><span class="pre">'standard'</span></em><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.RewardModelType.STANDARD" title="Link to this definition"></a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">StateTransitionModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">state_transition_cov_matrix</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#StateTransitionModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="POMDPPlanners.core.distributions.html#POMDPPlanners.core.distributions.Distribution" title="POMDPPlanners.core.distributions.Distribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">Distribution</span></code></a></p>
+<p>State transition model for Continuous Light-Dark POMDP.</p>
+<p>This model implements continuous movement in 2D space with Gaussian noise.
+The agent’s next position is determined by adding the action vector to the
+current position, with additional Gaussian noise to model uncertainty.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>action</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>state_transition_cov_matrix</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel.state">
+<span class="sig-name descname"><span class="pre">state</span></span><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel.state" title="Link to this definition"></a></dt>
+<dd><p>Current 2D position [x, y]</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel.action">
+<span class="sig-name descname"><span class="pre">action</span></span><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel.action" title="Link to this definition"></a></dt>
+<dd><p>Movement vector [dx, dy]</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel.state_transition_cov_matrix">
+<span class="sig-name descname"><span class="pre">state_transition_cov_matrix</span></span><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel.state_transition_cov_matrix" title="Link to this definition"></a></dt>
+<dd><p>Covariance matrix for transition noise</p>
+</dd></dl>
+
+<dl class="py attribute">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel.mean">
+<span class="sig-name descname"><span class="pre">mean</span></span><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel.mean" title="Link to this definition"></a></dt>
+<dd><p>Expected next position (state + action)</p>
+</dd></dl>
+
+<p class="rubric">Example</p>
+<p>Using the Continuous Light-Dark state transition model:</p>
+<div class="highlight-default notranslate"><div class="highlight"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="c1"># Define current position and movement action</span>
+<span class="n">state</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">3.0</span><span class="p">,</span> <span class="mf">4.0</span><span class="p">])</span>  <span class="c1"># Current position</span>
+<span class="n">action</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">])</span>  <span class="c1"># Move right and slightly up</span>
+
+<span class="c1"># Define movement noise</span>
+<span class="n">cov_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span> <span class="o">*</span> <span class="mf">0.1</span>  <span class="c1"># Small movement noise</span>
+
+<span class="c1"># Create transition model</span>
+<span class="n">transition</span> <span class="o">=</span> <span class="n">StateTransitionModel</span><span class="p">(</span>
+    <span class="n">state</span><span class="o">=</span><span class="n">state</span><span class="p">,</span>
+    <span class="n">action</span><span class="o">=</span><span class="n">action</span><span class="p">,</span>
+    <span class="n">state_transition_cov_matrix</span><span class="o">=</span><span class="n">cov_matrix</span>
+<span class="p">)</span>
+
+<span class="c1"># Sample next position with noise</span>
+<span class="n">next_position</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">sample</span><span class="p">()[</span><span class="mi">0</span><span class="p">]</span>
+<span class="c1"># Returns position around [4.0, 4.5] ± noise</span>
+
+<span class="c1"># Calculate probability of specific next position</span>
+<span class="n">prob</span> <span class="o">=</span> <span class="n">transition</span><span class="o">.</span><span class="n">probability</span><span class="p">([</span><span class="n">next_position</span><span class="p">])</span>
+</pre></div>
+</div>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel.probability">
+<span class="sig-name descname"><span class="pre">probability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#StateTransitionModel.probability"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel.probability" title="Link to this definition"></a></dt>
+<dd><p>Calculate probabilities for given values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>values</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a>]</span>) – List of values to calculate probabilities for</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Numpy array of probabilities corresponding to input values</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#NotImplementedError" title="(in Python v3.13)"><strong>NotImplementedError</strong></a> – This method is not implemented by default.
+    Subclasses should override if probability calculation is needed.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/continuous_light_dark_pomdp.html#StateTransitionModel.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp.StateTransitionModel.sample" title="Link to this definition"></a></dt>
+<dd><p>Sample values from the distribution.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>n_samples</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></span>) – Number of samples to return. Defaults to 1.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of n_samples independent samples from the distribution</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method according to their
+specific distribution type and parameters.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp">
+<span id="pomdpplanners-environments-light-dark-pomdp-discrete-light-dark-pomdp-module"></span><h2>POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp module<a class="headerlink" href="#module-POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp" title="Link to this heading"></a></h2>
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLDObservationModel">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">DiscreteLDObservationModel</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">next_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beacons</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacles</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beacon_radius</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation_error_prob</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/discrete_light_dark_pomdp.html#DiscreteLDObservationModel"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLDObservationModel" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.ObservationModel" title="POMDPPlanners.core.environment.ObservationModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">ObservationModel</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>next_state</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>action</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><em>Any</em></a>)</p></li>
+<li><p><strong>beacons</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>obstacles</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>beacon_radius</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>observation_error_prob</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLDObservationModel.probability">
+<span class="sig-name descname"><span class="pre">probability</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">values</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/discrete_light_dark_pomdp.html#DiscreteLDObservationModel.probability"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLDObservationModel.probability" title="Link to this definition"></a></dt>
+<dd><p>Calculate observation probabilities for given values.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>values</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a>]</span>) – List of observation values to calculate probabilities for</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Array of probabilities corresponding to the input values</p>
+</dd>
+<dt class="field-even">Raises<span class="colon">:</span></dt>
+<dd class="field-even"><p><a class="reference external" href="https://docs.python.org/3/library/exceptions.html#NotImplementedError" title="(in Python v3.13)"><strong>NotImplementedError</strong></a> – This method is not implemented by default.
+    Subclasses should override if probability calculation is needed.</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLDObservationModel.sample">
+<span class="sig-name descname"><span class="pre">sample</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">n_samples</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/discrete_light_dark_pomdp.html#DiscreteLDObservationModel.sample"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLDObservationModel.sample" title="Link to this definition"></a></dt>
+<dd><p>Sample observations from the observation model.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>n_samples</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">int</span></code></a></span>) – Number of observation samples to generate. Defaults to 1.</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of sampled observations of length n_samples.</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method according to their
+specific observation generation logic.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP">
+<em class="property"><span class="k"><span class="pre">class</span></span><span class="w"> </span></em><span class="sig-prename descclassname"><span class="pre">POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.</span></span><span class="sig-name descname"><span class="pre">DiscreteLightDarkPOMDP</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">discount_factor</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">name</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">'DiscreteLightDarkPOMDP'</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">transition_error_prob</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">observation_error_prob</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.05</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beacons</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[(0,</span> <span class="pre">0),</span> <span class="pre">(0,</span> <span class="pre">5),</span> <span class="pre">(0,</span> <span class="pre">10),</span> <span class="pre">(5,</span> <span class="pre">0),</span> <span class="pre">(5,</span> <span class="pre">5),</span> <span class="pre">(5,</span> <span class="pre">10),</span> <span class="pre">(10,</span> <span class="pre">0),</span> <span class="pre">(10,</span> <span class="pre">5),</span> <span class="pre">(10,</span> <span class="pre">10)]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goal_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">numpy.array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">start_state</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">numpy.array</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacles</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">[(3,</span> <span class="pre">7),</span> <span class="pre">(5,</span> <span class="pre">5)]</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacle_hit_probability</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">0.2</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">obstacle_reward</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">-10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">goal_reward</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">10.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">beacon_radius</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">1.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">fuel_cost</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">2.0</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">grid_size</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">11</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">is_stochastic_reward</span></span><span class="o"><span class="pre">=</span></span><span class="default_value"><span class="pre">True</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/discrete_light_dark_pomdp.html#DiscreteLightDarkPOMDP"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP" title="Link to this definition"></a></dt>
+<dd><p>Bases: <a class="reference internal" href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.html#POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDPDiscreteActions" title="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp.BaseLightDarkPOMDPDiscreteActions"><code class="xref py py-class docutils literal notranslate"><span class="pre">BaseLightDarkPOMDPDiscreteActions</span></code></a>, <a class="reference internal" href="POMDPPlanners.core.environment.html#POMDPPlanners.core.environment.DiscreteActionsEnvironment" title="POMDPPlanners.core.environment.DiscreteActionsEnvironment"><code class="xref py py-class docutils literal notranslate"><span class="pre">DiscreteActionsEnvironment</span></code></a></p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>discount_factor</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>name</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.13)"><em>str</em></a>)</p></li>
+<li><p><strong>transition_error_prob</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>observation_error_prob</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>beacons</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><em>Tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>]</em><em>]</em>)</p></li>
+<li><p><strong>goal_state</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>start_state</strong> (<a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><em>numpy.ndarray</em></a>)</p></li>
+<li><p><strong>obstacles</strong> (<a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><em>List</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Tuple" title="(in Python v3.13)"><em>Tuple</em></a><em>[</em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>, </em><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a><em>]</em><em>]</em>)</p></li>
+<li><p><strong>obstacle_hit_probability</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>obstacle_reward</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>goal_reward</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>beacon_radius</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>fuel_cost</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><em>float</em></a>)</p></li>
+<li><p><strong>grid_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.13)"><em>int</em></a>)</p></li>
+<li><p><strong>is_stochastic_reward</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><em>bool</em></a>)</p></li>
+</ul>
+</dd>
+</dl>
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP.compute_metrics">
+<span class="sig-name descname"><span class="pre">compute_metrics</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">histories</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/discrete_light_dark_pomdp.html#DiscreteLightDarkPOMDP.compute_metrics"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP.compute_metrics" title="Link to this definition"></a></dt>
+<dd><p>Compute environment-specific metrics from episode histories.</p>
+<p>This method can be overridden by subclasses to provide custom
+metric calculations beyond standard return and episode length.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>histories</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference internal" href="POMDPPlanners.core.simulation.html#POMDPPlanners.core.simulation.history.History" title="POMDPPlanners.core.simulation.history.History"><code class="xref py py-class docutils literal notranslate"><span class="pre">History</span></code></a>]</span>) – List of episode histories to analyze</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.List" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">List</span></code></a>[<a class="reference internal" href="POMDPPlanners.core.simulation.html#POMDPPlanners.core.simulation.metrics.MetricValue" title="POMDPPlanners.core.simulation.metrics.MetricValue"><code class="xref py py-class docutils literal notranslate"><span class="pre">MetricValue</span></code></a>]</span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>List of computed metrics with confidence intervals</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP.is_terminal">
+<span class="sig-name descname"><span class="pre">is_terminal</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/discrete_light_dark_pomdp.html#DiscreteLightDarkPOMDP.is_terminal"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP.is_terminal" title="Link to this definition"></a></dt>
+<dd><p>Check if a state is terminal.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – State to check for terminal condition</p>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">bool</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>True if the state is terminal, False otherwise</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define terminal conditions.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP.observation_model">
+<span class="sig-name descname"><span class="pre">observation_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">next_state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/discrete_light_dark_pomdp.html#DiscreteLightDarkPOMDP.observation_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP.observation_model" title="Link to this definition"></a></dt>
+<dd><p>Get the observation model for a given next state and action.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>next_state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – The resulting state after taking an action</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – The action that was executed</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.distributions.html#POMDPPlanners.core.distributions.Distribution" title="POMDPPlanners.core.distributions.Distribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">Distribution</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Observation model that can sample observations</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define observation generation.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP.reward">
+<span class="sig-name descname"><span class="pre">reward</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/discrete_light_dark_pomdp.html#DiscreteLightDarkPOMDP.reward"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP.reward" title="Link to this definition"></a></dt>
+<dd><p>Calculate the immediate reward for a state-action pair.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – Current state</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Action executed from the state</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.13)"><code class="xref py py-class docutils literal notranslate"><span class="pre">float</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>Immediate reward value</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define reward structure.</p>
+</div>
+</dd></dl>
+
+<dl class="py method">
+<dt class="sig sig-object py" id="POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP.state_transition_model">
+<span class="sig-name descname"><span class="pre">state_transition_model</span></span><span class="sig-paren">(</span><em class="sig-param"><span class="n"><span class="pre">state</span></span></em>, <em class="sig-param"><span class="n"><span class="pre">action</span></span></em><span class="sig-paren">)</span><a class="reference internal" href="../_modules/POMDPPlanners/environments/light_dark_pomdp/discrete_light_dark_pomdp.html#DiscreteLightDarkPOMDP.state_transition_model"><span class="viewcode-link"><span class="pre">[source]</span></span></a><a class="headerlink" href="#POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp.DiscreteLightDarkPOMDP.state_transition_model" title="Link to this definition"></a></dt>
+<dd><p>Get the state transition model for a given state-action pair.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters<span class="colon">:</span></dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>state</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://numpy.org/doc/stable/reference/generated/numpy.ndarray.html#numpy.ndarray" title="(in NumPy v2.3)"><code class="xref py py-class docutils literal notranslate"><span class="pre">ndarray</span></code></a></span>) – Current state</p></li>
+<li><p><strong>action</strong> (<span class="sphinx_autodoc_typehints-type"><a class="reference external" href="https://docs.python.org/3/library/typing.html#typing.Any" title="(in Python v3.13)"><code class="xref py py-data docutils literal notranslate"><span class="pre">Any</span></code></a></span>) – Action to be executed</p></li>
+</ul>
+</dd>
+<dt class="field-even">Return type<span class="colon">:</span></dt>
+<dd class="field-even"><p><span class="sphinx_autodoc_typehints-type"><a class="reference internal" href="POMDPPlanners.core.distributions.html#POMDPPlanners.core.distributions.Distribution" title="POMDPPlanners.core.distributions.Distribution"><code class="xref py py-class docutils literal notranslate"><span class="pre">Distribution</span></code></a></span></p>
+</dd>
+<dt class="field-odd">Returns<span class="colon">:</span></dt>
+<dd class="field-odd"><p>State transition model that can sample next states</p>
+</dd>
+</dl>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Subclasses must implement this method to define state dynamics.</p>
+</div>
+</dd></dl>
+
+</dd></dl>
+
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="POMDPPlanners.environments.html" class="btn btn-neutral float-left" title="POMDPPlanners.environments package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.html" class="btn btn-neutral float-right" title="POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils package" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2024, POMDPPlanners Team.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
