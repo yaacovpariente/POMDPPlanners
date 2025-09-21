@@ -91,3 +91,8 @@ legacy/
 experiments/results
 dask-worker-space/
 joblib_cache/
+experiments
+
+# Project-specific files
+CLAUDE.md
+CLAUDE_VIOLATION_REMINDER.md
