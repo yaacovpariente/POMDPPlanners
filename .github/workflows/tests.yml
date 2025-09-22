@@ -74,6 +74,13 @@ jobs:
         python legacy/push_pomdp_visualization_example.py
       continue-on-error: true  # Visualization examples may have display issues in CI
 
+    - name: Build documentation
+      if: matrix.python-version == '3.11'  # Only build docs once
+      run: |
+        cd docs
+        sphinx-build -b html . _build/html
+      continue-on-error: true  # Don't fail the build if docs have warnings
+
     - name: Upload coverage to Codecov
       if: matrix.python-version == '3.11'
       uses: codecov/codecov-action@v3
