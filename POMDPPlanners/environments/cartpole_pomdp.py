@@ -54,30 +54,32 @@ class CartPoleStateTransition(StateTransitionModel):
         masspole: Mass of the pole
         
     Example:
-        Using the CartPole state transition model::
-        
-            import numpy as np
-            
-            # Define initial state [position, velocity, angle, angular_velocity]
-            state = np.array([0.0, 0.0, 0.1, 0.0])  # Cart at center, pole slightly tilted
-            action = 1  # Apply right force
-            
-            # Create transition model with physics parameters
-            transition = CartPoleStateTransition(
-                state=state,
-                action=action,
-                force_mag=10.0,
-                total_mass=1.1,
-                polemass_length=0.05,
-                gravity=9.8,
-                length=0.5,
-                kinematics_integrator="euler",
-                tau=0.02,
-                masspole=0.1
-            )
-            
-            # Simulate physics step
-            next_state = transition.sample()[0]  # Returns new [pos, vel, angle, ang_vel]
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Define initial state [position, velocity, angle, angular_velocity]
+        >>> state = np.array([0.0, 0.0, 0.1, 0.0])
+        >>> action = 1  # Apply right force
+
+        >>> # Create transition model with physics parameters
+        >>> transition = CartPoleStateTransition(
+        ...     state=state,
+        ...     action=action,
+        ...     force_mag=10.0,
+        ...     total_mass=1.1,
+        ...     polemass_length=0.05,
+        ...     gravity=9.8,
+        ...     length=0.5,
+        ...     kinematics_integrator="euler",
+        ...     tau=0.02,
+        ...     masspole=0.1
+        ... )
+
+        >>> # Simulate physics step
+        >>> next_state = transition.sample()[0]
+        >>> len(next_state) == 4  # [pos, vel, angle, ang_vel]
+        True
+        >>> isinstance(next_state, np.ndarray)
+        True
     """
     
     def __init__(
@@ -157,29 +159,33 @@ class CartPoleObservation(ObservationModel):
         noise_cov: Covariance matrix for observation noise
         
     Example:
-        Using the CartPole observation model::
-        
-            import numpy as np
-            
-            # Define true state after action
-            true_state = np.array([0.1, 0.05, 0.02, -0.1])
-            action = 1
-            
-            # Define observation noise covariance
-            noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])  # Independent noise
-            
-            # Create observation model
-            obs_model = CartPoleObservation(
-                next_state=true_state,
-                action=action,
-                noise_cov=noise_cov
-            )
-            
-            # Sample noisy observation
-            observation = obs_model.sample()[0]  # Returns noisy version of true_state
-            
-            # Calculate probability of specific observation
-            prob = obs_model.probability([observation])
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Define true state after action
+        >>> true_state = np.array([0.1, 0.05, 0.02, -0.1])
+        >>> action = 1
+
+        >>> # Define observation noise covariance
+        >>> noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
+
+        >>> # Create observation model
+        >>> obs_model = CartPoleObservation(
+        ...     next_state=true_state,
+        ...     action=action,
+        ...     noise_cov=noise_cov
+        ... )
+
+        >>> # Sample noisy observation
+        >>> observation = obs_model.sample()[0]
+        >>> len(observation) == 4  # Same dimensionality as state
+        True
+        >>> isinstance(observation, np.ndarray)
+        True
+
+        >>> # Calculate probability of specific observation
+        >>> prob = obs_model.probability([observation])
+        >>> len(prob) == 1
+        True
     """
     
     def __init__(self, next_state: np.ndarray, action: int, noise_cov: np.ndarray):
@@ -208,21 +214,29 @@ class CartPoleInitialStateDistribution(Distribution):
     initialized close to zero with small random perturbations.
     
     Example:
-        Using the initial state distribution::
-        
-            # Create initial state distribution
-            initial_dist = CartPoleInitialStateDistribution()
-            
-            # Sample initial state
-            initial_state = initial_dist.sample()[0]
-            # Returns array like [-0.03, 0.01, 0.04, -0.02] (random values in [-0.05, 0.05])
-            
-            # Sample multiple initial states
-            states = initial_dist.sample(n_samples=3)
-            # Returns list of 3 random initial state arrays
-            
-            # Each state has 4 components: [cart_pos, cart_vel, pole_angle, pole_ang_vel]
-            position, velocity, angle, angular_velocity = initial_state
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Create initial state distribution
+        >>> initial_dist = CartPoleInitialStateDistribution()
+
+        >>> # Sample initial state
+        >>> initial_state = initial_dist.sample()[0]
+        >>> len(initial_state) == 4
+        True
+        >>> all(-0.05 <= x <= 0.05 for x in initial_state)  # Values in valid range
+        True
+
+        >>> # Sample multiple initial states
+        >>> states = initial_dist.sample(n_samples=3)
+        >>> len(states) == 3
+        True
+        >>> all(len(state) == 4 for state in states)
+        True
+
+        >>> # Each state has 4 components: [cart_pos, cart_vel, pole_angle, pole_ang_vel]
+        >>> position, velocity, angle, angular_velocity = initial_state
+        >>> isinstance(position, (int, float, np.floating))
+        True
     """
     
     def __init__(self):
@@ -249,27 +263,36 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
     - Termination: Pole falls beyond angle threshold or cart moves too far
     
     Example:
-        Creating and using a CartPole POMDP::
-        
-            import numpy as np
-            
-            # Create CartPole environment with observation noise
-            noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])  # Noise covariance matrix
-            cartpole = CartPolePOMDP(
-                discount_factor=0.99,
-                noise_cov=noise_cov
-            )
-            
-            # Get initial state and take action
-            initial_state_dist = cartpole.initial_state_dist()
-            state = initial_state_dist.sample()[0]
-            
-            # Apply force action (0=left, 1=right)
-            action = 1  # Apply right force
-            reward = cartpole.reward(state, action)
-            
-            # Check if episode should terminate
-            is_done = cartpole.is_terminal(state)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Create CartPole environment with observation noise
+        >>> noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
+        >>> cartpole = CartPolePOMDP(
+        ...     discount_factor=0.99,
+        ...     noise_cov=noise_cov
+        ... )
+
+        >>> # Get initial state and take action
+        >>> initial_state_dist = cartpole.initial_state_dist()
+        >>> state = initial_state_dist.sample()[0]
+        >>> len(state) == 4  # [cart_pos, cart_vel, pole_angle, pole_vel]
+        True
+
+        >>> # Apply force action (0=left, 1=right)
+        >>> action = 1  # Apply right force
+        >>> reward = cartpole.reward(state, action)
+        >>> reward >= 0.0  # Non-negative reward
+        True
+
+        >>> # Check if episode should terminate
+        >>> is_done = cartpole.is_terminal(state)
+        >>> isinstance(is_done, bool)
+        True
+
+        >>> # Verify actions are available
+        >>> actions = cartpole.get_actions()
+        >>> len(actions) == 2  # left and right force
+        True
     """
     
     def __init__(

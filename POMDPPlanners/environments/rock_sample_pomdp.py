@@ -209,19 +209,21 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         exit_reward: Reward for reaching the exit
         
     Example:
-        Basic usage::
-        
-            # Create 5x5 grid with 3 rocks
-            pomdp = RockSamplePOMDP(
-                map_size=(5, 5),
-                rock_positions=[(0, 0), (2, 2), (3, 3)]
-            )
-            
-            # Sample initial state
-            initial_state = pomdp.initial_state_dist().sample()[0]
-            
-            # Execute action
-            next_state, obs, reward = pomdp.sample_next_step(initial_state, 0)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Create 5x5 grid with 3 rocks
+        >>> pomdp = RockSamplePOMDP(
+        ...     map_size=(5, 5),
+        ...     rock_positions=[(0, 0), (2, 2), (3, 3)]
+        ... )
+
+        >>> # Sample initial state
+        >>> initial_state = pomdp.initial_state_dist().sample()[0]
+        >>> isinstance(initial_state, RockSampleState)
+        True
+
+        >>> # Execute action
+        >>> next_state, obs, reward = pomdp.sample_next_step(initial_state, 0)  # doctest: +SKIP
     """
     
     def __init__(

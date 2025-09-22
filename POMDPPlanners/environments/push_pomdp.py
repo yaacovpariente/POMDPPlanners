@@ -62,27 +62,29 @@ class PushStateTransition(StateTransitionModel):
         target_pos: Target position [x, y] (fixed)
         
     Example:
-        Using the Push state transition model::
-        
-            import numpy as np
-            
-            # Define state: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-            state = np.array([2.0, 3.0, 2.5, 3.1, 8.0, 8.0])
-            action = "right"  # Move robot right
-            
-            # Create transition model
-            transition = PushStateTransition(
-                state=state,
-                action=action,
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3
-            )
-            
-            # Simulate step
-            next_state = transition.sample()[0]
-            # Robot moves right, might push object if close enough
-            # Returns new [robot_x, robot_y, object_x, object_y, target_x, target_y]
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Define state: [robot_x, robot_y, object_x, object_y, target_x, target_y]
+        >>> state = np.array([2.0, 3.0, 2.5, 3.1, 8.0, 8.0])
+        >>> action = "right"  # Move robot right
+
+        >>> # Create transition model
+        >>> transition = PushStateTransition(
+        ...     state=state,
+        ...     action=action,
+        ...     grid_size=10,
+        ...     push_threshold=1.0,
+        ...     friction_coefficient=0.3
+        ... )
+
+        >>> # Simulate step
+        >>> next_state = transition.sample()[0]
+        >>> len(next_state) == 6  # [robot_x, robot_y, object_x, object_y, target_x, target_y]
+        True
+        >>> isinstance(next_state, np.ndarray)
+        True
+        >>> bool(next_state[0] > state[0])  # Robot moved right
+        True
     """
     
     def __init__(
@@ -187,29 +189,35 @@ class PushObservation(ObservationModel):
         target_pos: Target position (observed exactly)
         
     Example:
-        Using the Push observation model::
-        
-            import numpy as np
-            
-            # True state after robot movement
-            true_state = np.array([3.0, 3.0, 2.8, 3.2, 8.0, 8.0])
-            action = "right"
-            
-            # Create observation model
-            obs_model = PushObservation(
-                next_state=true_state,
-                action=action,
-                observation_noise=0.1,
-                grid_size=10
-            )
-            
-            # Sample noisy observation
-            observation = obs_model.sample()[0]
-            # Robot and target positions exact: [3.0, 3.0, ?, ?, 8.0, 8.0]
-            # Object position noisy: around [2.8, 3.2] ± 0.1
-            
-            # Calculate observation probability
-            prob = obs_model.probability(observation)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # True state after robot movement
+        >>> true_state = np.array([3.0, 3.0, 2.8, 3.2, 8.0, 8.0])
+        >>> action = "right"
+
+        >>> # Create observation model
+        >>> obs_model = PushObservation(
+        ...     next_state=true_state,
+        ...     action=action,
+        ...     observation_noise=0.1,
+        ...     grid_size=10
+        ... )
+
+        >>> # Sample noisy observation
+        >>> observation = obs_model.sample()[0]
+        >>> len(observation) == 6  # [robot_x, robot_y, noisy_obj_x, noisy_obj_y, target_x, target_y]
+        True
+        >>> bool(observation[0] == 3.0)  # Robot position exact
+        True
+        >>> bool(observation[1] == 3.0)  # Robot position exact
+        True
+        >>> bool(observation[4] == 8.0)  # Target position exact
+        True
+
+        >>> # Calculate observation probability
+        >>> prob = obs_model.probability([observation])
+        >>> len(prob) == 1
+        True
     """
     
     def __init__(
@@ -282,31 +290,41 @@ class PushPOMDP(DiscreteActionsEnvironment):
     - Obstacles prevent robot and object movement through them
     
     Example:
-        Creating and using a Push POMDP::
-        
-            # Create push environment with obstacles
-            push_env = PushPOMDP(
-                discount_factor=0.99,
-                grid_size=10,
-                push_threshold=1.0,
-                friction_coefficient=0.3,
-                observation_noise=0.1,
-                obstacles=[(3.0, 4.0), (6.0, 7.0)],  # Obstacle positions
-                obstacle_radius=0.5,
-                obstacle_penalty=-10.0
-            )
-            
-            # Get initial state
-            initial_state_dist = push_env.initial_state_dist()
-            state = initial_state_dist.sample()[0]
-            
-            # Move robot and potentially push object
-            actions = push_env.get_actions()  # ["up", "down", "left", "right"]
-            action = "right"
-            reward = push_env.reward(state, action)
-            
-            # Check if object reached target
-            is_done = push_env.is_terminal(state)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Create push environment with obstacles
+        >>> push_env = PushPOMDP(
+        ...     discount_factor=0.99,
+        ...     grid_size=10,
+        ...     push_threshold=1.0,
+        ...     friction_coefficient=0.3,
+        ...     observation_noise=0.1,
+        ...     obstacles=[(3.0, 4.0), (6.0, 7.0)],
+        ...     obstacle_radius=0.5,
+        ...     obstacle_penalty=-10.0
+        ... )
+
+        >>> # Get initial state
+        >>> initial_state_dist = push_env.initial_state_dist()
+        >>> state = initial_state_dist.sample()[0]
+        >>> len(state) == 6  # [robot_x, robot_y, object_x, object_y, target_x, target_y]
+        True
+
+        >>> # Move robot and potentially push object
+        >>> actions = push_env.get_actions()
+        >>> len(actions) == 4  # ["up", "down", "left", "right"]
+        True
+        >>> "right" in actions
+        True
+
+        >>> # Calculate reward and check termination
+        >>> action = "right"
+        >>> reward = push_env.reward(state, action)
+        >>> isinstance(reward, (int, float))
+        True
+        >>> is_done = push_env.is_terminal(state)
+        >>> isinstance(is_done, (bool, np.bool_))
+        True
     """
     
     def __init__(

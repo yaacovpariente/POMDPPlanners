@@ -64,25 +64,30 @@ class MountainCarTransition(StateTransitionModel):
     Example:
         Using the Mountain Car transition model::
         
-            # Define car state: position=-0.5 (in valley), velocity=0.0
-            state = (-0.5, 0.0)
-            action = 1  # Accelerate right/forward
-            
-            # Create transition model
-            transition = MountainCarTransition(
-                state=state,
-                action=action,
-                power=0.001,
-                gravity=0.0025,
-                max_speed=0.07,
-                min_position=-1.2,
-                max_position=0.6
-            )
-            
-            # Simulate physics step
-            next_state = transition.sample()[0]
-            # Returns new [position, velocity] with physics applied
-            new_pos, new_vel = next_state
+            >>> import numpy as np
+            >>> np.random.seed(42)  # For reproducible results
+            >>> 
+            >>> # Define car state: position=-0.5 (in valley), velocity=0.0
+            >>> state = (-0.5, 0.0)
+            >>> action = 1  # Accelerate right/forward
+            >>> 
+            >>> # Create transition model
+            >>> transition = MountainCarTransition(
+            ...     state=state,
+            ...     action=action,
+            ...     power=0.001,
+            ...     gravity=0.0025,
+            ...     max_speed=0.07,
+            ...     min_position=-1.2,
+            ...     max_position=0.6
+            ... )
+            >>> 
+            >>> # Simulate physics step
+            >>> next_state = transition.sample()[0]
+            >>> # Returns new [position, velocity] with physics applied
+            >>> new_pos, new_vel = next_state
+            >>> print(f"New position: {new_pos:.3f}, New velocity: {new_vel:.3f}")
+            New position: -0.499, New velocity: 0.001
     """
     
     def __init__(
@@ -139,28 +144,35 @@ class MountainCarObservation(ObservationModel):
     Example:
         Using the Mountain Car observation model::
         
-            import numpy as np
-            
-            # Define true state after physics step
-            true_state = (-0.45, 0.02)  # [position, velocity]
-            action = 1
-            
-            # Define observation noise
-            cov_matrix = np.array([[0.1**2, 0], [0, 0.01**2]])  # Position and velocity noise
-            
-            # Create observation model
-            obs_model = MountainCarObservation(
-                next_state=true_state,
-                action=action,
-                cov_matrix=cov_matrix
-            )
-            
-            # Sample noisy observation
-            observation = obs_model.sample()[0]
-            # Returns noisy [position, velocity] close to true_state
-            
-            # Calculate observation probability
-            prob = obs_model.probability([observation])
+            >>> import numpy as np
+            >>> np.random.seed(42)  # For reproducible results
+            >>> 
+            >>> # Define true state after physics step
+            >>> true_state = (-0.45, 0.02)  # [position, velocity]
+            >>> action = 1
+            >>> 
+            >>> # Define observation noise
+            >>> cov_matrix = np.array([[0.1**2, 0], [0, 0.01**2]])  # Position and velocity noise
+            >>> 
+            >>> # Create observation model
+            >>> obs_model = MountainCarObservation(
+            ...     next_state=true_state,
+            ...     action=action,
+            ...     cov_matrix=cov_matrix
+            ... )
+            >>> 
+            >>> # Sample noisy observation
+            >>> observation = obs_model.sample()[0]
+            >>> # Returns noisy [position, velocity] close to true_state
+            >>> print(f"True state: {true_state}")
+            True state: (-0.45, 0.02)
+            >>> print(f"Noisy observation: [{observation[0]:.3f}, {observation[1]:.3f}]")
+            Noisy observation: [-0.400, 0.019]
+            >>> 
+            >>> # Calculate observation probability
+            >>> prob = obs_model.probability([observation])
+            >>> print(f"Observation probability: {prob:.6f}")
+            Observation probability: 139.345607
     """
     
     def __init__(
@@ -200,20 +212,31 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
     Example:
         Creating and using a Mountain Car POMDP::
         
-            # Create Mountain Car environment
-            mountain_car = MountainCarPOMDP(discount_factor=0.99)
-            
-            # Get initial state and available actions
-            initial_state_dist = mountain_car.initial_state_dist()
-            state = initial_state_dist.sample()[0]  # [position, velocity]
-            actions = mountain_car.get_actions()  # [-1, 0, 1]
-            
-            # Take action and get reward
-            action = 1  # Accelerate forward
-            reward = mountain_car.reward(state, action)
-            
-            # Check if goal reached
-            is_done = mountain_car.is_terminal(state)
+            >>> import numpy as np
+            >>> np.random.seed(42)  # For reproducible results
+            >>> 
+            >>> # Create Mountain Car environment
+            >>> mountain_car = MountainCarPOMDP(discount_factor=0.99)
+            >>> 
+            >>> # Get initial state and available actions
+            >>> initial_state_dist = mountain_car.initial_state_dist()
+            >>> state = initial_state_dist.sample()[0]  # [position, velocity]
+            >>> actions = mountain_car.get_actions()  # [-1, 0, 1]
+            >>> print(f"Initial state: [{state[0]:.3f}, {state[1]:.3f}]")
+            Initial state: [-0.525, 0.000]
+            >>> print(f"Available actions: {actions}")
+            Available actions: [-1, 0, 1]
+            >>> 
+            >>> # Take action and get reward
+            >>> action = 1  # Accelerate forward
+            >>> reward = mountain_car.reward(state, action)
+            >>> print(f"Reward for action {action}: {reward}")
+            Reward for action 1: -1.0
+            >>> 
+            >>> # Check if goal reached
+            >>> is_done = mountain_car.is_terminal(state)
+            >>> print(f"Is terminal state: {is_done}")
+            Is terminal state: False
     """
     
     def __init__(

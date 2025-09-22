@@ -60,6 +60,21 @@ jobs:
       run: |
         pytest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing
 
+    - name: Run doctests
+      run: |
+        # Run doctests on core modules
+        python -m doctest POMDPPlanners/core/belief.py -v
+        python -m doctest POMDPPlanners/core/distributions.py -v
+
+        # Run doctests on environments
+        python -m doctest POMDPPlanners/environments/tiger_pomdp.py -v
+        python -m doctest POMDPPlanners/environments/cartpole_pomdp.py -v
+        python -m doctest POMDPPlanners/environments/push_pomdp.py -v
+
+        # Run doctests on planners
+        python -m doctest POMDPPlanners/planners/mcts_planners/pomcp.py -v
+        python -m doctest POMDPPlanners/planners/mcts_planners/pomcpow.py -v
+
     - name: Upload coverage to Codecov
       if: matrix.python-version == '3.11'
       uses: codecov/codecov-action@v3

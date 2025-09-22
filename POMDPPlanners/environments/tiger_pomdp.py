@@ -49,19 +49,27 @@ class TigerStateTransition(StateTransitionModel):
         action: Action to be taken (listen, open_left, or open_right)
         
     Example:
-        Using the Tiger state transition model::
-        
-            # Create transition model for listening action
-            transition_listen = TigerStateTransition(state="tiger_left", action="listen")
-            next_state_listen = transition_listen.sample()[0]  # Returns "tiger_left" (no change)
-            
-            # Create transition model for opening door
-            transition_open = TigerStateTransition(state="tiger_left", action="open_left")
-            next_state_open = transition_open.sample()[0]  # Returns random: "tiger_left" or "tiger_right"
-            
-            # Check probabilities for different outcomes
-            prob_same = transition_listen.probability(["tiger_left"])  # Returns [1.0]
-            prob_random = transition_open.probability(["tiger_left"])  # Returns [0.5]
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Create transition model for listening action
+        >>> transition_listen = TigerStateTransition(state="tiger_left", action="listen")
+        >>> next_state_listen = transition_listen.sample()[0]
+        >>> next_state_listen == "tiger_left"  # No state change when listening
+        True
+
+        >>> # Create transition model for opening door
+        >>> transition_open = TigerStateTransition(state="tiger_left", action="open_left")
+        >>> next_state_open = transition_open.sample()[0]
+        >>> next_state_open in ["tiger_left", "tiger_right"]  # Random outcome
+        True
+
+        >>> # Check probabilities for different outcomes
+        >>> prob_same = transition_listen.probability(["tiger_left"])
+        >>> bool(prob_same[0] == 1.0)  # Probability remains same when listening
+        True
+        >>> prob_random = transition_open.probability(["tiger_left"])
+        >>> bool(prob_random[0] == 0.5)  # Equal probability when opening
+        True
     """
     
     def __init__(self, state: str, action: str):
@@ -106,20 +114,30 @@ class TigerObservation(ObservationModel):
         action: The action that was taken
         
     Example:
-        Using the Tiger observation model::
-        
-            # Create observation model for listening when tiger is left
-            obs_listen = TigerObservation(next_state="tiger_left", action="listen")
-            observation = obs_listen.sample()[0]  # Usually "hear_left" (85% chance)
-            
-            # Create observation model for opening door
-            obs_open = TigerObservation(next_state="tiger_left", action="open_left")
-            observation_open = obs_open.sample()[0]  # Always "hear_nothing"
-            
-            # Check observation probabilities
-            prob_correct = obs_listen.probability(["hear_left"])  # Returns [0.85]
-            prob_wrong = obs_listen.probability(["hear_right"])   # Returns [0.15]
-            prob_nothing = obs_open.probability(["hear_nothing"]) # Returns [1.0]
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Create observation model for listening when tiger is left
+        >>> obs_listen = TigerObservation(next_state="tiger_left", action="listen")
+        >>> observation = obs_listen.sample()[0]
+        >>> observation in ["hear_left", "hear_right"]  # Listen gives acoustic feedback
+        True
+
+        >>> # Create observation model for opening door
+        >>> obs_open = TigerObservation(next_state="tiger_left", action="open_left")
+        >>> observation_open = obs_open.sample()[0]
+        >>> observation_open == "hear_nothing"  # Opening always gives no sound
+        True
+
+        >>> # Check observation probabilities
+        >>> prob_correct = obs_listen.probability(["hear_left"])
+        >>> bool(prob_correct[0] == 0.85)  # Correct observation probability
+        True
+        >>> prob_wrong = obs_listen.probability(["hear_right"])
+        >>> bool(prob_wrong[0] == 0.15)  # Wrong observation probability
+        True
+        >>> prob_nothing = obs_open.probability(["hear_nothing"])
+        >>> bool(prob_nothing[0] == 1.0)  # Opening door always gives no sound
+        True
     """
     
     def __init__(self, next_state: str, action: str):
@@ -182,21 +200,36 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         observations: List of possible observations
         
     Example:
-        Creating and using a Tiger POMDP::
-        
-            # Create Tiger environment
-            tiger = TigerPOMDP(discount_factor=0.95)
-            
-            # Get initial belief and sample episode
-            initial_belief = get_initial_belief(tiger, n_particles=1000)
-            
-            # Sample state and take action
-            state = initial_belief.sample()
-            actions = tiger.get_actions()
-            reward = tiger.reward(state, "listen")
-            
-            # Check for terminal condition
-            is_done = tiger.is_terminal(state)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> from POMDPPlanners.core.belief import get_initial_belief
+        >>> # Create Tiger environment
+        >>> tiger = TigerPOMDP(discount_factor=0.95)
+        >>> tiger.name
+        'TigerPOMDP'
+
+        >>> # Get initial state distribution and sample
+        >>> initial_dist = tiger.initial_state_dist()
+        >>> state = initial_dist.sample()[0]
+        >>> state in ["tiger_left", "tiger_right"]
+        True
+
+        >>> # Get available actions and compute reward
+        >>> actions = tiger.get_actions()
+        >>> "listen" in actions
+        True
+        >>> "open_left" in actions
+        True
+
+        >>> # Check reward for listening
+        >>> reward = tiger.reward(state, "listen")
+        >>> reward == -1
+        True
+
+        >>> # Check terminal condition (tiger problem is never terminal)
+        >>> is_done = tiger.is_terminal(state)
+        >>> is_done
+        False
     """
     
     def __init__(self, discount_factor: float, name: str = "TigerPOMDP", output_dir: Optional[Path] = None, debug: bool = False, use_queue_logger: bool = False):
