@@ -41,7 +41,7 @@ class History:
         >>> 
         >>> env = TigerPOMDP(discount_factor=0.95)
         >>> import numpy as np
-        >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
+            >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
         >>> step = StepData("tiger_left", "listen", "tiger_left", "tiger_left", -1.0, belief)
         >>> policy_data = PolicyRunData(info_variables=[])
         >>> 
@@ -91,7 +91,7 @@ class History:
             >>> 
             >>> env = TigerPOMDP(discount_factor=0.95)
             >>> import numpy as np
-        >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
+            >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
             >>> step = StepData("tiger_left", "listen", "tiger_left", "tiger_left", -1.0, belief)
             >>> policy_data = PolicyRunData(info_variables=[])
             >>> 
@@ -147,7 +147,7 @@ class History:
             >>> 
             >>> env = TigerPOMDP(discount_factor=0.95)
             >>> import numpy as np
-        >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
+            >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
             >>> step = StepData("tiger_left", "listen", "tiger_left", "tiger_left", -1.0, belief)
             >>> policy_data = PolicyRunData(info_variables=[])
             >>> 
@@ -209,7 +209,7 @@ class History:
             >>> 
             >>> env = TigerPOMDP(discount_factor=0.95)
             >>> import numpy as np
-        >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
+            >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
             >>> step = StepData("tiger_left", "listen", "tiger_left", "tiger_left", -1.0, belief)
             >>> policy_data = PolicyRunData(info_variables=[])
             >>> 
@@ -296,7 +296,7 @@ def history_to_discounted_return_value(history: History) -> float:
         >>> 
         >>> env = TigerPOMDP(discount_factor=0.95)
         >>> import numpy as np
-        >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
+            >>> belief = WeightedParticleBelief(env.states, np.array([0.0, -0.1]))
         >>> step1 = StepData("tiger_left", "listen", "tiger_left", "tiger_left", -1.0, belief)
         >>> step2 = StepData("tiger_left", "listen", "tiger_left", "tiger_left", -1.0, belief)
         >>> policy_data = PolicyRunData(info_variables=[])

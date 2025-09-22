@@ -65,15 +65,17 @@ html_theme_options = {
     'titles_only': False,
     'canonical_url': '',
     'logo_only': False,
-    'display_version': True,
     'prev_next_buttons_location': 'bottom',
     'style_external_links': False,
     'vcs_pageview_mode': '',
-    # Force show complete navigation tree on all pages
-    'globaltoc_depth': 4,
-    'globaltoc_collapse': False,
-    'globaltoc_includehidden': True
 }
+
+# Suppress certain warnings to reduce noise
+suppress_warnings = [
+    'autodoc.import_object',
+    'autodoc.failed_import',
+    'ref.python',
+]
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
