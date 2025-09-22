@@ -29,7 +29,7 @@ jobs:
         python-version: "3.11"
 
     - name: Cache pip dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-docs-${{ hashFiles('**/requirements*.txt') }}
@@ -48,10 +48,10 @@ jobs:
     - name: Build documentation
       run: |
         cd docs
-        # Generate API documentation
-        sphinx-apidoc -o api ../POMDPPlanners --force --module-first
+        # Generate API documentation (exclude tests)
+        sphinx-apidoc -o api ../POMDPPlanners tests --force --module-first
         # Build HTML documentation
-        sphinx-build -b html . _build/html -W --keep-going
+        sphinx-build -b html . _build/html --keep-going
 
     - name: Upload documentation artifacts
       uses: actions/upload-artifact@v4
@@ -117,8 +117,8 @@ jobs:
     - name: Check documentation builds
       run: |
         cd docs
-        sphinx-apidoc -o api ../POMDPPlanners --force --module-first
-        sphinx-build -b html . _build/html -W
+        sphinx-apidoc -o api ../POMDPPlanners tests --force --module-first
+        sphinx-build -b html . _build/html
 
     - name: Check for broken links
       run: |

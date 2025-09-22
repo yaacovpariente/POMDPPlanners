@@ -118,7 +118,7 @@ jobs:
         # Update version information in documentation
         echo "Release ${{ github.event.release.tag_name }} published"
         cd docs
-        sphinx-apidoc -o api ../POMDPPlanners --force --module-first
+        sphinx-apidoc -o api ../POMDPPlanners tests --force --module-first
         sphinx-build -b html . _build/html
 
     - name: Deploy updated docs

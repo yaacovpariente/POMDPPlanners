@@ -1,0 +1,68 @@
+{
+    "window.commandCenter": true,
+    "git.confirmSync": false,
+    "remote.SSH.remotePlatform": {
+        "zeus": "linux"
+    },
+    "files.watcherExclude": {
+        "**/node_modules/**": true,
+        "**/__pycache__/**": true,
+        "**/.git/**": true,
+        "**/cache/**": true,
+        "**/debug_output/**": true,
+        "**/dask-worker-space/**": true,
+        "**/joblib_cache/**": true,
+        "**/POMDPPlanners.egg-info/**": true,
+        "**/docs/_build/**": true
+    },
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/__pycache__": true,
+        "**/.git": true,
+        "**/cache": true,
+        "**/debug_output": true,
+        "**/dask-worker-space": true,
+        "**/joblib_cache": true,
+        "**/POMDPPlanners.egg-info": true,
+        "**/docs/_build": true
+    },
+    "files.exclude": {
+        "**/__pycache__": true,
+        "**/.git": true,
+        "**/cache": true,
+        "**/debug_output": true,
+        "**/dask-worker-space": true,
+        "**/joblib_cache": true,
+        "**/POMDPPlanners.egg-info": true,
+        "**/docs/_build": true
+    },
+    "editor.minimap.enabled": false,
+    "editor.renderWhitespace": "none",
+    "editor.renderControlCharacters": false,
+    "editor.renderLineHighlight": "line",
+    "editor.smoothScrolling": false,
+    "editor.cursorBlinking": "solid",
+    "editor.cursorSmoothCaretAnimation": "off",
+    "workbench.enableExperiments": false,
+    "workbench.settings.enableNaturalLanguageSearch": false,
+    "extensions.autoUpdate": false,
+    "extensions.autoCheckUpdates": false,
+    "update.mode": "none",
+    "telemetry.telemetryLevel": "off",
+    "ai.experimental.ollama": false,
+    "ai.experimental.ollama.server": "",
+    "ai.experimental.ollama.model": "",
+    "ai.experimental.ollama.keepAlive": "off"
+}
+
+
+
+
+
+
+
+
+
+
+
+

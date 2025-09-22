@@ -35,7 +35,7 @@ pip install -e .
 cd docs
 
 echo "🏗️  Generating API documentation..."
-sphinx-apidoc -o api ../POMDPPlanners --force --module-first
+sphinx-apidoc -o api ../POMDPPlanners tests --force --module-first
 
 echo "🏗️  Building HTML documentation..."
 sphinx-build -b html . _build/html
