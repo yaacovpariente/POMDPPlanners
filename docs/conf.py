@@ -56,10 +56,47 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # a list of builtin themes.
 html_theme = 'sphinx_rtd_theme'
 
+# ReadTheDocs theme configuration
+html_theme_options = {
+    'navigation_depth': 4,
+    'collapse_navigation': False,
+    'sticky_navigation': True,
+    'includehidden': True,
+    'titles_only': False,
+    'canonical_url': '',
+    'logo_only': False,
+    'display_version': True,
+    'prev_next_buttons_location': 'bottom',
+    'style_external_links': False,
+    'vcs_pageview_mode': '',
+    # Force show complete navigation tree on all pages
+    'globaltoc_depth': 4,
+    'globaltoc_collapse': False,
+    'globaltoc_includehidden': True
+}
+
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+# Ensure consistent navigation across all pages
+html_use_smartypants = True
+html_split_index = False
+html_short_title = 'POMDPPlanners'
+
+# Master document
+master_doc = 'index'
+
+# Navigation configuration
+html_sidebars = {
+    '**': [
+        'globaltoc.html',
+        'relations.html',
+        'sourcelink.html',
+        'searchbox.html',
+    ]
+}
 
 # -- Options for autodoc ----------------------------------------------------
 

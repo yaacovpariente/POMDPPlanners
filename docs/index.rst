@@ -76,22 +76,29 @@ Basic Usage
 
    installation
    quickstart
-   tutorials/index
-   examples/index
 
 .. toctree::
    :maxdepth: 2
-   :caption: API Reference
+   :caption: Examples & Tutorials
 
-   api/index
+   examples/basic_usage
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Core Components
+
+   core/environments
+   core/planners
+   core/beliefs
+   core/simulations
 
 .. toctree::
    :maxdepth: 1
-   :caption: Developer Guide
+   :caption: API Reference
 
-   contributing
-   development
-   testing
+   api/core
+   api/environments
+   api/planners
 
 🏗️ Architecture Overview
 -------------------------
