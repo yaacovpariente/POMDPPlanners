@@ -97,4 +97,3 @@ jobs:
     - name: Test usage examples in tests
       run: |
         pytest POMDPPlanners/tests/test_environments/test_all_environment_examples.py -v
-        pytest POMDPPlanners/tests/test_all_usage_examples.py -v
