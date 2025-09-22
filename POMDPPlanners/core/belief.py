@@ -26,34 +26,36 @@ from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.utils.config_to_id import config_to_id
 
+
 class Belief(ABC):
     """Abstract base class for POMDP belief state representations.
-    
+
     This class defines the interface for belief states in POMDP environments.
     Belief states represent probability distributions over the state space,
     capturing the agent's uncertainty about the current state.
-    
+
     Note:
         This is an abstract base class and cannot be instantiated directly.
         Subclasses must implement the update() and sample() methods.
     """
-    
+
     @classmethod
     def from_config(cls, config):
         """Create a belief instance from configuration.
-        
+
         Factory method that dynamically creates belief instances based on
         configuration objects specifying the class name and parameters.
-        
+
         Args:
             config: Configuration object with class_name and params attributes
-            
+
         Returns:
             New belief instance of the specified type
-            
+
         Raises:
             ValueError: If the specified belief class is not found
         """
+
         # Get all subclasses of Belief recursively
         def get_all_subclasses(c):
             subclasses = c.__subclasses__()
@@ -70,6 +72,7 @@ class Belief(ABC):
     @property
     def config_id(self) -> str:
         """Generate a deterministic identifier based on belief configuration."""
+
         def serialize_value(value):
             """Helper function to serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
@@ -80,14 +83,14 @@ class Belief(ABC):
                 return [serialize_value(v) for v in value]
             elif isinstance(value, dict):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
-            elif hasattr(value, '__dict__'):
+            elif hasattr(value, "__dict__"):
                 return serialize_value(value.__dict__)
             else:
                 return str(value)
-        
+
         config_dict = {}
         for key, value in self.__dict__.items():
-            if key.startswith('_') or callable(value):
+            if key.startswith("_") or callable(value):
                 continue
             config_dict[key] = serialize_value(value)
         config_dict = dict(sorted(config_dict.items()))
@@ -104,20 +107,26 @@ class Belief(ABC):
         return self.config_id == other.config_id
 
     @abstractmethod
-    def update(self, action: Any, observation: Any, pomdp: Environment, state: Optional[Any] = None) -> "Belief":
+    def update(
+        self,
+        action: Any,
+        observation: Any,
+        pomdp: Environment,
+        state: Optional[Any] = None,
+    ) -> "Belief":
         """Update belief given an action-observation pair.
-        
+
         Performs Bayesian belief update using the environment's transition
         and observation models.
-        
+
         Args:
             action: Action that was executed
             observation: Observation that was received
             pomdp: Environment providing transition and observation models
-            
+
         Returns:
             Updated belief state reflecting the new information
-            
+
         Note:
             Subclasses must implement this method according to their
             specific belief representation and update strategy.
@@ -127,15 +136,16 @@ class Belief(ABC):
     @abstractmethod
     def sample(self) -> Any:
         """Sample a state from the current belief distribution.
-        
+
         Returns:
             A state sampled according to the belief's probability distribution
-            
+
         Note:
             Subclasses must implement this method to enable state sampling
             for planning and simulation purposes.
         """
         pass
+
 
 class UnweightedParticleBelief(Belief):
     def __init__(self, particles: list, reinvigoration_fraction=0.2):
@@ -143,7 +153,13 @@ class UnweightedParticleBelief(Belief):
         self.reinvigoration_fraction = reinvigoration_fraction
         self.particles = particles
 
-    def update(self, action: Any, observation: Any, pomdp: Environment, is_reinvigorate: bool = False) -> "UnweightedParticleBelief":
+    def update(
+        self,
+        action: Any,
+        observation: Any,
+        pomdp: Environment,
+        is_reinvigorate: bool = False,
+    ) -> "UnweightedParticleBelief":
         new_particles = []
 
         for _ in range(self.num_particles):
@@ -158,7 +174,12 @@ class UnweightedParticleBelief(Belief):
         if is_reinvigorate:
             if len(new_particles) < self.reinvigoration_fraction * self.num_particles:
                 num_new = int(self.reinvigoration_fraction * self.num_particles)
-                reinvigorated = [self.reinvigorate(action=action, observation=observation, pomdp=pomdp) for _ in range(num_new)]
+                reinvigorated = [
+                    self.reinvigorate(
+                        action=action, observation=observation, pomdp=pomdp
+                    )
+                    for _ in range(num_new)
+                ]
                 new_particles += reinvigorated
 
         # Replenish to full count
@@ -171,7 +192,9 @@ class UnweightedParticleBelief(Belief):
         """Simulate a new particle that matches the action-observation pair."""
         # Try sampling from initial state and simulate until match
         while True:
-            s = self._reinvigoration_pertubation(action=action, observation=observation, pomdp=pomdp)
+            s = self._reinvigoration_pertubation(
+                action=action, observation=observation, pomdp=pomdp
+            )
             next_s = pomdp.state_transition_model(state=s, action=action).sample()[0]
             obs = pomdp.observation_model(next_state=next_s, action=action).sample()[0]
             if pomdp.is_equal_observation(obs, observation):
@@ -179,19 +202,22 @@ class UnweightedParticleBelief(Belief):
 
     def sample(self):
         return random.choice(self.particles)
-    
+
     @abstractmethod
-    def _reinvigoration_pertubation(self, action: Any, observation: Any, pomdp: Environment) -> Any:
+    def _reinvigoration_pertubation(
+        self, action: Any, observation: Any, pomdp: Environment
+    ) -> Any:
         """This method should be implemented specifically for each environment."""
         pass
 
+
 class WeightedParticleBelief(Belief):
     """Weighted particle filter implementation for POMDP belief states.
-    
+
     This class implements a particle filter with weighted particles, suitable
     for continuous observation spaces. It supports automatic resampling based
     on effective sample size to maintain particle diversity.
-    
+
     Attributes:
         particles: List of state particles representing the belief
         log_weights: Log-weights of particles in log space for numerical stability
@@ -200,7 +226,7 @@ class WeightedParticleBelief(Belief):
         ess_factor: Effective sample size factor for resampling threshold
         ess_threshold: Computed threshold for triggering resampling
         eps: Small epsilon value for numerical stability in weight updates
-        
+
     Example:
         >>> import numpy as np
         >>> # Create belief with 10 particles (smaller for testing)
@@ -227,18 +253,22 @@ class WeightedParticleBelief(Belief):
         >>> len(state) == 2  # [x, y] coordinate
         True
     """
-    
+
     def __init__(
-        self, particles: list, log_weights: np.ndarray, resampling: bool = False, ess_factor: float = 0.5
+        self,
+        particles: list,
+        log_weights: np.ndarray,
+        resampling: bool = False,
+        ess_factor: float = 0.5,
     ):
         """Initialize weighted particle belief.
-        
+
         Args:
             particles: List of state particles
             log_weights: Log-weights for particles (must sum to 1 in probability space)
             resampling: Enable automatic resampling when ESS drops. Defaults to False.
             ess_factor: Effective sample size threshold factor (0 < ess_factor <= 1). Defaults to 0.5.
-            
+
         Raises:
             TypeError: If particles is not a list or log_weights is not a numpy array
             ValueError: If particles and weights have different lengths, or weights are invalid
@@ -254,7 +284,9 @@ class WeightedParticleBelief(Belief):
         if not np.any(log_weights != 0):
             raise ValueError("At least one log_weight must be nonzero")
         if not np.all(np.isfinite(log_weights)):
-            raise ValueError("log_weights must be finite numbers (not Inf, -Inf, or NaN)")
+            raise ValueError(
+                "log_weights must be finite numbers (not Inf, -Inf, or NaN)"
+            )
 
         self.particles = particles
         self.log_weights = log_weights
@@ -271,28 +303,28 @@ class WeightedParticleBelief(Belief):
 
     def to_dict(self) -> dict:
         """Convert the belief to a dictionary for serialization.
-        
+
         Returns:
             dict: A dictionary containing all necessary fields for deserialization.
         """
         return {
-            'particles': self.particles,
-            'log_weights': self.log_weights.tolist(),
-            'resampling': self.resampling,
-            'ess_factor': self.ess_factor
+            "particles": self.particles,
+            "log_weights": self.log_weights.tolist(),
+            "resampling": self.resampling,
+            "ess_factor": self.ess_factor,
         }
 
     def to_unique_support_distribution(self) -> "DiscreteDistribution":
         """Convert the belief to a DiscreteDistribution with unique particles.
-        
+
         Returns:
             DiscreteDistribution: A distribution where each particle appears only once,
             with its probability being the sum of all its occurrences in the original belief.
         """
-        
+
         # Create a dictionary to store unique particles and their combined weights
         unique_particles = {}
-        
+
         # Iterate through particles and their weights
         for particle, weight in zip(self.particles, self.normalized_weights):
             # Convert particle to tuple if it's a numpy array for hashability
@@ -300,13 +332,13 @@ class WeightedParticleBelief(Belief):
                 particle_key = tuple(particle.tolist())
             else:
                 particle_key = particle
-                
+
             # Add or update the weight for this particle
             if particle_key in unique_particles:
                 unique_particles[particle_key] += weight
             else:
                 unique_particles[particle_key] = weight
-        
+
         # Convert back to original particle types and create arrays
         particles = []
         weights = []
@@ -316,16 +348,17 @@ class WeightedParticleBelief(Belief):
             else:
                 particles.append(particle_key)
             weights.append(weight)
-            
+
         # Convert to numpy array and normalize to ensure sum is exactly 1
         weights = np.array(weights)
         weights = weights / np.sum(weights)  # Normalize to sum to 1
-        
+
         return DiscreteDistribution(values=particles, probs=weights)
 
     @property
     def config_id(self) -> str:
         """Generate a deterministic identifier based on belief configuration."""
+
         def serialize_value(value):
             """Helper function to serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
@@ -336,11 +369,11 @@ class WeightedParticleBelief(Belief):
                 return [serialize_value(v) for v in value]
             elif isinstance(value, dict):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
-            elif hasattr(value, '__dict__'):
+            elif hasattr(value, "__dict__"):
                 return serialize_value(value.__dict__)
             else:
                 return str(value)
-        
+
         # Create a list of particle-weight pairs to maintain order
         particle_weight_pairs = []
         for particle, weight in zip(self.particles, self.log_weights):
@@ -348,25 +381,27 @@ class WeightedParticleBelief(Belief):
             if isinstance(particle, np.ndarray):
                 particle = particle.tolist()
             particle_weight_pairs.append((serialize_value(particle), float(weight)))
-        
+
         # Sort particle-weight pairs to make config_id invariant to order
         particle_weight_pairs.sort(key=lambda x: (str(x[0]), x[1]))
-        
+
         config_dict = {
-            'particle_weight_pairs': particle_weight_pairs,
-            'resampling': self.resampling,
-            'ess_factor': self.ess_factor
+            "particle_weight_pairs": particle_weight_pairs,
+            "resampling": self.resampling,
+            "ess_factor": self.ess_factor,
         }
         config_dict = dict(sorted(config_dict.items()))
         return config_to_id(config_dict)
 
-    def _resample(self, particles: list, log_weights: np.ndarray) -> Tuple[list, np.ndarray]:
+    def _resample(
+        self, particles: list, log_weights: np.ndarray
+    ) -> Tuple[list, np.ndarray]:
         """Resample particles based on their weights if effective sample size is below threshold.
-        
+
         Args:
             particles: List of particles to potentially resample
             log_weights: Log weights of the particles
-            
+
         Returns:
             Tuple containing:
             - Resampled particles (or original if no resampling needed)
@@ -374,7 +409,7 @@ class WeightedParticleBelief(Belief):
         """
         normalized_weights = np.exp(log_weights - np.max(log_weights))
         normalized_weights = normalized_weights / np.sum(normalized_weights)
-        
+
         effective_sample_size = 1 / np.sum(np.square(normalized_weights))
         if effective_sample_size < self.ess_threshold:
             sampled_indexes = random.choices(
@@ -383,32 +418,44 @@ class WeightedParticleBelief(Belief):
                 k=len(particles),
             )
             resampled_particles = [particles[i] for i in sampled_indexes]
-            new_log_weights = np.log(np.ones(len(resampled_particles)) / len(resampled_particles))
+            new_log_weights = np.log(
+                np.ones(len(resampled_particles)) / len(resampled_particles)
+            )
             return resampled_particles, new_log_weights
         return particles, log_weights
-    
-    def _update_weights(self, action: Any, observation: Any, pomdp: Environment) -> Tuple[np.ndarray, np.ndarray]:
+
+    def _update_weights(
+        self, action: Any, observation: Any, pomdp: Environment
+    ) -> Tuple[np.ndarray, np.ndarray]:
         next_particles = [
             pomdp.state_transition_model(state=particle, action=action).sample()[0]
             for particle in self.particles
         ]
-        probs = np.array([
-            pomdp.observation_model(
-                next_state=next_particle, action=action
-            ).probability([observation])[0]
-            for next_particle in next_particles
-        ])
-        
+        probs = np.array(
+            [
+                pomdp.observation_model(
+                    next_state=next_particle, action=action
+                ).probability([observation])[0]
+                for next_particle in next_particles
+            ]
+        )
+
         next_log_weights = self.log_weights + np.log(self.eps + probs)
 
         return next_particles, next_log_weights
 
-    def update(self, action, observation, pomdp: Environment, state: Optional[Any] = None) -> "WeightedParticleBelief":
-        next_particles, next_log_weights = self._update_weights(action=action, observation=observation, pomdp=pomdp)
-        
+    def update(
+        self, action, observation, pomdp: Environment, state: Optional[Any] = None
+    ) -> "WeightedParticleBelief":
+        next_particles, next_log_weights = self._update_weights(
+            action=action, observation=observation, pomdp=pomdp
+        )
+
         if self.resampling:
-            next_particles, next_log_weights = self._resample(next_particles, next_log_weights)
-                
+            next_particles, next_log_weights = self._resample(
+                next_particles, next_log_weights
+            )
+
         return WeightedParticleBelief(
             particles=next_particles,
             log_weights=next_log_weights,
@@ -419,54 +466,59 @@ class WeightedParticleBelief(Belief):
         idx = np.random.choice(len(self.particles), p=self.normalized_weights)
         return self.particles[idx]
 
+
 class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
-    def __init__(self, particles: list, log_weights: np.ndarray, resampling: bool = True, ess_factor: float = 0.5, reinvigoration_fraction: float = 0.2):
+    def __init__(
+        self,
+        particles: list,
+        log_weights: np.ndarray,
+        resampling: bool = True,
+        ess_factor: float = 0.5,
+        reinvigoration_fraction: float = 0.2,
+    ):
         super().__init__(
-            particles=particles, 
-            log_weights=log_weights, 
-            resampling=resampling, 
-            ess_factor=ess_factor
+            particles=particles,
+            log_weights=log_weights,
+            resampling=resampling,
+            ess_factor=ess_factor,
         )
-        
+
         self.reinvigoration_fraction = reinvigoration_fraction
-        
-    def update(self, action, observation, pomdp: Environment) -> "WeightedParticleBelief":
-        belief = super().update(
-            action=action,
-            observation=observation,
-            pomdp=pomdp
-        )
-        
+
+    def update(
+        self, action, observation, pomdp: Environment
+    ) -> "WeightedParticleBelief":
+        belief = super().update(action=action, observation=observation, pomdp=pomdp)
+
         belief = self.reinvigorate(
-            action=action,
-            observation=observation,
-            pomdp=pomdp,
-            belief=belief
+            action=action, observation=observation, pomdp=pomdp, belief=belief
         )
-        
+
         return belief
-    
+
     @abstractmethod
-    def reinvigorate(self, action: Any, observation: Any, pomdp: Environment, belief: Belief) -> Belief:
+    def reinvigorate(
+        self, action: Any, observation: Any, pomdp: Environment, belief: Belief
+    ) -> Belief:
         """This function should be implemented for a specific POMDP environment."""
         pass
-        
+
 
 class WeightedParticleBeliefStateUpdate(Belief):
     """Incremental weighted particle belief for online state estimation.
-    
+
     This class implements a lightweight belief representation that incrementally
     accumulates state particles with associated observation likelihood weights.
     It is designed for online learning and planning algorithms that build beliefs
     by sequentially adding individual state samples rather than maintaining a
     fixed-size particle set.
-    
+
     Unlike traditional particle filters that maintain a fixed number of particles
     through resampling, WeightedParticleBeliefStateUpdate grows dynamically by
     accumulating particles with observation-based weights. This makes it particularly
     suitable for Monte Carlo Tree Search (MCTS) algorithms where beliefs are built
     incrementally during tree expansion.
-    
+
     Key Features:
     - **Incremental Accumulation**: Add particles one-by-one without resampling
     - **Observation Weighting**: Each particle weighted by observation likelihood
@@ -474,19 +526,19 @@ class WeightedParticleBeliefStateUpdate(Belief):
     - **Weighted Sampling**: Sample states proportionally to observation evidence
     - **Memory Efficient**: No fixed particle budget, grows as needed
     - **Deterministic Config ID**: Order-invariant identification for caching
-    
+
     Mathematical Foundation:
     The belief represents a discrete probability distribution where each particle
     s_i has weight w_i = P(o|s_i,a), the observation likelihood. The probability
     of state s is proportional to the sum of weights for all particles with that state:
-    
+
     P(s|o,a) ∝ Σ_{i: s_i=s} w_i
-    
+
     Attributes:
         particles: List of state particles representing possible world states
         weights: List of observation likelihood weights for each particle
         weights_sum: Running sum of all weights for efficient normalization
-        
+
     Examples:
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> # Create environment and empty belief
@@ -510,7 +562,7 @@ class WeightedParticleBeliefStateUpdate(Belief):
         >>> sampled_state = belief.sample()
         >>> sampled_state in ["tiger_left", "tiger_right"]
         True
-            
+
         >>> import numpy as np
         >>> from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
         >>> # Create continuous state environment
@@ -536,7 +588,7 @@ class WeightedParticleBeliefStateUpdate(Belief):
         True
         >>> bool(child_belief.weights[-1] > 0)  # New particle has positive weight
         True
-                
+
         >>> from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
         >>> env = SanityPOMDP(discount_factor=0.95)
 
@@ -561,54 +613,54 @@ class WeightedParticleBeliefStateUpdate(Belief):
         >>> # Both should have same final state
         >>> len(belief_inplace.particles) == len(belief_immutable.particles)
         True
-            
+
         Monte Carlo Tree Search integration::
-        
+
             from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
             from POMDPPlanners.core.tree import BeliefNode, ActionNode
             import random
-            
+
             env = TigerPOMDP(discount_factor=0.95)
-            
+
             # Root belief node with initial particles
             root_belief = WeightedParticleBeliefStateUpdate(
                 particles=["tiger_left", "tiger_right"],
                 weights=[0.5, 0.5]
             )
             root_node = BeliefNode(belief=root_belief)
-            
+
             # Simulate MCTS expansion
             action = "listen"
             possible_observations = ["hear_left", "hear_right"]
-            
+
             # Create action node
             action_node = ActionNode(action=action, parent=root_node)
-            
+
             # For each possible observation, create belief child
             for observation in possible_observations:
                 # Sample particles and create child belief
                 child_belief = WeightedParticleBeliefStateUpdate([], [])
-                
+
                 # Add particles based on transition model
                 for _ in range(5):  # Multiple particles per observation
                     parent_state = root_belief.sample()
                     next_state = env.state_transition_model(parent_state, action).sample()[0]
                     child_belief.inplace_update(action, observation, env, next_state)
-                
+
                 # Create belief node for tree
                 belief_node = BeliefNode(belief=child_belief, observation=observation, parent=action_node)
                 print(f"Child belief for {observation}: {len(child_belief.particles)} particles")
-                
+
         Weighted sampling and state estimation::
-        
+
             from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
             import collections
-            
+
             env = TigerPOMDP(discount_factor=0.95)
             belief = WeightedParticleBeliefStateUpdate([], [])
-            
+
             # Add strongly biased evidence for tiger_left
             evidence_sets = [
                 ("tiger_left", "hear_left", 5),    # Strong evidence for left
@@ -616,54 +668,54 @@ class WeightedParticleBeliefStateUpdate(Belief):
                 ("tiger_left", "hear_right", 1),   # Weak evidence for right from left
                 ("tiger_right", "hear_right", 3),  # Medium evidence for right
             ]
-            
+
             for state, obs, count in evidence_sets:
                 for _ in range(count):
                     belief.inplace_update("listen", obs, env, state)
-            
+
             # Analyze sampling distribution
             samples = [belief.sample() for _ in range(1000)]
             sample_counts = collections.Counter(samples)
-            
+
             print("Sampling distribution:")
             for state, count in sample_counts.items():
                 probability = count / 1000
                 print(f"  {state}: {probability:.3f}")
-                
+
             # Should strongly favor tiger_left due to evidence weighting
-            
+
         Configuration ID and caching::
-        
+
             from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
             from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
-            
+
             env = SanityPOMDP(discount_factor=0.95)
-            
+
             # Create two beliefs with same particles in different orders
             belief1 = WeightedParticleBeliefStateUpdate([0, 1, 0], [0.8, 0.2, 0.6])
             belief2 = WeightedParticleBeliefStateUpdate([1, 0, 0], [0.2, 0.8, 0.6])
-            
+
             # Config IDs should be equal (order-invariant)
             print(f"Belief 1 config ID: {belief1.config_id}")
             print(f"Belief 2 config ID: {belief2.config_id}")
             print(f"IDs match: {belief1.config_id == belief2.config_id}")
-            
+
             # Useful for caching in planning algorithms
             belief_cache = {belief1.config_id: "cached_result"}
-            
+
             if belief2.config_id in belief_cache:
                 print("Cache hit! Reusing computation.")
-                
+
         Advanced: Custom particle types::
-        
+
             import numpy as np
             from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
             from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
-            
+
             # Works with any particle type - numpy arrays, custom objects, etc.
             noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
             env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
-            
+
             # Numpy array particles
             particles = [
                 np.array([0.0, 0.0, 0.1, 0.0]),
@@ -671,35 +723,37 @@ class WeightedParticleBeliefStateUpdate(Belief):
                 np.array([-0.1, 0.0, 0.12, 0.0])
             ]
             weights = [0.4, 0.35, 0.25]
-            
+
             belief = WeightedParticleBeliefStateUpdate(particles, weights)
-            
+
             # Add more complex state
             complex_state = np.array([0.05, 0.1, 0.09, -0.05])
             action = np.array([1])  # Force right
             observation = np.array([0.06, 0.1, 0.088, -0.05])
-            
+
             new_belief = belief.update(action, observation, env, complex_state)
             sampled_state = new_belief.sample()
-            
+
             print(f"Sampled state shape: {sampled_state.shape}")
             print(f"Sampled state: {sampled_state}")
     """
-    
-    def __init__(self, particles: Optional[list] = None, weights: Optional[list] = None):
+
+    def __init__(
+        self, particles: Optional[list] = None, weights: Optional[list] = None
+    ):
         """Initialize weighted particle belief.
-        
+
         Creates a belief state with given particles and weights. Empty lists
         create an empty belief that can be populated incrementally.
-        
+
         Args:
             particles: List of state particles. Defaults to empty list.
             weights: List of observation likelihood weights corresponding to particles.
                 Must have same length as particles. Defaults to empty list.
-                
+
         Raises:
             ValueError: If particles and weights have different lengths.
-            
+
         Note:
             When weights is empty, weights_sum is automatically set to 0.
             This handles the case where an empty belief is initialized.
@@ -710,12 +764,18 @@ class WeightedParticleBeliefStateUpdate(Belief):
 
         if len(particles) != len(weights):
             raise ValueError("particles and weights must have the same length")
-            
+
         self.particles = particles
         self.weights = weights
         self.weights_sum = sum(weights) if weights else 0
 
-    def update(self, action: Any, observation: Any, pomdp: Environment, state: Optional[Any] = None) -> "WeightedParticleBeliefStateUpdate":
+    def update(
+        self,
+        action: Any,
+        observation: Any,
+        pomdp: Environment,
+        state: Optional[Any] = None,
+    ) -> "WeightedParticleBeliefStateUpdate":
         """Create new belief by adding a state particle with observation weight.
         
         This method creates a new belief instance without modifying the current one.
@@ -754,13 +814,23 @@ class WeightedParticleBeliefStateUpdate(Belief):
                 assert len(new_belief.particles) == 3
         """
         new_particles = self.particles + [state]
-        observation_probability = pomdp.observation_model(next_state=state, action=action).probability([observation])[0]
+        observation_probability = pomdp.observation_model(
+            next_state=state, action=action
+        ).probability([observation])[0]
         new_weights = self.weights + [observation_probability]
-        new_belief = WeightedParticleBeliefStateUpdate(particles=new_particles, weights=new_weights)
-        
+        new_belief = WeightedParticleBeliefStateUpdate(
+            particles=new_particles, weights=new_weights
+        )
+
         return new_belief
 
-    def inplace_update(self, action: Any, observation: Any, pomdp: Environment, state: Optional[Any] = None) -> None:
+    def inplace_update(
+        self,
+        action: Any,
+        observation: Any,
+        pomdp: Environment,
+        state: Optional[Any] = None,
+    ) -> None:
         """Add a state particle with observation weight to current belief.
         
         This method modifies the current belief in-place by appending a new particle
@@ -789,35 +859,38 @@ class WeightedParticleBeliefStateUpdate(Belief):
                 assert belief.weights_sum > 0
         """
         self.particles.append(state)
-        observation_probability = pomdp.observation_model(next_state=state, action=action).probability([observation])[0]
+        observation_probability = pomdp.observation_model(
+            next_state=state, action=action
+        ).probability([observation])[0]
         self.weights.append(observation_probability)
         self.weights_sum += observation_probability
 
     def sample(self) -> Any:
         """Sample a state from the current belief distribution.
-        
+
         Returns:
             A state sampled according to the belief's probability distribution
-            
+
         Raises:
             ValueError: If belief is empty or has zero weights.
         """
         if not self.particles or self.weights_sum == 0:
             raise ValueError("Cannot sample from empty or unnormalized belief")
-        
+
         # Normalize weights for sampling
         normalized_weights = [w / self.weights_sum for w in self.weights]
-        
+
         # Sample based on normalized weights
         return random.choices(self.particles, weights=normalized_weights, k=1)[0]
 
     @property
     def config_id(self) -> str:
         """Generate a deterministic identifier based on belief configuration.
-        
+
         This implementation ensures that config_id is invariant to the order
         of particles and weights, similar to WeightedParticleBelief.
         """
+
         def serialize_value(value):
             """Helper function to serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
@@ -828,11 +901,11 @@ class WeightedParticleBeliefStateUpdate(Belief):
                 return [serialize_value(v) for v in value]
             elif isinstance(value, dict):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
-            elif hasattr(value, '__dict__'):
+            elif hasattr(value, "__dict__"):
                 return serialize_value(value.__dict__)
             else:
                 return str(value)
-        
+
         # Create a list of particle-weight pairs to maintain order
         particle_weight_pairs = []
         for particle, weight in zip(self.particles, self.weights):
@@ -840,13 +913,13 @@ class WeightedParticleBeliefStateUpdate(Belief):
             if isinstance(particle, np.ndarray):
                 particle = particle.tolist()
             particle_weight_pairs.append((serialize_value(particle), float(weight)))
-        
+
         # Sort particle-weight pairs to make config_id invariant to order
         particle_weight_pairs.sort(key=lambda x: (str(x[0]), x[1]))
-        
+
         config_dict = {
-            'particle_weight_pairs': particle_weight_pairs,
-            'weights_sum': self.weights_sum
+            "particle_weight_pairs": particle_weight_pairs,
+            "weights_sum": self.weights_sum,
         }
         config_dict = dict(sorted(config_dict.items()))
         return config_to_id(config_dict)
@@ -854,19 +927,19 @@ class WeightedParticleBeliefStateUpdate(Belief):
 
 class UnweightedParticleBeliefStateUpdate(Belief):
     """Uniform particle belief for incremental state accumulation.
-    
+
     This class implements a lightweight belief representation that maintains
     a collection of state particles with uniform probability distribution.
     Unlike weighted particle filters, all particles contribute equally to
     the belief state, making it suitable for discrete observation spaces
     where observation likelihoods are binary (match/no-match) rather than
     continuous probability distributions.
-    
+
     UnweightedParticleBeliefStateUpdate is designed for online learning and
     planning algorithms that incrementally accumulate particles during tree
     expansion or sequential state estimation. It provides both in-place and
     immutable update operations for different algorithmic requirements.
-    
+
     Key Features:
     - **Uniform Weighting**: All particles have equal probability weight
     - **Incremental Accumulation**: Add particles one-by-one without resampling
@@ -874,286 +947,286 @@ class UnweightedParticleBeliefStateUpdate(Belief):
     - **Fast Sampling**: Simple uniform random sampling from particle set
     - **Efficient Updates**: Both in-place and immutable update operations
     - **Deterministic Config ID**: Order-invariant identification for caching
-    
+
     Mathematical Foundation:
     The belief represents a discrete uniform distribution over accumulated particles.
     Each particle has equal probability 1/N where N is the total number of particles.
-    For particles with the same state value, the probability is proportional to 
+    For particles with the same state value, the probability is proportional to
     their count:
-    
+
     P(s) = count(s) / N = |{i: s_i = s}| / |particles|
-    
+
     This makes it ideal for discrete observation models where observations either
     match a state (probability 1) or don't match (probability 0).
-    
+
     Attributes:
         particles: List of state particles, each with uniform probability
         weights_sum: Total number of particles (equivalent to uniform weight sum)
-        
+
     Examples:
         Basic uniform belief construction::
-        
+
             from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-            
+
             # Create environment and empty uniform belief
             env = TigerPOMDP(discount_factor=0.95)
             belief = UnweightedParticleBeliefStateUpdate(particles=[])
-            
+
             # Add states uniformly (all have equal probability)
             belief.inplace_update("listen", "hear_left", env, "tiger_left")
-            belief.inplace_update("listen", "hear_right", env, "tiger_right") 
+            belief.inplace_update("listen", "hear_right", env, "tiger_right")
             belief.inplace_update("listen", "hear_left", env, "tiger_left")
-            
+
             print(f"Belief has {len(belief.particles)} particles")
             print(f"Weights sum: {belief.weights_sum}")  # Equal to number of particles
-            
+
             # Sample uniformly from particles
             sampled_state = belief.sample()  # Each "tiger_left" has 2/3 prob, "tiger_right" has 1/3
-            
+
         Monte Carlo Tree Search with uniform beliefs::
-        
+
             from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
             from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
             from POMDPPlanners.core.tree import BeliefNode, ActionNode
             import random
-            
+
             env = SanityPOMDP(discount_factor=0.95)
-            
+
             # Root belief with uniform initial distribution
             root_belief = UnweightedParticleBeliefStateUpdate(
                 particles=[0, 1, 0, 1, 0]  # More 0s than 1s, but all weighted equally
             )
             root_node = BeliefNode(belief=root_belief)
-            
+
             # Simulate MCTS node expansion
             action = 0  # Good action
             possible_observations = [0, 1]  # Discrete observations
-            
+
             # Create action node
             action_node = ActionNode(action=action, parent=root_node)
-            
+
             # For each observation, accumulate child belief
             for observation in possible_observations:
                 child_belief = UnweightedParticleBeliefStateUpdate([])
-                
+
                 # Add particles uniformly based on environment dynamics
                 for _ in range(10):  # Multiple simulations
                     parent_state = root_belief.sample()
                     next_state = env.state_transition_model(parent_state, action).sample()[0]
                     child_belief.inplace_update(action, observation, env, next_state)
-                
+
                 # Create belief node
                 belief_node = BeliefNode(belief=child_belief, observation=observation, parent=action_node)
                 print(f"Child for obs {observation}: {len(child_belief.particles)} particles")
-                
+
         Comparing weighted vs unweighted belief updates::
-        
+
             from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
             from POMDPPlanners.core.belief import (
                 WeightedParticleBeliefStateUpdate, UnweightedParticleBeliefStateUpdate
             )
             import collections
-            
+
             env = SanityPOMDP(discount_factor=0.95)
-            
+
             # Same particle sequence for both belief types
             states = [0, 1, 0, 1, 0, 1, 0]  # More 0s (good states) than 1s (bad states)
             observations = [0, 1, 0, 0, 1, 0, 1]
             action = 0
-            
+
             # Weighted belief considers observation likelihoods
             weighted_belief = WeightedParticleBeliefStateUpdate([], [])
             for state, obs in zip(states, observations):
                 weighted_belief.inplace_update(action, obs, env, state)
-                
+
             # Unweighted belief treats all particles equally
             unweighted_belief = UnweightedParticleBeliefStateUpdate([])
             for state, obs in zip(states, observations):
                 unweighted_belief.inplace_update(action, obs, env, state)
-            
+
             # Compare sampling distributions
             print("Weighted belief sampling:")
             weighted_samples = [weighted_belief.sample() for _ in range(1000)]
             weighted_counts = collections.Counter(weighted_samples)
             for state, count in sorted(weighted_counts.items()):
                 print(f"  State {state}: {count/1000:.3f}")
-                
-            print("\\nUnweighted belief sampling:")  
+
+            print("\\nUnweighted belief sampling:")
             unweighted_samples = [unweighted_belief.sample() for _ in range(1000)]
             unweighted_counts = collections.Counter(unweighted_samples)
             for state, count in sorted(unweighted_counts.items()):
                 print(f"  State {state}: {count/1000:.3f}")
-                
+
         Discrete observation filtering::
-        
+
             from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
             import collections
-            
+
             env = TigerPOMDP(discount_factor=0.95)
             belief = UnweightedParticleBeliefStateUpdate([])
-            
+
             # Simulate multiple observations (discrete: hear_left or hear_right)
             observation_sequence = [
                 ("tiger_left", "hear_left"),    # Consistent evidence
-                ("tiger_left", "hear_left"),    # More consistent evidence  
+                ("tiger_left", "hear_left"),    # More consistent evidence
                 ("tiger_right", "hear_left"),   # Inconsistent evidence
                 ("tiger_left", "hear_right"),   # Inconsistent evidence
                 ("tiger_left", "hear_left"),    # Back to consistent
                 ("tiger_right", "hear_right"),  # Consistent for right
             ]
-            
+
             for state, obs in observation_sequence:
                 belief.inplace_update("listen", obs, env, state)
-                
+
             print(f"Final belief has {len(belief.particles)} particles")
-            
+
             # Analyze uniform distribution over accumulated particles
             samples = [belief.sample() for _ in range(1000)]
             sample_counts = collections.Counter(samples)
-            
+
             print("Uniform belief distribution:")
             for state, count in sample_counts.items():
                 probability = count / 1000
                 particle_count = belief.particles.count(state)
                 expected_prob = particle_count / len(belief.particles)
                 print(f"  {state}: {probability:.3f} (expected: {expected_prob:.3f})")
-                
+
         Immutable belief trees for planning::
-        
+
             import numpy as np
             from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
             from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-            
+
             # Create continuous state environment
             noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
             env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
-            
+
             # Start with uniform belief over multiple initial states
             initial_states = [
                 np.array([0.0, 0.0, 0.1, 0.0]),   # Balanced pole
                 np.array([0.1, 0.0, 0.08, 0.0]),  # Slightly right
                 np.array([-0.1, 0.0, 0.12, 0.0])  # Slightly left
             ]
-            
+
             root_belief = UnweightedParticleBeliefStateUpdate(initial_states)
-            
+
             # Generate child beliefs for different actions (functional style)
             actions = [0, 1]  # Push left or right
             child_beliefs = {}
-            
+
             for action in actions:
                 child_belief = UnweightedParticleBeliefStateUpdate([])
-                
+
                 # Generate next states uniformly
                 for _ in range(5):  # Multiple rollouts per action
                     current_state = root_belief.sample()
                     next_state = env.state_transition_model(current_state, action).sample()[0]
                     # For simplicity, assume observation equals next state (fully observable case)
                     child_belief = child_belief.update(action, next_state, env, next_state)
-                
+
                 child_beliefs[action] = child_belief
                 print(f"Child belief for action {action}: {len(child_belief.particles)} particles")
-                
+
             # All child beliefs maintain uniform distribution over their particles
             for action, child_belief in child_beliefs.items():
                 sample = child_belief.sample()
                 print(f"Sample from action {action} belief: {sample[:2]}")  # First 2 components
-                
+
         Memory-efficient particle accumulation::
-        
+
             from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
             from POMDPPlanners.core.belief import (
                 WeightedParticleBeliefStateUpdate, UnweightedParticleBeliefStateUpdate
             )
             import sys
-            
+
             env = SanityPOMDP(discount_factor=0.95)
-            
+
             # Compare memory usage between weighted and unweighted beliefs
             weighted_belief = WeightedParticleBeliefStateUpdate([], [])
             unweighted_belief = UnweightedParticleBeliefStateUpdate([])
-            
+
             # Add many particles
             states = [0, 1] * 1000  # 2000 particles
             for state in states:
                 weighted_belief.inplace_update("action", 0, env, state)
                 unweighted_belief.inplace_update("action", 0, env, state)
-                
+
             # Check memory usage (unweighted should use less memory)
             weighted_size = sys.getsizeof(weighted_belief.particles) + sys.getsizeof(weighted_belief.weights)
             unweighted_size = sys.getsizeof(unweighted_belief.particles)
-            
+
             print(f"Weighted belief memory: {weighted_size} bytes")
             print(f"Unweighted belief memory: {unweighted_size} bytes")
             print(f"Memory savings: {((weighted_size - unweighted_size) / weighted_size * 100):.1f}%")
-            
+
             # Both have same number of particles but unweighted saves memory on weights
             assert len(weighted_belief.particles) == len(unweighted_belief.particles)
-            
+
         Configuration caching and equality::
-        
+
             from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
             from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-            
+
             env = SanityPOMDP(discount_factor=0.95)
-            
+
             # Create two beliefs with same particles in different orders
             belief1 = UnweightedParticleBeliefStateUpdate([0, 1, 0, 1, 0])
             belief2 = UnweightedParticleBeliefStateUpdate([1, 0, 1, 0, 0])
-            
+
             # Config IDs should be equal (order-invariant)
             print(f"Belief 1 config ID: {belief1.config_id[:8]}...")
             print(f"Belief 2 config ID: {belief2.config_id[:8]}...")
             print(f"IDs match: {belief1.config_id == belief2.config_id}")
-            
+
             # Test belief equality
             print(f"Beliefs equal: {belief1 == belief2}")
-            
+
             # Useful for caching in tree search algorithms
             belief_cache = {belief1: "cached_computation"}
-            
+
             if belief2 in belief_cache:
                 print("Cache hit! Beliefs are equivalent.")
             else:
                 print("Cache miss - beliefs differ.")
-                
+
         Large-scale particle accumulation::
-        
+
             from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
             import time
             import collections
-            
+
             env = TigerPOMDP(discount_factor=0.95)
             belief = UnweightedParticleBeliefStateUpdate([])
-            
+
             # Time large-scale particle addition
             start_time = time.time()
-            
+
             # Add 10000 particles uniformly
             states = ["tiger_left", "tiger_right"]
             observations = ["hear_left", "hear_right"]
-            
+
             for i in range(10000):
                 state = states[i % 2]  # Alternate between states
                 obs = observations[i % 2]  # Alternate between observations
                 belief.inplace_update("listen", obs, env, state)
-                
+
             end_time = time.time()
-            
+
             print(f"Added {len(belief.particles)} particles in {end_time - start_time:.3f} seconds")
             print(f"Rate: {len(belief.particles) / (end_time - start_time):.0f} particles/second")
-            
+
             # Verify uniform distribution
             samples = [belief.sample() for _ in range(1000)]
             sample_counts = collections.Counter(samples)
-            
+
             for state, count in sample_counts.items():
                 print(f"{state}: {count/1000:.3f} (expected: 0.5)")
     """
-    
+
     def __init__(self, particles: list = []):
         """Initialize unweighted particle belief.
         
@@ -1180,8 +1253,14 @@ class UnweightedParticleBeliefStateUpdate(Belief):
         """
         self.particles = particles
         self.weights_sum = len(particles)
-        
-    def update(self, action: Any, observation: Any, pomdp: Environment, state: Optional[Any] = None) -> "UnweightedParticleBeliefStateUpdate":
+
+    def update(
+        self,
+        action: Any,
+        observation: Any,
+        pomdp: Environment,
+        state: Optional[Any] = None,
+    ) -> "UnweightedParticleBeliefStateUpdate":
         """Create new belief by adding a state particle with uniform weight.
         
         This method creates a new belief instance without modifying the current one.
@@ -1215,7 +1294,7 @@ class UnweightedParticleBeliefStateUpdate(Belief):
         """
         new_particles = self.particles + [state]
         return UnweightedParticleBeliefStateUpdate(particles=new_particles)
-    
+
     def sample(self) -> Any:
         """Sample a state uniformly from the current belief distribution.
         
@@ -1242,8 +1321,14 @@ class UnweightedParticleBeliefStateUpdate(Belief):
                     print(f"{state}: {count/1000:.2f}")
         """
         return random.choice(self.particles)
-    
-    def inplace_update(self, action: Any, observation: Any, pomdp: Environment, state: Optional[Any] = None) -> None:
+
+    def inplace_update(
+        self,
+        action: Any,
+        observation: Any,
+        pomdp: Environment,
+        state: Optional[Any] = None,
+    ) -> None:
         """Add a state particle with uniform weight to current belief.
         
         This method modifies the current belief in-place by appending a new particle.
@@ -1277,10 +1362,11 @@ class UnweightedParticleBeliefStateUpdate(Belief):
     @property
     def config_id(self) -> str:
         """Generate a deterministic identifier based on belief configuration.
-        
+
         This implementation ensures that config_id is invariant to the order
         of particles by sorting them.
         """
+
         def serialize_value(value):
             """Helper function to serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
@@ -1291,11 +1377,11 @@ class UnweightedParticleBeliefStateUpdate(Belief):
                 return [serialize_value(v) for v in value]
             elif isinstance(value, dict):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
-            elif hasattr(value, '__dict__'):
+            elif hasattr(value, "__dict__"):
                 return serialize_value(value.__dict__)
             else:
                 return str(value)
-        
+
         # Convert particles to serializable format and sort them
         serialized_particles = []
         for particle in self.particles:
@@ -1303,30 +1389,31 @@ class UnweightedParticleBeliefStateUpdate(Belief):
             if isinstance(particle, np.ndarray):
                 particle = particle.tolist()
             serialized_particles.append(serialize_value(particle))
-        
+
         # Sort particles to make config_id invariant to order
         serialized_particles.sort(key=str)
-        
+
         config_dict = {
-            'particles': serialized_particles,
-            'weights_sum': self.weights_sum
+            "particles": serialized_particles,
+            "weights_sum": self.weights_sum,
         }
         config_dict = dict(sorted(config_dict.items()))
         return config_to_id(config_dict)
+
 
 def sample_next_belief(
     belief: Belief, action: Any, pomdp: "Environment"
 ) -> Tuple[Belief, Any]:
     """Simulate one step of belief evolution.
-    
+
     This function samples a state from the current belief, simulates the
     environment dynamics, and updates the belief with the resulting observation.
-    
+
     Args:
         belief: Current belief state
         action: Action to execute
         pomdp: Environment providing dynamics models
-        
+
     Returns:
         Tuple containing:
             - Updated belief after incorporating the observation
@@ -1334,7 +1421,9 @@ def sample_next_belief(
     """
     state = belief.sample()
     next_state = pomdp.state_transition_model(state=state, action=action).sample()[0]
-    observation = pomdp.observation_model(next_state=next_state, action=action).sample()[0]
+    observation = pomdp.observation_model(
+        next_state=next_state, action=action
+    ).sample()[0]
 
     next_belief = belief.update(action=action, observation=observation, pomdp=pomdp)
 
@@ -1345,15 +1434,15 @@ def get_initial_belief(
     pomdp: Environment, n_particles: int, resampling: bool = True
 ) -> Belief:
     """Create initial belief from environment's initial state distribution.
-    
+
     Args:
         pomdp: Environment to get initial distribution from
         n_particles: Number of particles to generate for the belief
         resampling: Enable resampling in the created belief. Defaults to True.
-        
+
     Returns:
         WeightedParticleBelief with uniform weights over initial states
-        
+
     Raises:
         TypeError: If n_particles is not an integer
         ValueError: If n_particles is not positive
@@ -1369,6 +1458,7 @@ def get_initial_belief(
     return WeightedParticleBelief(
         particles=particles, log_weights=log_weights, resampling=resampling
     )
+
 
 def is_terminal_belief(belief: Belief, env: Environment) -> bool:
     """Check if the belief is terminal."""

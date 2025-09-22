@@ -710,7 +710,9 @@ def test_pomdp_simulator_mlflow_tracking_configures_experiment_directory(
     # ACT: Initialize simulator with MLflow configuration
     simulator = POMDPSimulator(
         task_manager_config=JoblibConfig(n_jobs=1),
-        cache_dir_path=temp_cache_dir, experiment_name=experiment_name, debug=True
+        cache_dir_path=temp_cache_dir,
+        experiment_name=experiment_name,
+        debug=True,
     )
     current_tracking_uri = mlflow.get_tracking_uri()
 
@@ -741,7 +743,9 @@ def test_context_manager_functionality(temp_cache_dir):
     """
     with POMDPSimulator(
         task_manager_config=JoblibConfig(n_jobs=1),
-        cache_dir_path=temp_cache_dir, experiment_name="ContextManagerTest", debug=True
+        cache_dir_path=temp_cache_dir,
+        experiment_name="ContextManagerTest",
+        debug=True,
     ) as simulator:
         assert isinstance(simulator, POMDPSimulator)
         assert simulator.cache_dir_path == temp_cache_dir
@@ -1036,7 +1040,9 @@ def test_simulator_error_handling_invalid_cache_dir():
     try:
         simulator = POMDPSimulator(
             task_manager_config=JoblibConfig(n_jobs=1),
-            cache_dir_path=invalid_path, experiment_name="ErrorTest", debug=True
+            cache_dir_path=invalid_path,
+            experiment_name="ErrorTest",
+            debug=True,
         )
         # If no exception is raised, that's also acceptable behavior
         assert isinstance(simulator, POMDPSimulator)
@@ -1203,7 +1209,9 @@ def test_simulator_mlflow_directory_structure_is_correct(temp_cache_dir):
     experiment_name = "MLflowStructureTest"
     simulator = POMDPSimulator(
         task_manager_config=JoblibConfig(n_jobs=1),
-        cache_dir_path=temp_cache_dir, experiment_name=experiment_name, debug=True
+        cache_dir_path=temp_cache_dir,
+        experiment_name=experiment_name,
+        debug=True,
     )
 
     # Setup minimal simulation to trigger MLflow usage
@@ -1495,7 +1503,9 @@ def test_simulator_skips_visualization_caching_when_disabled(temp_cache_dir):
     # ARRANGE: Setup simulator without visualization caching
     simulator = POMDPSimulator(
         task_manager_config=JoblibConfig(n_jobs=1),
-        cache_dir_path=temp_cache_dir, experiment_name="NoVisualizationTest", debug=True
+        cache_dir_path=temp_cache_dir,
+        experiment_name="NoVisualizationTest",
+        debug=True,
     )
 
     # Setup continuous light-dark environment
@@ -1842,7 +1852,9 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
     # ARRANGE: Setup simulator and test environment
     simulator = POMDPSimulator(
         task_manager_config=JoblibConfig(n_jobs=1),
-        cache_dir_path=temp_cache_dir, experiment_name="CacheDirectoryTest", debug=True
+        cache_dir_path=temp_cache_dir,
+        experiment_name="CacheDirectoryTest",
+        debug=True,
     )
 
     environment = ContinuousLightDarkPOMDPDiscreteActions(
@@ -2252,7 +2264,9 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
     # ARRANGE: Setup simulator
     simulator = POMDPSimulator(
         task_manager_config=JoblibConfig(n_jobs=1),
-        cache_dir_path=temp_cache_dir, experiment_name="CacheCleanupTest", debug=True
+        cache_dir_path=temp_cache_dir,
+        experiment_name="CacheCleanupTest",
+        debug=True,
     )
 
     environment = ContinuousLightDarkPOMDPDiscreteActions(
@@ -2355,7 +2369,9 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
     # ARRANGE: Setup simulator
     simulator = POMDPSimulator(
         task_manager_config=JoblibConfig(n_jobs=1),
-        cache_dir_path=temp_cache_dir, experiment_name="DisabledCachingTest", debug=True
+        cache_dir_path=temp_cache_dir,
+        experiment_name="DisabledCachingTest",
+        debug=True,
     )
 
     environment = ContinuousLightDarkPOMDPDiscreteActions(
@@ -2460,7 +2476,9 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
 
     simulator = POMDPSimulator(
         task_manager_config=JoblibConfig(n_jobs=1),
-        cache_dir_path=temp_cache_dir, experiment_name="ErrorHandlingTest", debug=True
+        cache_dir_path=temp_cache_dir,
+        experiment_name="ErrorHandlingTest",
+        debug=True,
     )
 
     environment = ContinuousLightDarkPOMDPDiscreteActions(
@@ -2568,7 +2586,9 @@ def test_create_and_log_environment_visualizations_empty_results(temp_cache_dir)
     # ARRANGE: Setup simulator
     simulator = POMDPSimulator(
         task_manager_config=JoblibConfig(n_jobs=1),
-        cache_dir_path=temp_cache_dir, experiment_name="EmptyResultsTest", debug=True
+        cache_dir_path=temp_cache_dir,
+        experiment_name="EmptyResultsTest",
+        debug=True,
     )
 
     # Create empty results
@@ -2629,7 +2649,7 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
         depth=10,
         exploration_constant=1.0,
         n_simulations=10,
-        name="POMCP1"
+        name="POMCP1",
     )
     policy2 = POMCP(
         environment=env2,
@@ -2637,7 +2657,7 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
         depth=10,
         exploration_constant=2.0,
         n_simulations=10,
-        name="POMCP2"
+        name="POMCP2",
     )
     policy3 = POMCP(
         environment=env3,
@@ -2645,7 +2665,7 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
         depth=10,
         exploration_constant=1.5,
         n_simulations=10,
-        name="POMCP3"
+        name="POMCP3",
     )
 
     # Set up run parameters for different environment-policy combinations
@@ -2689,7 +2709,9 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
     logs_dir = temp_cache_dir / "env_policy" / "logs"
 
     # Verify log directory exists
-    assert logs_dir.exists(), f"Environment-policy logs directory should exist at {logs_dir}"
+    assert (
+        logs_dir.exists()
+    ), f"Environment-policy logs directory should exist at {logs_dir}"
 
     # Get all log files
     log_files = list(logs_dir.glob("*.log"))
@@ -2711,41 +2733,49 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
     expected_log_patterns = {
         "env_policy_TigerEnv1_POMCP1_",
         "env_policy_TigerEnv2_POMCP2_",
-        "env_policy_TigerEnv3_POMCP3_"
+        "env_policy_TigerEnv3_POMCP3_",
     }
 
     actual_log_names = {f.name for f in log_files}
-    
+
     # Check that each expected pattern has a matching file
     for pattern in expected_log_patterns:
-        matching_files = [f for f in actual_log_names if f.startswith(pattern) and f.endswith('.log')]
-        assert len(matching_files) == 1, f"Expected exactly one file matching pattern '{pattern}', found {len(matching_files)}: {matching_files}"
+        matching_files = [
+            f for f in actual_log_names if f.startswith(pattern) and f.endswith(".log")
+        ]
+        assert (
+            len(matching_files) == 1
+        ), f"Expected exactly one file matching pattern '{pattern}', found {len(matching_files)}: {matching_files}"
 
     # Verify log files contain expected episode information
     for log_file in log_files:
-        with open(log_file, 'r') as f:
+        with open(log_file, "r") as f:
             content = f.read()
 
         # Each log file should contain episode logging with proper formatting
-        assert "[EPISODE_" in content, f"Log file {log_file.name} should contain episode logs"
-        assert "Starting episode simulation" in content, f"Log file {log_file.name} should contain episode start logs"
+        assert (
+            "[EPISODE_" in content
+        ), f"Log file {log_file.name} should contain episode logs"
+        assert (
+            "Starting episode simulation" in content
+        ), f"Log file {log_file.name} should contain episode start logs"
 
         # Verify structured logging format is used
         if "TigerEnv1.POMCP1" in log_file.name:
             # This combination has 2 episodes
-            assert "[EPISODE_001]" in content and "[EPISODE_002]" in content, (
-                f"Log file {log_file.name} should contain episodes 001 and 002"
-            )
+            assert (
+                "[EPISODE_001]" in content and "[EPISODE_002]" in content
+            ), f"Log file {log_file.name} should contain episodes 001 and 002"
         elif "TigerEnv2.POMCP2" in log_file.name:
             # This combination has 2 episodes
-            assert "[EPISODE_001]" in content and "[EPISODE_002]" in content, (
-                f"Log file {log_file.name} should contain episodes 001 and 002"
-            )
+            assert (
+                "[EPISODE_001]" in content and "[EPISODE_002]" in content
+            ), f"Log file {log_file.name} should contain episodes 001 and 002"
         elif "TigerEnv3.POMCP3" in log_file.name:
             # This combination has 1 episode
-            assert "[EPISODE_001]" in content, (
-                f"Log file {log_file.name} should contain episode 001"
-            )
+            assert (
+                "[EPISODE_001]" in content
+            ), f"Log file {log_file.name} should contain episode 001"
 
     # Verify simulation results are valid
     assert results is not None, "Simulation should return valid results"

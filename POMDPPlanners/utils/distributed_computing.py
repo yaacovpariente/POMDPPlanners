@@ -15,10 +15,10 @@ def run_parallel_locally(
     n_jobs: int = 1,
     description: str = "Running parallel tasks",
     unit: str = "task",
-    cache_dir: str = None
+    cache_dir: str = None,
 ) -> List[Any]:
     """Run a function in parallel with different keyword argument sets using joblib.
-    
+
     Args:
         func: The function to run in parallel
         kwargs_list: List of keyword argument dictionaries, where each dict contains the kwargs for one function call
@@ -26,28 +26,28 @@ def run_parallel_locally(
         description: Description for the progress bar
         unit: Unit label for the progress bar
         cache_dir: Directory to store cached results. If None, caching is disabled.
-        
+
     Returns:
         List of results from each function call
     """
-    logger.info(f"Starting parallel execution with {len(kwargs_list)} tasks using {n_jobs} jobs")
-    
+    logger.info(
+        f"Starting parallel execution with {len(kwargs_list)} tasks using {n_jobs} jobs"
+    )
+
     # Set up caching if cache_dir is provided
     if cache_dir is not None:
         logger.info(f"Using cache directory: {cache_dir}")
         memory = Memory(cache_dir, verbose=0)
         func = memory.cache(func)
-    
+
     # Run tasks in parallel using joblib with progress bar
     results = Parallel(n_jobs=n_jobs)(
-        delayed(func)(**kwargs) for kwargs in tqdm(
-            kwargs_list,
-            total=len(kwargs_list),
-            desc=description,
-            unit=unit
+        delayed(func)(**kwargs)
+        for kwargs in tqdm(
+            kwargs_list, total=len(kwargs_list), desc=description, unit=unit
         )
     )
-    
+
     logger.info(f"All parallel tasks completed")
     return results
 
@@ -61,10 +61,10 @@ def run_distributed(
     unit: str = "task",
     address: str = None,
     namespace: str = "POMDPPlanners",
-    runtime_env: dict = None
+    runtime_env: dict = None,
 ) -> List[Any]:
     """Run a function in parallel across multiple machines using Ray.
-    
+
     Args:
         func: The function to run in parallel
         kwargs_list: List of keyword argument dictionaries, where each dict contains the kwargs for one function call
@@ -75,7 +75,7 @@ def run_distributed(
         address: Ray cluster address to connect to (if None, starts a local cluster)
         namespace: Ray namespace for the tasks
         runtime_env: Runtime environment configuration for Ray
-        
+
     Returns:
         List of results from each function call
     """
@@ -98,7 +98,7 @@ def run_distributed(
 
     # Submit all tasks
     futures = [remote_func.remote(**kwargs) for kwargs in kwargs_list]
-    
+
     # Track progress and collect results
     results = []
     with tqdm(total=len(kwargs_list), desc=description, unit=unit) as pbar:

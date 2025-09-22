@@ -11,7 +11,11 @@ import pytest
 import numpy as np
 import random
 
-from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action_cost_setting
+from POMDPPlanners.core.tree import (
+    ActionNode,
+    BeliefNode,
+    get_optimal_action_cost_setting,
+)
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 
@@ -24,8 +28,10 @@ random.seed(42)
 class TestEnvironment(Environment):
     def __init__(self):
         space_info = SpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE)
-        super().__init__(discount_factor=0.95, name="TestEnvironment", space_info=space_info)
-    
+        super().__init__(
+            discount_factor=0.95, name="TestEnvironment", space_info=space_info
+        )
+
     def state_transition(self, state, action):
         return state
 
@@ -35,32 +41,35 @@ class TestEnvironment(Environment):
                 return 1.0
 
         return DummyModel()
-    
+
     def is_equal_observation(self, observation1, observation2):
         """Check if two observations are equal."""
         return observation1 == observation2
-    
+
     def is_terminal(self, state):
         """Check if state is terminal."""
         return False
-    
+
     def reward(self, state, action, next_state):
         """Return reward for state transition."""
         return 0.0
-    
+
     def initial_state_dist(self):
         """Return initial state distribution."""
         from POMDPPlanners.core.distributions import DiscreteDistribution
+
         return DiscreteDistribution({0: 1.0})
-    
+
     def initial_observation_dist(self):
         """Return initial observation distribution."""
         from POMDPPlanners.core.distributions import DiscreteDistribution
+
         return DiscreteDistribution({"obs": 1.0})
-    
+
     def state_transition_model(self, state, action):
         """Return state transition model."""
         from POMDPPlanners.core.distributions import DiscreteDistribution
+
         return DiscreteDistribution({state: 1.0})
 
 
@@ -76,13 +85,13 @@ def test_belief():
 @pytest.fixture
 def test_env():
     """Test env.
-    
+
     Purpose: Provides TestEnvironment fixture for tree node testing with POMDP interface
-    
+
     Given: TestEnvironment implementation with discrete spaces, dummy models, and deterministic transitions
     When: Fixture is used in tree structure tests
     Then: Returns TestEnvironment instance with proper POMDP interface methods for belief updates
-    
+
     Test type: unit
     """
     return TestEnvironment()
@@ -91,25 +100,27 @@ def test_env():
 def test_action_node_initialization_creates_mcts_tree_node():
     """
     Purpose: Validates ActionNode initializes correctly for MCTS tree construction
-    
+
     Given: Action string "move_forward" and optional parent node with test data
     When: ActionNode instances are created with basic and parent-child configurations
     Then: Nodes are initialized with correct action, default values, and proper tree relationships
-    
+
     Test type: unit
     """
     # ARRANGE: Setup action and test data for node initialization
     test_action = "move_forward"
     parent_action = "parent_action"
     test_data = {"test": "data"}
-    
+
     # ACT: Create basic ActionNode without parent
     basic_node = ActionNode(test_action, children=())
-    
+
     # Create ActionNode with parent and data
     parent_node = ActionNode(parent_action, children=())
-    child_node = ActionNode(test_action, parent=parent_node, data=test_data, children=())
-    
+    child_node = ActionNode(
+        test_action, parent=parent_node, data=test_data, children=()
+    )
+
     # ASSERT: Verify basic node initialization with correct defaults
     assert basic_node.action == test_action
     assert basic_node.q_value == 0.0  # Default Q-value for new nodes
@@ -120,7 +131,7 @@ def test_action_node_initialization_creates_mcts_tree_node():
     assert basic_node.upper_confidence_bound == 0.0
     assert basic_node.parent is None  # Root node has no parent
     assert basic_node.children == ()  # No children initially
-    
+
     # Verify parent-child relationship and data storage
     assert child_node.parent == parent_node
     assert child_node.data == test_data
@@ -129,13 +140,13 @@ def test_action_node_initialization_creates_mcts_tree_node():
 
 def test_belief_node_initialization(test_belief):
     """Test belief node initialization.
-    
+
     Purpose: Validates that BeliefNode initializes correctly with belief state and default MCTS values
-    
+
     Given: WeightedParticleBelief with particles [1,2] and weights [0.6,0.4], optional parent and data parameters
     When: BeliefNode instances are created with basic and parent-child configurations
     Then: Nodes have correct belief reference, default v_value=0.0, visit_count=0, confidence bounds=0.0, and proper tree relationships
-    
+
     Test type: unit
     """
     # Test basic initialization
@@ -158,13 +169,13 @@ def test_belief_node_initialization(test_belief):
 
 def test_tree_structure(test_belief):
     """Test tree structure.
-    
+
     Purpose: Validates that MCTS tree structure correctly maintains parent-child relationships between BeliefNode and ActionNode
-    
+
     Given: Root BeliefNode and multiple ActionNodes (action1, action2) with child BeliefNodes
     When: Tree hierarchy is constructed with proper parent-child assignments
     Then: Root has correct children tuple, ActionNodes have proper parents, and BeliefNodes maintain correct action parent references
-    
+
     Test type: unit
     """
     # Create a simple tree structure
@@ -184,13 +195,13 @@ def test_tree_structure(test_belief):
 
 def test_get_optimal_action(test_belief):
     """Test get optimal action.
-    
+
     Purpose: Validates that get_optimal_action_cost_setting correctly selects action with lowest cost (highest negative q_value)
-    
+
     Given: BeliefNode with 3 ActionNode children having different q_values (0.5, 0.8, 0.3)
     When: get_optimal_action_cost_setting evaluates the action choices
     Then: Returns action3 with lowest cost (0.3) for cost-minimization MCTS setting
-    
+
     Test type: unit
     """
     # Create a belief node with multiple action children
@@ -210,15 +221,16 @@ def test_get_optimal_action(test_belief):
     optimal_action = get_optimal_action_cost_setting(belief_node)
     assert optimal_action == "action3"
 
+
 def test_node_properties(test_belief):
     """Test node properties.
-    
+
     Purpose: Validates that ActionNode and BeliefNode properties can be updated correctly during MCTS simulation
-    
+
     Given: ActionNode and BeliefNode instances with initial default values
     When: MCTS properties are updated (q_value, visit_count, v_value, confidence bounds)
     Then: All property updates persist correctly with expected values maintained
-    
+
     Test type: unit
     """
     # Test updating node properties
@@ -251,28 +263,34 @@ def test_node_properties(test_belief):
 
 def test_sample_child_node(test_belief):
     """Test the sample_child_node method of ActionNode.
-    
+
     Purpose: Validates sampling behavior for  child node
-    
+
     Given: Configured object with sampling capabilities
     When: Sample method is called
     Then: Valid samples are returned according to distribution
-    
+
     Test type: unit
     """
     # Create an action node with multiple belief node children
     action_node = ActionNode("test_action", children=())
-    
+
     # Create belief nodes with different visit counts
-    belief1 = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
+    belief1 = BeliefNode(
+        test_belief, observation="obs1", parent=action_node, children=()
+    )
     belief1.visit_count = 10
-    
-    belief2 = BeliefNode(test_belief, observation="obs2", parent=action_node, children=())
+
+    belief2 = BeliefNode(
+        test_belief, observation="obs2", parent=action_node, children=()
+    )
     belief2.visit_count = 5
-    
-    belief3 = BeliefNode(test_belief, observation="obs3", parent=action_node, children=())
+
+    belief3 = BeliefNode(
+        test_belief, observation="obs3", parent=action_node, children=()
+    )
     belief3.visit_count = 15
-    
+
     # Test sampling with different visit counts
     # Since this is probabilistic, we'll test multiple times to ensure it works
     sampled_nodes = []
@@ -280,26 +298,30 @@ def test_sample_child_node(test_belief):
         sampled_node = action_node.sample_child_node()
         sampled_nodes.append(sampled_node)
         assert sampled_node in [belief1, belief2, belief3]
-    
+
     # Check that all nodes are sampled at least once (very likely with 100 samples)
     unique_sampled = set(sampled_nodes)
     assert len(unique_sampled) >= 2  # At least 2 different nodes should be sampled
-    
+
     # Test with equal visit counts
     action_node_equal = ActionNode("test_action_equal", children=())
-    belief_equal1 = BeliefNode(test_belief, observation="obs1", parent=action_node_equal, children=())
+    belief_equal1 = BeliefNode(
+        test_belief, observation="obs1", parent=action_node_equal, children=()
+    )
     belief_equal1.visit_count = 5
-    
-    belief_equal2 = BeliefNode(test_belief, observation="obs2", parent=action_node_equal, children=())
+
+    belief_equal2 = BeliefNode(
+        test_belief, observation="obs2", parent=action_node_equal, children=()
+    )
     belief_equal2.visit_count = 5
-    
+
     # Test sampling with equal visit counts
     sampled_nodes_equal = []
     for _ in range(50):
         sampled_node = action_node_equal.sample_child_node()
         sampled_nodes_equal.append(sampled_node)
         assert sampled_node in [belief_equal1, belief_equal2]
-    
+
     # Both nodes should be sampled roughly equally
     count_belief1 = sampled_nodes_equal.count(belief_equal1)
     count_belief2 = sampled_nodes_equal.count(belief_equal2)
@@ -308,19 +330,21 @@ def test_sample_child_node(test_belief):
 
 def test_sample_child_node_single_child(test_belief):
     """Test sample_child_node with only one child.
-    
+
     Purpose: Validates sampling behavior for  child node single child
-    
+
     Given: Configured object with sampling capabilities
     When: Sample method is called
     Then: Valid samples are returned according to distribution
-    
+
     Test type: unit
     """
     action_node = ActionNode("test_action", children=())
-    belief = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
+    belief = BeliefNode(
+        test_belief, observation="obs1", parent=action_node, children=()
+    )
     belief.visit_count = 5
-    
+
     # Should always return the single child
     sampled_node = action_node.sample_child_node()
     assert sampled_node == belief
@@ -328,17 +352,17 @@ def test_sample_child_node_single_child(test_belief):
 
 def test_sample_child_node_no_children():
     """Test sample_child_node with no children (should raise error).
-    
+
     Purpose: Validates sampling behavior for  child node no children
-    
+
     Given: Configured object with sampling capabilities
     When: Sample method is called
     Then: Valid samples are returned according to distribution
-    
+
     Test type: unit
     """
     action_node = ActionNode("test_action", children=())
-    
+
     # This should raise a ValueError because sum(child_visit_counts) would be 0
     with pytest.raises(ValueError):
         action_node.sample_child_node()
@@ -346,33 +370,39 @@ def test_sample_child_node_no_children():
 
 def test_get_belief_node_child(test_belief, test_env):
     """Test the get_belief_node_child method of ActionNode.
-    
+
     Purpose: Validates that get_belief_node_child correctly retrieves BeliefNode children based on observation matching
-    
+
     Given: ActionNode with 3 BeliefNode children having different observations (obs1, obs2, obs3)
     When: get_belief_node_child is called with existing and non-existing observation identifiers
     Then: Returns correct BeliefNode for existing observations and None for non-existent observations
-    
+
     Test type: unit
     """
     # Create an action node with multiple belief node children
     action_node = ActionNode("test_action", children=())
-    
+
     # Create belief nodes with different observations
-    belief1 = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
-    belief2 = BeliefNode(test_belief, observation="obs2", parent=action_node, children=())
-    belief3 = BeliefNode(test_belief, observation="obs3", parent=action_node, children=())
-    
+    belief1 = BeliefNode(
+        test_belief, observation="obs1", parent=action_node, children=()
+    )
+    belief2 = BeliefNode(
+        test_belief, observation="obs2", parent=action_node, children=()
+    )
+    belief3 = BeliefNode(
+        test_belief, observation="obs3", parent=action_node, children=()
+    )
+
     # Test getting existing observations
     result1 = action_node.get_belief_node_child("obs1", test_env)
     assert result1 == belief1
-    
+
     result2 = action_node.get_belief_node_child("obs2", test_env)
     assert result2 == belief2
-    
+
     result3 = action_node.get_belief_node_child("obs3", test_env)
     assert result3 == belief3
-    
+
     # Test getting non-existing observation
     result_none = action_node.get_belief_node_child("non_existent_obs", test_env)
     assert result_none is None
@@ -380,17 +410,17 @@ def test_get_belief_node_child(test_belief, test_env):
 
 def test_get_belief_node_child_no_children(test_belief, test_env):
     """Test get_belief_node_child with no children.
-    
+
     Purpose: Validates that get_belief_node_child handles edge case of ActionNode with no children gracefully
-    
+
     Given: ActionNode with empty children tuple
     When: get_belief_node_child is called with any observation identifier
     Then: Returns None indicating no matching child found
-    
+
     Test type: unit
     """
     action_node = ActionNode("test_action", children=())
-    
+
     # Should return None for any observation
     result = action_node.get_belief_node_child("any_observation", test_env)
     assert result is None
@@ -398,21 +428,25 @@ def test_get_belief_node_child_no_children(test_belief, test_env):
 
 def test_get_belief_node_child_duplicate_observations(test_belief, test_env):
     """Test get_belief_node_child with duplicate observations (should return first match).
-    
+
     Purpose: Validates that get_belief_node_child returns first matching BeliefNode when multiple children have identical observations
-    
+
     Given: ActionNode with 2 BeliefNode children both having observation "same_obs"
     When: get_belief_node_child searches for "same_obs"
     Then: Returns first child (belief1) with matching observation due to first-match search behavior
-    
+
     Test type: unit
     """
     action_node = ActionNode("test_action", children=())
-    
+
     # Create belief nodes with the same observation
-    belief1 = BeliefNode(test_belief, observation="same_obs", parent=action_node, children=())
-    belief2 = BeliefNode(test_belief, observation="same_obs", parent=action_node, children=())
-    
+    belief1 = BeliefNode(
+        test_belief, observation="same_obs", parent=action_node, children=()
+    )
+    belief2 = BeliefNode(
+        test_belief, observation="same_obs", parent=action_node, children=()
+    )
+
     # Should return the first child with matching observation
     result = action_node.get_belief_node_child("same_obs", test_env)
     assert result == belief1
@@ -420,25 +454,29 @@ def test_get_belief_node_child_duplicate_observations(test_belief, test_env):
 
 def test_get_belief_node_child_none_observation(test_belief, test_env):
     """Test get_belief_node_child with None observation.
-    
+
     Purpose: Validates that get_belief_node_child correctly handles None observations using proper equality comparison
-    
+
     Given: ActionNode with BeliefNode children having None and string observations
     When: get_belief_node_child searches for None observation and string observation
     Then: Returns correct BeliefNode for None observation match and string observation match respectively
-    
+
     Test type: unit
     """
     action_node = ActionNode("test_action", children=())
-    
+
     # Create belief nodes with None observation
-    belief_none = BeliefNode(test_belief, observation=None, parent=action_node, children=())
-    belief_obs = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
-    
+    belief_none = BeliefNode(
+        test_belief, observation=None, parent=action_node, children=()
+    )
+    belief_obs = BeliefNode(
+        test_belief, observation="obs1", parent=action_node, children=()
+    )
+
     # Test getting None observation
     result = action_node.get_belief_node_child(None, test_env)
     assert result == belief_none
-    
+
     # Test getting regular observation
     result_obs = action_node.get_belief_node_child("obs1", test_env)
     assert result_obs == belief_obs
@@ -446,33 +484,33 @@ def test_get_belief_node_child_none_observation(test_belief, test_env):
 
 def test_belief_node_get_child(test_belief):
     """Test the get_child method of BeliefNode.
-    
+
     Purpose: Validates that get_child correctly retrieves ActionNode children based on action matching
-    
+
     Given: BeliefNode with 3 ActionNode children having different actions (action1, action2, action3)
     When: get_child is called with existing and non-existing action identifiers
     Then: Returns correct ActionNode for existing actions and None for non-existent actions
-    
+
     Test type: unit
     """
     # Create a belief node with multiple action children
     belief_node = BeliefNode(test_belief, children=())
-    
+
     # Create action nodes with different actions
     action1 = ActionNode("action1", parent=belief_node, children=())
     action2 = ActionNode("action2", parent=belief_node, children=())
     action3 = ActionNode("action3", parent=belief_node, children=())
-    
+
     # Test getting existing actions
     result1 = belief_node.get_child("action1")
     assert result1 == action1
-    
+
     result2 = belief_node.get_child("action2")
     assert result2 == action2
-    
+
     result3 = belief_node.get_child("action3")
     assert result3 == action3
-    
+
     # Test getting non-existing action
     result_none = belief_node.get_child("non_existent_action")
     assert result_none is None
@@ -480,17 +518,17 @@ def test_belief_node_get_child(test_belief):
 
 def test_belief_node_get_child_no_children(test_belief):
     """Test get_child with no children.
-    
+
     Purpose: Validates that get_child handles edge case of BeliefNode with no children gracefully
-    
+
     Given: BeliefNode with empty children tuple
     When: get_child is called with any action identifier
     Then: Returns None indicating no matching child found
-    
+
     Test type: unit
     """
     belief_node = BeliefNode(test_belief, children=())
-    
+
     # Should return None for any action
     result = belief_node.get_child("any_action")
     assert result is None
@@ -498,21 +536,21 @@ def test_belief_node_get_child_no_children(test_belief):
 
 def test_belief_node_get_child_duplicate_actions(test_belief):
     """Test get_child with duplicate actions (should return first match).
-    
+
     Purpose: Validates that get_child returns first matching ActionNode when multiple children have identical actions
-    
+
     Given: BeliefNode with 2 ActionNode children both having action "same_action"
     When: get_child searches for "same_action"
     Then: Returns first child (action1) with matching action due to first-match search behavior
-    
+
     Test type: unit
     """
     belief_node = BeliefNode(test_belief, children=())
-    
+
     # Create action nodes with the same action
     action1 = ActionNode("same_action", parent=belief_node, children=())
     action2 = ActionNode("same_action", parent=belief_node, children=())
-    
+
     # Should return the first child with matching action
     result = belief_node.get_child("same_action")
     assert result == action1
@@ -520,25 +558,25 @@ def test_belief_node_get_child_duplicate_actions(test_belief):
 
 def test_belief_node_get_child_none_action(test_belief):
     """Test get_child with None action.
-    
+
     Purpose: Validates that get_child correctly handles None actions using proper equality comparison
-    
+
     Given: BeliefNode with ActionNode children having None and string actions
     When: get_child searches for None action and string action
     Then: Returns correct ActionNode for None action match and string action match respectively
-    
+
     Test type: unit
     """
     belief_node = BeliefNode(test_belief, children=())
-    
+
     # Create action nodes with None action
     action_none = ActionNode(None, parent=belief_node, children=())
     action_str = ActionNode("action1", parent=belief_node, children=())
-    
+
     # Test getting None action
     result = belief_node.get_child(None)
     assert result == action_none
-    
+
     # Test getting regular action
     result_str = belief_node.get_child("action1")
     assert result_str == action_str
@@ -546,34 +584,34 @@ def test_belief_node_get_child_none_action(test_belief):
 
 def test_belief_node_get_child_numeric_actions(test_belief):
     """Test get_child with numeric actions.
-    
+
     Purpose: Validates that get_child works correctly with numeric action identifiers
-    
+
     Given: BeliefNode with ActionNode children having integer and float actions
     When: get_child searches for matching numeric actions
     Then: Returns correct ActionNode for exact numeric matches
-    
+
     Test type: unit
     """
     belief_node = BeliefNode(test_belief, children=())
-    
+
     # Create action nodes with numeric actions
     action_int = ActionNode(1, parent=belief_node, children=())
     action_float = ActionNode(2.5, parent=belief_node, children=())
     action_zero = ActionNode(0, parent=belief_node, children=())
-    
+
     # Test getting integer action
     result_int = belief_node.get_child(1)
     assert result_int == action_int
-    
+
     # Test getting float action
     result_float = belief_node.get_child(2.5)
     assert result_float == action_float
-    
+
     # Test getting zero action
     result_zero = belief_node.get_child(0)
     assert result_zero == action_zero
-    
+
     # Test non-existing numeric action
     result_none = belief_node.get_child(999)
     assert result_none is None

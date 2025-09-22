@@ -8,11 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-from POMDPPlanners.core.environment import (
-    Environment,
-    SpaceInfo,
-    SpaceType
-)
+from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.simulation import History, StepData, MetricValue
 from POMDPPlanners.utils.statistics import confidence_interval
@@ -27,7 +23,17 @@ class BaseLightDarkPOMDP(Environment, ABC):
         name: str,
         space_info: SpaceInfo,
         reward_range: Optional[Tuple[float, float]] = None,
-        beacons: List[Tuple[float, float]] = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)],
+        beacons: List[Tuple[float, float]] = [
+            (0, 0),
+            (0, 5),
+            (0, 10),
+            (5, 0),
+            (5, 5),
+            (5, 10),
+            (10, 0),
+            (10, 5),
+            (10, 10),
+        ],
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
         obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
@@ -54,9 +60,14 @@ class BaseLightDarkPOMDP(Environment, ABC):
             fuel_cost=fuel_cost,
             grid_size=grid_size,
         )
-        
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, reward_range=reward_range)
-        
+
+        super().__init__(
+            discount_factor=discount_factor,
+            name=name,
+            space_info=space_info,
+            reward_range=reward_range,
+        )
+
         # Convert lists of tuples to numpy arrays (maintaining internal representation)
         self.beacons = self._convert_beacons_to_array(beacons)
         self.goal_state = goal_state
@@ -69,39 +80,43 @@ class BaseLightDarkPOMDP(Environment, ABC):
         self.beacon_radius = beacon_radius
         self.fuel_cost = fuel_cost
         self.grid_size = grid_size
-    
-    def _convert_beacons_to_array(self, beacons_list: List[Tuple[float, float]]) -> np.ndarray:
+
+    def _convert_beacons_to_array(
+        self, beacons_list: List[Tuple[float, float]]
+    ) -> np.ndarray:
         """Convert list of (x, y) tuples to 2xN numpy array format for beacons.
-        
+
         Args:
             beacons_list: List of (x, y) coordinate tuples
-            
+
         Returns:
             2xN numpy array where first row is x coordinates, second row is y coordinates
         """
         if not beacons_list:
             return np.empty((2, 0))
-        
+
         # Convert list of tuples to numpy array and transpose to get 2xN format
         coords_array = np.array(beacons_list).T  # Shape: (2, N)
         return coords_array
-    
-    def _convert_obstacles_to_array(self, obstacles_list: List[Tuple[float, float]]) -> np.ndarray:
+
+    def _convert_obstacles_to_array(
+        self, obstacles_list: List[Tuple[float, float]]
+    ) -> np.ndarray:
         """Convert list of (x, y) tuples to 2xN numpy array format for obstacles.
-        
+
         Args:
             obstacles_list: List of (x, y) coordinate tuples
-            
+
         Returns:
             2xN numpy array where first row is x coordinates, second row is y coordinates
         """
         if not obstacles_list:
             return np.empty((2, 0))
-        
+
         # Convert list of tuples to numpy array and transpose to get 2xN format (same as beacons)
         coords_array = np.array(obstacles_list).T  # Shape: (2, N)
         return coords_array
-        
+
     def __type_check(
         self,
         discount_factor: float,
@@ -125,7 +140,9 @@ class BaseLightDarkPOMDP(Environment, ABC):
             raise TypeError("name must be a string")
         if not isinstance(beacons, list):
             raise TypeError("beacons must be a list of tuples")
-        if beacons and not all(isinstance(beacon, tuple) and len(beacon) == 2 for beacon in beacons):
+        if beacons and not all(
+            isinstance(beacon, tuple) and len(beacon) == 2 for beacon in beacons
+        ):
             raise TypeError("beacons must be a list of (x, y) coordinate tuples")
         if not isinstance(goal_state, np.ndarray):
             raise TypeError("goal_state must be a numpy array")
@@ -133,7 +150,9 @@ class BaseLightDarkPOMDP(Environment, ABC):
             raise TypeError("start_state must be a numpy array")
         if not isinstance(obstacles, list):
             raise TypeError("obstacles must be a list of tuples")
-        if obstacles and not all(isinstance(obstacle, tuple) and len(obstacle) == 2 for obstacle in obstacles):
+        if obstacles and not all(
+            isinstance(obstacle, tuple) and len(obstacle) == 2 for obstacle in obstacles
+        ):
             raise TypeError("obstacles must be a list of (x, y) coordinate tuples")
         if not isinstance(obstacle_hit_probability, float):
             raise TypeError("obstacle_hit_probability must be a float")
@@ -176,23 +195,23 @@ class BaseLightDarkPOMDP(Environment, ABC):
         for obstacle in obstacles:
             if not (0 <= obstacle[0] <= grid_size and 0 <= obstacle[1] <= grid_size):
                 raise ValueError("obstacles coordinates must be within grid")
-        
+
     @abstractmethod
     def state_transition_model(self, state: np.ndarray, action: Any) -> Distribution:
         pass
-    
+
     @abstractmethod
     def observation_model(self, next_state: np.ndarray, action: Any) -> Distribution:
         pass
-    
+
     @abstractmethod
     def reward(self, state: np.ndarray, action: Any) -> float:
         pass
-    
+
     @abstractmethod
     def is_terminal(self, state: np.ndarray) -> bool:
         pass
-    
+
     @abstractmethod
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         pass
@@ -202,22 +221,28 @@ class BaseLightDarkPOMDP(Environment, ABC):
 
     def initial_observation_dist(self) -> Distribution:
         return DiscreteDistribution(values=[1.0], probs=np.array([1.0]))
-    
-    def visualize_path(self, path: List[np.ndarray], agent_belief_path: List[DiscreteDistribution], actions: List[str], cache_path: Path):
+
+    def visualize_path(
+        self,
+        path: List[np.ndarray],
+        agent_belief_path: List[DiscreteDistribution],
+        actions: List[str],
+        cache_path: Path,
+    ):
         if not isinstance(cache_path, Path):
             raise TypeError("cache_path must be a Path object")
         if not str(cache_path).endswith(".gif"):
             raise ValueError("cache_path must end with .gif")
 
         # Control belief particles color
-        belief_particles_color = '#FFFF00'  # Yellow color
+        belief_particles_color = "#FFFF00"  # Yellow color
 
         fig, ax = plt.subplots(figsize=(10, 8))
         ax.set_xlim(-1, self.grid_size + 1)
         ax.set_ylim(-1, self.grid_size + 1)
         ax.set_xticks(np.arange(-1, self.grid_size + 1, 1))
         ax.set_yticks(np.arange(-1, self.grid_size + 1, 1))
-        ax.set_facecolor('#696969')  # Darker grey
+        ax.set_facecolor("#696969")  # Darker grey
         ax.grid(False)  # Remove the grid from the background
 
         # Plot circles around beacons with white background and light fade effect
@@ -228,27 +253,54 @@ class BaseLightDarkPOMDP(Environment, ABC):
                 radius = self.beacon_radius + j * 0.05  # Smaller radius increments
                 # Exponential decay for more realistic light fade
                 alpha = 0.9 * np.exp(-j * 0.3)  # Exponential decay from 0.9 to near 0
-                circle = plt.Circle((beacon_x, beacon_y), radius, 
-                                  facecolor='white', edgecolor='none', alpha=alpha)
+                circle = plt.Circle(
+                    (beacon_x, beacon_y),
+                    radius,
+                    facecolor="white",
+                    edgecolor="none",
+                    alpha=alpha,
+                )
                 ax.add_patch(circle)
-        
+
         # Plot the beacons
-        ax.scatter(self.beacons[0], self.beacons[1], color="blue", marker='^', s=100, label="Beacons")
+        ax.scatter(
+            self.beacons[0],
+            self.beacons[1],
+            color="blue",
+            marker="^",
+            s=100,
+            label="Beacons",
+        )
         # Plot the goal state
         ax.scatter(
-            self.goal_state[0], self.goal_state[1], color="green", marker='*', s=200, label="Goal State"
+            self.goal_state[0],
+            self.goal_state[1],
+            color="green",
+            marker="*",
+            s=200,
+            label="Goal State",
         )
         # Plot the start state
         ax.scatter(
             self.start_state[0], self.start_state[1], color="red", label="Start State"
         )
         # Plot circles around obstacles with transparent red background
-        for i in range(self.obstacles.shape[1]):  # obstacles.shape[1] is number of obstacles
-            obstacle_x, obstacle_y = self.obstacles[0, i], self.obstacles[1, i]  # obstacles[0,i] is x, obstacles[1,i] is y
-            circle = plt.Circle((obstacle_x, obstacle_y), self.obstacle_radius, 
-                              facecolor='red', edgecolor='none', alpha=0.3)
+        for i in range(
+            self.obstacles.shape[1]
+        ):  # obstacles.shape[1] is number of obstacles
+            obstacle_x, obstacle_y = (
+                self.obstacles[0, i],
+                self.obstacles[1, i],
+            )  # obstacles[0,i] is x, obstacles[1,i] is y
+            circle = plt.Circle(
+                (obstacle_x, obstacle_y),
+                self.obstacle_radius,
+                facecolor="red",
+                edgecolor="none",
+                alpha=0.3,
+            )
             ax.add_patch(circle)
-        
+
         # Plot the obstacles
         if self.obstacles.size > 0:
             ax.scatter(
@@ -259,32 +311,59 @@ class BaseLightDarkPOMDP(Environment, ABC):
         (agent,) = ax.plot([], [], "ro", markersize=10)
         (path_line,) = ax.plot([], [], "r-", alpha=0.5, linewidth=2)
         # Initialize the action arrow
-        arrow = plt.arrow(0, 0, 0, 0, color='red', width=0.1, head_width=0.3, head_length=0.3, length_includes_head=True)
+        arrow = plt.arrow(
+            0,
+            0,
+            0,
+            0,
+            color="red",
+            width=0.1,
+            head_width=0.3,
+            head_length=0.3,
+            length_includes_head=True,
+        )
         # Initialize belief particles scatter plots for different time steps
         belief_scatters = []
         max_history = min(len(path), 10)  # Show up to 10 previous time steps
         # Create gradient from yellow to red
         yellow_color = np.array([1.0, 1.0, 0.0])  # Yellow RGB
-        red_color = np.array([1.0, 0.0, 0.0])     # Red RGB
+        red_color = np.array([1.0, 0.0, 0.0])  # Red RGB
         colors = []
         for i in range(max_history):
             # Interpolate between yellow (current) and red (old)
             t = (max_history - 1 - i) / max_history  # 0 for current, 1 for oldest
             color = yellow_color * (1 - t) + red_color * t
             # Apply additional intensity decay
-            alpha_factor = 0.1 + 0.9 * (i / max_history)  # 0.1 to 1.0 - more extreme decay
+            alpha_factor = 0.1 + 0.9 * (
+                i / max_history
+            )  # 0.1 to 1.0 - more extreme decay
             color = color * alpha_factor
             colors.append(color)
-        
+
         for i in range(max_history):
-            scatter = ax.scatter([], [], c=[colors[i]], alpha=0.6 + 0.3 * (i / max_history), 
-                               s=50, label="")
+            scatter = ax.scatter(
+                [],
+                [],
+                c=[colors[i]],
+                alpha=0.6 + 0.3 * (i / max_history),
+                s=50,
+                label="",
+            )
             belief_scatters.append(scatter)
-        
+
         # Create a proper legend entry for belief particles
         from matplotlib.lines import Line2D
-        legend_element = Line2D([], [], marker='o', color=belief_particles_color, 
-                               markersize=8, alpha=0.7, linestyle='', label='Belief Particles')
+
+        legend_element = Line2D(
+            [],
+            [],
+            marker="o",
+            color=belief_particles_color,
+            markersize=8,
+            alpha=0.7,
+            linestyle="",
+            label="Belief Particles",
+        )
         ax.add_artist(legend_element)
 
         def init():
@@ -345,7 +424,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         ani = animation.FuncAnimation(
             fig, update, frames=len(path), init_func=init, blit=True, repeat=False
         )
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
         plt.title("Agent Path")
         plt.tight_layout()
 
@@ -357,11 +436,11 @@ class BaseLightDarkPOMDP(Environment, ABC):
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Cache visualization of agent's path and belief.
-        
+
         Args:
             history: List of step data from an episode
             cache_path: Path where to save the visualization
-            
+
         Raises:
             ValueError: If history is empty or contains invalid data
         """
@@ -374,52 +453,63 @@ class BaseLightDarkPOMDP(Environment, ABC):
                 raise TypeError("history must be a List of StepData objects")
         if not isinstance(cache_path, Path):
             raise TypeError("cache_path must be a Path object")
-            
+
         # Extract data with validation
         agent_path = []
         agent_belief_path = []
         actions = []
-        
+
         for step in history:
-            if not hasattr(step, 'state') or not hasattr(step, 'belief') or not hasattr(step, 'action'):
+            if (
+                not hasattr(step, "state")
+                or not hasattr(step, "belief")
+                or not hasattr(step, "action")
+            ):
                 raise ValueError(f"History step missing required attributes: {step}")
-                
+
             agent_path.append(step.state)
             agent_belief_path.append(step.belief.to_unique_support_distribution())
             actions.append(step.action)
-            
+
         # Validate all lists have same length
         if not (len(agent_path) == len(agent_belief_path) == len(actions)):
-            raise ValueError(f"Mismatched lengths: path={len(agent_path)}, belief={len(agent_belief_path)}, actions={len(actions)}")
-            
+            raise ValueError(
+                f"Mismatched lengths: path={len(agent_path)}, belief={len(agent_belief_path)}, actions={len(actions)}"
+            )
+
         # Create directory if it doesn't exist
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        self.visualize_path(path=agent_path, agent_belief_path=agent_belief_path, actions=actions, cache_path=cache_path)
+
+        self.visualize_path(
+            path=agent_path,
+            agent_belief_path=agent_belief_path,
+            actions=actions,
+            cache_path=cache_path,
+        )
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return np.array_equal(observation1, observation2)
-    
+
     @property
     def config_id(self) -> str:
         """Generate a deterministic identifier based on environment configuration.
         This implementation ensures that the config_id is invariant to the order of beacons and obstacles.
         """
         config_dict = {}
-        
+
         # Include all public attributes that aren't callables
         for key, value in self.__dict__.items():
-            if key.startswith('_') or callable(value):
+            if key.startswith("_") or callable(value):
                 continue
-                
+
             # Handle numpy arrays
             if isinstance(value, np.ndarray):
-                if key == 'beacons':
+                if key == "beacons":
                     # Beacons are in 2xN format: [[x1,x2,...], [y1,y2,...]]
                     # Transpose to get Nx2 format, sort, then transpose back
                     sorted_array = np.sort(value.T, axis=0).T
                     config_dict[key] = sorted_array.tolist()
-                elif key == 'obstacles':
+                elif key == "obstacles":
                     # Obstacles are in 2xN format: [[x1,x2,...], [y1,y2,...]]
                     # Transpose to get Nx2 format, sort, then transpose back
                     sorted_array = np.sort(value.T, axis=0).T
@@ -439,10 +529,10 @@ class BaseLightDarkPOMDP(Environment, ABC):
                     elif isinstance(v, np.ndarray):
                         serializable_dict[k] = v.tolist()
                 config_dict[key] = serializable_dict
-                
+
         # Sort dictionary to ensure consistent ordering
         config_dict = dict(sorted(config_dict.items()))
-        
+
         return config_to_id(config_dict)
 
 
@@ -453,7 +543,17 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
         name: str,
         is_discrete_observations: bool,
         reward_range: Optional[Tuple[float, float]] = None,
-        beacons: List[Tuple[float, float]] = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)],
+        beacons: List[Tuple[float, float]] = [
+            (0, 0),
+            (0, 5),
+            (0, 10),
+            (5, 0),
+            (5, 5),
+            (5, 10),
+            (10, 0),
+            (10, 5),
+            (10, 10),
+        ],
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
         obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
@@ -466,7 +566,9 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
     ):
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,
-            observation_space=SpaceType.DISCRETE if is_discrete_observations else SpaceType.CONTINUOUS
+            observation_space=(
+                SpaceType.DISCRETE if is_discrete_observations else SpaceType.CONTINUOUS
+            ),
         )
         super().__init__(
             discount_factor=discount_factor,
@@ -484,7 +586,7 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
             fuel_cost=fuel_cost,
             grid_size=grid_size,
         )
-        
+
         self.actions = ["up", "down", "right", "left"]
         self.action_to_vector = {
             "up": np.array([0, 1]),
@@ -495,4 +597,3 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
 
     def get_actions(self) -> List[Any]:
         return self.actions
-

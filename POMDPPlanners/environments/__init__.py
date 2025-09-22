@@ -33,8 +33,13 @@ from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.rock_sample_pomdp import RockSamplePOMDP
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
 
-from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import DiscreteLightDarkPOMDP
-from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDP, ContinuousLightDarkPOMDPDiscreteActions
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
+)
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDP,
+    ContinuousLightDarkPOMDPDiscreteActions,
+)
 
 __all__ = [
     "PushPOMDP",
@@ -48,7 +53,7 @@ __all__ = [
     "MountainCarPOMDP",
     "LaserTagPOMDP",
     "RockSamplePOMDP",
-    "PacManPOMDP"
+    "PacManPOMDP",
 ]
 
 # Registry of available environments
@@ -67,40 +72,43 @@ ENVIRONMENT_REGISTRY: Dict[str, Type] = {
     "PacManPOMDP": PacManPOMDP,
 }
 
+
 def get_environment(env_type: str, **kwargs) -> Any:
     """Factory function to create environment instances by name.
-    
+
     This function provides a convenient way to create environment instances
     using string identifiers, enabling configuration-driven environment creation.
-    
+
     Args:
         env_type: Name of the environment type to create
         **kwargs: Additional arguments to pass to the environment constructor
-        
+
     Returns:
         An instance of the requested environment
-        
+
     Raises:
         ValueError: If the environment type is not registered
-        
+
     Example:
         Creating different environments::
-        
+
             # Create Tiger POMDP
             tiger = get_environment("TigerPOMDP", discount_factor=0.95)
-            
+
             # Create Light-Dark POMDP with custom parameters
             lightdark = get_environment(
                 "ContinuousLightDarkPOMDP",
                 discount_factor=0.99,
                 light_loc=[5.0, 0.0]
             )
-            
+
             # Create CartPole POMDP
             cartpole = get_environment("CartPolePOMDP", discount_factor=0.95)
     """
     if env_type not in ENVIRONMENT_REGISTRY:
-        raise ValueError(f"Unsupported environment type: {env_type}. "
-                       f"Available types: {list(ENVIRONMENT_REGISTRY.keys())}")
-    
+        raise ValueError(
+            f"Unsupported environment type: {env_type}. "
+            f"Available types: {list(ENVIRONMENT_REGISTRY.keys())}"
+        )
+
     return ENVIRONMENT_REGISTRY[env_type](**kwargs)

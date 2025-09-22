@@ -16,17 +16,19 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.environment import Environment
 
 
-def belief_expectation_cost(belief: WeightedParticleBelief, action: Any, env: Environment) -> float:
+def belief_expectation_cost(
+    belief: WeightedParticleBelief, action: Any, env: Environment
+) -> float:
     """Calculate expected cost for an action given a weighted particle belief.
-    
+
     This function computes the expected immediate cost (negative reward) by
     taking the weighted average over all particles in the belief state.
-    
+
     Args:
         belief: Weighted particle belief representing state uncertainty
         action: Action to evaluate
         env: Environment providing reward function
-        
+
     Returns:
         Expected immediate cost (negative of expected reward)
     """
@@ -37,17 +39,20 @@ def belief_expectation_cost(belief: WeightedParticleBelief, action: Any, env: En
 
     return cost_
 
-def belief_expectation_reward(belief: WeightedParticleBelief, action: Any, env: Environment) -> float:
+
+def belief_expectation_reward(
+    belief: WeightedParticleBelief, action: Any, env: Environment
+) -> float:
     """Calculate expected reward for an action given a weighted particle belief.
-    
+
     This function computes the expected immediate reward by taking the weighted
     average over all particles in the belief state.
-    
+
     Args:
         belief: Weighted particle belief representing state uncertainty
         action: Action to evaluate
         env: Environment providing reward function
-        
+
     Returns:
         Expected immediate reward
     """

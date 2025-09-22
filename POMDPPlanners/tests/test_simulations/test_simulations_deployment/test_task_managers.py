@@ -1053,14 +1053,16 @@ def test_pbs_task_manager_missing_dependency():
 
     # Create a mock that raises ImportError when importing dask_jobqueue
     def mock_import(name, *args, **kwargs):
-        if name == 'dask_jobqueue':
+        if name == "dask_jobqueue":
             raise ImportError("No module named 'dask_jobqueue'")
         # For other imports, use the real import
         return __import__(name, *args, **kwargs)
 
     # Mock the local import inside _initialize_client to raise ImportError
-    with patch('builtins.__import__', side_effect=mock_import):
-        with pytest.raises(RuntimeError, match="dask-jobqueue is required for PBS support"):
+    with patch("builtins.__import__", side_effect=mock_import):
+        with pytest.raises(
+            RuntimeError, match="dask-jobqueue is required for PBS support"
+        ):
             manager._initialize_client()
 
 
@@ -1144,7 +1146,7 @@ def test_pbs_task_manager_dashboard_initialization_custom():
         enable_dashboard=True,
         dashboard_address="192.168.1.100",
         dashboard_port=8888,
-        dashboard_prefix="/my-dashboard"
+        dashboard_prefix="/my-dashboard",
     )
 
     assert manager.enable_dashboard is True
@@ -1165,9 +1167,7 @@ def test_pbs_task_manager_dashboard_disabled():
     Test type: unit
     """
     manager = PBSTaskManager(
-        queue="batch_queue",
-        enable_dashboard=False,
-        dashboard_port=9999
+        queue="batch_queue", enable_dashboard=False, dashboard_port=9999
     )
 
     assert manager.enable_dashboard is False
@@ -1340,7 +1340,7 @@ def test_pbs_task_manager_context_manager_with_dashboard():
             queue="default",
             enable_dashboard=True,
             dashboard_port=8888,
-            dashboard_address="127.0.0.1"
+            dashboard_address="127.0.0.1",
         ) as manager:
             assert manager.queue == "default"
             assert manager.enable_dashboard is True
@@ -1350,7 +1350,9 @@ def test_pbs_task_manager_context_manager_with_dashboard():
             assert manager.cluster is None  # Not initialized yet
     except Exception as e:
         # Should not raise any exceptions during context manager setup
-        pytest.fail(f"Context manager with dashboard should not raise exceptions during setup: {e}")
+        pytest.fail(
+            f"Context manager with dashboard should not raise exceptions during setup: {e}"
+        )
 
 
 def test_pbs_task_manager_cluster_storage():

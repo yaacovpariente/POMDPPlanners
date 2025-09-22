@@ -34,7 +34,7 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
     ObservationModel,
     SpaceInfo,
-    SpaceType
+    SpaceType,
 )
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import StepData
@@ -43,15 +43,15 @@ import scipy.stats
 
 class MountainCarTransition(StateTransitionModel):
     """Physics-based state transition model for Mountain Car POMDP.
-    
+
     This model implements the deterministic physics of a car on a sinusoidal
     hill surface. The car's velocity is affected by both the applied action
     (engine force) and gravitational force that depends on the slope of the hill.
-    
+
     The physics equations are:
     - velocity += action * power + cos(3 * position) * (-gravity)
     - position += velocity
-    
+
     Attributes:
         state: Current state (position, velocity) tuple
         action: Engine action (-1, 0, or 1)
@@ -60,17 +60,17 @@ class MountainCarTransition(StateTransitionModel):
         max_speed: Maximum velocity magnitude
         min_position: Minimum position boundary
         max_position: Maximum position boundary
-        
+
     Example:
         Using the Mountain Car transition model::
-        
+
             >>> import numpy as np
             >>> np.random.seed(42)  # For reproducible results
-            >>> 
+            >>>
             >>> # Define car state: position=-0.5 (in valley), velocity=0.0
             >>> state = (-0.5, 0.0)
             >>> action = 1  # Accelerate right/forward
-            >>> 
+            >>>
             >>> # Create transition model
             >>> transition = MountainCarTransition(
             ...     state=state,
@@ -81,7 +81,7 @@ class MountainCarTransition(StateTransitionModel):
             ...     min_position=-1.2,
             ...     max_position=0.6
             ... )
-            >>> 
+            >>>
             >>> # Simulate physics step
             >>> next_state = transition.sample()[0]
             >>> # Returns new [position, velocity] with physics applied
@@ -89,7 +89,7 @@ class MountainCarTransition(StateTransitionModel):
             >>> print(f"New position: {new_pos:.3f}, New velocity: {new_vel:.3f}")
             New position: -0.499, New velocity: 0.001
     """
-    
+
     def __init__(
         self,
         state: Tuple[float, float],
@@ -130,37 +130,37 @@ class MountainCarTransition(StateTransitionModel):
 
 class MountainCarObservation(ObservationModel):
     """Noisy observation model for Mountain Car POMDP.
-    
+
     This model adds Gaussian noise to the true car state (position, velocity)
     to create partial observability. The agent receives noisy measurements
     of both position and velocity, making state estimation challenging.
-    
+
     Attributes:
         next_state: True state after action execution
         action: Action that was taken (not used in observation generation)
         cov_matrix: Covariance matrix for observation noise
         mean: Expected observation (equals true state)
-        
+
     Example:
         Using the Mountain Car observation model::
-        
+
             >>> import numpy as np
             >>> np.random.seed(42)  # For reproducible results
-            >>> 
+            >>>
             >>> # Define true state after physics step
             >>> true_state = (-0.45, 0.02)  # [position, velocity]
             >>> action = 1
-            >>> 
+            >>>
             >>> # Define observation noise
             >>> cov_matrix = np.array([[0.1**2, 0], [0, 0.01**2]])  # Position and velocity noise
-            >>> 
+            >>>
             >>> # Create observation model
             >>> obs_model = MountainCarObservation(
             ...     next_state=true_state,
             ...     action=action,
             ...     cov_matrix=cov_matrix
             ... )
-            >>> 
+            >>>
             >>> # Sample noisy observation
             >>> observation = obs_model.sample()[0]
             >>> # Returns noisy [position, velocity] close to true_state
@@ -168,13 +168,13 @@ class MountainCarObservation(ObservationModel):
             True state: (-0.45, 0.02)
             >>> print(f"Noisy observation: [{observation[0]:.3f}, {observation[1]:.3f}]")
             Noisy observation: [-0.400, 0.019]
-            >>> 
+            >>>
             >>> # Calculate observation probability
             >>> prob = obs_model.probability([observation])
             >>> print(f"Observation probability: {prob:.6f}")
             Observation probability: 139.345607
     """
-    
+
     def __init__(
         self, next_state: Tuple[float, float], action: int, cov_matrix: np.ndarray
     ):
@@ -192,32 +192,34 @@ class MountainCarObservation(ObservationModel):
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
         # Vectorized probability for a batch of observations
         values_array = np.array(values)
-        return scipy.stats.multivariate_normal(self.mean, self.cov_matrix).pdf(values_array)
+        return scipy.stats.multivariate_normal(self.mean, self.cov_matrix).pdf(
+            values_array
+        )
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
     """Mountain Car problem formulated as a POMDP.
-    
+
     This environment simulates an underpowered car trying to reach the top of
     a steep mountain. The car must build momentum by oscillating back and forth
     to gain enough energy to reach the goal, with noisy observations of its state.
-    
+
     Problem Structure:
     - State: [position, velocity] (continuous, position ∈ [-1.2, 0.6], velocity ∈ [-0.07, 0.07])
-    - Actions: [-1 (reverse), 0 (neutral), 1 (forward)] (discrete)  
+    - Actions: [-1 (reverse), 0 (neutral), 1 (forward)] (discrete)
     - Observations: Noisy state measurements (continuous)
     - Rewards: 0 for reaching goal (position ≥ 0.5), -1 per time step otherwise
     - Goal: Drive car to position ≥ 0.5 (top of mountain)
-    
+
     Example:
         Creating and using a Mountain Car POMDP::
-        
+
             >>> import numpy as np
             >>> np.random.seed(42)  # For reproducible results
-            >>> 
+            >>>
             >>> # Create Mountain Car environment
             >>> mountain_car = MountainCarPOMDP(discount_factor=0.99)
-            >>> 
+            >>>
             >>> # Get initial state and available actions
             >>> initial_state_dist = mountain_car.initial_state_dist()
             >>> state = initial_state_dist.sample()[0]  # [position, velocity]
@@ -226,26 +228,26 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             Initial state: [-0.525, 0.000]
             >>> print(f"Available actions: {actions}")
             Available actions: [-1, 0, 1]
-            >>> 
+            >>>
             >>> # Take action and get reward
             >>> action = 1  # Accelerate forward
             >>> reward = mountain_car.reward(state, action)
             >>> print(f"Reward for action {action}: {reward}")
             Reward for action 1: -1.0
-            >>> 
+            >>>
             >>> # Check if goal reached
             >>> is_done = mountain_car.is_terminal(state)
             >>> print(f"Is terminal state: {is_done}")
             Is terminal state: False
     """
-    
+
     def __init__(
-        self, 
-        discount_factor: float, 
-        name: str = "MountainCarPOMDP", 
-        output_dir: Optional[Path] = None, 
-        debug: bool = False, 
-        use_queue_logger: bool = False
+        self,
+        discount_factor: float,
+        name: str = "MountainCarPOMDP",
+        output_dir: Optional[Path] = None,
+        debug: bool = False,
+        use_queue_logger: bool = False,
     ):
         self.min_position = -1.2
         self.max_position = 0.6
@@ -268,10 +270,17 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
 
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,  # Action space is [-1, 0, 1]
-            observation_space=SpaceType.CONTINUOUS  # Observation space is position and velocity
+            observation_space=SpaceType.CONTINUOUS,  # Observation space is position and velocity
         )
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info, 
-                        reward_range=(-1.0, 0.0), output_dir=output_dir, debug=debug, use_queue_logger=use_queue_logger)
+        super().__init__(
+            discount_factor=discount_factor,
+            name=name,
+            space_info=space_info,
+            reward_range=(-1.0, 0.0),
+            output_dir=output_dir,
+            debug=debug,
+            use_queue_logger=use_queue_logger,
+        )
 
     def state_transition_model(
         self, state: Tuple[float, float], action: int
@@ -316,12 +325,14 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
                     velocity = 0.0
                     samples.append(np.array([position, velocity]))
                 return samples
+
         return InitialState()
 
     def initial_observation_dist(self) -> Distribution:
         class InitialObservation(Distribution):
             def sample(self, n_samples: int = 1) -> List[np.ndarray]:
                 return [np.array([0.0, 0.0])] * n_samples
+
         return InitialObservation()
 
     def get_actions(self) -> List[Any]:
@@ -331,5 +342,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         # Create a figure and axis
         pass
 
-    def is_equal_observation(self, observation1: Tuple[float, float], observation2: Tuple[float, float]) -> bool:
+    def is_equal_observation(
+        self, observation1: Tuple[float, float], observation2: Tuple[float, float]
+    ) -> bool:
         return np.array_equal(observation1, observation2)

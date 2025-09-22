@@ -10,18 +10,26 @@ from POMDPPlanners.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+
 def get_cache_key(
     environment: Environment,
     policy: Policy,
     initial_belief: Belief,
     general_config: dict = {},
 ) -> str:
-    return (environment.config_id, policy.config_id, initial_belief.config_id, str(sorted(general_config.items())))
+    return (
+        environment.config_id,
+        policy.config_id,
+        initial_belief.config_id,
+        str(sorted(general_config.items())),
+    )
+
 
 def get_cache_dir_path(
     cache_dir_path: Path,
 ) -> Path:
     return cache_dir_path / "simulations_cache"
+
 
 def cache_episode_simulation_results(
     environment: Environment,
@@ -40,6 +48,7 @@ def cache_episode_simulation_results(
     else:
         cache[key] = results
 
+
 def load_episode_simulation_results(
     environment: Environment,
     policy: Policy,
@@ -51,7 +60,7 @@ def load_episode_simulation_results(
     cache = diskcache.Cache(cache_dir_path)
 
     key = get_cache_key(environment, policy, initial_belief, general_config)
-    
+
     if key in cache:
         return cache[key]
     else:

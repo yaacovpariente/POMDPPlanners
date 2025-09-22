@@ -11,7 +11,10 @@ import json
 import tempfile
 from pathlib import Path
 
-from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler, DiscreteActionSampler
+from POMDPPlanners.utils.action_samplers import (
+    UnitCircleActionSampler,
+    DiscreteActionSampler,
+)
 from POMDPPlanners.core.tree import BeliefNode
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
@@ -23,6 +26,7 @@ import random
 
 np.random.seed(42)
 random.seed(42)
+
 
 class TestUnitCircleActionSampler:
     """Test cases for the UnitCircleActionSampler class."""
@@ -203,9 +207,7 @@ class TestUnitCircleActionSampler:
         particles = [np.array([0.0, 0.0]), np.array([1.0, 1.0])]
         log_weights = np.array([-0.1, -0.2])
         belief = WeightedParticleBelief(
-            particles=particles,
-            log_weights=log_weights,
-            resampling=False
+            particles=particles, log_weights=log_weights, resampling=False
         )
         belief_node = BeliefNode(belief=belief, observation=np.array([0.0, 0.0]))
 
@@ -731,9 +733,7 @@ class TestDiscreteActionSampler:
         particles = [np.array([0.0, 0.0]), np.array([1.0, 1.0])]
         log_weights = np.array([-0.1, -0.2])
         belief = WeightedParticleBelief(
-            particles=particles,
-            log_weights=log_weights,
-            resampling=False
+            particles=particles, log_weights=log_weights, resampling=False
         )
         belief_node = BeliefNode(belief=belief, observation=np.array([0.0, 0.0]))
 
@@ -900,7 +900,7 @@ class TestDiscreteActionSampler:
         # Test with tuples
         tuple_actions = [(1, 0), (0, 1), (-1, 0), (0, -1)]
         sampler_tuples = DiscreteActionSampler(actions=tuple_actions)
-        
+
         sampled_tuple = sampler_tuples.sample()
         assert sampled_tuple in tuple_actions
         assert isinstance(sampled_tuple, tuple)
@@ -908,7 +908,7 @@ class TestDiscreteActionSampler:
         # Test with numpy arrays
         array_actions = [np.array([1, 0]), np.array([0, 1]), np.array([-1, 0])]
         sampler_arrays = DiscreteActionSampler(actions=array_actions)
-        
+
         sampled_array = sampler_arrays.sample()
         # Check that the sampled array matches one of the original arrays
         assert any(np.array_equal(sampled_array, arr) for arr in array_actions)
@@ -917,7 +917,7 @@ class TestDiscreteActionSampler:
         # Test with dictionaries
         dict_actions = [{"x": 1, "y": 0}, {"x": 0, "y": 1}, {"x": -1, "y": 0}]
         sampler_dicts = DiscreteActionSampler(actions=dict_actions)
-        
+
         sampled_dict = sampler_dicts.sample()
         assert sampled_dict in dict_actions
         assert isinstance(sampled_dict, dict)
@@ -1002,7 +1002,7 @@ class TestDiscreteActionSampler:
 
         # Test __reduce__ method directly
         reduce_result = sampler.__reduce__()
-        
+
         # Should return tuple with class and constructor arguments
         assert isinstance(reduce_result, tuple)
         assert len(reduce_result) == 2
@@ -1038,7 +1038,7 @@ class TestDiscreteActionSampler:
 
         # Sampler should still use the original list (before modification)
         sampled_actions = [sampler.sample() for _ in range(100)]
-        
+
         # All sampled actions should be from the original list (A, B, C)
         for action in sampled_actions:
             assert action in ["A", "B", "C"]

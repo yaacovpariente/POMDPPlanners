@@ -1,19 +1,20 @@
 from abc import ABC, abstractmethod
 import numpy as np
 
+
 class BaseLightDarkRewardModel(ABC):
     @abstractmethod
     def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
         pass
-    
+
     def compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
         if action.shape != (2,):
             raise ValueError("action must be a 2D vector")
-        
+
         return self._compute_reward(state, action)
-    
+
 
 class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
     def __init__(
@@ -41,12 +42,15 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
     def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
         next_state = state + action
 
-        is_goal_state = np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius
-        
-        is_in_obstacle_range = np.any(
-            np.linalg.norm(next_state.reshape(-1, 1) - self.obstacles, axis=0) <= self.obstacle_radius
+        is_goal_state = (
+            np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius
         )
-        
+
+        is_in_obstacle_range = np.any(
+            np.linalg.norm(next_state.reshape(-1, 1) - self.obstacles, axis=0)
+            <= self.obstacle_radius
+        )
+
         is_out_of_grid = np.any(next_state < 0) or np.any(next_state > self.grid_size)
 
         reward = -self.fuel_cost - np.linalg.norm(next_state - self.goal_state)
@@ -59,11 +63,15 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
             reward += self.obstacle_reward
 
         return reward
-    
+
     def _obstacle_reward(self, state: np.ndarray) -> float:
-        return self.obstacle_reward if np.random.rand() < self.obstacle_hit_probability else 0.0
-    
-    
+        return (
+            self.obstacle_reward
+            if np.random.rand() < self.obstacle_hit_probability
+            else 0.0
+        )
+
+
 class ContinuousLDDangerousStatesRewardModel(ContinuousLightDarkRewardModel):
     def __init__(
         self,
@@ -77,8 +85,18 @@ class ContinuousLDDangerousStatesRewardModel(ContinuousLightDarkRewardModel):
         goal_reward: float,
         fuel_cost: float,
     ):
-        super().__init__(goal_state, obstacles, goal_state_radius, obstacle_radius, grid_size, obstacle_hit_probability, obstacle_reward, goal_reward, fuel_cost)
-        
+        super().__init__(
+            goal_state,
+            obstacles,
+            goal_state_radius,
+            obstacle_radius,
+            grid_size,
+            obstacle_hit_probability,
+            obstacle_reward,
+            goal_reward,
+            fuel_cost,
+        )
+
     def _obstacle_reward(self, state: np.ndarray) -> float:
         """The expected reward is 0.0, but the variance is high."""
         return self.obstacle_reward if np.random.rand() < 0.5 else -self.obstacle_reward
@@ -96,7 +114,7 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
         obstacle_reward: float,
         goal_reward: float,
         fuel_cost: float,
-        penalty_decay: float
+        penalty_decay: float,
     ):
         self.goal_state = goal_state
         self.obstacles = obstacles
@@ -112,8 +130,10 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
     def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
         next_state = state + action
 
-        is_goal_state = np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius
-        
+        is_goal_state = (
+            np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius
+        )
+
         is_out_of_grid = np.any(next_state < 0) or np.any(next_state > self.grid_size)
 
         reward = -self.fuel_cost - np.linalg.norm(next_state - self.goal_state)
@@ -124,18 +144,16 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
             reward += self.obstacle_reward
 
         reward += self._obstacle_reward(next_state)
-        
+
         return reward
-    
+
     def _obstacle_reward(self, state: np.ndarray) -> float:
         # Calculate distance to nearest obstacle
         distances = np.linalg.norm(state.reshape(-1, 1) - self.obstacles, axis=0)
         d = np.min(distances)
-        
+
         # Calculate probability based on distance and decay factor
-        p = np.exp(-d/self.penalty_decay)
-        
+        p = np.exp(-d / self.penalty_decay)
+
         # Return obstacle reward if random value is less than probability
         return self.obstacle_reward if np.random.rand() < p else 0.0
-    
-    

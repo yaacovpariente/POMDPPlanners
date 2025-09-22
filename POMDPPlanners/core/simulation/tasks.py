@@ -4,71 +4,73 @@ from pathlib import Path
 import logging
 from POMDPPlanners.utils.logger import get_logger
 
+
 class SimulationTask(ABC):
     """Abstract base class for simulation tasks.
-    
+
     This class defines the interface that all simulation tasks must implement.
     A simulation task represents a unit of work that can be executed and cached.
-    
+
     Examples:
         >>> class MySimulationTask(SimulationTask):
         ...     def __init__(self, config_id):
         ...         self.config_id = config_id
-        ...     
+        ...
         ...     def run(self):
         ...         return f"Result for {self.config_id}"
-        ...     
+        ...
         ...     def get_config_id(self):
         ...         return self.config_id
-        >>> 
+        >>>
         >>> task = MySimulationTask("test_config")
         >>> task.get_config_id()
         'test_config'
         >>> task.run()
         'Result for test_config'
     """
+
     @abstractmethod
     def run(self) -> Any:
         """Execute the simulation task.
-        
+
         Returns:
             Any: The result of the simulation task
         """
         pass
-    
+
     @abstractmethod
     def get_config_id(self) -> str:
         """Get a unique identifier for this task's configuration.
-        
+
         Returns:
             str: Unique configuration identifier for caching
         """
         pass
-    
+
 
 class DataBaseInterface(ABC):
     """Abstract interface for database operations used by task managers.
-    
+
     This class defines the interface for caching simulation results,
     allowing different database implementations to be used interchangeably.
-    
+
     Examples:
         >>> class MockDatabase(DataBaseInterface):
         ...     def __init__(self):
         ...         self.data = {}
-        ...     
+        ...
         ...     def get(self, key):
         ...         return self.data.get(key)
-        ...     
+        ...
         ...     def is_key_in_cache(self, key):
         ...         return key in self.data
-        ...     
+        ...
         ...     def set(self, key, value):
         ...         self.data[key] = value
-        ...     
+        ...
         ...     def clear(self):
         ...         self.data.clear()
-        >>> 
+        >>>
         >>> db = MockDatabase()
         >>> db.set("test_key", "test_value")
         >>> db.is_key_in_cache("test_key")
@@ -76,52 +78,53 @@ class DataBaseInterface(ABC):
         >>> db.get("test_key")
         'test_value'
     """
+
     @abstractmethod
     def get(self, key: str) -> Any:
         """Retrieve a value from the database.
-        
+
         Args:
             key: The key to retrieve
-            
+
         Returns:
             Any: The stored value
         """
         pass
-    
+
     @abstractmethod
     def is_key_in_cache(self, key: str) -> bool:
         """Check if a key exists in the database.
-        
+
         Args:
             key: The key to check
-            
+
         Returns:
             bool: True if key exists, False otherwise
         """
         pass
-    
+
     @abstractmethod
     def set(self, key: str, value: Any):
         """Store a value in the database.
-        
+
         Args:
             key: The key to store under
             value: The value to store
         """
         pass
-    
+
     @abstractmethod
     def clear(self):
         """Clear all data from the database."""
         pass
-    
-    
+
+
 class TaskManager(ABC):
     """Abstract base class for task managers.
-    
+
     Task managers coordinate the execution of simulation tasks,
     handling caching, parallelization, and result collection.
-    
+
     Examples:
         >>> class SimpleTaskManager(TaskManager):
         ...     def run_tasks(self, tasks, task_identifiers):
@@ -132,11 +135,11 @@ class TaskManager(ABC):
         ...             results.append(result)
         ...             identifiers.append(identifier)
         ...         return results, identifiers
-        >>> 
+        >>>
         >>> class MyTask(SimulationTask):
         ...     def run(self): return "result"
         ...     def get_config_id(self): return "config"
-        >>> 
+        >>>
         >>> manager = SimpleTaskManager()
         >>> tasks = [MyTask()]
         >>> identifiers = ["task1"]
@@ -146,31 +149,35 @@ class TaskManager(ABC):
         >>> ids[0]
         'task1'
     """
+
     @abstractmethod
-    def run_tasks(self, tasks: List[SimulationTask], task_identifiers: list) -> Tuple[List[Any], list]:
+    def run_tasks(
+        self, tasks: List[SimulationTask], task_identifiers: list
+    ) -> Tuple[List[Any], list]:
         """Execute a list of simulation tasks.
-        
+
         Args:
             tasks: List of simulation tasks to execute
             task_identifiers: List of identifiers for each task
-            
+
         Returns:
             Tuple[List[Any], list]: Results and successful task identifiers
         """
         pass
-    
+
+
 class TaskManagerExternalDB(TaskManager):
     """Task manager that uses an external database for caching.
-    
+
     This task manager implements caching functionality using an external database
     interface, allowing simulation results to be cached and reused across runs.
-    
+
     Attributes:
         cache_db: Database interface for caching results
         cache_dir: Optional directory for logging and cache files
         logger_debug: Whether to enable debug logging
         use_queue_logger: Whether to use queue-based logging
-    
+
     Examples:
         >>> class MockDatabase(DataBaseInterface):
         ...     def __init__(self):
@@ -179,15 +186,15 @@ class TaskManagerExternalDB(TaskManager):
         ...     def is_key_in_cache(self, key): return key in self.data
         ...     def set(self, key, value): self.data[key] = value
         ...     def clear(self): self.data.clear()
-        >>> 
+        >>>
         >>> class MockTaskManager(TaskManagerExternalDB):
         ...     def _run_tasks(self, tasks):
         ...         return [task.run() for task in tasks]
-        >>> 
+        >>>
         >>> class MyTask(SimulationTask):
         ...     def run(self): return "cached_result"
         ...     def get_config_id(self): return "test_config"
-        >>> 
+        >>>
         >>> db = MockDatabase()
         >>> manager = MockTaskManager(db)
         >>> tasks = [MyTask()]
@@ -198,9 +205,16 @@ class TaskManagerExternalDB(TaskManager):
         >>> db.is_key_in_cache("test_config")
         True
     """
-    def __init__(self, cache_db: DataBaseInterface, cache_dir: Optional[Path] = None, logger_debug: bool = False, use_queue_logger: bool = False):
+
+    def __init__(
+        self,
+        cache_db: DataBaseInterface,
+        cache_dir: Optional[Path] = None,
+        logger_debug: bool = False,
+        use_queue_logger: bool = False,
+    ):
         """Initialize the task manager with caching database.
-        
+
         Args:
             cache_db: Database interface for caching results
             cache_dir: Optional directory for logging and cache files
@@ -211,11 +225,11 @@ class TaskManagerExternalDB(TaskManager):
         self.cache_dir = cache_dir
         self.logger_debug = logger_debug
         self.use_queue_logger = use_queue_logger
-        
+
     @property
     def logger(self) -> logging.Logger:
         """Get the logger instance for this task manager.
-        
+
         Returns:
             logging.Logger: Configured logger instance
         """
@@ -223,34 +237,36 @@ class TaskManagerExternalDB(TaskManager):
             name=f"task_manager",
             debug=self.logger_debug,
             output_dir=self.cache_dir,
-            use_queue=self.use_queue_logger
+            use_queue=self.use_queue_logger,
         )
-    
+
     @abstractmethod
     def _run_tasks(self, tasks: List[SimulationTask]) -> List[Any]:
         """Execute a list of tasks (to be implemented by subclasses).
-        
+
         Args:
             tasks: List of simulation tasks to execute
-            
+
         Returns:
             List[Any]: Results from executing the tasks
         """
         pass
-    
-    def run_tasks(self, tasks: List[SimulationTask], task_identifiers: list) -> Tuple[List[Any], list]:
+
+    def run_tasks(
+        self, tasks: List[SimulationTask], task_identifiers: list
+    ) -> Tuple[List[Any], list]:
         """Execute tasks with caching support.
-        
+
         This method checks the cache for existing results before executing tasks,
         runs only uncached tasks, and stores new results in the cache.
-        
+
         Args:
             tasks: List of simulation tasks to execute
             task_identifiers: List of identifiers for each task
-            
+
         Returns:
             Tuple[List[Any], list]: Results and successful task identifiers
-        
+
         Examples:
             >>> class MockDatabase(DataBaseInterface):
             ...     def __init__(self):
@@ -259,15 +275,15 @@ class TaskManagerExternalDB(TaskManager):
             ...     def is_key_in_cache(self, key): return key in self.data
             ...     def set(self, key, value): self.data[key] = value
             ...     def clear(self): self.data.clear()
-            >>> 
+            >>>
             >>> class MockTaskManager(TaskManagerExternalDB):
             ...     def _run_tasks(self, tasks):
             ...         return [task.run() for task in tasks]
-            >>> 
+            >>>
             >>> class MyTask(SimulationTask):
             ...     def run(self): return "result"
             ...     def get_config_id(self): return "config1"
-            >>> 
+            >>>
             >>> db = MockDatabase()
             >>> manager = MockTaskManager(db)
             >>> tasks = [MyTask()]
@@ -283,7 +299,7 @@ class TaskManagerExternalDB(TaskManager):
         results = [None] * len(tasks)
         tasks_to_run = []
         task_indices = []  # Keep track of original indices for uncached tasks
-        
+
         # First pass: check cache and collect tasks that need to be run
         cached_tasks = 0
         for i, task in enumerate(tasks):
@@ -294,18 +310,22 @@ class TaskManagerExternalDB(TaskManager):
             else:
                 tasks_to_run.append(task)
                 task_indices.append(i)
-        
-        self.logger.info(f"Cache status: {cached_tasks} tasks cached, {len(tasks_to_run)} tasks uncached out of {len(tasks)} total tasks")
-        
+
+        self.logger.info(
+            f"Cache status: {cached_tasks} tasks cached, {len(tasks_to_run)} tasks uncached out of {len(tasks)} total tasks"
+        )
+
         # Run only the tasks that weren't in cache
         if tasks_to_run:
             self.logger.info(f"Running {len(tasks_to_run)} uncached tasks")
             new_results = self._run_tasks(tasks_to_run)
             self.logger.info(f"Completed {len(new_results)} tasks")
-            
+
             if len(new_results) != len(tasks_to_run):
-                raise ValueError("new_results and tasks_to_run must have the same length")
-            
+                raise ValueError(
+                    "new_results and tasks_to_run must have the same length"
+                )
+
             # Store new results in their original positions
             for idx, result in zip(task_indices, new_results):
                 if result is None:  # prevents storing failed tasks
@@ -314,7 +334,9 @@ class TaskManagerExternalDB(TaskManager):
                 results[idx] = result
                 # Cache the new result
                 task_id = tasks[idx].get_config_id()
-                self.logger.debug(f"Storing task {idx} in cache with config_id: {task_id}")
+                self.logger.debug(
+                    f"Storing task {idx} in cache with config_id: {task_id}"
+                )
                 self.cache_db.set(task_id, result)
 
         # Filter out failed tasks and their identifiers
@@ -326,12 +348,14 @@ class TaskManagerExternalDB(TaskManager):
                 successful_identifiers.append(identifier)
             else:
                 task_id = tasks[i].get_config_id()
-                self.logger.warning(f"Task {i} (config_id: {task_id}) failed - returned None result")
+                self.logger.warning(
+                    f"Task {i} (config_id: {task_id}) failed - returned None result"
+                )
 
         n_failed_tasks = len(tasks) - len(successful_results)
         self.logger.info(f"{len(successful_results)} tasks completed successfully")
-        
+
         if n_failed_tasks > 0:
             self.logger.warning(f"{n_failed_tasks} tasks failed.")
-            
+
         return successful_results, successful_identifiers

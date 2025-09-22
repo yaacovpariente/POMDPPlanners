@@ -18,10 +18,9 @@ def create_test_belief():
     particles = ["tiger_left", "tiger_right"]
     log_weights = np.array([np.log(0.5), np.log(0.5)])
     return WeightedParticleBelief(
-        particles=particles,
-        log_weights=log_weights,
-        resampling=False
+        particles=particles, log_weights=log_weights, resampling=False
     )
+
 
 @pytest.fixture
 def temp_cache_dir():
@@ -38,6 +37,7 @@ def temp_cache_dir():
             # If we can't remove due to file handles, that's okay for tests
             pass
 
+
 @pytest.fixture
 def cache_db(temp_cache_dir):
     """Fixture to create a DiskCacheDB instance."""
@@ -51,10 +51,12 @@ def cache_db(temp_cache_dir):
     # Add a small delay to ensure file handles are released
     time.sleep(0.1)
 
+
 @pytest.fixture
 def environment():
     """Fixture to create a Tiger POMDP environment."""
     return TigerPOMDP(discount_factor=0.95)
+
 
 @pytest.fixture
 def policy(environment):
@@ -67,18 +69,19 @@ def policy(environment):
         c_ucb=1.0,
         beta_ucb=0.5,
         belief_child_num=4,
-        n_simulations=2
+        n_simulations=2,
     )
+
 
 def test_disk_cache_db_initialization(temp_cache_dir):
     """Test DiskCacheDB initialization and cleanup.
-    
-    Purpose: Validates proper initialization of disk cache db 
-    
+
+    Purpose: Validates proper initialization of disk cache db
+
     Given: Constructor parameters and initial conditions
     When: Object is initialized
     Then: Object is properly constructed with expected attributes
-    
+
     Test type: unit
     """
     cache_db = DiskCacheDB(cache_dir=temp_cache_dir)
@@ -89,15 +92,16 @@ def test_disk_cache_db_initialization(temp_cache_dir):
     finally:
         cache_db.close()
 
+
 def test_disk_cache_db_operations(temp_cache_dir, environment, policy):
     """Test basic cache operations (set, get, is_key_in_cache).
-    
+
     Purpose: Validates that DiskCacheDB correctly implements core cache operations including storage, retrieval, and key existence checking
-    
+
     Given: DiskCacheDB with temporary cache directory, EpisodeSimulationTask with TigerPOMDP environment and SparsePFT policy
     When: Task is executed and result cached using set(), then retrieved using get() and is_key_in_cache()
     Then: Cache correctly stores History object, retrieval returns equivalent History with matching discount_factor and step counts, key existence checks work correctly
-    
+
     Test type: unit
     """
     cache_db = DiskCacheDB(cache_dir=temp_cache_dir)
@@ -111,14 +115,14 @@ def test_disk_cache_db_operations(temp_cache_dir, environment, policy):
             num_steps=2,
             episode_id=1,
             seed=42,
-            console_output=False
+            console_output=False,
         )
         history = task.run()
-        
+
         # Test setting and getting
         cache_db.set(task._cache_key, history)
         assert cache_db.is_key_in_cache(task._cache_key)
-        
+
         retrieved = cache_db.get(task._cache_key)
         assert isinstance(retrieved, History)
         # Compare main fields instead of object equality
@@ -127,26 +131,27 @@ def test_disk_cache_db_operations(temp_cache_dir, environment, policy):
         assert retrieved.reach_terminal_state == history.reach_terminal_state
         assert len(retrieved.history) == len(history.history)
         # Optionally compare more fields as needed
-        
+
         # Test non-existent key
         assert not cache_db.is_key_in_cache("non_existent")
         assert cache_db.get("non_existent") is None
     finally:
         cache_db.close()
 
+
 def test_disk_cache_db_store_and_retrieve(cache_db, environment, policy):
     """Test storing and retrieving tasks from disk cache.
-    
+
     Purpose: Validates that DiskCacheDB can store task results with config IDs and retrieve identical History objects
-    
+
     Given: DiskCacheDB instance, EpisodeSimulationTask, and mock History with specific timing and result attributes
     When: History is stored using task config ID and then retrieved from cache
     Then: Retrieved History object matches original exactly including discount_factor, timing attributes, and terminal state flag
-    
+
     Test type: unit
     """
     belief = create_test_belief()
-    
+
     task = EpisodeSimulationTask(
         environment=environment,
         policy=policy,
@@ -154,9 +159,9 @@ def test_disk_cache_db_store_and_retrieve(cache_db, environment, policy):
         num_steps=2,
         episode_id=1,
         seed=42,
-        console_output=False
+        console_output=False,
     )
-    
+
     # Create a mock history result
     history = History(
         history=[],
@@ -168,33 +173,34 @@ def test_disk_cache_db_store_and_retrieve(cache_db, environment, policy):
         average_reward_time=0.005,
         actual_num_steps=2,
         reach_terminal_state=True,
-        policy_run_data=None
+        policy_run_data=None,
     )
-    
+
     # Store in cache
     task_id = task.get_config_id()
     cache_db.set(task_id, history)
-    
+
     # Check if key exists
     assert cache_db.is_key_in_cache(task_id)
-    
+
     # Retrieve from cache
     retrieved_history = cache_db.get(task_id)
     assert retrieved_history == history
 
+
 def test_disk_cache_db_clear(cache_db, environment, policy):
     """Test clearing the disk cache.
-    
+
     Purpose: Validates that DiskCacheDB clear operation removes all cached entries and makes them inaccessible
-    
+
     Given: DiskCacheDB with cached History object stored using task config ID
     When: clear() method is called on the cache database
     Then: Previously cached key is no longer found in cache (is_key_in_cache returns False)
-    
+
     Test type: unit
     """
     belief = create_test_belief()
-    
+
     task = EpisodeSimulationTask(
         environment=environment,
         policy=policy,
@@ -202,9 +208,9 @@ def test_disk_cache_db_clear(cache_db, environment, policy):
         num_steps=2,
         episode_id=1,
         seed=42,
-        console_output=False
+        console_output=False,
     )
-    
+
     # Create a mock history result
     history = History(
         history=[],
@@ -216,18 +222,18 @@ def test_disk_cache_db_clear(cache_db, environment, policy):
         average_reward_time=0.005,
         actual_num_steps=2,
         reach_terminal_state=True,
-        policy_run_data=None
+        policy_run_data=None,
     )
-    
+
     # Store in cache
     task_id = task.get_config_id()
     cache_db.set(task_id, history)
-    
+
     # Verify it's in cache
     assert cache_db.is_key_in_cache(task_id)
-    
+
     # Clear cache
     cache_db.clear()
-    
+
     # Verify it's no longer in cache
-    assert not cache_db.is_key_in_cache(task_id) 
+    assert not cache_db.is_key_in_cache(task_id)

@@ -1,8 +1,10 @@
 from setuptools import setup, find_packages
 
+
 def read_requirements(filename):
     with open(filename) as f:
-        return [line.strip() for line in f if line.strip() and not line.startswith('#')]
+        return [line.strip() for line in f if line.strip() and not line.startswith("#")]
+
 
 setup(
     name="POMDPPlanners",
@@ -29,9 +31,9 @@ setup(
         "Operating System :: OS Independent",
     ],
     python_requires=">=3.8",
-    install_requires=read_requirements('requirements.txt'),
+    install_requires=read_requirements("requirements.txt"),
     extras_require={
-        "dev": read_requirements('requirements-dev.txt'),
+        "dev": read_requirements("requirements-dev.txt"),
         "docs": [
             "sphinx",
             "sphinx-autodoc-typehints",
@@ -44,4 +46,4 @@ setup(
         "Source": "https://github.com/yaacovpariente/POMDPPlanners",
         "Documentation": "https://yaacovpariente.github.io/POMDPPlanners/",
     },
-) 
+)

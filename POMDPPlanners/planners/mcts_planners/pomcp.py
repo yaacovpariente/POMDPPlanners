@@ -1,7 +1,7 @@
 """POMCP (Partially Observable Monte Carlo Planning) Algorithm Implementation.
 
 This module implements POMCP, a Monte Carlo Tree Search algorithm for POMDP planning.
-POMCP builds a search tree by iteratively sampling trajectories and using UCB1 
+POMCP builds a search tree by iteratively sampling trajectories and using UCB1
 for action selection, providing an efficient approximation to optimal POMDP planning.
 
 The algorithm works by:
@@ -29,24 +29,30 @@ from pathlib import Path
 from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, PolicyRunData
 from POMDPPlanners.core.environment import SpaceType, DiscreteActionsEnvironment
 from POMDPPlanners.core.belief import Belief, UnweightedParticleBeliefStateUpdate
-from POMDPPlanners.core.tree import ActionNode, get_optimal_action_reward_setting, BeliefNode
+from POMDPPlanners.core.tree import (
+    ActionNode,
+    get_optimal_action_reward_setting,
+    BeliefNode,
+)
 from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
-from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
+from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
+    PathSimulationPolicy,
+)
 
 
 class POMCP(PathSimulationPolicy):
     """POMCP (Partially Observable Monte Carlo Planning) algorithm.
-    
+
     POMCP is a Monte Carlo Tree Search algorithm for POMDP planning that combines
     UCB1 action selection with particle filtering to handle continuous observation
     spaces. It builds a search tree through repeated simulations and provides
     theoretical convergence guarantees.
-    
+
     The algorithm uses UCB1 (Upper Confidence Bounds) to balance exploration
     and exploitation when selecting actions during tree search. It maintains
     belief states using particle filters and performs random rollouts to
     estimate values at leaf nodes.
-    
+
     Attributes:
         environment: The POMDP environment to plan for
         discount_factor: Discount factor for future rewards (0 < γ ≤ 1)
@@ -62,7 +68,7 @@ class POMCP(PathSimulationPolicy):
         in this implementation, we keep the belief structure abstract to allow users to choose
         their preferred belief representation. In the usage example below, a weighted particle
         belief is used via the :func:`POMDPPlanners.core.belief.get_initial_belief` function.
-        
+
     Example:
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.core.belief import get_initial_belief
@@ -89,37 +95,39 @@ class POMCP(PathSimulationPolicy):
         >>> hasattr(run_data, 'info_variables')  # Has tree statistics
         True
     """
-    
+
     def __init__(
-        self, 
-        environment: DiscreteActionsEnvironment, 
-        discount_factor: float, 
-        depth: int, 
+        self,
+        environment: DiscreteActionsEnvironment,
+        discount_factor: float,
+        depth: int,
         exploration_constant: float,
         name: str,
-        time_out_in_seconds: int = None, 
-        n_simulations: int = None, 
+        time_out_in_seconds: int = None,
+        n_simulations: int = None,
         min_samples_per_node: int = 10,
-        log_path: Optional[Path] = None,    
+        log_path: Optional[Path] = None,
         debug: bool = False,
-        use_queue_logger: bool = False
+        use_queue_logger: bool = False,
     ):
         combination1 = time_out_in_seconds is not None and n_simulations is None
         combination2 = time_out_in_seconds is None and n_simulations is not None
         if not (combination1 or combination2):
-            raise ValueError("Only one of time_out_in_seconds and n_simulations must be provided.")
-        
+            raise ValueError(
+                "Only one of time_out_in_seconds and n_simulations must be provided."
+            )
+
         super().__init__(
-            environment=environment, 
-            discount_factor=discount_factor, 
+            environment=environment,
+            discount_factor=discount_factor,
             name=name,
             n_simulations=n_simulations,
             time_out_in_seconds=time_out_in_seconds,
             log_path=log_path,
             debug=debug,
-            use_queue_logger=use_queue_logger
+            use_queue_logger=use_queue_logger,
         )
-        
+
         self.depth = depth
         self.exploration_constant = exploration_constant
         self.min_samples_per_node = min_samples_per_node
@@ -127,83 +135,121 @@ class POMCP(PathSimulationPolicy):
     def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
         state = belief_node.belief.sample()
         self._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
-    
-    def _simulate_state_path(self, state: Any, belief_node: BeliefNode, depth: int) -> float:
-        if depth > self.depth: 
+
+    def _simulate_state_path(
+        self, state: Any, belief_node: BeliefNode, depth: int
+    ) -> float:
+        if depth > self.depth:
             belief_node.parent = None  # remove the node from the tree
             return 0
-        
+
         if self.environment.is_terminal(state=state):
             belief_node.visit_count += 1
             return 0
 
         if belief_node.is_leaf:
             for action in self.environment.get_actions():
-                action_node = ActionNode(action=action, parent=belief_node, children=tuple())
-                
+                action_node = ActionNode(
+                    action=action, parent=belief_node, children=tuple()
+                )
+
             belief_node.visit_count += 1
-            return self.random_rollout(state=state, depth=depth)            
-        
+            return self.random_rollout(state=state, depth=depth)
+
         action_node = self.get_explored_action_node(belief_node=belief_node)
-        
+
         state = belief_node.belief.sample()
-        next_state, next_observation, reward = self.environment.sample_next_step(state=state, action=action_node.action)
-        
+        next_state, next_observation, reward = self.environment.sample_next_step(
+            state=state, action=action_node.action
+        )
+
         next_belief_node = None
         for belief_node_child in action_node.children:
-            if self.environment.is_equal_observation(observation1=next_observation, observation2=belief_node_child.observation):
+            if self.environment.is_equal_observation(
+                observation1=next_observation,
+                observation2=belief_node_child.observation,
+            ):
                 next_belief_node = belief_node_child
                 break
 
         if next_belief_node is None:
             belief = UnweightedParticleBeliefStateUpdate(particles=[next_state])
-            next_belief_node = BeliefNode(belief=belief, observation=next_observation, parent=action_node, children=tuple())
-        
+            next_belief_node = BeliefNode(
+                belief=belief,
+                observation=next_observation,
+                parent=action_node,
+                children=tuple(),
+            )
+
         return_sample = reward + self.discount_factor * self._simulate_state_path(
-            state=next_state, 
-            belief_node=next_belief_node, 
-            depth=depth + 1
+            state=next_state, belief_node=next_belief_node, depth=depth + 1
         )
-        
-        self.update_nodes(belief_node=belief_node, action_node=action_node, return_sample=return_sample, state=state)
-            
+
+        self.update_nodes(
+            belief_node=belief_node,
+            action_node=action_node,
+            return_sample=return_sample,
+            state=state,
+        )
+
         return return_sample
-        
+
     def get_explored_action_node(self, belief_node: BeliefNode) -> ActionNode:
         if not isinstance(belief_node, BeliefNode):
             raise TypeError("belief_node must be a BeliefNode instance")
-        
-        action_nodes_visits = np.array([child.visit_count for child in belief_node.children])
+
+        action_nodes_visits = np.array(
+            [child.visit_count for child in belief_node.children]
+        )
         unvisited_action_indices = np.where(action_nodes_visits == 0)[0]
         if len(unvisited_action_indices) > 0:
             return belief_node.children[np.random.choice(unvisited_action_indices)]
 
-        action_nodes_q_values = np.array([child.q_value for child in belief_node.children])
-        ucb = action_nodes_q_values + self.exploration_constant * np.sqrt(np.log(belief_node.visit_count) / action_nodes_visits)
+        action_nodes_q_values = np.array(
+            [child.q_value for child in belief_node.children]
+        )
+        ucb = action_nodes_q_values + self.exploration_constant * np.sqrt(
+            np.log(belief_node.visit_count) / action_nodes_visits
+        )
 
         return belief_node.children[np.argmax(ucb)]
-        
+
     def random_rollout(self, state: Any, depth: int) -> float:
         if depth > self.depth or self.environment.is_terminal(state=state):
             return 0
-        
+
         action = random.choice(self.environment.get_actions())
-        next_state, next_observation, reward = self.environment.sample_next_step(state=state, action=action)
-        
-        return reward + self.discount_factor * self.random_rollout(state=next_state, depth=depth + 1)
-        
-    def update_nodes(self, belief_node: BeliefNode, action_node: ActionNode, return_sample: float, state: Any):
-        if belief_node.parent is not None: # prevents updating the initial belief.
-            belief_node.belief.inplace_update(action=None, observation=None, pomdp=self.environment, state=state)
-        
+        next_state, next_observation, reward = self.environment.sample_next_step(
+            state=state, action=action
+        )
+
+        return reward + self.discount_factor * self.random_rollout(
+            state=next_state, depth=depth + 1
+        )
+
+    def update_nodes(
+        self,
+        belief_node: BeliefNode,
+        action_node: ActionNode,
+        return_sample: float,
+        state: Any,
+    ):
+        if belief_node.parent is not None:  # prevents updating the initial belief.
+            belief_node.belief.inplace_update(
+                action=None, observation=None, pomdp=self.environment, state=state
+            )
+
         belief_node.visit_count += 1
         action_node.visit_count += 1
-        action_node.q_value += (return_sample - action_node.q_value) / action_node.visit_count
-        belief_node.v_value = np.max([child.q_value for child in belief_node.children if child.visit_count > 0])
+        action_node.q_value += (
+            return_sample - action_node.q_value
+        ) / action_node.visit_count
+        belief_node.v_value = np.max(
+            [child.q_value for child in belief_node.children if child.visit_count > 0]
+        )
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
         return PolicySpaceInfo(
-            action_space=SpaceType.DISCRETE,
-            observation_space=SpaceType.DISCRETE
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
         )

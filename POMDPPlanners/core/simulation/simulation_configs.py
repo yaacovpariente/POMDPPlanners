@@ -2,7 +2,11 @@ from typing import TYPE_CHECKING, Optional
 from pathlib import Path
 from dataclasses import dataclass
 
-from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParameterFeature, CategoricalHyperParameter, NumericalHyperParameter
+from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParameterFeature,
+    CategoricalHyperParameter,
+    NumericalHyperParameter,
+)
 
 
 if TYPE_CHECKING:
@@ -10,20 +14,21 @@ if TYPE_CHECKING:
     from POMDPPlanners.core.environment import Environment
     from POMDPPlanners.core.policy import Policy
 
+
 @dataclass(frozen=True)
 class EnvironmentRunParams:
-    environment: 'Environment'
-    belief: 'Belief'
-    policies: list['Policy']
+    environment: "Environment"
+    belief: "Belief"
+    policies: list["Policy"]
     num_episodes: int
     num_steps: int
 
 
 @dataclass(frozen=True)
 class HyperParameterRunParams:
-    environment: 'Environment'
-    belief: 'Belief'
-    policies: list['Policy']
+    environment: "Environment"
+    belief: "Belief"
+    policies: list["Policy"]
     num_episodes: int
     num_steps: int
     hyper_parameters: list[HyperParameterFeature]
