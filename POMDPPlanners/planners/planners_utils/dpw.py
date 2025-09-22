@@ -22,29 +22,28 @@ class ActionSampler(ABC):
     computing, caching, or saving/loading configurations.
     
     Examples:
-        Basic continuous control action sampler::
-        
-            import numpy as np
-            from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-            
-            class ContinuousControlSampler(ActionSampler):
-                def __init__(self, action_bounds=(-1.0, 1.0), action_dim=2):
-                    self.action_bounds = action_bounds
-                    self.action_dim = action_dim
-                
-                def sample(self, belief_node=None):
-                    # Sample uniformly from action space
-                    low, high = self.action_bounds
-                    return np.random.uniform(low, high, size=self.action_dim)
-            
-            # Usage with PFT-DPW
-            sampler = ContinuousControlSampler(action_bounds=(-2.0, 2.0), action_dim=4)
-            action = sampler.sample()  # Returns 4D action vector
-            
-            # Serialization works automatically
-            import pickle
-            serialized = pickle.dumps(sampler)
-            restored_sampler = pickle.loads(serialized)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+        >>>
+        >>> class ContinuousControlSampler(ActionSampler):
+        ...     def __init__(self, action_bounds=(-1.0, 1.0), action_dim=2):
+        ...         self.action_bounds = action_bounds
+        ...         self.action_dim = action_dim
+        ...
+        ...     def sample(self, belief_node=None):
+        ...         # Sample uniformly from action space
+        ...         low, high = self.action_bounds
+        ...         return np.random.uniform(low, high, size=self.action_dim)
+        >>>
+        >>> # Usage with PFT-DPW
+        >>> sampler = ContinuousControlSampler(action_bounds=(-2.0, 2.0), action_dim=4)
+        >>> action = sampler.sample()  # Returns 4D action vector  # doctest: +SKIP
+        >>>
+        >>> # Serialization works automatically
+        >>> import pickle
+        >>> serialized = pickle.dumps(sampler)  # doctest: +SKIP
+        >>> restored_sampler = pickle.loads(serialized)  # doctest: +SKIP
             
         Discrete action sampler with custom distribution::
         
