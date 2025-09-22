@@ -69,30 +69,28 @@ class StateTransitionModel(Distribution):
         mean: Expected next position (state + action)
         
     Example:
-        Using the Continuous Light-Dark state transition model::
-        
-            import numpy as np
-            
-            # Define current position and movement action
-            state = np.array([3.0, 4.0])  # Current position
-            action = np.array([1.0, 0.5])  # Move right and slightly up
-            
-            # Define movement noise
-            cov_matrix = np.eye(2) * 0.1  # Small movement noise
-            
-            # Create transition model
-            transition = StateTransitionModel(
-                state=state,
-                action=action,
-                state_transition_cov_matrix=cov_matrix
-            )
-            
-            # Sample next position with noise
-            next_position = transition.sample()[0]
-            # Returns position around [4.0, 4.5] ± noise
-            
-            # Calculate probability of specific next position
-            prob = transition.probability([next_position])
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Define current position and movement action
+        >>> state = np.array([3.0, 4.0])  # Current position
+        >>> action = np.array([1.0, 0.5])  # Move right and slightly up
+        >>>
+        >>> # Define movement noise
+        >>> cov_matrix = np.eye(2) * 0.1  # Small movement noise
+        >>>
+        >>> # Create transition model
+        >>> transition = StateTransitionModel(
+        ...     state=state,
+        ...     action=action,
+        ...     state_transition_cov_matrix=cov_matrix
+        ... )
+        >>>
+        >>> # Sample next position with noise
+        >>> next_position = transition.sample()[0]  # doctest: +SKIP
+        >>> # Returns position around [4.0, 4.5] ± noise
+        >>>
+        >>> # Calculate probability of specific next position
+        >>> prob = transition.probability([next_position])  # doctest: +SKIP
     """
     
     def __init__(self, state: np.ndarray, action: np.ndarray, state_transition_cov_matrix: np.ndarray):
@@ -135,28 +133,28 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     - Terminal conditions for goal reaching, obstacle hits, and boundary violations
     
     Example:
-        Creating and using a Continuous Light-Dark POMDP::
-        
-            import numpy as np
-            
-            # Create environment with custom parameters
-            env = ContinuousLightDarkPOMDP(
-                discount_factor=0.95,
-                goal_state=np.array([10, 5]),
-                start_state=np.array([0, 5]),
-                reward_model_type=RewardModelType.STANDARD
-            )
-            
-            # Sample initial state and take continuous action
-            state_dist = env.initial_state_dist()
-            state = state_dist.sample()[0]
-            
-            # Move toward goal with continuous action
-            action = np.array([1.0, 0.0])  # Move right
-            reward = env.reward(state, action)
-            
-            # Check termination
-            is_done = env.is_terminal(state)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Create environment with custom parameters
+        >>> env = ContinuousLightDarkPOMDP(
+        ...     discount_factor=0.95,
+        ...     goal_state=np.array([10, 5]),
+        ...     start_state=np.array([0, 5]),
+        ...     reward_model_type=RewardModelType.STANDARD
+        ... )
+        >>>
+        >>> # Sample initial state and take continuous action
+        >>> state_dist = env.initial_state_dist()
+        >>> state = state_dist.sample()[0]
+        >>> len(state) == 2  # 2D position
+        True
+        >>>
+        >>> # Move toward goal with continuous action
+        >>> action = np.array([1.0, 0.0])  # Move right
+        >>> reward = env.reward(state, action)  # doctest: +SKIP
+        >>>
+        >>> # Check termination
+        >>> is_done = env.is_terminal(state)  # doctest: +SKIP
     """
     
     def __init__(
@@ -435,24 +433,24 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
     - "left": [-1, 0]
     
     Example:
-        Creating and using a Discrete Actions Light-Dark POMDP::
-        
-            import numpy as np
-            
-            # Create environment with discrete actions
-            env = ContinuousLightDarkPOMDPDiscreteActions(
-                discount_factor=0.95,
-                goal_state=np.array([10, 5]),
-                start_state=np.array([0, 5])
-            )
-            
-            # Get available actions and take one
-            actions = env.get_actions()  # ["up", "down", "right", "left"]
-            action = "right"  # Move right
-            
-            # Simulate step
-            state = env.start_state
-            reward = env.reward(state, action)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Create environment with discrete actions
+        >>> env = ContinuousLightDarkPOMDPDiscreteActions(
+        ...     discount_factor=0.95,
+        ...     goal_state=np.array([10, 5]),
+        ...     start_state=np.array([0, 5])
+        ... )
+        >>>
+        >>> # Get available actions and take one
+        >>> actions = env.get_actions()  # ["up", "down", "right", "left"]
+        >>> len(actions) == 4
+        True
+        >>> action = "right"  # Move right
+        >>>
+        >>> # Simulate step
+        >>> state = env.start_state
+        >>> reward = env.reward(state, action)  # doctest: +SKIP
     """
     
     def __init__(
