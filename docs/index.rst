@@ -83,6 +83,7 @@ Basic Usage
 
    examples/basic_usage
    examples/planners_comparison
+   examples/hyperparameter_tuning
 
 .. toctree::
    :maxdepth: 2

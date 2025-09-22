@@ -10,35 +10,37 @@ Let's solve the classic Tiger POMDP problem using POMCP:
 
 .. code-block:: python
 
-   from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+   from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
    from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
    from POMDPPlanners.core.belief import WeightedParticleBelief
 
    # Step 1: Create the environment
-   env = TigerPOMDP()
-   print(f"States: {env.get_states()}")
-   print(f"Actions: {env.get_actions()}")
-   print(f"Observations: {env.get_observations()}")
+   config_api = EnvironmentConfigsAPI()
+   env, initial_belief = config_api.tiger_pomdp_config(n_particles=30)
+   print(f"States: {env.states}")
+   print(f"Actions: {env.actions}")
+   print(f"Observations: {env.observations}")
 
    # Step 2: Create the planner
-   planner = POMCP(env, num_simulations=1000, exploration_constant=50.0)
-
-   # Step 3: Initialize belief state
-   initial_belief = WeightedParticleBelief.create_uniform_belief(
-       env.get_states(), num_particles=1000
+   planner = POMCP(
+       environment=env,
+       discount_factor=env.discount_factor,
+       depth=10,
+       exploration_constant=50.0,
+       name="POMCP_Tiger",
+       n_simulations=1000
    )
 
+   # Step 3: Belief state is already initialized from config
+
    # Step 4: Get optimal action
-   action = planner.get_action(initial_belief)
-   print(f"Recommended action: {action}")
+   action, run_data = planner.action(initial_belief)
+   print(f"Recommended action: {action[0]}")
 
    # Step 5: Take action and update belief
-   observation, reward, done = env.step(action)
-   updated_belief = planner.update_belief(initial_belief, action, observation)
-
+   next_state, observation, reward = env.sample_next_step(state=initial_belief.sample(), action=action[0])
    print(f"Observation: {observation}")
    print(f"Reward: {reward}")
-   print(f"Episode done: {done}")
 
 Core Concepts
 ------------
@@ -50,9 +52,10 @@ Environments define the POMDP problem structure:
 .. code-block:: python
 
    # All environments inherit from the base Environment class
-   from POMDPPlanners.environments.light_dark_pomdp import ContinuousLightDarkPOMDP
+   from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
 
-   env = ContinuousLightDarkPOMDP()
+   config_api = EnvironmentConfigsAPI()
+   env, belief = config_api.continuous_observations_continuous_actions_light_dark_pomdp_config()
 
    # Key methods
    state = env.reset()                    # Initialize environment
@@ -67,16 +70,23 @@ Planners compute optimal actions given beliefs:
 .. code-block:: python
 
    from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-   from POMDPPlanners.planners.sparse_sampling_planner import SparseSamplingPlanner
+   from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
 
    # MCTS-based planner
-   pomcp = POMCP(env, num_simulations=500, exploration_constant=10.0)
+   pomcp = POMCP(
+       environment=env,
+       discount_factor=env.discount_factor,
+       depth=10,
+       exploration_constant=10.0,
+       name="POMCP_Test",
+       n_simulations=500
+   )
 
    # Sparse sampling planner
-   sparse = SparseSamplingPlanner(env, num_simulations=100, max_depth=10)
+   sparse = StandardSparseSamplingDiscreteActionsPlanner(env, branching_factor=100, depth=2)
 
    # Get action from planner
-   action = pomcp.get_action(belief_state)
+   action, run_data = pomcp.action(belief_state)
 
 **Belief States**
 
@@ -87,10 +97,8 @@ Belief states represent uncertainty over the true state:
    from POMDPPlanners.core.belief import WeightedParticleBelief
 
    # Create uniform belief over all states
-   belief = WeightedParticleBelief.create_uniform_belief(
-       states=env.get_states(),
-       num_particles=1000
-   )
+   from POMDPPlanners.core.belief import get_initial_belief
+   belief = get_initial_belief(env, n_particles=1000)
 
    # Sample from belief
    state_sample = belief.sample()
@@ -105,8 +113,8 @@ For systematic evaluation, use the simulation framework:
 
 .. code-block:: python
 
-   from POMDPPlanners.simulations.simulator import Simulator
-   from POMDPPlanners.utils.config_loader import create_config
+   from POMDPPlanners.simulations.simulator import POMDPSimulator
+   from POMDPPlanners.utils.config_loader import load_config
 
    # Create configuration
    config = {
@@ -176,36 +184,41 @@ Available Environments
 .. code-block:: python
 
    # Tiger POMDP - classic two-door problem
-   from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-   tiger = TigerPOMDP()
+   from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
+   config_api = EnvironmentConfigsAPI()
+   tiger_env, tiger_belief = config_api.tiger_pomdp_config()
 
 **Navigation Tasks**
 
 .. code-block:: python
 
    # Light-Dark POMDP - position-dependent observation noise
-   from POMDPPlanners.environments.light_dark_pomdp import ContinuousLightDarkPOMDP
-   light_dark = ContinuousLightDarkPOMDP(grid_size=10)
+   from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
+   config_api = EnvironmentConfigsAPI()
+   light_dark_env, light_dark_belief = config_api.continuous_observations_continuous_actions_light_dark_pomdp_config()
 
 **Control Problems**
 
 .. code-block:: python
 
    # CartPole with partial observability
-   from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-   cartpole = CartPolePOMDP()
+   from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
+   config_api = EnvironmentConfigsAPI()
+   cartpole_env, cartpole_belief = config_api.cartpole_pomdp_config()
 
    # Mountain Car with partial observability
-   from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
-   mountain_car = MountainCarPOMDP()
+   from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
+   config_api = EnvironmentConfigsAPI()
+   mountain_car_env, mountain_car_belief = config_api.mountain_car_pomdp_config()
 
 **Manipulation Tasks**
 
 .. code-block:: python
 
    # Object pushing with uncertainty
-   from POMDPPlanners.environments.push_pomdp import PushPOMDP
-   push = PushPOMDP()
+   from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
+   config_api = EnvironmentConfigsAPI()
+   push_env, push_belief = config_api.push_pomdp_config()
 
 Available Planners
 -----------------
@@ -231,8 +244,8 @@ Available Planners
 .. code-block:: python
 
    # Sparse Sampling
-   from POMDPPlanners.planners.sparse_sampling_planner import SparseSamplingPlanner
-   sparse = SparseSamplingPlanner(env, num_simulations=100, max_depth=10)
+   from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+   sparse = StandardSparseSamplingDiscreteActionsPlanner(env, branching_factor=100, depth=10)
 
 Configuration Management
 -----------------------
@@ -259,7 +272,7 @@ Use YAML files for reproducible experiments:
 .. code-block:: python
 
    from POMDPPlanners.utils.config_loader import load_config
-   from POMDPPlanners.simulations.simulator import Simulator
+   from POMDPPlanners.simulations.simulator import POMDPSimulator
 
    # Load configuration
    config = load_config("config.yaml")
