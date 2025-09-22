@@ -114,6 +114,11 @@ autodoc_mock_imports = [
     'gymnasium',
     'dask',
     'joblib',
+    'pandas',
+    'ray',
+    'dask_jobqueue',
+    'PIL',
+    'cv2',
 ]
 
 # -- Options for intersphinx mapping ----------------------------------------

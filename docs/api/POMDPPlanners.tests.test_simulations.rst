@@ -49,14 +49,6 @@ POMDPPlanners.tests.test\_simulations.test\_simulations\_api module
    :show-inheritance:
    :undoc-members:
 
-POMDPPlanners.tests.test\_simulations.test\_simulations\_usage\_examples module
--------------------------------------------------------------------------------
-
-.. automodule:: POMDPPlanners.tests.test_simulations.test_simulations_usage_examples
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 POMDPPlanners.tests.test\_simulations.test\_simulator module
 ------------------------------------------------------------
 
