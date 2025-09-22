@@ -10,7 +10,17 @@ from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.belief import Belief, get_initial_belief
 from POMDPPlanners.core.simulation import EnvironmentRunParams
+from POMDPPlanners.core.simulation import (
+    CategoricalHyperParameter,
+    NumericalHyperParameter,
+)
+from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParameterRunParams,
+    OptimizedPolicyResult,
+    HyperParameterOptimizationDirection,
+)
 from POMDPPlanners.simulations.simulator import POMDPSimulator
+from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import HyperParameterOptimizer
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
     DaskConfig,
@@ -746,3 +756,202 @@ class SimulationsAPI:
             )
             self.logger.info("PBS cluster simulation run completed")
             return results
+
+    def run_hyperparameter_optimization(
+        self,
+        environment_run_params: List[HyperParameterRunParams],
+        experiment_name: str = "POMDP_Hyperparameter_Optimization",
+        n_jobs: int = -1,
+        cache_dir_path: Path = None,
+        clear_cache_on_start: bool = False,
+        debug: bool = False,
+        confidence_interval_level: float = 0.95,
+        alpha: float = 0.05,
+        use_queue_logger: bool = False,
+    ) -> List[OptimizedPolicyResult]:
+        """Run hyperparameter optimization for POMDP policies using Optuna.
+
+        This method provides a high-level interface for hyperparameter optimization
+        by wrapping the HyperParameterOptimizer class. It supports optimization
+        of multiple environment-policy configurations with comprehensive MLflow
+        tracking and statistical analysis.
+
+        The optimization uses Optuna's advanced algorithms (TPE, CMA-ES, etc.) to
+        efficiently search the hyperparameter space and find optimal configurations
+        for POMDP policies.
+
+        Args:
+            environment_run_params: List of HyperParameterRunParams configurations,
+                each specifying an environment, policy class, hyperparameter ranges,
+                and optimization settings. Each configuration must include the
+                required n_trials parameter.
+            experiment_name: Name for the MLflow experiment tracking. Used to organize
+                optimization runs and enable comparison across different experiments.
+            n_jobs: Number of parallel jobs for episode execution. Use -1 to use all
+                available CPU cores, or specify a positive integer for a specific
+                number of cores.
+            cache_dir_path: Optional path for storing optimization results, logs,
+                and MLflow artifacts. If None, results are stored in the current
+                working directory.
+            clear_cache_on_start: Whether to clear existing cache before starting
+                optimization. Useful for ensuring clean runs when debugging or testing.
+            debug: Whether to enable debug-level logging output. When True, provides
+                detailed information about optimization progress and internal operations.
+            confidence_interval_level: Confidence level for statistical analysis
+                (between 0.0 and 1.0). Used for computing confidence intervals in
+                performance statistics. Defaults to 0.95 for 95% confidence intervals.
+            alpha: Significance level for statistical tests (between 0.0 and 1.0).
+                Used for hypothesis testing and confidence interval calculations.
+                Defaults to 0.05 for 5% significance level.
+            use_queue_logger: Whether to use queue-based logging for distributed
+                execution scenarios. Defaults to False for local execution.
+
+        Returns:
+            List[OptimizedPolicyResult]: List of optimization results, each containing
+                the optimized policy with its best hyperparameters, environment reference,
+                and optimization metadata for each input configuration.
+
+        Raises:
+            ValueError: If any configuration contains invalid parameters or missing
+                required fields like n_trials.
+            TypeError: If policy classes are not Policy subclasses.
+            RuntimeError: If optimization fails for any configuration.
+
+        Example:
+            Running hyperparameter optimization for POMCP on Tiger POMDP::
+
+                from pathlib import Path
+                from POMDPPlanners.simulations.simulations_api import SimulationsAPI
+                from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+                from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+                from POMDPPlanners.core.belief import get_initial_belief
+                from POMDPPlanners.core.simulation import (
+                    NumericalHyperParameter, CategoricalHyperParameter
+                )
+                from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+                    HyperParameterRunParams, HyperParameterOptimizationDirection
+                )
+
+                # Initialize the API
+                api = SimulationsAPI(
+                    cache_dir_path=Path("./optimization_results"),
+                    debug=True
+                )
+
+                # Create environment and initial belief
+                tiger = TigerPOMDP(discount_factor=0.95)
+                initial_belief = get_initial_belief(tiger, n_particles=1000)
+
+                # Define hyperparameter optimization configurations
+                optimization_configs = [
+                    HyperParameterRunParams(
+                        environment=tiger,
+                        belief=initial_belief,
+                        policy_cls=POMCP,
+                        hyper_parameters=[
+                            NumericalHyperParameter("exploration_constant", 0.1, 10.0),
+                            NumericalHyperParameter("n_simulations", 100, 2000),
+                            NumericalHyperParameter("depth", 5, 20)
+                        ],
+                        constant_parameters={
+                            "discount_factor": 0.95,
+                            "name": "OptimizedPOMCP"
+                        },
+                        num_episodes=50,       # Episodes for final evaluation
+                        num_steps=30,          # Steps per episode
+                        n_trials=100,         # Number of optimization trials
+                        direction=HyperParameterOptimizationDirection.MAXIMIZE,
+                        parameter_to_optimize="average_return"
+                    )
+                ]
+
+                # Run hyperparameter optimization
+                results = api.run_hyperparameter_optimization(
+                    environment_run_params=optimization_configs,
+                    experiment_name="Tiger_POMCP_Optimization",
+                    n_jobs=4,  # Use 4 CPU cores
+                    enable_profiling=True
+                )
+
+                # Analyze results
+                for i, result in enumerate(results):
+                    print(f"Configuration {i+1} Results:")
+                    print(f"  Environment: {result.environment.__class__.__name__}")
+                    print(f"  Policy: {result.policy.__class__.__name__}")
+                    print(f"  Best hyperparameters: {result.chosen_hyper_parameters}")
+                    print(f"  Policy name: {result.policy.name}")
+
+                # Use optimized policies for further analysis
+                optimized_policies = [result.policy for result in results]
+                print(f"Optimized {len(optimized_policies)} policies successfully")
+
+        Note:
+            This method requires Optuna and MLflow to be installed. The optimization
+            process can be computationally intensive for complex policies and large
+            parameter spaces. All optimization runs are automatically tracked in
+            MLflow with comprehensive parameter logging, metrics recording, and
+            artifact storage.
+
+            Key Implementation Details:
+            - Uses HyperParameterOptimizer internally for optimization logic
+            - All optimization runs are automatically tracked in MLflow
+            - Requires explicit belief initialization (not generated automatically)
+            - n_trials parameter is mandatory in each HyperParameterRunParams
+            - Results include optimized policies with their chosen hyperparameters
+            - Supports both numerical and categorical hyperparameters
+        """
+        self.logger.info(
+            f"Starting hyperparameter optimization for {len(environment_run_params)} configurations"
+        )
+        self.logger.debug(
+            f"Parameters: experiment_name={experiment_name}, n_jobs={n_jobs}, "
+            f"confidence_interval={confidence_interval_level}, alpha={alpha}"
+        )
+
+        # Set up cache directory
+        if cache_dir_path is None:
+            cache_dir_path = Path("./hyperparameter_optimization_results")
+        
+        # Create cache directory if it doesn't exist
+        cache_dir_path.mkdir(parents=True, exist_ok=True)
+
+        # Initialize the hyperparameter optimizer
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=cache_dir_path,
+            experiment_name=experiment_name,
+            n_jobs=n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            use_queue_logger=use_queue_logger,
+        )
+
+        try:
+            # Run optimization
+            self.logger.info("Running hyperparameter optimization")
+            results = optimizer.optimize(environment_run_params)
+            
+            self.logger.info(
+                f"Hyperparameter optimization completed successfully. "
+                f"Optimized {len(results)} out of {len(environment_run_params)} configurations"
+            )
+            
+            # Log summary of results
+            for i, result in enumerate(results):
+                self.logger.info(
+                    f"Configuration {i+1}: {result.environment.__class__.__name__} "
+                    f"with {result.policy.__class__.__name__} - "
+                    f"Best parameters: {result.chosen_hyper_parameters}"
+                )
+            
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Hyperparameter optimization failed: {e}")
+            raise RuntimeError(f"Hyperparameter optimization failed: {e}") from e
+        
+        finally:
+            # Clean up optimizer resources
+            try:
+                optimizer.cleanup()
+            except Exception as cleanup_error:
+                self.logger.warning(f"Error during optimizer cleanup: {cleanup_error}")
