@@ -16,7 +16,7 @@ Overview
 
 **Key Features Demonstrated:**
 - Environment configuration using EnvironmentConfigsAPI
-- Custom action samplers for continuous action spaces
+- Pre-built action samplers from utils module for different action spaces
 - Statistical analysis with confidence intervals
 - Multi-environment, multi-algorithm evaluation
 - Performance profiling and result visualization
@@ -28,389 +28,122 @@ Complete Example
 
     import numpy as np
     from pathlib import Path
-    from typing import List
 
     # Core POMDPPlanners imports
     from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
     from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
     from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+    from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler, DiscreteActionSampler
     from POMDPPlanners.simulations.simulations_api import SimulationsAPI
     from POMDPPlanners.core.simulation import EnvironmentRunParams
 
-    # Custom Action Samplers for Different Environments
-    # ================================================
+    # Setup environments
+    env_config = EnvironmentConfigsAPI(discount_factor=0.95, debug=False)
+    push_env, push_belief = env_config.push_pomdp_config(n_particles=1000)
+    light_dark_env, light_dark_belief = env_config.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=1000)
 
-    class PushPOMDPActionSampler(ActionSampler):
-        """Action sampler for Push POMDP with 2D continuous force vectors."""
+    # Create action samplers
+    push_action_sampler = UnitCircleActionSampler(max_action_magnitude=1.5)
+    light_dark_action_sampler = DiscreteActionSampler(actions=[0, 1, 2, 3])
 
-        def __init__(self, max_force: float = 1.0):
-            self.max_force = max_force
-
-        def sample(self, belief_node=None):
-            # Sample 2D force vector for pushing objects
-            angle = np.random.uniform(0, 2 * np.pi)
-            magnitude = np.random.uniform(0, self.max_force)
-            return np.array([
-                magnitude * np.cos(angle),
-                magnitude * np.sin(angle)
-            ])
-
-    class LightDarkPOMDPActionSampler(ActionSampler):
-        """Action sampler for Light-Dark POMDP with discrete movement actions."""
-
-        def __init__(self):
-            # Light-Dark POMDP typically uses discrete actions: North, South, East, West
-            self.actions = [0, 1, 2, 3]  # Discrete movement directions
-
-        def sample(self, belief_node=None):
-            return np.random.choice(self.actions)
-
-    # Environment Configuration
-    # ========================
-
-    def setup_environments_and_beliefs():
-        """Configure Push POMDP and Light-Dark POMDP environments with initial beliefs."""
-
-        print("Setting up environments...")
-
-        # Initialize environment configuration API
-        env_config = EnvironmentConfigsAPI(discount_factor=0.95, debug=False)
-
-        # Configure Push POMDP environment
-        push_env, push_belief = env_config.push_pomdp_config(n_particles=1000)
-        print(f"Push POMDP configured: {push_env.name}")
-        print(f"  - Action space: {push_env.space_info.action_space}")
-        print(f"  - Observation space: {push_env.space_info.observation_space}")
-
-        # Configure Light-Dark POMDP environment (discrete actions version)
-        light_dark_env, light_dark_belief = env_config.continuous_observations_discrete_actions_light_dark_pomdp_config(
-            n_particles=1000
+    # Configure planners for Push POMDP
+    push_planners = [
+        POMCPOW(
+            environment=push_env,
+            discount_factor=0.95,
+            depth=15,
+            exploration_constant=1.41,
+            k_o=3.0,
+            k_a=3.0,
+            alpha_o=0.5,
+            alpha_a=0.5,
+            action_sampler=push_action_sampler,
+            n_simulations=1000,
+            name="POMCPOW_Push"
+        ),
+        PFT_DPW(
+            environment=push_env,
+            discount_factor=0.95,
+            depth=15,
+            name="PFT_DPW_Push",
+            action_sampler=push_action_sampler,
+            k_a=2.0,
+            alpha_a=0.6,
+            k_o=1.5,
+            alpha_o=0.5,
+            exploration_constant=1.0,
+            n_simulations=1000
         )
-        print(f"Light-Dark POMDP configured: {light_dark_env.name}")
-        print(f"  - Goal state: {light_dark_env.goal_state}")
-        print(f"  - Start state: {light_dark_env.start_state}")
+    ]
 
-        return (push_env, push_belief), (light_dark_env, light_dark_belief)
-
-    # Planner Configuration
-    # ====================
-
-    def setup_planners(push_env, light_dark_env):
-        """Configure POMCPOW and PFT-DPW planners for both environments."""
-
-        print("\\nSetting up planners...")
-
-        # Create action samplers for each environment
-        push_action_sampler = PushPOMDPActionSampler(max_force=1.5)
-        light_dark_action_sampler = LightDarkPOMDPActionSampler()
-
-        # Configure planners for Push POMDP
-        push_planners = [
-            POMCPOW(
-                environment=push_env,
-                discount_factor=0.95,
-                depth=15,
-                exploration_constant=1.41,  # √2 for balanced exploration
-                k_o=3.0,                    # Observation progressive widening coefficient
-                k_a=3.0,                    # Action progressive widening coefficient
-                alpha_o=0.5,                # Observation progressive widening exponent
-                alpha_a=0.5,                # Action progressive widening exponent
-                action_sampler=push_action_sampler,
-                n_simulations=1000,
-                name="POMCPOW_Push"
-            ),
-            PFT_DPW(
-                environment=push_env,
-                discount_factor=0.95,
-                depth=15,
-                name="PFT_DPW_Push",
-                action_sampler=push_action_sampler,
-                k_a=2.0,                    # Action progressive widening coefficient
-                alpha_a=0.6,                # Faster action space expansion
-                k_o=1.5,                    # Observation progressive widening coefficient
-                alpha_o=0.5,                # Observation progressive widening exponent
-                exploration_constant=1.0,   # UCB1 exploration parameter
-                n_simulations=1000
-            )
-        ]
-
-        # Configure planners for Light-Dark POMDP
-        light_dark_planners = [
-            POMCPOW(
-                environment=light_dark_env,
-                discount_factor=0.95,
-                depth=20,
-                exploration_constant=2.0,   # Higher exploration for navigation
-                k_o=4.0,                    # More observation branches for complex navigation
-                k_a=2.0,                    # Conservative action expansion for discrete actions
-                alpha_o=0.6,                # Faster observation expansion
-                alpha_a=0.4,                # Slower action expansion (discrete space)
-                action_sampler=light_dark_action_sampler,
-                n_simulations=1500,
-                name="POMCPOW_LightDark"
-            ),
-            PFT_DPW(
-                environment=light_dark_env,
-                discount_factor=0.95,
-                depth=20,
-                name="PFT_DPW_LightDark",
-                action_sampler=light_dark_action_sampler,
-                k_a=1.5,                    # Conservative action expansion
-                alpha_a=0.4,                # Slower expansion for discrete actions
-                k_o=2.0,                    # Observation progressive widening
-                alpha_o=0.5,                # Standard observation expansion
-                exploration_constant=1.5,   # Moderate exploration
-                n_simulations=1500
-            )
-        ]
-
-        print(f"Configured {len(push_planners)} planners for Push POMDP")
-        print(f"Configured {len(light_dark_planners)} planners for Light-Dark POMDP")
-
-        return push_planners, light_dark_planners
-
-    # Simulation Configuration
-    # =======================
-
-    def create_simulation_configurations(environments_and_beliefs, planners):
-        """Create environment run parameters for the simulation study."""
-
-        (push_env, push_belief), (light_dark_env, light_dark_belief) = environments_and_beliefs
-        push_planners, light_dark_planners = planners
-
-        print("\\nCreating simulation configurations...")
-
-        # Configure simulation parameters for each environment
-        environment_run_params = [
-            # Push POMDP configuration
-            EnvironmentRunParams(
-                environment=push_env,
-                belief=push_belief,
-                policies=push_planners,
-                num_episodes=100,            # Number of episodes per policy
-                num_steps=30                 # Maximum steps per episode
-            ),
-
-            # Light-Dark POMDP configuration
-            EnvironmentRunParams(
-                environment=light_dark_env,
-                belief=light_dark_belief,
-                policies=light_dark_planners,
-                num_episodes=150,            # More episodes for navigation task
-                num_steps=25                 # Steps to reach goal
-            )
-        ]
-
-        total_configurations = sum(len(config.policies) for config in environment_run_params)
-        print(f"Created {len(environment_run_params)} environment configurations")
-        print(f"Total algorithm-environment combinations: {total_configurations}")
-
-        return environment_run_params
-
-    # Main Simulation Execution
-    # ========================
-
-    def run_planners_comparison_study():
-        """Execute the complete planners comparison study."""
-
-        print("=" * 60)
-        print("POMDP Planners Comparison Study")
-        print("Comparing POMCPOW vs PFT-DPW on Push and Light-Dark POMDPs")
-        print("=" * 60)
-
-        # Setup phase
-        environments_and_beliefs = setup_environments_and_beliefs()
-        push_env, light_dark_env = environments_and_beliefs[0][0], environments_and_beliefs[1][0]
-        planners = setup_planners(push_env, light_dark_env)
-        environment_run_params = create_simulation_configurations(environments_and_beliefs, planners)
-
-        # Initialize SimulationsAPI
-        print("\\nInitializing SimulationsAPI...")
-        api = SimulationsAPI(
-            cache_dir_path=Path("./planners_comparison_results"),
-            debug=True
+    # Configure planners for Light-Dark POMDP
+    light_dark_planners = [
+        POMCPOW(
+            environment=light_dark_env,
+            discount_factor=0.95,
+            depth=20,
+            exploration_constant=2.0,
+            k_o=4.0,
+            k_a=2.0,
+            alpha_o=0.6,
+            alpha_a=0.4,
+            action_sampler=light_dark_action_sampler,
+            n_simulations=1500,
+            name="POMCPOW_LightDark"
+        ),
+        PFT_DPW(
+            environment=light_dark_env,
+            discount_factor=0.95,
+            depth=20,
+            name="PFT_DPW_LightDark",
+            action_sampler=light_dark_action_sampler,
+            k_a=1.5,
+            alpha_a=0.4,
+            k_o=2.0,
+            alpha_o=0.5,
+            exploration_constant=1.5,
+            n_simulations=1500
         )
+    ]
 
-        # Execute simulation with debug validation
-        print("\\nStarting simulation with initial debug validation...")
-        print("This will run a quick validation followed by the full study...")
+    # Create simulation configurations
+    environment_run_params = [
+        EnvironmentRunParams(
+            environment=push_env,
+            belief=push_belief,
+            policies=push_planners,
+            num_episodes=100,
+            num_steps=30
+        ),
+        EnvironmentRunParams(
+            environment=light_dark_env,
+            belief=light_dark_belief,
+            policies=light_dark_planners,
+            num_episodes=150,
+            num_steps=25
+        )
+    ]
 
-        try:
-            results, statistics_df = api.run_multiple_environments_and_policies_local_run_with_initial_debug_run(
-                environment_run_params=environment_run_params,
-                alpha=0.05,                      # 95% confidence intervals
-                confidence_interval_level=0.95,
-                experiment_name="Planners_Comparison_Study",
-                n_jobs=-1,                       # Use all available CPU cores
-                enable_profiling=True            # Enable performance profiling
-            )
+    # Run simulation
+    api = SimulationsAPI(cache_dir_path=Path("./planners_comparison_results"), debug=True)
+    results, statistics_df = api.run_multiple_environments_and_policies_local_run_with_initial_debug_run(
+        environment_run_params=environment_run_params,
+        alpha=0.05,
+        confidence_interval_level=0.95,
+        experiment_name="Planners_Comparison_Study",
+        n_jobs=-1,
+        enable_profiling=True
+    )
 
-            print("\\n" + "=" * 60)
-            print("SIMULATION COMPLETED SUCCESSFULLY!")
-            print("=" * 60)
+    # Display results
+    print("\\nPERFORMANCE RESULTS:")
+    for env_name in statistics_df['environment'].unique():
+        env_results = statistics_df[statistics_df['environment'] == env_name]
+        print(f"\\n{env_name}:")
+        for _, row in env_results.iterrows():
+            print(f"  {row['policy']}: {row['average_return']:.3f} [{row['average_return_ci_lower']:.3f}, {row['average_return_ci_upper']:.3f}]")
 
-            return results, statistics_df
-
-        except Exception as e:
-            print(f"\\nSimulation failed with error: {e}")
-            print("Check the logs for detailed error information.")
-            raise
-
-    # Results Analysis
-    # ===============
-
-    def analyze_results(results, statistics_df):
-        """Analyze and display the simulation results."""
-
-        print("\\nANALYZING RESULTS...")
-        print("-" * 40)
-
-        # Display basic statistics
-        print(f"Total configurations tested: {len(statistics_df)}")
-        print(f"Environments: {', '.join(statistics_df['environment'].unique())}")
-        print(f"Planners: {', '.join(statistics_df['policy'].unique())}")
-
-        print("\\nDETAILED PERFORMANCE COMPARISON:")
-        print("-" * 40)
-
-        # Compare performance by environment
-        for env_name in statistics_df['environment'].unique():
-            env_results = statistics_df[statistics_df['environment'] == env_name]
-            print(f"\\n{env_name.upper()} RESULTS:")
-
-            for _, row in env_results.iterrows():
-                policy_name = row['policy']
-                avg_return = row['average_return']
-                ci_lower = row['average_return_ci_lower']
-                ci_upper = row['average_return_ci_upper']
-                std_return = row['std_return']
-                total_episodes = row['total_episodes']
-
-                print(f"  {policy_name}:")
-                print(f"    Average Return: {avg_return:.3f} [{ci_lower:.3f}, {ci_upper:.3f}]")
-                print(f"    Std Deviation: {std_return:.3f}")
-                print(f"    Episodes: {total_episodes}")
-
-        # Performance ranking
-        print("\\nPERFORMANCE RANKING BY ENVIRONMENT:")
-        print("-" * 40)
-
-        for env_name in statistics_df['environment'].unique():
-            env_results = statistics_df[statistics_df['environment'] == env_name]
-            ranked = env_results.sort_values('average_return', ascending=False)
-
-            print(f"\\n{env_name} - Best to Worst:")
-            for i, (_, row) in enumerate(ranked.iterrows(), 1):
-                print(f"  {i}. {row['policy']}: {row['average_return']:.3f}")
-
-        # Statistical significance analysis
-        print("\\nSTATISTICAL ANALYSIS:")
-        print("-" * 40)
-
-        for env_name in statistics_df['environment'].unique():
-            env_results = statistics_df[statistics_df['environment'] == env_name]
-            if len(env_results) >= 2:
-                best_policy = env_results.loc[env_results['average_return'].idxmax()]
-                worst_policy = env_results.loc[env_results['average_return'].idxmin()]
-
-                # Check if confidence intervals overlap
-                best_ci_lower = best_policy['average_return_ci_lower']
-                worst_ci_upper = worst_policy['average_return_ci_upper']
-
-                significant = best_ci_lower > worst_ci_upper
-                significance_text = "SIGNIFICANT" if significant else "not significant"
-
-                print(f"{env_name}: Performance difference is {significance_text}")
-                print(f"  Best: {best_policy['policy']} ({best_policy['average_return']:.3f})")
-                print(f"  Worst: {worst_policy['policy']} ({worst_policy['average_return']:.3f})")
-
-    # Visualization and Reporting
-    # ==========================
-
-    def generate_comparison_report(results, statistics_df):
-        """Generate a comprehensive comparison report."""
-
-        print("\\n" + "=" * 60)
-        print("COMPREHENSIVE COMPARISON REPORT")
-        print("=" * 60)
-
-        # Algorithm characteristics summary
-        print("\\nALGORITHM CHARACTERISTICS:")
-        print("-" * 30)
-        print("POMCPOW:")
-        print("  - Double progressive widening (actions + observations)")
-        print("  - Weighted particle belief updates")
-        print("  - UCB1-based action selection")
-        print("  - Suitable for mixed discrete/continuous spaces")
-
-        print("\\nPFT-DPW:")
-        print("  - Progressive Function Transfer")
-        print("  - Action and observation progressive widening")
-        print("  - Designed for continuous action spaces")
-        print("  - UCB1-style exploration with adaptive sampling")
-
-        # Environment characteristics
-        print("\\nENVIRONMENT CHARACTERISTICS:")
-        print("-" * 30)
-        print("Push POMDP:")
-        print("  - Continuous action space (2D force vectors)")
-        print("  - Object manipulation task")
-        print("  - Noisy observations")
-        print("  - Reward based on successful object pushing")
-
-        print("\\nLight-Dark POMDP:")
-        print("  - Discrete action space (4 directions)")
-        print("  - Navigation task with position-dependent noise")
-        print("  - Beacon-based observations")
-        print("  - Goal-reaching with obstacle avoidance")
-
-        # Key insights
-        print("\\nKEY INSIGHTS:")
-        print("-" * 15)
-
-        for env_name in statistics_df['environment'].unique():
-            env_results = statistics_df[statistics_df['environment'] == env_name]
-            best_performer = env_results.loc[env_results['average_return'].idxmax()]
-
-            print(f"\\n{env_name}:")
-            print(f"  Best performer: {best_performer['policy']}")
-            print(f"  Performance: {best_performer['average_return']:.3f}")
-
-            # Environment-specific insights
-            if "Push" in env_name:
-                print("  Analysis: Performance on continuous action manipulation task")
-            elif "LightDark" in env_name:
-                print("  Analysis: Performance on discrete navigation with noisy observations")
-
-        print("\\nRECOMMendations:")
-        print("-" * 15)
-        print("- For continuous action spaces: Consider the better-performing algorithm")
-        print("- For discrete action spaces: Evaluate based on computational constraints")
-        print("- For mixed environments: POMCPOW may offer better versatility")
-        print("- Consider problem-specific tuning of progressive widening parameters")
-
-    # Main Execution
-    # =============
-
-    if __name__ == "__main__":
-        try:
-            # Run the complete comparison study
-            results, statistics_df = run_planners_comparison_study()
-
-            # Analyze and report results
-            analyze_results(results, statistics_df)
-            generate_comparison_report(results, statistics_df)
-
-            print("\\n" + "=" * 60)
-            print("STUDY COMPLETE!")
-            print("Check './planners_comparison_results' for detailed logs and data")
-            print("MLflow tracking available for experiment details")
-            print("=" * 60)
-
-        except Exception as e:
-            print(f"\\nStudy failed: {e}")
-            print("Check logs for debugging information")
+    print("\\nStudy complete! Check './planners_comparison_results' for detailed logs.")
 
 Expected Output and Analysis
 ---------------------------
@@ -458,6 +191,21 @@ Customization Options
     # Use risk-averse environment configurations
     risk_averse_config = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95)
 
+**Action Sampler Customization:**
+.. code-block:: python
+
+    # Customize action samplers for different environments
+    from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler, DiscreteActionSampler
+    
+    # Conservative movement for delicate tasks
+    conservative_sampler = UnitCircleActionSampler(max_action_magnitude=0.5)
+    
+    # Aggressive movement for fast tasks
+    aggressive_sampler = UnitCircleActionSampler(max_action_magnitude=2.0)
+    
+    # Custom discrete actions
+    custom_discrete_sampler = DiscreteActionSampler(actions=[0, 1, 2, 3, 4, 5])
+
 **Planner Tuning:**
 .. code-block:: python
 
@@ -468,6 +216,7 @@ Customization Options
         k_a=1.5,        # Conservative action expansion
         alpha_o=0.7,    # Faster observation growth
         alpha_a=0.3,    # Slower action growth
+        action_sampler=conservative_sampler,  # Use customized sampler
         # ... other parameters
     )
 
