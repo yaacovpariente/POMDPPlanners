@@ -526,22 +526,24 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         max_observation_noise: Maximum noise standard deviation
 
     Example:
-        Basic usage::
-
-            # Create 7x7 maze with walls and pellets
-            walls = {(1, 1), (1, 2), (3, 3)}
-            pellets = [(0, 2), (2, 0), (4, 4)]
-            pomdp = PacManPOMDP(
-                maze_size=(7, 7),
-                walls=walls,
-                initial_pellets=pellets
-            )
-
-            # Sample initial state
-            initial_state = pomdp.initial_state_dist().sample()[0]
-
-            # Execute action
-            next_state, obs, reward = pomdp.sample_next_step(initial_state, 1)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Create 7x7 maze with walls and pellets
+        >>> walls = {(1, 1), (1, 2), (3, 3)}
+        >>> pellets = [(0, 2), (2, 0), (4, 4)]
+        >>> pomdp = PacManPOMDP(
+        ...     maze_size=(7, 7),
+        ...     walls=walls,
+        ...     initial_pellets=pellets
+        ... )
+        >>>
+        >>> # Sample initial state
+        >>> initial_state = pomdp.initial_state_dist().sample()[0]
+        >>> isinstance(initial_state, PacManState)
+        True
+        >>>
+        >>> # Execute action
+        >>> next_state, obs, reward = pomdp.sample_next_step(initial_state, 1)  # doctest: +SKIP
     """
 
     def __init__(
