@@ -1,11 +1,6 @@
 POMDPPlanners.tests package
 ===========================
 
-.. automodule:: POMDPPlanners.tests
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Subpackages
 -----------
 
@@ -22,18 +17,16 @@ Subpackages
 Submodules
 ----------
 
-POMDPPlanners.tests.conftest module
------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: POMDPPlanners.tests.conftest
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.tests.conftest
+   POMDPPlanners.tests.test_setup
 
-POMDPPlanners.tests.test\_setup module
---------------------------------------
+Module contents
+---------------
 
-.. automodule:: POMDPPlanners.tests.test_setup
+.. automodule:: POMDPPlanners.tests
    :members:
    :show-inheritance:
    :undoc-members:

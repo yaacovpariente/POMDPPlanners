@@ -1,11 +1,6 @@
 POMDPPlanners.tests.test\_planners package
 ==========================================
 
-.. automodule:: POMDPPlanners.tests.test_planners
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Subpackages
 -----------
 
@@ -19,10 +14,15 @@ Subpackages
 Submodules
 ----------
 
-POMDPPlanners.tests.test\_planners.test\_sparse\_sampling\_planner module
--------------------------------------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: POMDPPlanners.tests.test_planners.test_sparse_sampling_planner
+   POMDPPlanners.tests.test_planners.test_sparse_sampling_planner
+
+Module contents
+---------------
+
+.. automodule:: POMDPPlanners.tests.test_planners
    :members:
    :show-inheritance:
    :undoc-members:

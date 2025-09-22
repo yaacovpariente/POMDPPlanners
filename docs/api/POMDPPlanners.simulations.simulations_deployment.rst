@@ -1,11 +1,6 @@
 POMDPPlanners.simulations.simulations\_deployment package
 =========================================================
 
-.. automodule:: POMDPPlanners.simulations.simulations_deployment
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Subpackages
 -----------
 
@@ -17,26 +12,17 @@ Subpackages
 Submodules
 ----------
 
-POMDPPlanners.simulations.simulations\_deployment.cache\_dbs module
--------------------------------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: POMDPPlanners.simulations.simulations_deployment.cache_dbs
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.simulations.simulations_deployment.cache_dbs
+   POMDPPlanners.simulations.simulations_deployment.task_manager_configs
+   POMDPPlanners.simulations.simulations_deployment.task_managers
 
-POMDPPlanners.simulations.simulations\_deployment.task\_manager\_configs module
--------------------------------------------------------------------------------
+Module contents
+---------------
 
-.. automodule:: POMDPPlanners.simulations.simulations_deployment.task_manager_configs
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.simulations.simulations\_deployment.task\_managers module
------------------------------------------------------------------------
-
-.. automodule:: POMDPPlanners.simulations.simulations_deployment.task_managers
+.. automodule:: POMDPPlanners.simulations.simulations_deployment
    :members:
    :show-inheritance:
    :undoc-members:

@@ -1,26 +1,19 @@
 POMDPPlanners.tests.test\_planners.test\_planners\_utils package
 ================================================================
 
-.. automodule:: POMDPPlanners.tests.test_planners.test_planners_utils
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Submodules
 ----------
 
-POMDPPlanners.tests.test\_planners.test\_planners\_utils.test\_dpw module
--------------------------------------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.tests.test_planners.test_planners_utils.test_dpw
+   POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout
 
-POMDPPlanners.tests.test\_planners.test\_planners\_utils.test\_rollout module
------------------------------------------------------------------------------
+Module contents
+---------------
 
-.. automodule:: POMDPPlanners.tests.test_planners.test_planners_utils.test_rollout
+.. automodule:: POMDPPlanners.tests.test_planners.test_planners_utils
    :members:
    :show-inheritance:
    :undoc-members:

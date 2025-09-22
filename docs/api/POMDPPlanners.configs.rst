@@ -1,26 +1,19 @@
 POMDPPlanners.configs package
 =============================
 
-.. automodule:: POMDPPlanners.configs
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Submodules
 ----------
 
-POMDPPlanners.configs.environment\_configs module
--------------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: POMDPPlanners.configs.environment_configs
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.configs.environment_configs
+   POMDPPlanners.configs.planners_hyperparam_configs
 
-POMDPPlanners.configs.planners\_hyperparam\_configs module
-----------------------------------------------------------
+Module contents
+---------------
 
-.. automodule:: POMDPPlanners.configs.planners_hyperparam_configs
+.. automodule:: POMDPPlanners.configs
    :members:
    :show-inheritance:
    :undoc-members:

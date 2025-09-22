@@ -1,26 +1,19 @@
 POMDPPlanners.simulations.simulations\_deployment.tasks package
 ===============================================================
 
-.. automodule:: POMDPPlanners.simulations.simulations_deployment.tasks
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Submodules
 ----------
 
-POMDPPlanners.simulations.simulations\_deployment.tasks.episode\_simulation\_task module
-----------------------------------------------------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: POMDPPlanners.simulations.simulations_deployment.tasks.episode_simulation_task
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.simulations.simulations_deployment.tasks.episode_simulation_task
+   POMDPPlanners.simulations.simulations_deployment.tasks.hyper_parameter_tuning_simulation_task
 
-POMDPPlanners.simulations.simulations\_deployment.tasks.hyper\_parameter\_tuning\_simulation\_task module
----------------------------------------------------------------------------------------------------------
+Module contents
+---------------
 
-.. automodule:: POMDPPlanners.simulations.simulations_deployment.tasks.hyper_parameter_tuning_simulation_task
+.. automodule:: POMDPPlanners.simulations.simulations_deployment.tasks
    :members:
    :show-inheritance:
    :undoc-members:
