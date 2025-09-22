@@ -18,20 +18,21 @@ if TYPE_CHECKING:
     from POMDPPlanners.core.policy import Policy
     from POMDPPlanners.core.belief import Belief
 
+
 @dataclass
 class EnvironmentConfig:
     """Configuration specification for POMDP environments.
-    
+
     This data class standardizes how environment configurations are specified,
     enabling dynamic creation of environment instances from configuration files.
-    
+
     Attributes:
         class_name: Name of the environment class to instantiate
         params: Dictionary of parameters to pass to the environment constructor
-        
+
     Example:
         Creating environment configurations::
-        
+
             # Tiger POMDP configuration
             tiger_config = EnvironmentConfig(
                 class_name="TigerPOMDP",
@@ -42,30 +43,32 @@ class EnvironmentConfig:
                     "reward_incorrect": -100.0
                 }
             )
-            
+
             # Light-dark POMDP configuration
             lightdark_config = EnvironmentConfig(
                 class_name="ContinuousLightDarkPOMDP",
                 params={"discount_factor": 0.95, "light_loc": [5.0, 0.0]}
             )
     """
+
     class_name: str
     params: Dict[str, Any]
+
 
 @dataclass
 class PolicyConfig:
     """Configuration specification for POMDP policies.
-    
+
     This data class standardizes how policy configurations are specified,
     enabling dynamic creation of policy instances from configuration files.
-    
+
     Attributes:
         class_name: Name of the policy class to instantiate
         params: Dictionary of parameters to pass to the policy constructor
-        
+
     Example:
         Creating policy configurations::
-        
+
             # POMCP policy configuration
             pomcp_config = PolicyConfig(
                 class_name="POMCP",
@@ -75,38 +78,42 @@ class PolicyConfig:
                     "max_depth": 10
                 }
             )
-            
+
             # PFT-DPW policy configuration
             pft_config = PolicyConfig(
                 class_name="PFT_DPW",
                 params={"num_simulations": 500, "alpha": 0.5, "k": 10.0}
             )
     """
+
     class_name: str
     params: Dict[str, Any]
+
 
 @dataclass
 class BeliefConfig:
     """Configuration specification for belief representations.
-    
+
     This data class standardizes how belief configurations are specified,
     enabling dynamic creation of belief instances from configuration files.
-    
+
     Attributes:
         class_name: Name of the belief class to instantiate
         params: Dictionary of parameters to pass to the belief constructor
     """
+
     class_name: str
     params: Dict[str, Any]
+
 
 @dataclass
 class ExperimentConfig:
     """Complete experiment specification with all required components.
-    
+
     This data class aggregates all the components needed to run a POMDP
     experiment, including the environment, policies, belief representation,
     and execution parameters.
-    
+
     Attributes:
         environment: Configured environment instance
         policies: List of policy instances to evaluate
@@ -114,8 +121,9 @@ class ExperimentConfig:
         num_episodes: Number of episodes to run per policy
         num_steps: Maximum number of steps per episode
     """
-    environment: 'Environment'
-    policies: List['Policy']
-    belief: 'Belief'
+
+    environment: "Environment"
+    policies: List["Policy"]
+    belief: "Belief"
     num_episodes: int
-    num_steps: int 
+    num_steps: int

@@ -29,18 +29,18 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
     DiscreteActionsEnvironment,
     SpaceInfo,
-    SpaceType
+    SpaceType,
 )
 from POMDPPlanners.core.distributions import Distribution
 
 
 class CartPoleStateTransition(StateTransitionModel):
     """Physics-based state transition model for CartPole POMDP.
-    
+
     This model implements the classical cart-pole dynamics with deterministic
     physics simulation. The cart experiences forces that affect both cart
     acceleration and pole angular acceleration through coupled equations of motion.
-    
+
     Attributes:
         state: Current state [cart_position, cart_velocity, pole_angle, pole_velocity]
         action: Force direction (0 for left, 1 for right)
@@ -52,7 +52,7 @@ class CartPoleStateTransition(StateTransitionModel):
         kinematics_integrator: Integration method ("euler" or "semi-implicit euler")
         tau: Time step for integration
         masspole: Mass of the pole
-        
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -81,7 +81,7 @@ class CartPoleStateTransition(StateTransitionModel):
         >>> isinstance(next_state, np.ndarray)
         True
     """
-    
+
     def __init__(
         self,
         state: np.ndarray,
@@ -148,16 +148,16 @@ class CartPoleStateTransition(StateTransitionModel):
 
 class CartPoleObservation(ObservationModel):
     """Noisy observation model for CartPole POMDP.
-    
+
     This model adds Gaussian noise to the true state to create partial observability.
     The agent receives a noisy version of the full state vector, making it challenging
     to determine the exact cart-pole configuration.
-    
+
     Attributes:
         next_state: True state after action execution
         action: Action that was taken (not used in observation generation)
         noise_cov: Covariance matrix for observation noise
-        
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -187,7 +187,7 @@ class CartPoleObservation(ObservationModel):
         >>> len(prob) == 1
         True
     """
-    
+
     def __init__(self, next_state: np.ndarray, action: int, noise_cov: np.ndarray):
         super().__init__(next_state=next_state, action=action)
         self.noise_cov = noise_cov
@@ -202,17 +202,22 @@ class CartPoleObservation(ObservationModel):
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
         # Convert list of arrays to 2D numpy array for vectorized computation
         values_array = np.array(values)
-        return np.array([stats.multivariate_normal(self.next_state, self.noise_cov).pdf(value) for value in values_array])
+        return np.array(
+            [
+                stats.multivariate_normal(self.next_state, self.noise_cov).pdf(value)
+                for value in values_array
+            ]
+        )
 
 
 class CartPoleInitialStateDistribution(Distribution):
     """Initial state distribution for CartPole POMDP.
-    
+
     This distribution generates random initial states for the cart-pole system
     by sampling uniformly from a small range around the equilibrium position.
     All state variables (position, velocity, angle, angular velocity) are
     initialized close to zero with small random perturbations.
-    
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -238,7 +243,7 @@ class CartPoleInitialStateDistribution(Distribution):
         >>> isinstance(position, (int, float, np.floating))
         True
     """
-    
+
     def __init__(self):
         super().__init__()
 
@@ -250,18 +255,18 @@ class CartPoleInitialStateDistribution(Distribution):
 
 class CartPolePOMDP(DiscreteActionsEnvironment):
     """CartPole balancing task formulated as a POMDP.
-    
+
     This environment simulates the classic cart-pole balancing problem where an agent
     must apply left or right forces to keep a pole balanced on a moving cart.
     The challenge comes from noisy observations of the cart-pole state.
-    
+
     Problem Structure:
     - State: [cart_position, cart_velocity, pole_angle, pole_velocity] (continuous)
     - Actions: [left_force, right_force] (discrete)
     - Observations: Noisy state measurements (continuous)
     - Rewards: +1.0 per time step alive, 0.0 when terminated
     - Termination: Pole falls beyond angle threshold or cart moves too far
-    
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -294,15 +299,15 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         >>> len(actions) == 2  # left and right force
         True
     """
-    
+
     def __init__(
-        self, 
-        discount_factor: float, 
-        noise_cov: np.ndarray, 
-        name: str = "CartPolePOMDP", 
-        output_dir: Optional[Path] = None, 
-        debug: bool = False, 
-        use_queue_logger: bool = False
+        self,
+        discount_factor: float,
+        noise_cov: np.ndarray,
+        name: str = "CartPolePOMDP",
+        output_dir: Optional[Path] = None,
+        debug: bool = False,
+        use_queue_logger: bool = False,
     ):
         # Set all configuration parameters first
         self.noise_cov = noise_cov
@@ -326,17 +331,18 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         # Create space info
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,  # Binary action space
-            observation_space=SpaceType.CONTINUOUS  # Continuous state space
+            observation_space=SpaceType.CONTINUOUS,  # Continuous state space
         )
-        
+
         # Call parent's __init__ last, which will generate the config_id
         super().__init__(
-            discount_factor=discount_factor, 
-            name=name, space_info=space_info, 
-            reward_range=(0.0, 1.0), 
-            output_dir=output_dir, 
+            discount_factor=discount_factor,
+            name=name,
+            space_info=space_info,
+            reward_range=(0.0, 1.0),
+            output_dir=output_dir,
             debug=debug,
-            use_queue_logger=use_queue_logger
+            use_queue_logger=use_queue_logger,
         )
 
     def state_transition_model(
@@ -355,7 +361,9 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             masspole=self.masspole,
         )
 
-    def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
+    def observation_model(
+        self, next_state: np.ndarray, action: int
+    ) -> ObservationModel:
         return CartPoleObservation(
             next_state=next_state, action=action, noise_cov=self.noise_cov
         )
@@ -392,6 +400,8 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
 
     def get_actions(self) -> List[int]:
         return [0, 1]
-    
-    def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
+
+    def is_equal_observation(
+        self, observation1: np.ndarray, observation2: np.ndarray
+    ) -> bool:
         return np.array_equal(observation1, observation2)

@@ -483,7 +483,9 @@ class PBSTaskManager(DaskTaskManager):
         # Prepare scheduler options for dashboard configuration
         scheduler_options = {}
         if self.enable_dashboard:
-            scheduler_options["dashboard_address"] = f"{self.dashboard_address}:{self.dashboard_port}"
+            scheduler_options["dashboard_address"] = (
+                f"{self.dashboard_address}:{self.dashboard_port}"
+            )
             if self.dashboard_prefix:
                 scheduler_options["dashboard_prefix"] = self.dashboard_prefix
 
@@ -528,15 +530,19 @@ class PBSTaskManager(DaskTaskManager):
 
         try:
             # Try to get dashboard URL from client
-            if hasattr(self.client, 'dashboard_link'):
+            if hasattr(self.client, "dashboard_link"):
                 return self.client.dashboard_link
 
             # Fallback: construct URL from configuration
-            if self.cluster and hasattr(self.cluster, 'scheduler_address'):
+            if self.cluster and hasattr(self.cluster, "scheduler_address"):
                 scheduler_address = self.cluster.scheduler_address
                 if scheduler_address:
                     # Extract host from scheduler address
-                    host = scheduler_address.split(':')[0] if ':' in scheduler_address else scheduler_address
+                    host = (
+                        scheduler_address.split(":")[0]
+                        if ":" in scheduler_address
+                        else scheduler_address
+                    )
                     base_url = f"http://{host}:{self.dashboard_port}"
                     if self.dashboard_prefix:
                         return f"{base_url}/{self.dashboard_prefix.lstrip('/')}"

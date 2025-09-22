@@ -10,17 +10,24 @@ from unittest.mock import Mock
 
 from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
 from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
-    HyperParamPlannerConfig, 
-    get_fast_optimization_defaults
+    HyperParamPlannerConfig,
+    get_fast_optimization_defaults,
 )
-from POMDPPlanners.core.simulation import NumericalHyperParameter, CategoricalHyperParameter
+from POMDPPlanners.core.simulation import (
+    NumericalHyperParameter,
+    CategoricalHyperParameter,
+)
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
-from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+from POMDPPlanners.planners.sparse_sampling_planner import (
+    StandardSparseSamplingDiscreteActionsPlanner,
+)
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.mcts_planners.pomcp_dpw import POMCP_DPW
-from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import DiscreteActionSequencesPlanner
+from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import (
+    DiscreteActionSequencesPlanner,
+)
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
@@ -31,15 +38,17 @@ class TestPlannersHyperparamConfigs:
     def setup_method(self):
         """Set up test fixtures for each test method."""
         self.discount_factor = 0.95
-        self.config_api = PlannersHyperparamConfigs(discount_factor=self.discount_factor)
-        
+        self.config_api = PlannersHyperparamConfigs(
+            discount_factor=self.discount_factor
+        )
+
         # Create mock environment with reward range
         self.mock_env = Mock()
         self.mock_env.reward_range = (-10.0, 100.0)  # Example reward range
-        
+
         # Create mock action sampler
         self.mock_action_sampler = Mock(spec=ActionSampler)
-        
+
         self.planner_name = "TestPlanner"
 
     def test_initialization(self):
@@ -70,7 +79,7 @@ class TestPlannersHyperparamConfigs:
         config = self.config_api.pft_dpw_config(
             env=self.mock_env,
             action_sampler=self.mock_action_sampler,
-            name=self.planner_name
+            name=self.planner_name,
         )
 
         # Verify return type
@@ -80,7 +89,14 @@ class TestPlannersHyperparamConfigs:
         # Verify hyperparameters
         assert len(config.hyper_parameters) == 6
         param_names = [param.name for param in config.hyper_parameters]
-        expected_params = ["exploration_constant", "depth", "k_a", "alpha_a", "k_o", "alpha_o"]
+        expected_params = [
+            "exploration_constant",
+            "depth",
+            "k_a",
+            "alpha_a",
+            "k_o",
+            "alpha_o",
+        ]
         assert set(param_names) == set(expected_params)
 
         # Verify constant parameters
@@ -103,7 +119,7 @@ class TestPlannersHyperparamConfigs:
         config = self.config_api.pomcpow_config(
             env=self.mock_env,
             action_sampler=self.mock_action_sampler,
-            name=self.planner_name
+            name=self.planner_name,
         )
 
         assert isinstance(config, HyperParamPlannerConfig)
@@ -126,8 +142,7 @@ class TestPlannersHyperparamConfigs:
         Test type: unit
         """
         config = self.config_api.sparse_pft_config(
-            env=self.mock_env,
-            name=self.planner_name
+            env=self.mock_env, name=self.planner_name
         )
 
         assert isinstance(config, HyperParamPlannerConfig)
@@ -154,8 +169,7 @@ class TestPlannersHyperparamConfigs:
         Test type: unit
         """
         config = self.config_api.sparse_sampling_config(
-            env=self.mock_env,
-            name=self.planner_name
+            env=self.mock_env, name=self.planner_name
         )
 
         assert isinstance(config, HyperParamPlannerConfig)
@@ -183,10 +197,7 @@ class TestPlannersHyperparamConfigs:
 
         Test type: unit
         """
-        config = self.config_api.pomcp_config(
-            env=self.mock_env,
-            name=self.planner_name
-        )
+        config = self.config_api.pomcp_config(env=self.mock_env, name=self.planner_name)
 
         assert isinstance(config, HyperParamPlannerConfig)
         assert config.policy_cls == POMCP
@@ -208,7 +219,7 @@ class TestPlannersHyperparamConfigs:
         config = self.config_api.pomcp_dpw_config(
             env=self.mock_env,
             action_sampler=self.mock_action_sampler,
-            name=self.planner_name
+            name=self.planner_name,
         )
 
         assert isinstance(config, HyperParamPlannerConfig)
@@ -226,8 +237,7 @@ class TestPlannersHyperparamConfigs:
         Test type: unit
         """
         config = self.config_api.discrete_action_sequences_config(
-            env=self.mock_env,
-            name=self.planner_name
+            env=self.mock_env, name=self.planner_name
         )
 
         assert isinstance(config, HyperParamPlannerConfig)
@@ -244,7 +254,6 @@ class TestPlannersHyperparamConfigs:
         assert param_dict["n_return_samples"].low == 10
         assert param_dict["n_return_samples"].high == 500
 
-
     def test_all_configs_return_hyperparamplannerconfig(self):
         """Test that all configuration methods return HyperParamPlannerConfig instances.
 
@@ -257,20 +266,28 @@ class TestPlannersHyperparamConfigs:
         Test type: unit
         """
         configs = [
-            self.config_api.pft_dpw_config(self.mock_env, self.mock_action_sampler, "PFT_DPW"),
-            self.config_api.pomcpow_config(self.mock_env, self.mock_action_sampler, "POMCPOW"),
+            self.config_api.pft_dpw_config(
+                self.mock_env, self.mock_action_sampler, "PFT_DPW"
+            ),
+            self.config_api.pomcpow_config(
+                self.mock_env, self.mock_action_sampler, "POMCPOW"
+            ),
             self.config_api.sparse_pft_config(self.mock_env, "SparsePFT"),
             self.config_api.sparse_sampling_config(self.mock_env, "SparseSampling"),
             self.config_api.pomcp_config(self.mock_env, "POMCP"),
-            self.config_api.pomcp_dpw_config(self.mock_env, self.mock_action_sampler, "POMCP_DPW"),
-            self.config_api.discrete_action_sequences_config(self.mock_env, "DiscreteSequences")
+            self.config_api.pomcp_dpw_config(
+                self.mock_env, self.mock_action_sampler, "POMCP_DPW"
+            ),
+            self.config_api.discrete_action_sequences_config(
+                self.mock_env, "DiscreteSequences"
+            ),
         ]
 
         for config in configs:
             assert isinstance(config, HyperParamPlannerConfig)
-            assert hasattr(config, 'policy_cls')
-            assert hasattr(config, 'hyper_parameters')
-            assert hasattr(config, 'constant_parameters')
+            assert hasattr(config, "policy_cls")
+            assert hasattr(config, "hyper_parameters")
+            assert hasattr(config, "constant_parameters")
 
     def test_hyperparameter_names_uniqueness(self):
         """Test that hyperparameter names are unique within each configuration.
@@ -284,18 +301,28 @@ class TestPlannersHyperparamConfigs:
         Test type: unit
         """
         configs = [
-            self.config_api.pft_dpw_config(self.mock_env, self.mock_action_sampler, "PFT_DPW"),
-            self.config_api.pomcpow_config(self.mock_env, self.mock_action_sampler, "POMCPOW"),
+            self.config_api.pft_dpw_config(
+                self.mock_env, self.mock_action_sampler, "PFT_DPW"
+            ),
+            self.config_api.pomcpow_config(
+                self.mock_env, self.mock_action_sampler, "POMCPOW"
+            ),
             self.config_api.sparse_pft_config(self.mock_env, "SparsePFT"),
             self.config_api.sparse_sampling_config(self.mock_env, "SparseSampling"),
             self.config_api.pomcp_config(self.mock_env, "POMCP"),
-            self.config_api.pomcp_dpw_config(self.mock_env, self.mock_action_sampler, "POMCP_DPW"),
-            self.config_api.discrete_action_sequences_config(self.mock_env, "DiscreteSequences")
+            self.config_api.pomcp_dpw_config(
+                self.mock_env, self.mock_action_sampler, "POMCP_DPW"
+            ),
+            self.config_api.discrete_action_sequences_config(
+                self.mock_env, "DiscreteSequences"
+            ),
         ]
 
         for config in configs:
             param_names = [param.name for param in config.hyper_parameters]
-            assert len(param_names) == len(set(param_names)), f"Duplicate parameter names in {config.policy_cls.__name__}"
+            assert len(param_names) == len(
+                set(param_names)
+            ), f"Duplicate parameter names in {config.policy_cls.__name__}"
 
     def test_constant_parameters_include_required_fields(self):
         """Test that constant parameters include all required fields.
@@ -330,8 +357,10 @@ class TestPlannersHyperparamConfigs:
         zero_range_env.reward_range = (0.0, 0.0)  # Zero range
 
         config = self.config_api.pomcp_config(zero_range_env, "ZeroRange")
-        exploration_param = next(p for p in config.hyper_parameters if p.name == "exploration_constant")
-        
+        exploration_param = next(
+            p for p in config.hyper_parameters if p.name == "exploration_constant"
+        )
+
         # Should handle zero range gracefully (exploration constant max should be 0)
         assert exploration_param.high == 0.0
         assert exploration_param.low == 0.0
@@ -351,8 +380,10 @@ class TestPlannersHyperparamConfigs:
         negative_env.reward_range = (-50.0, -10.0)  # Range of 40
 
         config = self.config_api.pomcp_config(negative_env, "Negative")
-        exploration_param = next(p for p in config.hyper_parameters if p.name == "exploration_constant")
-        
+        exploration_param = next(
+            p for p in config.hyper_parameters if p.name == "exploration_constant"
+        )
+
         # Should use absolute difference: (-10.0 - (-50.0)) * max_depth_for_tuning = 40 * 10 = 400
         expected_max = 40.0 * 10
         assert exploration_param.high == expected_max
@@ -370,10 +401,10 @@ class TestPlannersHyperparamConfigs:
         """
         # Create a real environment for testing
         env = TigerPOMDP(discount_factor=0.95, name="TestTiger")
-        
+
         # Create POMCP configuration using the config API
         pomcp_config = self.config_api.pomcp_config(env, "TestPOMCP")
-        
+
         # Verify configuration was created successfully
         assert pomcp_config is not None
         assert pomcp_config.policy_cls == POMCP
@@ -393,10 +424,10 @@ class TestPlannersHyperparamConfigs:
         """
         # Create a real environment for testing
         env = TigerPOMDP(discount_factor=0.95, name="TestTiger")
-        
+
         # Create SparsePFT configuration using the config API
         sparse_pft_config = self.config_api.sparse_pft_config(env, "TestSparsePFT")
-        
+
         # Verify configuration was created successfully
         assert sparse_pft_config is not None
         assert sparse_pft_config.policy_cls == SparsePFT
@@ -416,22 +447,22 @@ class TestPlannersHyperparamConfigs:
         """
         # Create a real environment for testing
         env = TigerPOMDP(discount_factor=0.95, name="TestTiger")
-        
+
         # Create multiple configurations
         pomcp_config = self.config_api.pomcp_config(env, "TestPOMCP")
         sparse_pft_config = self.config_api.sparse_pft_config(env, "TestSparsePFT")
-        
+
         planner_configs = [pomcp_config, sparse_pft_config]
-        
+
         # Verify all configurations were created successfully
         assert len(planner_configs) == 2
-        
+
         # Verify POMCP configuration
         assert pomcp_config is not None
         assert pomcp_config.policy_cls == POMCP
         assert pomcp_config.constant_parameters["environment"] == env
         assert pomcp_config.constant_parameters["name"] == "TestPOMCP"
-        
+
         # Verify SparsePFT configuration
         assert sparse_pft_config is not None
         assert sparse_pft_config.policy_cls == SparsePFT
@@ -451,19 +482,19 @@ class TestPlannersHyperparamConfigs:
         """
         # Create a real environment for testing
         env = TigerPOMDP(discount_factor=0.95, name="TestTiger")
-        
+
         # Create POMCP configuration
         pomcp_config = self.config_api.pomcp_config(env, "TestPOMCPFast")
-        
+
         # Get fast optimization defaults
         fast_defaults = get_fast_optimization_defaults()
-        
+
         # Verify configuration was created successfully
         assert pomcp_config is not None
         assert pomcp_config.policy_cls == POMCP
         assert pomcp_config.constant_parameters["environment"] == env
         assert pomcp_config.constant_parameters["name"] == "TestPOMCPFast"
-        
+
         # Verify fast defaults were created successfully
         assert fast_defaults is not None
         assert isinstance(fast_defaults, dict)

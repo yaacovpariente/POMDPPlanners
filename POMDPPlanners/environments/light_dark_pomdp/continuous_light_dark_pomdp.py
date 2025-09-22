@@ -35,39 +35,50 @@ import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 from scipy.stats import multivariate_normal
 
-from POMDPPlanners.core.environment import DiscreteActionsEnvironment, ObservationModel, SpaceInfo, SpaceType
+from POMDPPlanners.core.environment import (
+    DiscreteActionsEnvironment,
+    ObservationModel,
+    SpaceInfo,
+    SpaceType,
+)
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.utils.statistics import confidence_interval
 from POMDPPlanners.core.belief import Belief
 
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import BaseLightDarkPOMDP
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import ContinuousLightDarkNormalNoiseObservationModel
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
+    BaseLightDarkPOMDP,
+)
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
+    ContinuousLightDarkNormalNoiseObservationModel,
+)
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
     ContinuousLightDarkRewardModel,
     ContinuousLightDarkDecayingHitProbabilityRewardModel,
-    ContinuousLDDangerousStatesRewardModel
+    ContinuousLDDangerousStatesRewardModel,
 )
+
 
 class RewardModelType(Enum):
     STANDARD = "standard"
     DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
     DANGEROUS_STATES = "dangerous_states"
 
+
 class StateTransitionModel(Distribution):
     """State transition model for Continuous Light-Dark POMDP.
-    
+
     This model implements continuous movement in 2D space with Gaussian noise.
     The agent's next position is determined by adding the action vector to the
     current position, with additional Gaussian noise to model uncertainty.
-    
+
     Attributes:
         state: Current 2D position [x, y]
         action: Movement vector [dx, dy]
         state_transition_cov_matrix: Covariance matrix for transition noise
         mean: Expected next position (state + action)
-        
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -92,46 +103,51 @@ class StateTransitionModel(Distribution):
         >>> # Calculate probability of specific next position
         >>> prob = transition.probability([next_position])  # doctest: +SKIP
     """
-    
-    def __init__(self, state: np.ndarray, action: np.ndarray, state_transition_cov_matrix: np.ndarray):
+
+    def __init__(
+        self,
+        state: np.ndarray,
+        action: np.ndarray,
+        state_transition_cov_matrix: np.ndarray,
+    ):
         self.state = state
         self.action = action
         self.state_transition_cov_matrix = state_transition_cov_matrix
         self.mean = state + action
-        
+
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
         # Vectorized sampling: generate all samples at once
         samples = np.random.multivariate_normal(
-            mean=self.mean,
-            cov=self.state_transition_cov_matrix,
-            size=n_samples
+            mean=self.mean, cov=self.state_transition_cov_matrix, size=n_samples
         )
-        
+
         # Convert to list of arrays
         return [sample for sample in samples]
-    
+
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
         # Convert list to numpy array for vectorized computation
         values_array = np.array(values)
-        
+
         # Use scipy's built-in multivariate normal PDF
-        return multivariate_normal.pdf(values_array, mean=self.mean, cov=self.state_transition_cov_matrix)
-        
+        return multivariate_normal.pdf(
+            values_array, mean=self.mean, cov=self.state_transition_cov_matrix
+        )
+
 
 class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     """Continuous Light-Dark POMDP environment with continuous actions.
-    
+
     This environment extends the base Light-Dark problem to continuous 2D space
     with continuous action vectors. The agent navigates toward a goal while
     dealing with position-dependent observation noise and optional obstacles.
-    
+
     Key features:
     - Continuous 2D state and action spaces
-    - Light beacons reduce observation noise when nearby  
+    - Light beacons reduce observation noise when nearby
     - Multiple reward models available (standard, decaying hit probability, dangerous states)
     - Optional obstacles with configurable hit penalties
     - Terminal conditions for goal reaching, obstacle hits, and boundary violations
-    
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -156,14 +172,24 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         >>> # Check termination
         >>> is_done = env.is_terminal(state)  # doctest: +SKIP
     """
-    
+
     def __init__(
-        self, 
-        discount_factor: float, 
+        self,
+        discount_factor: float,
         name: str = "ContinuousLightDarkPOMDP",
         state_transition_cov_matrix: np.ndarray = np.eye(2),
         observation_cov_matrix: np.ndarray = np.eye(2),
-        beacons: List[Tuple[float, float]] = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)],
+        beacons: List[Tuple[float, float]] = [
+            (0, 0),
+            (0, 5),
+            (0, 10),
+            (5, 0),
+            (5, 5),
+            (5, 10),
+            (10, 0),
+            (10, 5),
+            (10, 10),
+        ],
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
         obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
@@ -180,13 +206,12 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         is_obstacle_hit_terminal: bool = True,
     ):
         space_info = SpaceInfo(
-            action_space=SpaceType.CONTINUOUS,
-            observation_space=SpaceType.CONTINUOUS
+            action_space=SpaceType.CONTINUOUS, observation_space=SpaceType.CONTINUOUS
         )
         # Calculate reward range based on reward model type
         # Maximum distance to goal is diagonal of grid: sqrt(2) * grid_size
         max_distance_to_goal = np.sqrt(2) * grid_size
-        
+
         if reward_model_type == RewardModelType.STANDARD:
             # Min: -fuel_cost - max_distance + obstacle_reward (always negative)
             # Max: -fuel_cost - 0 + goal_reward (at goal)
@@ -207,9 +232,9 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             # Default fallback
             min_reward = -fuel_cost - max_distance_to_goal + obstacle_reward
             max_reward = -fuel_cost + goal_reward
-            
+
         calculated_reward_range = (min_reward, max_reward)
-        
+
         super().__init__(
             discount_factor=discount_factor,
             name=name,
@@ -227,7 +252,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             fuel_cost=fuel_cost,
             grid_size=grid_size,
         )
-        
+
         self.__type_check(
             state_transition_cov_matrix=state_transition_cov_matrix,
             observation_cov_matrix=observation_cov_matrix,
@@ -235,14 +260,14 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             beacon_radius=beacon_radius,
             obstacle_radius=obstacle_radius,
         )
-        
+
         self.state_transition_cov_matrix = state_transition_cov_matrix
         self.observation_cov_matrix = observation_cov_matrix
         self.goal_state_radius = goal_state_radius
         self.beacon_radius = beacon_radius
         self.penalty_decay = penalty_decay
         self.is_obstacle_hit_terminal = is_obstacle_hit_terminal
-        
+
         # Initialize reward model based on type
         if reward_model_type == RewardModelType.STANDARD:
             self.reward_model = ContinuousLightDarkRewardModel(
@@ -302,32 +327,36 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             raise ValueError("beacon_radius must be greater than 0")
         if obstacle_radius <= 0:
             raise ValueError("obstacle_radius must be greater than 0")
-    
-    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> Distribution:
+
+    def state_transition_model(
+        self, state: np.ndarray, action: np.ndarray
+    ) -> Distribution:
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
         if action.shape != (2,):
             raise ValueError("action must be a 2D vector")
-        
+
         return StateTransitionModel(
             state=state,
             action=action,
-            state_transition_cov_matrix=self.state_transition_cov_matrix
+            state_transition_cov_matrix=self.state_transition_cov_matrix,
         )
 
-    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> Distribution:
+    def observation_model(
+        self, next_state: np.ndarray, action: np.ndarray
+    ) -> Distribution:
         if next_state.shape != (2,):
             raise ValueError("next_state must be a 2D vector")
         if action.shape != (2,):
             raise ValueError("action must be a 2D vector")
-        
+
         return ContinuousLightDarkNormalNoiseObservationModel(
             next_state=next_state,
             action=action,
             observation_cov_matrix=self.observation_cov_matrix,
             grid_size=self.grid_size,
             beacons=self.beacons,
-            beacon_radius=self.beacon_radius
+            beacon_radius=self.beacon_radius,
         )
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
@@ -337,7 +366,9 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
 
-        is_goal_state = np.linalg.norm(state - self.goal_state) <= self.goal_state_radius
+        is_goal_state = (
+            np.linalg.norm(state - self.goal_state) <= self.goal_state_radius
+        )
 
         if self.is_obstacle_hit_terminal:
             # Calculate distance to each obstacle (obstacles are 2xN format)
@@ -360,18 +391,23 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             goal_reached_in_history = False
             obstacle_hit_in_history = False
             obstacle_hit_counter_in_history = 0
-            
+
             for i, step in enumerate(history.history):
-                if np.linalg.norm(step.state - self.goal_state) <= self.goal_state_radius:
+                if (
+                    np.linalg.norm(step.state - self.goal_state)
+                    <= self.goal_state_radius
+                ):
                     goal_reached_in_history = True
                     break
-                
+
                 # Calculate distance to each obstacle (obstacles are 2xN format)
-                distances = np.linalg.norm(step.state.reshape(-1, 1) - self.obstacles, axis=0)
+                distances = np.linalg.norm(
+                    step.state.reshape(-1, 1) - self.obstacles, axis=0
+                )
                 if np.any(distances <= self.obstacle_radius):
                     obstacle_hit_in_history = True
                     obstacle_hit_counter_in_history += 1
-            
+
             goal_reached.append(1 if goal_reached_in_history else 0)
             obstacle_hits.append(1 if obstacle_hit_in_history else 0)
             obstacle_hit_counter.append(obstacle_hit_counter_in_history)
@@ -381,7 +417,9 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         avg_obstacle_hit_counter = np.mean(obstacle_hit_counter)
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
         obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)
-        obstacle_hit_counter_ci = confidence_interval(data=obstacle_hit_counter, confidence=0.95)
+        obstacle_hit_counter_ci = confidence_interval(
+            data=obstacle_hit_counter, confidence=0.95
+        )
 
         return [
             MetricValue(
@@ -401,37 +439,42 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 value=avg_obstacle_hit_counter,
                 lower_confidence_bound=obstacle_hit_counter_ci[0],
                 upper_confidence_bound=obstacle_hit_counter_ci[1],
-            )
+            ),
         ]
 
     def __eq__(self, other):
         if not isinstance(other, ContinuousLightDarkPOMDP):
             return False
-        
+
         if not super().__eq__(other):
             return False
-        
+
         return (
-            np.array_equal(self.state_transition_cov_matrix, other.state_transition_cov_matrix) and
-            np.array_equal(self.observation_cov_matrix, other.observation_cov_matrix) and
-            self.goal_state_radius == other.goal_state_radius and
-            self.beacon_radius == other.beacon_radius and
-            self.obstacle_radius == other.obstacle_radius
+            np.array_equal(
+                self.state_transition_cov_matrix, other.state_transition_cov_matrix
+            )
+            and np.array_equal(
+                self.observation_cov_matrix, other.observation_cov_matrix
+            )
+            and self.goal_state_radius == other.goal_state_radius
+            and self.beacon_radius == other.beacon_radius
+            and self.obstacle_radius == other.obstacle_radius
         )
+
 
 class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
     """Continuous Light-Dark POMDP environment with discrete actions.
-    
+
     This variant of the Continuous Light-Dark POMDP uses discrete directional actions
     (up, down, left, right) instead of continuous action vectors. The continuous
     state space and observation model are preserved.
-    
+
     Actions are mapped to unit vectors:
     - "up": [0, 1]
-    - "down": [0, -1]  
+    - "down": [0, -1]
     - "right": [1, 0]
     - "left": [-1, 0]
-    
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -452,7 +495,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
         >>> state = env.start_state
         >>> reward = env.reward(state, action)  # doctest: +SKIP
     """
-    
+
     def __init__(
         self,
         discount_factor: float,
@@ -467,7 +510,17 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
         beacon_radius: float = 1.0,
         obstacle_radius: float = 1.5,
         name: str = "ContinuousLightDarkPOMDPDiscreteActions",
-        beacons: List[Tuple[float, float]] = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)],
+        beacons: List[Tuple[float, float]] = [
+            (0, 0),
+            (0, 5),
+            (0, 10),
+            (5, 0),
+            (5, 5),
+            (5, 10),
+            (10, 0),
+            (10, 5),
+            (10, 10),
+        ],
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
         obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
@@ -499,10 +552,9 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
 
         # Override space info
         self.space_info = SpaceInfo(
-            action_space=SpaceType.DISCRETE,
-            observation_space=SpaceType.CONTINUOUS
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.CONTINUOUS
         )
-        
+
         self.actions = ["up", "down", "right", "left"]
         self.action_to_vector = {
             "up": np.array([0, 1]),
@@ -531,22 +583,29 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
             return False
         # Compare only configuration parameters, ignoring internal objects like reward_model
         return (
-            self.discount_factor == other.discount_factor and
-            np.array_equal(self.state_transition_cov_matrix, other.state_transition_cov_matrix) and
-            np.array_equal(self.observation_cov_matrix, other.observation_cov_matrix) and
-            np.array_equal(self.beacons, other.beacons) and
-            np.array_equal(self.goal_state, other.goal_state) and
-            np.array_equal(self.start_state, other.start_state) and
-            np.array_equal(self.obstacles, other.obstacles) and
-            self.obstacle_hit_probability == other.obstacle_hit_probability and
-            self.obstacle_reward == other.obstacle_reward and
-            self.goal_reward == other.goal_reward and
-            self.fuel_cost == other.fuel_cost and
-            self.grid_size == other.grid_size and
-            self.goal_state_radius == other.goal_state_radius and
-            self.beacon_radius == other.beacon_radius and
-            self.obstacle_radius == other.obstacle_radius and
-            self.penalty_decay == other.penalty_decay and
-            self.actions == other.actions and
-            all(np.array_equal(self.action_to_vector[k], other.action_to_vector[k]) for k in self.action_to_vector)
+            self.discount_factor == other.discount_factor
+            and np.array_equal(
+                self.state_transition_cov_matrix, other.state_transition_cov_matrix
+            )
+            and np.array_equal(
+                self.observation_cov_matrix, other.observation_cov_matrix
+            )
+            and np.array_equal(self.beacons, other.beacons)
+            and np.array_equal(self.goal_state, other.goal_state)
+            and np.array_equal(self.start_state, other.start_state)
+            and np.array_equal(self.obstacles, other.obstacles)
+            and self.obstacle_hit_probability == other.obstacle_hit_probability
+            and self.obstacle_reward == other.obstacle_reward
+            and self.goal_reward == other.goal_reward
+            and self.fuel_cost == other.fuel_cost
+            and self.grid_size == other.grid_size
+            and self.goal_state_radius == other.goal_state_radius
+            and self.beacon_radius == other.beacon_radius
+            and self.obstacle_radius == other.obstacle_radius
+            and self.penalty_decay == other.penalty_decay
+            and self.actions == other.actions
+            and all(
+                np.array_equal(self.action_to_vector[k], other.action_to_vector[k])
+                for k in self.action_to_vector
+            )
         )

@@ -304,12 +304,14 @@ class TestPBSConfig:
             queue="batch",
             enable_dashboard=False,
             dashboard_port=9999,
-            dashboard_address="10.0.0.1"
+            dashboard_address="10.0.0.1",
         )
 
         assert config.enable_dashboard is False
         assert config.dashboard_port == 9999  # Should still store the parameter
-        assert config.dashboard_address == "10.0.0.1"  # Should still store the parameter
+        assert (
+            config.dashboard_address == "10.0.0.1"
+        )  # Should still store the parameter
 
     def test_pbs_config_dashboard_parameter_validation(self):
         """Test PBSConfig accepts various dashboard parameter values.

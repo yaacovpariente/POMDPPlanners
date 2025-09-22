@@ -120,8 +120,8 @@ def sample_hyperparameter_run_params(tiger_environment, pomcp_policy):
                 "name": "OptimizedPOMCP",
             },
             num_episodes=2,  # Small number for testing
-            num_steps=5,     # Small number for testing
-            n_trials=3,      # Small number for testing
+            num_steps=5,  # Small number for testing
+            n_trials=3,  # Small number for testing
             direction=HyperParameterOptimizationDirection.MAXIMIZE,
             parameter_to_optimize="average_return",
         )
@@ -139,7 +139,7 @@ def mock_optimized_policy_result(tiger_environment):
         name="OptimizedPOMCP",
         n_simulations=150,
     )
-    
+
     return OptimizedPolicyResult(
         policy=optimized_policy,
         environment=tiger_environment,
@@ -585,12 +585,20 @@ class TestSimulationsAPI:
         task_manager_config = call_args[1]["task_manager_config"]
 
         assert task_manager_config.enable_dashboard is False
-        assert task_manager_config.dashboard_port == 8888  # Should still store the parameter
-        assert task_manager_config.dashboard_address == "127.0.0.1"  # Should still store the parameter
+        assert (
+            task_manager_config.dashboard_port == 8888
+        )  # Should still store the parameter
+        assert (
+            task_manager_config.dashboard_address == "127.0.0.1"
+        )  # Should still store the parameter
 
     @patch("POMDPPlanners.simulations.simulations_api.HyperParameterOptimizer")
     def test_run_hyperparameter_optimization_success(
-        self, mock_optimizer_class, temp_cache_dir, sample_hyperparameter_run_params, mock_optimized_policy_result
+        self,
+        mock_optimizer_class,
+        temp_cache_dir,
+        sample_hyperparameter_run_params,
+        mock_optimized_policy_result,
     ):
         """Test successful execution of run_hyperparameter_optimization.
 
@@ -629,7 +637,9 @@ class TestSimulationsAPI:
         assert call_args[1]["use_queue_logger"] is False
 
         # Verify optimizer.optimize was called with correct parameters
-        mock_optimizer_instance.optimize.assert_called_once_with(sample_hyperparameter_run_params)
+        mock_optimizer_instance.optimize.assert_called_once_with(
+            sample_hyperparameter_run_params
+        )
 
         # Verify results
         assert isinstance(results, list)
@@ -645,7 +655,11 @@ class TestSimulationsAPI:
 
     @patch("POMDPPlanners.simulations.simulations_api.HyperParameterOptimizer")
     def test_run_hyperparameter_optimization_default_parameters(
-        self, mock_optimizer_class, temp_cache_dir, sample_hyperparameter_run_params, mock_optimized_policy_result
+        self,
+        mock_optimizer_class,
+        temp_cache_dir,
+        sample_hyperparameter_run_params,
+        mock_optimized_policy_result,
     ):
         """Test hyperparameter optimization with default parameters.
 
@@ -671,7 +685,9 @@ class TestSimulationsAPI:
         # Verify default parameters
         call_args = mock_optimizer_class.call_args
 
-        assert call_args[1]["experiment_name"] == "POMDP_Hyperparameter_Optimization"  # Default
+        assert (
+            call_args[1]["experiment_name"] == "POMDP_Hyperparameter_Optimization"
+        )  # Default
         assert call_args[1]["n_jobs"] == -1  # Default
         assert call_args[1]["confidence_interval_level"] == 0.95  # Default
         assert call_args[1]["alpha"] == 0.05  # Default
@@ -686,7 +702,11 @@ class TestSimulationsAPI:
 
     @patch("POMDPPlanners.simulations.simulations_api.HyperParameterOptimizer")
     def test_run_hyperparameter_optimization_custom_cache_dir(
-        self, mock_optimizer_class, temp_cache_dir, sample_hyperparameter_run_params, mock_optimized_policy_result
+        self,
+        mock_optimizer_class,
+        temp_cache_dir,
+        sample_hyperparameter_run_params,
+        mock_optimized_policy_result,
     ):
         """Test hyperparameter optimization with custom cache directory.
 
@@ -720,7 +740,11 @@ class TestSimulationsAPI:
 
     @patch("POMDPPlanners.simulations.simulations_api.HyperParameterOptimizer")
     def test_run_hyperparameter_optimization_multiple_configurations(
-        self, mock_optimizer_class, temp_cache_dir, sample_hyperparameter_run_params, mock_optimized_policy_result
+        self,
+        mock_optimizer_class,
+        temp_cache_dir,
+        sample_hyperparameter_run_params,
+        mock_optimized_policy_result,
     ):
         """Test hyperparameter optimization with multiple configurations.
 
@@ -735,7 +759,7 @@ class TestSimulationsAPI:
         # Create multiple configurations
         tiger_env = TigerPOMDP(discount_factor=0.95, name="test_tiger")
         initial_belief = get_initial_belief(tiger_env, n_particles=100)
-        
+
         multiple_configs = [
             HyperParameterRunParams(
                 environment=tiger_env,
@@ -771,7 +795,14 @@ class TestSimulationsAPI:
 
         # Create mock results for multiple configurations
         mock_result_1 = OptimizedPolicyResult(
-            policy=POMCP(environment=tiger_env, discount_factor=0.95, depth=10, exploration_constant=1.0, name="POMCP_Config1", n_simulations=100),
+            policy=POMCP(
+                environment=tiger_env,
+                discount_factor=0.95,
+                depth=10,
+                exploration_constant=1.0,
+                name="POMCP_Config1",
+                n_simulations=100,
+            ),
             environment=tiger_env,
             chosen_hyper_parameters={"exploration_constant": 1.0, "n_simulations": 100},
             num_episodes=2,
@@ -779,9 +810,16 @@ class TestSimulationsAPI:
             direction=HyperParameterOptimizationDirection.MAXIMIZE,
             parameter_to_optimize="average_return",
         )
-        
+
         mock_result_2 = OptimizedPolicyResult(
-            policy=POMCP(environment=tiger_env, discount_factor=0.95, depth=12, exploration_constant=1.0, name="POMCP_Config2", n_simulations=100),
+            policy=POMCP(
+                environment=tiger_env,
+                discount_factor=0.95,
+                depth=12,
+                exploration_constant=1.0,
+                name="POMCP_Config2",
+                n_simulations=100,
+            ),
             environment=tiger_env,
             chosen_hyper_parameters={"depth": 12, "algorithm": "tpe"},
             num_episodes=2,
@@ -834,8 +872,11 @@ class TestSimulationsAPI:
         mock_optimizer_class.return_value = mock_optimizer_instance
 
         api = SimulationsAPI()
-        
-        with pytest.raises(RuntimeError, match="Hyperparameter optimization failed: Optimization failed"):
+
+        with pytest.raises(
+            RuntimeError,
+            match="Hyperparameter optimization failed: Optimization failed",
+        ):
             api.run_hyperparameter_optimization(
                 environment_run_params=sample_hyperparameter_run_params,
                 cache_dir_path=temp_cache_dir,
@@ -846,7 +887,11 @@ class TestSimulationsAPI:
 
     @patch("POMDPPlanners.simulations.simulations_api.HyperParameterOptimizer")
     def test_run_hyperparameter_optimization_cleanup_error(
-        self, mock_optimizer_class, temp_cache_dir, sample_hyperparameter_run_params, mock_optimized_policy_result
+        self,
+        mock_optimizer_class,
+        temp_cache_dir,
+        sample_hyperparameter_run_params,
+        mock_optimized_policy_result,
     ):
         """Test hyperparameter optimization with cleanup error handling.
 
@@ -865,7 +910,7 @@ class TestSimulationsAPI:
         mock_optimizer_class.return_value = mock_optimizer_instance
 
         api = SimulationsAPI()
-        
+
         # Should not raise an exception despite cleanup error
         results = api.run_hyperparameter_optimization(
             environment_run_params=sample_hyperparameter_run_params,
@@ -919,9 +964,7 @@ class TestSimulationsAPI:
                 cache_dir_path=temp_cache_dir,
             )
 
-    def test_run_hyperparameter_optimization_empty_configurations(
-        self, temp_cache_dir
-    ):
+    def test_run_hyperparameter_optimization_empty_configurations(self, temp_cache_dir):
         """Test run_hyperparameter_optimization with empty configurations list.
 
         Purpose: Validates that hyperparameter optimization handles empty configurations gracefully
@@ -933,7 +976,7 @@ class TestSimulationsAPI:
         Test type: unit
         """
         api = SimulationsAPI()
-        
+
         results = api.run_hyperparameter_optimization(
             environment_run_params=[],  # Empty list
             cache_dir_path=temp_cache_dir,

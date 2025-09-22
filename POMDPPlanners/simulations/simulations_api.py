@@ -20,7 +20,9 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
 )
 from POMDPPlanners.simulations.simulator import POMDPSimulator
-from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import HyperParameterOptimizer
+from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
+    HyperParameterOptimizer,
+)
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
     DaskConfig,
@@ -902,7 +904,7 @@ class SimulationsAPI:
         # Set up cache directory
         if cache_dir_path is None:
             cache_dir_path = Path("./hyperparameter_optimization_results")
-        
+
         # Create cache directory if it doesn't exist
         cache_dir_path.mkdir(parents=True, exist_ok=True)
 
@@ -920,12 +922,12 @@ class SimulationsAPI:
             # Run optimization
             self.logger.info("Running hyperparameter optimization")
             results = optimizer.optimize(environment_run_params)
-            
+
             self.logger.info(
                 f"Hyperparameter optimization completed successfully. "
                 f"Optimized {len(results)} out of {len(environment_run_params)} configurations"
             )
-            
+
             # Log summary of results
             for i, result in enumerate(results):
                 self.logger.info(
@@ -933,13 +935,13 @@ class SimulationsAPI:
                     f"with {result.policy.__class__.__name__} - "
                     f"Best parameters: {result.chosen_hyper_parameters}"
                 )
-            
+
             return results
-            
+
         except Exception as e:
             self.logger.error(f"Hyperparameter optimization failed: {e}")
             raise RuntimeError(f"Hyperparameter optimization failed: {e}") from e
-        
+
         finally:
             # Clean up optimizer resources
             try:

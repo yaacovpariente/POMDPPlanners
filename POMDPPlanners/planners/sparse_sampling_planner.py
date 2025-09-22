@@ -27,33 +27,38 @@ from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceType
 
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment
 from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action_cost_setting
+from POMDPPlanners.core.tree import (
+    ActionNode,
+    BeliefNode,
+    get_optimal_action_cost_setting,
+)
 from POMDPPlanners.core.cost import belief_expectation_cost
+
 
 class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
     """Abstract base class for sparse sampling POMDP planners.
-    
+
     This class implements the core sparse sampling algorithm for POMDP planning.
     It builds a finite-depth lookahead tree by sampling a limited number of outcomes
     at each node, providing theoretical guarantees on policy quality.
-    
+
     The algorithm works by building a tree where:
     - Each belief node represents a belief state
     - Each action node represents taking an action from a belief
     - The tree depth is limited to control computational complexity
     - Value estimates are computed using dynamic programming
-    
+
     Attributes:
         environment: The POMDP environment to plan for
         branching_factor: Number of samples at each node (controls tree width)
         depth: Maximum planning depth (controls tree height)
         resampling: Whether to resample particles during belief updates
-        
+
     Note:
         This is an abstract base class. Subclasses must implement the value
         update methods for leaf and non-leaf nodes.
     """
-    
+
     def __init__(
         self,
         environment: DiscreteActionsEnvironment,
@@ -62,7 +67,7 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         resampling: bool = False,
         name: str = "SparseSamplingDiscreteActionsPlanner",
         log_path: Optional[Path] = None,
-        debug: bool = False
+        debug: bool = False,
     ):
         if not isinstance(environment, DiscreteActionsEnvironment):
             raise TypeError("environment must be a DiscreteActionsEnvironment instance")
@@ -78,11 +83,11 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
             raise ValueError("Branching factor must be greater than 0")
 
         super().__init__(
-            environment=environment, 
+            environment=environment,
             discount_factor=environment.discount_factor,
             name=name,
             log_path=log_path,
-            debug=debug
+            debug=debug,
         )
 
         self.branching_factor = branching_factor
@@ -115,7 +120,9 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
             )
 
             state = belief_node.belief.sample()
-            next_state = self.environment.state_transition_model(state, action).sample()[0]
+            next_state = self.environment.state_transition_model(
+                state, action
+            ).sample()[0]
             next_observation = self.environment.observation_model(
                 next_state, action
             ).sample()[0]
@@ -174,12 +181,11 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
     def _set_last_belief_node(self, node: BeliefNode):
         for action in self.environment.get_actions():
             child = ActionNode(action=action, parent=node, children=tuple(), data=None)
-            
+
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
         return PolicySpaceInfo(
-            action_space=SpaceType.DISCRETE,
-            observation_space=SpaceType.MIXED
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.MIXED
         )
 
     def random_rollout(self, belief_node: BeliefNode, depth: int) -> float:
@@ -199,25 +205,26 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
             next_state=next_state, action=action
         ).sample()[0]
 
+
 class StandardSparseSamplingDiscreteActionsPlanner(
     SparseSamplingDiscreteActionsPlanner
 ):
     """Standard implementation of sparse sampling for POMDP planning.
-    
+
     This concrete implementation of sparse sampling uses standard value updates:
     - Q-values for actions are computed as immediate cost plus discounted future value
     - V-values for beliefs are computed as the minimum Q-value over actions (cost formulation)
     - Leaf nodes use only immediate cost estimates
-    
+
     The algorithm provides theoretical guarantees: with probability 1-δ, the computed
     policy is ε-optimal, where ε decreases with increasing depth and branching factor.
-    
+
     Example:
         Creating and using a sparse sampling planner::
-        
+
             from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             from POMDPPlanners.core.belief import get_initial_belief
-            
+
             # Create environment and planner
             env = TigerPOMDP(discount_factor=0.95)
             planner = StandardSparseSamplingDiscreteActionsPlanner(
@@ -226,20 +233,27 @@ class StandardSparseSamplingDiscreteActionsPlanner(
                 depth=2,              # Plan 5 steps ahead
                 name="SparseSampling_Tiger"
             )
-            
+
             # Plan action from initial belief
             initial_belief = get_initial_belief(env, n_particles=1000)
             action, run_data = planner.action(initial_belief)
-            
+
             print(f"Selected action: {action[0]}")
             print(f"Planning completed with info: {run_data.info_variables}")
     """
-    
+
     def __init__(
-        self, environment: DiscreteActionsEnvironment, branching_factor: int, depth: int, name: str = "StandardSparseSamplingDiscreteActionsPlanner"
+        self,
+        environment: DiscreteActionsEnvironment,
+        branching_factor: int,
+        depth: int,
+        name: str = "StandardSparseSamplingDiscreteActionsPlanner",
     ):
         super().__init__(
-            environment=environment, branching_factor=branching_factor, depth=depth, name=name
+            environment=environment,
+            branching_factor=branching_factor,
+            depth=depth,
+            name=name,
         )
 
     def _update_leaf_node_q_value(self, node: ActionNode):

@@ -12,16 +12,17 @@
 #
 import os
 import sys
-sys.path.insert(0, os.path.abspath('..'))
+
+sys.path.insert(0, os.path.abspath(".."))
 
 # -- Project information -----------------------------------------------------
 
-project = 'POMDPPlanners'
-copyright = '2024, POMDPPlanners Team'
-author = 'POMDPPlanners Team'
+project = "POMDPPlanners"
+copyright = "2024, POMDPPlanners Team"
+author = "POMDPPlanners Team"
 
 # The full version, including alpha/beta/rc tags
-release = '1.0'
+release = "1.0"
 
 # -- General configuration ---------------------------------------------------
 
@@ -29,11 +30,11 @@ release = '1.0'
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.viewcode',
-    'sphinx.ext.napoleon',  # For Google/NumPy style docstrings
-    'sphinx.ext.intersphinx',
-    'sphinx_autodoc_typehints',  # Better type hint formatting
+    "sphinx.ext.autodoc",
+    "sphinx.ext.viewcode",
+    "sphinx.ext.napoleon",  # For Google/NumPy style docstrings
+    "sphinx.ext.intersphinx",
+    "sphinx_autodoc_typehints",  # Better type hint formatting
 ]
 
 # Napoleon settings for Google-style docstrings
@@ -43,104 +44,91 @@ napoleon_include_init_with_doc = False
 napoleon_include_private_with_doc = False
 
 # Add any paths that contain templates here, relative to this directory.
-templates_path = ['_templates']
+templates_path = ["_templates"]
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
-exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store', '**/tests/**', '**/test_*.py']
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/tests/**", "**/test_*.py"]
 
 # -- Options for HTML output -------------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = 'sphinx_rtd_theme'
+html_theme = "sphinx_rtd_theme"
 
 # ReadTheDocs theme configuration
 html_theme_options = {
-    'navigation_depth': 4,
-    'collapse_navigation': False,
-    'sticky_navigation': True,
-    'includehidden': True,
-    'titles_only': False,
-    'canonical_url': '',
-    'logo_only': False,
-    'prev_next_buttons_location': 'bottom',
-    'style_external_links': False,
-    'vcs_pageview_mode': '',
+    "navigation_depth": 4,
+    "collapse_navigation": False,
+    "sticky_navigation": True,
+    "includehidden": True,
+    "titles_only": False,
+    "canonical_url": "",
+    "logo_only": False,
+    "prev_next_buttons_location": "bottom",
+    "style_external_links": False,
+    "vcs_pageview_mode": "",
 }
 
 # Suppress certain warnings to reduce noise
 suppress_warnings = [
-    'autodoc.import_object',
-    'autodoc.failed_import',
-    'ref.python',
+    "autodoc.import_object",
+    "autodoc.failed_import",
+    "ref.python",
 ]
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ["_static"]
 
 # Ensure consistent navigation across all pages
 html_use_smartypants = True
 html_split_index = False
-html_short_title = 'POMDPPlanners'
+html_short_title = "POMDPPlanners"
 
 # Master document
-master_doc = 'index'
+master_doc = "index"
 
 # Navigation configuration
 html_sidebars = {
-    '**': [
-        'globaltoc.html',
-        'relations.html',
-        'sourcelink.html',
-        'searchbox.html',
+    "**": [
+        "globaltoc.html",
+        "relations.html",
+        "sourcelink.html",
+        "searchbox.html",
     ]
 }
 
 # -- Options for autodoc ----------------------------------------------------
 
 # Automatically extract type hints from docstrings
-autodoc_typehints = 'description'
-autodoc_typehints_format = 'short'
+autodoc_typehints = "description"
+autodoc_typehints_format = "short"
 
 # Mock imports for external dependencies
 autodoc_mock_imports = [
-    'numpy',
-    'scipy',
-    'matplotlib',
-    'torch',
-    'gym',
-    'gymnasium',
-    'dask',
-    'joblib',
-    'pandas',
-    'ray',
-    'dask_jobqueue',
-    'PIL',
-    'cv2',
+    "numpy",
+    "scipy",
+    "matplotlib",
+    "torch",
+    "gym",
+    "gymnasium",
+    "dask",
+    "joblib",
+    "pandas",
+    "ray",
+    "dask_jobqueue",
+    "PIL",
+    "cv2",
 ]
 
 # -- Options for intersphinx mapping ----------------------------------------
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {
-    'python': ('https://docs.python.org/3/', None),
-    'numpy': ('https://numpy.org/doc/stable/', None),
-    'scipy': ('https://docs.scipy.org/doc/scipy/', None),
+    "python": ("https://docs.python.org/3/", None),
+    "numpy": ("https://numpy.org/doc/stable/", None),
+    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
 }
-
-
-
-
-
-
-
-
-
-
-
-
-

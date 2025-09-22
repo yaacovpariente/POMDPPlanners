@@ -15,21 +15,18 @@ import random
 np.random.seed(42)
 random.seed(42)
 
-from POMDPPlanners.core.distributions import (
-    DiscreteDistribution,
-    Numpy2DDistribution
-)
+from POMDPPlanners.core.distributions import DiscreteDistribution, Numpy2DDistribution
 
 
 def test_discrete_distribution_initialization():
     """Test discrete distribution initialization.
-    
-    Purpose: Validates proper initialization of discrete distribution 
-    
+
+    Purpose: Validates proper initialization of discrete distribution
+
     Given: Constructor parameters and initial conditions
     When: Object is initialized
     Then: Object is properly constructed with expected attributes
-    
+
     Test type: unit
     """
     # Test valid initialization
@@ -46,13 +43,13 @@ def test_discrete_distribution_initialization():
 
 def test_discrete_distribution_sample():
     """Test discrete distribution sample.
-    
-    Purpose: Validates sampling behavior for discrete distribution 
-    
+
+    Purpose: Validates sampling behavior for discrete distribution
+
     Given: Configured object with sampling capabilities
     When: Sample method is called
     Then: Valid samples are returned according to distribution
-    
+
     Test type: unit
     """
     # Test sampling from a simple distribution
@@ -76,13 +73,13 @@ def test_discrete_distribution_sample():
 
 def test_discrete_distribution_probability():
     """Test that DiscreteDistribution correctly calculates probabilities for single and multiple values.
-    
+
     Purpose: Validates that discrete distribution probability method returns correct probability values for known distribution
-    
+
     Given: DiscreteDistribution with values [1, 2, 3] and probabilities [0.2, 0.5, 0.3]
     When: probability method is called with single values, multiple values, and values not in the distribution
     Then: Correct probabilities are returned (0.5 for value 2, 0.0 for values not in distribution)
-    
+
     Test type: unit
     """
     # Test probability calculation
@@ -104,13 +101,13 @@ def test_discrete_distribution_probability():
 
 def test_numpy2d_distribution_initialization():
     """Test numpy2d distribution initialization.
-    
-    Purpose: Validates proper initialization of numpy2d distribution 
-    
+
+    Purpose: Validates proper initialization of numpy2d distribution
+
     Given: Constructor parameters and initial conditions
     When: Object is initialized
     Then: Object is properly constructed with expected attributes
-    
+
     Test type: unit
     """
     # Test valid initialization
@@ -131,13 +128,13 @@ def test_numpy2d_distribution_initialization():
 
 def test_numpy2d_distribution_sample():
     """Test numpy2d distribution sample.
-    
-    Purpose: Validates sampling behavior for numpy2d distribution 
-    
+
+    Purpose: Validates sampling behavior for numpy2d distribution
+
     Given: Configured object with sampling capabilities
     When: Sample method is called
     Then: Valid samples are returned according to distribution
-    
+
     Test type: unit
     """
     # Test sampling from a simple distribution
@@ -162,13 +159,13 @@ def test_numpy2d_distribution_sample():
 
 def test_numpy2d_distribution_probability():
     """Test that Numpy2DDistribution correctly calculates probabilities for multi-dimensional arrays.
-    
+
     Purpose: Validates that numpy2d distribution probability method returns correct probability values for 2D array distribution
-    
+
     Given: Numpy2DDistribution with 2D values [[1,2,3],[4,5,6]] and probabilities [0.2, 0.5, 0.3]
     When: probability method is called with single arrays, multiple arrays, and arrays not in the distribution
     Then: Correct probabilities are returned (0.5 for [2,5], 0.0 for arrays not in distribution)
-    
+
     Test type: unit
     """
     # Test probability calculation
@@ -181,7 +178,9 @@ def test_numpy2d_distribution_probability():
     assert np.isclose(prob_array[0], 0.5)
 
     # Test multiple values
-    prob_array = dist.probability([np.array([1, 4]), np.array([2, 5]), np.array([3, 6]), np.array([0, 0])])
+    prob_array = dist.probability(
+        [np.array([1, 4]), np.array([2, 5]), np.array([3, 6]), np.array([0, 0])]
+    )
     assert np.isclose(prob_array[0], 0.2)
     assert np.isclose(prob_array[1], 0.5)
     assert np.isclose(prob_array[2], 0.3)

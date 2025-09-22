@@ -28,7 +28,7 @@ from POMDPPlanners.core.environment import (
     ObservationModel,
     StateTransitionModel,
     SpaceInfo,
-    SpaceType
+    SpaceType,
 )
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.simulation import History, MetricValue
@@ -40,14 +40,14 @@ OBSERVATIONS = ["hear_left", "hear_right", "hear_nothing"]
 
 class TigerStateTransition(StateTransitionModel):
     """State transition model for the Tiger POMDP.
-    
+
     The state only changes when a door is opened, after which the tiger
     is randomly placed behind one of the two doors for the next episode.
-    
+
     Attributes:
         state: Current state (tiger_left or tiger_right)
         action: Action to be taken (listen, open_left, or open_right)
-        
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -71,10 +71,10 @@ class TigerStateTransition(StateTransitionModel):
         >>> bool(prob_random[0] == 0.5)  # Equal probability when opening
         True
     """
-    
+
     def __init__(self, state: str, action: str):
         """Initialize the state transition model.
-        
+
         Args:
             state: Current state indicating tiger location
             action: Action being executed
@@ -105,14 +105,14 @@ class TigerStateTransition(StateTransitionModel):
 
 class TigerObservation(ObservationModel):
     """Observation model for the Tiger POMDP.
-    
+
     Provides noisy acoustic feedback when listening, with 85% accuracy.
     When doors are opened, no meaningful observation is provided.
-    
+
     Attributes:
         next_state: The state after action execution
         action: The action that was taken
-        
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -139,10 +139,10 @@ class TigerObservation(ObservationModel):
         >>> bool(prob_nothing[0] == 1.0)  # Opening door always gives no sound
         True
     """
-    
+
     def __init__(self, next_state: str, action: str):
         """Initialize the observation model.
-        
+
         Args:
             next_state: State after taking the action
             action: Action that was executed
@@ -156,9 +156,13 @@ class TigerObservation(ObservationModel):
             if self.action == "listen":
                 # Listen action is 85% accurate
                 if self.next_state == "tiger_left":
-                    samples.append("hear_left" if np.random.random() < 0.85 else "hear_right")
+                    samples.append(
+                        "hear_left" if np.random.random() < 0.85 else "hear_right"
+                    )
                 else:
-                    samples.append("hear_right" if np.random.random() < 0.85 else "hear_left")
+                    samples.append(
+                        "hear_right" if np.random.random() < 0.85 else "hear_left"
+                    )
             else:
                 # When opening a door, observation is random (hearing nothing)
                 samples.append("hear_nothing")
@@ -169,7 +173,7 @@ class TigerObservation(ObservationModel):
         for i, next_observation in enumerate(values):
             if next_observation not in OBSERVATIONS:
                 raise ValueError(f"Invalid observation: {next_observation}")
-                
+
             if self.action == "listen":
                 if self.next_state == "tiger_left":
                     result[i] = 0.85 if next_observation == "hear_left" else 0.15
@@ -183,22 +187,22 @@ class TigerObservation(ObservationModel):
 
 class TigerPOMDP(DiscreteActionsEnvironment):
     """Tiger POMDP environment implementation.
-    
+
     This is the classic Tiger problem where an agent must decide which door to open
     to find treasure while avoiding the tiger. The agent can listen for acoustic cues
     but receives noisy observations.
-    
+
     Problem Structure:
     - States: tiger_left, tiger_right (tiger's location)
-    - Actions: listen, open_left, open_right  
+    - Actions: listen, open_left, open_right
     - Observations: hear_left, hear_right, hear_nothing
     - Rewards: listen(-1), correct_door(+10), wrong_door(-100)
-    
+
     Attributes:
         states: List of possible states
         actions: List of possible actions
         observations: List of possible observations
-        
+
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
@@ -231,8 +235,15 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         >>> is_done
         False
     """
-    
-    def __init__(self, discount_factor: float, name: str = "TigerPOMDP", output_dir: Optional[Path] = None, debug: bool = False, use_queue_logger: bool = False):
+
+    def __init__(
+        self,
+        discount_factor: float,
+        name: str = "TigerPOMDP",
+        output_dir: Optional[Path] = None,
+        debug: bool = False,
+        use_queue_logger: bool = False,
+    ):
         """Initialize the Tiger POMDP environment.
 
         Args:
@@ -252,8 +263,15 @@ class TigerPOMDP(DiscreteActionsEnvironment):
             action_space=SpaceType.DISCRETE,  # Actions are discrete: listen, open_left, open_right
             observation_space=SpaceType.DISCRETE,  # Observations are discrete: hear_left, hear_right, hear_nothing
         )
-        super().__init__(discount_factor=discount_factor, name=name, space_info=space_info,
-                        reward_range=(-100.0, 10.0), output_dir=output_dir, debug=debug, use_queue_logger=use_queue_logger)
+        super().__init__(
+            discount_factor=discount_factor,
+            name=name,
+            space_info=space_info,
+            reward_range=(-100.0, 10.0),
+            output_dir=output_dir,
+            debug=debug,
+            use_queue_logger=use_queue_logger,
+        )
         self.states = STATES
         self.actions = ACTIONS
         self.observations = OBSERVATIONS
@@ -365,48 +383,51 @@ class TigerPOMDP(DiscreteActionsEnvironment):
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         """Compute Tiger POMDP specific metrics from simulation histories.
-        
+
         Args:
             histories: List of simulation histories
-            
+
         Returns:
             List of MetricValue objects containing the computed metrics
         """
         # Calculate success rate (opening correct door)
         success_count = 0
         total_episodes = len(histories)
-        
+
         for history in histories:
             # Check if the last action was opening a door
             last_step = history.history[-1]
             if last_step.action in ["open_left", "open_right"]:
                 # Check if the door opened was correct
-                if (last_step.action == "open_left" and last_step.state == "tiger_right") or \
-                   (last_step.action == "open_right" and last_step.state == "tiger_left"):
+                if (
+                    last_step.action == "open_left" and last_step.state == "tiger_right"
+                ) or (
+                    last_step.action == "open_right" and last_step.state == "tiger_left"
+                ):
                     success_count += 1
-        
+
         success_rate = success_count / total_episodes if total_episodes > 0 else 0.0
-        
+
         # Calculate average number of listens before opening a door
         listen_counts = []
         for history in histories:
             listen_count = sum(1 for step in history.history if step.action == "listen")
             listen_counts.append(listen_count)
-        
+
         avg_listens = sum(listen_counts) / len(listen_counts) if listen_counts else 0.0
-        
+
         # Create MetricValue objects
         return [
             MetricValue(
                 name="success_rate",
                 value=success_rate,
                 lower_confidence_bound=success_rate,  # Simple implementation, could be improved with proper confidence intervals
-                upper_confidence_bound=success_rate
+                upper_confidence_bound=success_rate,
             ),
             MetricValue(
                 name="average_listens",
                 value=avg_listens,
                 lower_confidence_bound=avg_listens,
-                upper_confidence_bound=avg_listens
-            )
+                upper_confidence_bound=avg_listens,
+            ),
         ]

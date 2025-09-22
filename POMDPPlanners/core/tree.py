@@ -6,6 +6,7 @@ from anytree import RenderTree
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.belief import Belief
 
+
 class BaseNode(NodeMixin):
     def __init__(self, parent=None, children=tuple(), data: Any = None):
         self.parent = parent
@@ -17,7 +18,8 @@ class BaseNode(NodeMixin):
         self.immediate_cost = None
         self.immediate_reward = None
         self.sample = []
-        
+
+
 class ActionNode(BaseNode):
     def __init__(self, action, parent=None, children=tuple(), data: Any = None):
         super().__init__(parent=parent, children=children, data=data)
@@ -43,20 +45,31 @@ class ActionNode(BaseNode):
     def print(self):
         print_tree(self)
 
-    def sample_child_node(self) -> 'BeliefNode':
+    def sample_child_node(self) -> "BeliefNode":
         child_weights = np.array([child.weight for child in self.children])
         weights = child_weights / sum(child_weights)
         return np.random.choice(self.children, p=weights)
 
-    def get_belief_node_child(self, observation: Any, environment: Environment) -> Union['BeliefNode', None]:
+    def get_belief_node_child(
+        self, observation: Any, environment: Environment
+    ) -> Union["BeliefNode", None]:
         for child in self.children:
             if environment.is_equal_observation(child.observation, observation):
                 return child
 
         return None
 
+
 class BeliefNode(BaseNode):
-    def __init__(self, belief: Belief, observation: Any = None, weight: Union[float, int] = 1.0, parent=None, children=tuple(), data: Any = None):
+    def __init__(
+        self,
+        belief: Belief,
+        observation: Any = None,
+        weight: Union[float, int] = 1.0,
+        parent=None,
+        children=tuple(),
+        data: Any = None,
+    ):
         if not isinstance(belief, Belief):
             raise TypeError("belief must be a Belief instance")
         super().__init__(parent=parent, children=children, data=data)
@@ -64,8 +77,8 @@ class BeliefNode(BaseNode):
         self.belief = belief
         self.observation = observation
         self.weight = weight
-        self.v_value = 0.
-        
+        self.v_value = 0.0
+
     @property
     def spec(self):
         return f"""BeliefNode:
@@ -76,25 +89,29 @@ class BeliefNode(BaseNode):
                 lower_confidence_bound: {self.lower_confidence_bound}
                 upper_confidence_bound: {self.upper_confidence_bound}
                 depth: {self.depth}"""
-                        
+
     @property
     def name(self):
         return self.spec
-        
+
     def print(self):
         print_tree(self)
-        
-    def update_belief(self, action: Any, observation: Any, pomdp: Environment, **kwargs):
-        self.belief = self.belief.update(action=action, observation=observation, pomdp=pomdp, **kwargs)
 
-    def get_child(self, action: Any) -> Union['ActionNode', None]:
+    def update_belief(
+        self, action: Any, observation: Any, pomdp: Environment, **kwargs
+    ):
+        self.belief = self.belief.update(
+            action=action, observation=observation, pomdp=pomdp, **kwargs
+        )
+
+    def get_child(self, action: Any) -> Union["ActionNode", None]:
         for child in self.children:
             if child.action == action:
                 return child
-                
+
         return None
-    
-        
+
+
 def print_tree(tree: Union[BeliefNode, ActionNode]):
     for pre, fill, node in RenderTree(tree):
         if isinstance(node, BeliefNode):
@@ -104,15 +121,18 @@ def print_tree(tree: Union[BeliefNode, ActionNode]):
 
         print(f"{pre}{name}")
 
+
 def get_optimal_action_cost_setting(belief_node: BeliefNode) -> Any:
     actions = [child.action for child in belief_node.children]
     q_values = [child.q_value for child in belief_node.children]
     return actions[np.argmin(q_values)]
 
+
 def get_optimal_action_reward_setting(belief_node: BeliefNode) -> Any:
     actions = [child.action for child in belief_node.children]
     q_values = [child.q_value for child in belief_node.children]
     return actions[np.argmax(q_values)]
+
 
 def sample_belief_node_child(action_node: ActionNode) -> BeliefNode:
     child_visit_counts = np.array([child.visit_count for child in action_node.children])

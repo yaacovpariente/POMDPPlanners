@@ -146,8 +146,10 @@ class BaseSimulator(ABC):
         self.use_queue_logger = use_queue_logger
 
         self.logger = get_logger(
-            name=f"simulator.{experiment_name}", debug=debug, output_dir=cache_dir_path,
-            use_queue=use_queue_logger
+            name=f"simulator.{experiment_name}",
+            debug=debug,
+            output_dir=cache_dir_path,
+            use_queue=use_queue_logger,
         )
 
         # Create task manager using configuration

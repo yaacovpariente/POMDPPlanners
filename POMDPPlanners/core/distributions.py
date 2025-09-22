@@ -16,25 +16,25 @@ import numpy as np
 
 class Distribution(ABC):
     """Abstract base class for probability distributions.
-    
+
     This class defines the interface that all probability distributions
     must implement, providing methods for sampling and probability calculation.
-    
+
     Note:
         This is an abstract base class and cannot be instantiated directly.
         Subclasses must implement the sample() method.
     """
-    
+
     @abstractmethod
     def sample(self, n_samples: int = 1) -> List[Any]:
         """Sample values from the distribution.
-        
+
         Args:
             n_samples: Number of samples to return. Defaults to 1.
-            
+
         Returns:
             List of n_samples independent samples from the distribution
-            
+
         Note:
             Subclasses must implement this method according to their
             specific distribution type and parameters.
@@ -43,13 +43,13 @@ class Distribution(ABC):
 
     def probability(self, values: List[Any]) -> np.ndarray:
         """Calculate probabilities for given values.
-        
+
         Args:
             values: List of values to calculate probabilities for
-            
+
         Returns:
             Numpy array of probabilities corresponding to input values
-            
+
         Raises:
             NotImplementedError: This method is not implemented by default.
                 Subclasses should override if probability calculation is needed.
@@ -61,14 +61,14 @@ class Distribution(ABC):
 
 class DiscreteDistribution(Distribution):
     """Implementation of discrete probability distributions.
-    
+
     This class represents a discrete probability distribution over a finite
     set of values, with associated probabilities that sum to 1.
-    
+
     Attributes:
         values: List of possible values in the distribution support
         probs: Numpy array of probabilities corresponding to each value
-        
+
     Example:
         >>> import numpy as np
         >>> # Create a distribution over actions
@@ -88,14 +88,14 @@ class DiscreteDistribution(Distribution):
         >>> bool(prob_up == 0.4)
         True
     """
-    
+
     def __init__(self, values: list, probs: np.array):
         """Initialize the discrete distribution.
-        
+
         Args:
             values: List of distinct values that can be sampled
             probs: Numpy array of probabilities for each value (must sum to 1)
-            
+
         Raises:
             TypeError: If values is not a list or probs is not a numpy array
             ValueError: If values and probs have different lengths or probs don't sum to 1

@@ -7,14 +7,23 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.animation as animation
 
-from POMDPPlanners.core.environment import DiscreteActionsEnvironment, ObservationModel, SpaceInfo, SpaceType
+from POMDPPlanners.core.environment import (
+    DiscreteActionsEnvironment,
+    ObservationModel,
+    SpaceInfo,
+    SpaceType,
+)
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.simulation import History
 from POMDPPlanners.core.simulation import MetricValue
 from POMDPPlanners.utils.statistics import confidence_interval
 from POMDPPlanners.core.belief import Belief
 
-from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import BaseLightDarkPOMDP, BaseLightDarkPOMDPDiscreteActions
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
+    BaseLightDarkPOMDP,
+    BaseLightDarkPOMDPDiscreteActions,
+)
+
 
 class DiscreteLDObservationModel(ObservationModel):
     def __init__(
@@ -39,8 +48,7 @@ class DiscreteLDObservationModel(ObservationModel):
             "right": np.array([1, 0]),
             "left": np.array([-1, 0]),
         }
-        
-        
+
         distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
         min_distance = np.min(distances)
         if min_distance < self.beacon_radius:
@@ -50,11 +58,11 @@ class DiscreteLDObservationModel(ObservationModel):
 
         values = [next_state + self.action_to_vector[action] for action in self.actions]
         values.append(next_state)
-        
+
         observation_error_prob = self.observation_error_prob * beacon_error_factor
         probs = np.ones(len(values)) * (observation_error_prob / (len(values) - 1))
         probs[-1] = 1 - observation_error_prob
-    
+
         self.distribution = DiscreteDistribution(values=values, probs=probs)
 
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
@@ -64,14 +72,26 @@ class DiscreteLDObservationModel(ObservationModel):
         return self.distribution.probability(values)
 
 
-class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsEnvironment):
+class DiscreteLightDarkPOMDP(
+    BaseLightDarkPOMDPDiscreteActions, DiscreteActionsEnvironment
+):
     def __init__(
         self,
         discount_factor: float,
         name: str = "DiscreteLightDarkPOMDP",
         transition_error_prob: float = 0.05,
         observation_error_prob: float = 0.05,
-        beacons: List[Tuple[float, float]] = [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)],
+        beacons: List[Tuple[float, float]] = [
+            (0, 0),
+            (0, 5),
+            (0, 10),
+            (5, 0),
+            (5, 5),
+            (5, 10),
+            (10, 0),
+            (10, 5),
+            (10, 10),
+        ],
         goal_state: np.ndarray = np.array([10, 5]),
         start_state: np.ndarray = np.array([0, 5]),
         obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
@@ -86,7 +106,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         self.transition_error_prob = transition_error_prob
         self.observation_error_prob = observation_error_prob
         self.is_stochastic_reward = is_stochastic_reward
-        
+
         super().__init__(
             discount_factor=discount_factor,
             name=name,
@@ -171,15 +191,15 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         for history in histories:
             goal_reached_in_history = False
             obstacle_hit_in_history = False
-            
+
             for i, step in enumerate(history.history):
                 if np.array_equal(step.state, self.goal_state):
                     goal_reached_in_history = True
                     break
-                
+
                 if np.any(np.all(step.state.reshape(-1, 1) == self.obstacles, axis=0)):
                     obstacle_hit_in_history = True
-            
+
             goal_reached.append(1 if goal_reached_in_history else 0)
             obstacle_hits.append(1 if obstacle_hit_in_history else 0)
 
@@ -201,5 +221,5 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
                 value=avg_obstacle_hits,
                 lower_confidence_bound=obstacle_hits_ci[0],
                 upper_confidence_bound=obstacle_hits_ci[1],
-            )
+            ),
         ]

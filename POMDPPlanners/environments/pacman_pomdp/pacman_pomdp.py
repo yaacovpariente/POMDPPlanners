@@ -71,7 +71,9 @@ class PacManState:
             raise ValueError("ghost_positions must be a tuple of position tuples")
         for i, ghost_pos in enumerate(self.ghost_positions):
             if not isinstance(ghost_pos, tuple) or len(ghost_pos) != 2:
-                raise ValueError(f"ghost_positions[{i}] must be a tuple of two integers")
+                raise ValueError(
+                    f"ghost_positions[{i}] must be a tuple of two integers"
+                )
         if not isinstance(self.pellets, tuple):
             raise ValueError("pellets must be a tuple of position tuples")
 
@@ -161,26 +163,32 @@ class PacManStateTransitionModel(Distribution):
     def _move_ghosts(self) -> Tuple[Tuple[int, int], ...]:
         """Move all ghosts with their respective policies."""
         new_positions = []
-        
+
         for i, ghost_pos in enumerate(self.state.ghost_positions):
             if self.pomdp.ghost_coordination == "independent":
                 # Each ghost acts independently
                 new_pos = self._move_single_ghost(ghost_pos, i)
             elif self.pomdp.ghost_coordination == "coordinated":
                 # Ghosts coordinate to surround PacMan
-                new_pos = self._move_coordinated_ghost(ghost_pos, i, self.state.ghost_positions)
+                new_pos = self._move_coordinated_ghost(
+                    ghost_pos, i, self.state.ghost_positions
+                )
             else:  # "mixed"
                 # Alternate between coordinated and independent behavior
                 if i % 2 == 0:
-                    new_pos = self._move_coordinated_ghost(ghost_pos, i, self.state.ghost_positions)
+                    new_pos = self._move_coordinated_ghost(
+                        ghost_pos, i, self.state.ghost_positions
+                    )
                 else:
                     new_pos = self._move_single_ghost(ghost_pos, i)
-            
+
             new_positions.append(new_pos)
-        
+
         return tuple(new_positions)
 
-    def _move_single_ghost(self, ghost_pos: Tuple[int, int], ghost_id: int) -> Tuple[int, int]:
+    def _move_single_ghost(
+        self, ghost_pos: Tuple[int, int], ghost_id: int
+    ) -> Tuple[int, int]:
         """Move individual ghost with stochastic policy."""
         possible_moves = self._get_valid_ghost_moves(ghost_pos)
 
@@ -190,7 +198,9 @@ class PacManStateTransitionModel(Distribution):
         pacman_pos = self.state.pacman_pos
 
         # Apply ghost-specific strategy if defined
-        if hasattr(self.pomdp, 'ghost_strategies') and ghost_id < len(self.pomdp.ghost_strategies):
+        if hasattr(self.pomdp, "ghost_strategies") and ghost_id < len(
+            self.pomdp.ghost_strategies
+        ):
             strategy = self.pomdp.ghost_strategies[ghost_id]
             if strategy == "patrol":
                 return self._move_patrol_ghost(ghost_pos, possible_moves, ghost_id)
@@ -214,42 +224,52 @@ class PacManStateTransitionModel(Distribution):
         chosen_idx = np.random.choice(len(possible_moves), p=probabilities)
         return possible_moves[chosen_idx]
 
-    def _move_coordinated_ghost(self, ghost_pos: Tuple[int, int], ghost_id: int, 
-                              all_ghost_positions: Tuple[Tuple[int, int], ...]) -> Tuple[int, int]:
+    def _move_coordinated_ghost(
+        self,
+        ghost_pos: Tuple[int, int],
+        ghost_id: int,
+        all_ghost_positions: Tuple[Tuple[int, int], ...],
+    ) -> Tuple[int, int]:
         """Move ghost with coordination strategy."""
         possible_moves = self._get_valid_ghost_moves(ghost_pos)
         if not possible_moves:
             return ghost_pos
 
         pacman_pos = self.state.pacman_pos
-        
+
         # Lead ghost (id=0) chases directly, others try to cut off escape routes
         if ghost_id == 0:
             # Direct pursuit
             target = pacman_pos
         else:
             # Try to block PacMan's escape routes
-            target = self._predict_pacman_escape_route(pacman_pos, all_ghost_positions, ghost_id)
-        
+            target = self._predict_pacman_escape_route(
+                pacman_pos, all_ghost_positions, ghost_id
+            )
+
         return self._move_toward_target(ghost_pos, target, possible_moves)
 
-    def _move_patrol_ghost(self, ghost_pos: Tuple[int, int], possible_moves: List[Tuple[int, int]], 
-                          ghost_id: int) -> Tuple[int, int]:
+    def _move_patrol_ghost(
+        self,
+        ghost_pos: Tuple[int, int],
+        possible_moves: List[Tuple[int, int]],
+        ghost_id: int,
+    ) -> Tuple[int, int]:
         """Move ghost in patrol pattern."""
         # Simple patrol: move in predictable rectangular pattern
-        if not hasattr(self.pomdp, '_ghost_patrol_directions'):
+        if not hasattr(self.pomdp, "_ghost_patrol_directions"):
             self.pomdp._ghost_patrol_directions = {}
-        
+
         if ghost_id not in self.pomdp._ghost_patrol_directions:
             self.pomdp._ghost_patrol_directions[ghost_id] = 0  # Start moving north
-        
+
         # Try to continue in current direction
         directions = [(0, -1), (1, 0), (0, 1), (-1, 0)]  # N, E, S, W
         current_dir = self.pomdp._ghost_patrol_directions[ghost_id]
         dr, dc = directions[current_dir]
-        
+
         preferred_pos = (ghost_pos[0] + dr, ghost_pos[1] + dc)
-        
+
         if preferred_pos in possible_moves:
             return preferred_pos
         else:
@@ -258,72 +278,92 @@ class PacManStateTransitionModel(Distribution):
             # Try new direction or just pick randomly
             return np.random.choice(possible_moves) if possible_moves else ghost_pos
 
-    def _move_ambush_ghost(self, ghost_pos: Tuple[int, int], possible_moves: List[Tuple[int, int]], 
-                          pacman_pos: Tuple[int, int]) -> Tuple[int, int]:
+    def _move_ambush_ghost(
+        self,
+        ghost_pos: Tuple[int, int],
+        possible_moves: List[Tuple[int, int]],
+        pacman_pos: Tuple[int, int],
+    ) -> Tuple[int, int]:
         """Move ghost to ambush position ahead of PacMan."""
         # Try to move to a position that intercepts PacMan's likely path
         # Predict where PacMan might go and position accordingly
-        
+
         # Simple heuristic: move to position that's 2-3 steps ahead of PacMan in the direction they're likely to go
         best_pos = ghost_pos
-        best_score = float('inf')
-        
+        best_score = float("inf")
+
         for move_pos in possible_moves:
             # Score based on being ahead of PacMan rather than directly chasing
-            distance_to_pacman = abs(move_pos[0] - pacman_pos[0]) + abs(move_pos[1] - pacman_pos[1])
+            distance_to_pacman = abs(move_pos[0] - pacman_pos[0]) + abs(
+                move_pos[1] - pacman_pos[1]
+            )
             # Prefer positions that are 2-4 tiles away (good ambush distance)
             if 2 <= distance_to_pacman <= 4:
                 score = distance_to_pacman
             else:
-                score = distance_to_pacman + 10  # Penalty for being too close or too far
-            
+                score = (
+                    distance_to_pacman + 10
+                )  # Penalty for being too close or too far
+
             if score < best_score:
                 best_score = score
                 best_pos = move_pos
-        
+
         return best_pos
 
-    def _predict_pacman_escape_route(self, pacman_pos: Tuple[int, int], 
-                                   ghost_positions: Tuple[Tuple[int, int], ...], 
-                                   current_ghost_id: int) -> Tuple[int, int]:
+    def _predict_pacman_escape_route(
+        self,
+        pacman_pos: Tuple[int, int],
+        ghost_positions: Tuple[Tuple[int, int], ...],
+        current_ghost_id: int,
+    ) -> Tuple[int, int]:
         """Predict where PacMan is likely to escape and target that area."""
         # Find the direction that maximizes distance from all ghosts
         possible_pacman_moves = self._get_valid_moves_for_position(pacman_pos)
-        
+
         best_escape_pos = pacman_pos
         max_min_distance = -1
-        
+
         for pacman_move in possible_pacman_moves:
             # Calculate minimum distance to any ghost from this position
             min_distance_to_ghosts = min(
                 abs(pacman_move[0] - ghost_pos[0]) + abs(pacman_move[1] - ghost_pos[1])
-                for i, ghost_pos in enumerate(ghost_positions) if i != current_ghost_id
+                for i, ghost_pos in enumerate(ghost_positions)
+                if i != current_ghost_id
             )
-            
+
             if min_distance_to_ghosts > max_min_distance:
                 max_min_distance = min_distance_to_ghosts
                 best_escape_pos = pacman_move
-        
+
         return best_escape_pos
 
-    def _move_toward_target(self, current_pos: Tuple[int, int], target_pos: Tuple[int, int], 
-                          possible_moves: List[Tuple[int, int]]) -> Tuple[int, int]:
+    def _move_toward_target(
+        self,
+        current_pos: Tuple[int, int],
+        target_pos: Tuple[int, int],
+        possible_moves: List[Tuple[int, int]],
+    ) -> Tuple[int, int]:
         """Move toward target position from possible moves."""
         if not possible_moves:
             return current_pos
-        
+
         best_move = current_pos
-        min_distance = float('inf')
-        
+        min_distance = float("inf")
+
         for move_pos in possible_moves:
-            distance = abs(move_pos[0] - target_pos[0]) + abs(move_pos[1] - target_pos[1])
+            distance = abs(move_pos[0] - target_pos[0]) + abs(
+                move_pos[1] - target_pos[1]
+            )
             if distance < min_distance:
                 min_distance = distance
                 best_move = move_pos
-        
+
         return best_move
 
-    def _get_valid_ghost_moves(self, ghost_pos: Tuple[int, int]) -> List[Tuple[int, int]]:
+    def _get_valid_ghost_moves(
+        self, ghost_pos: Tuple[int, int]
+    ) -> List[Tuple[int, int]]:
         """Get valid positions for ghost to move to."""
         row, col = ghost_pos
         possible_moves = [
@@ -336,7 +376,9 @@ class PacManStateTransitionModel(Distribution):
 
         return [pos for pos in possible_moves if self._is_valid_position(pos)]
 
-    def _get_valid_moves_for_position(self, pos: Tuple[int, int]) -> List[Tuple[int, int]]:
+    def _get_valid_moves_for_position(
+        self, pos: Tuple[int, int]
+    ) -> List[Tuple[int, int]]:
         """Get valid moves for any position (used for prediction)."""
         row, col = pos
         possible_moves = [
@@ -346,7 +388,9 @@ class PacManStateTransitionModel(Distribution):
             (row, col - 1),  # West
         ]
 
-        return [move_pos for move_pos in possible_moves if self._is_valid_position(move_pos)]
+        return [
+            move_pos for move_pos in possible_moves if self._is_valid_position(move_pos)
+        ]
 
     def _is_valid_position(self, pos: Tuple[int, int]) -> bool:
         """Check if position is valid (within bounds and not a wall)."""
@@ -412,19 +456,28 @@ class PacManObservationModel(Distribution):
 
         return observations
 
-    def sample_closest_ghosts(self, max_ghosts: int = 2, n_samples: int = 1) -> List[Tuple[Tuple[int, int], ...]]:
+    def sample_closest_ghosts(
+        self, max_ghosts: int = 2, n_samples: int = 1
+    ) -> List[Tuple[Tuple[int, int], ...]]:
         """Sample observations of only the closest ghosts."""
         if self.next_state.terminal:
-            terminal_obs = tuple([(-1, -1)] * min(max_ghosts, len(self.next_state.ghost_positions)))
+            terminal_obs = tuple(
+                [(-1, -1)] * min(max_ghosts, len(self.next_state.ghost_positions))
+            )
             return [terminal_obs] * n_samples
 
         pacman_pos = self.next_state.pacman_pos
-        
+
         # Calculate distances and sort ghosts by proximity
-        ghost_distances = [(ghost_pos, abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1])) 
-                          for ghost_pos in self.next_state.ghost_positions]
+        ghost_distances = [
+            (
+                ghost_pos,
+                abs(ghost_pos[0] - pacman_pos[0]) + abs(ghost_pos[1] - pacman_pos[1]),
+            )
+            for ghost_pos in self.next_state.ghost_positions
+        ]
         closest_ghosts = sorted(ghost_distances, key=lambda x: x[1])[:max_ghosts]
-        
+
         observations = []
         for _ in range(n_samples):
             ghost_obs = []
@@ -469,7 +522,9 @@ class PacManObservationModel(Distribution):
             else:
                 # Calculate probability as product of individual ghost observation probabilities
                 total_prob = 1.0
-                for i, (obs_pos, true_ghost_pos) in enumerate(zip(obs_tuple, true_ghost_positions)):
+                for i, (obs_pos, true_ghost_pos) in enumerate(
+                    zip(obs_tuple, true_ghost_positions)
+                ):
                     # Distance-based noise for this ghost
                     distance = abs(true_ghost_pos[0] - pacman_pos[0]) + abs(
                         true_ghost_pos[1] - pacman_pos[1]
@@ -491,9 +546,9 @@ class PacManObservationModel(Distribution):
                         col_diff = obs_pos[1] - true_ghost_pos[1]
                         distance_sq = row_diff**2 + col_diff**2
                         ghost_prob = np.exp(-distance_sq / (2 * noise_std**2))
-                    
+
                     total_prob *= ghost_prob
-                
+
                 prob = total_prob
 
             probs.append(prob)
@@ -596,10 +651,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         # Calculate reward range based on parameters
         min_reward = step_penalty + ghost_collision_penalty
         max_reward = step_penalty + pellet_reward + win_reward
-        
+
         space_info = SpaceInfo(
-            action_space=SpaceType.DISCRETE, 
-            observation_space=SpaceType.DISCRETE
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
         )
 
         super().__init__(
@@ -628,7 +682,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         # Handle ghost positions (backward compatibility)
         if initial_ghost_positions is not None:
             if len(initial_ghost_positions) != num_ghosts:
-                raise ValueError(f"initial_ghost_positions length ({len(initial_ghost_positions)}) must match num_ghosts ({num_ghosts})")
+                raise ValueError(
+                    f"initial_ghost_positions length ({len(initial_ghost_positions)}) must match num_ghosts ({num_ghosts})"
+                )
             self.initial_ghost_positions = initial_ghost_positions
         elif initial_ghost_pos is not None:
             # Backward compatibility: single ghost position provided
@@ -668,43 +724,49 @@ class PacManPOMDP(DiscreteActionsEnvironment):
     @property
     def initial_ghost_pos(self) -> Tuple[int, int]:
         """Backward compatibility: returns first ghost position."""
-        return self.initial_ghost_positions[0] if self.initial_ghost_positions else (0, 0)
+        return (
+            self.initial_ghost_positions[0] if self.initial_ghost_positions else (0, 0)
+        )
 
     def _generate_ghost_positions(self, num_ghosts: int) -> List[Tuple[int, int]]:
         """Generate ghost starting positions automatically."""
         rows, cols = self.maze_size
-        
+
         # Try to place ghosts in corners first, then other positions
         corner_positions = [
             (rows - 1, cols - 1),  # Bottom-right
-            (0, cols - 1),         # Top-right  
-            (rows - 1, 0),         # Bottom-left
-            (rows // 2, cols // 2), # Center
+            (0, cols - 1),  # Top-right
+            (rows - 1, 0),  # Bottom-left
+            (rows // 2, cols // 2),  # Center
         ]
-        
+
         # Filter out walls and PacMan position
         available_positions = []
         for pos in corner_positions:
             if pos not in self.walls and pos != self.initial_pacman_pos:
                 available_positions.append(pos)
-        
+
         # If we need more positions, add valid positions from the maze
         if len(available_positions) < num_ghosts:
             for r in range(rows):
                 for c in range(cols):
                     pos = (r, c)
-                    if (pos not in self.walls and 
-                        pos != self.initial_pacman_pos and 
-                        pos not in available_positions):
+                    if (
+                        pos not in self.walls
+                        and pos != self.initial_pacman_pos
+                        and pos not in available_positions
+                    ):
                         available_positions.append(pos)
                         if len(available_positions) >= num_ghosts:
                             break
                 if len(available_positions) >= num_ghosts:
                     break
-        
+
         if len(available_positions) < num_ghosts:
-            raise ValueError(f"Cannot place {num_ghosts} ghosts in maze with {len(available_positions)} available positions")
-        
+            raise ValueError(
+                f"Cannot place {num_ghosts} ghosts in maze with {len(available_positions)} available positions"
+            )
+
         return available_positions[:num_ghosts]
 
     def _validate_parameters(self):
@@ -717,8 +779,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):
 
         # Check PacMan position is within bounds
         if not (
-            0 <= self.initial_pacman_pos[0] < self.maze_size[0] and 
-            0 <= self.initial_pacman_pos[1] < self.maze_size[1]
+            0 <= self.initial_pacman_pos[0] < self.maze_size[0]
+            and 0 <= self.initial_pacman_pos[1] < self.maze_size[1]
         ):
             raise ValueError(
                 f"PacMan position {self.initial_pacman_pos} is outside maze bounds {self.maze_size}"
@@ -727,8 +789,8 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         # Check all ghost positions are within bounds
         for i, ghost_pos in enumerate(self.initial_ghost_positions):
             if not (
-                0 <= ghost_pos[0] < self.maze_size[0] and 
-                0 <= ghost_pos[1] < self.maze_size[1]
+                0 <= ghost_pos[0] < self.maze_size[0]
+                and 0 <= ghost_pos[1] < self.maze_size[1]
             ):
                 raise ValueError(
                     f"Ghost {i} position {ghost_pos} is outside maze bounds {self.maze_size}"
@@ -751,7 +813,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             raise ValueError(
                 f"Initial PacMan position {self.initial_pacman_pos} is inside a wall"
             )
-        
+
         for i, ghost_pos in enumerate(self.initial_ghost_positions):
             if ghost_pos in self.walls:
                 raise ValueError(
@@ -767,7 +829,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         valid_strategies = ["aggressive", "patrol", "ambush"]
         for i, strategy in enumerate(self.ghost_strategies):
             if strategy not in valid_strategies:
-                raise ValueError(f"ghost_strategies[{i}] must be one of {valid_strategies}")
+                raise ValueError(
+                    f"ghost_strategies[{i}] must be one of {valid_strategies}"
+                )
 
     def get_actions(self) -> List[int]:
         """Get all available actions."""
@@ -873,12 +937,14 @@ class PacManPOMDP(DiscreteActionsEnvironment):
                 # and count collision encounters
                 episode_distances = []
                 episode_collisions = 0
-                per_ghost_distances = [[] for _ in range(len(self.initial_ghost_positions))]
-                
+                per_ghost_distances = [
+                    [] for _ in range(len(self.initial_ghost_positions))
+                ]
+
                 for step_data in history.history:
                     if isinstance(step_data.state, PacManState):
                         pacman_pos = step_data.state.pacman_pos
-                        
+
                         # Calculate distances to all ghosts
                         ghost_distances = []
                         for i, ghost_pos in enumerate(step_data.state.ghost_positions):
@@ -886,7 +952,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
                                 pacman_pos[1] - ghost_pos[1]
                             )
                             ghost_distances.append(distance)
-                            
+
                             # Track per-ghost distances
                             if i < len(per_ghost_distances):
                                 per_ghost_distances[i].append(distance)
@@ -978,15 +1044,19 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             for history in histories:
                 if history.history:
                     ghost_distances_per_episode = [[] for _ in range(self.num_ghosts)]
-                    
+
                     for step_data in history.history:
                         if isinstance(step_data.state, PacManState):
                             pacman_pos = step_data.state.pacman_pos
-                            for i, ghost_pos in enumerate(step_data.state.ghost_positions):
+                            for i, ghost_pos in enumerate(
+                                step_data.state.ghost_positions
+                            ):
                                 if i < len(ghost_distances_per_episode):
-                                    distance = abs(pacman_pos[0] - ghost_pos[0]) + abs(pacman_pos[1] - ghost_pos[1])
+                                    distance = abs(pacman_pos[0] - ghost_pos[0]) + abs(
+                                        pacman_pos[1] - ghost_pos[1]
+                                    )
                                     ghost_distances_per_episode[i].append(distance)
-                    
+
                     # Calculate average distance per ghost for this episode
                     episode_ghost_avgs = []
                     for ghost_distances in ghost_distances_per_episode:
@@ -994,14 +1064,17 @@ class PacManPOMDP(DiscreteActionsEnvironment):
                             episode_ghost_avgs.append(np.mean(ghost_distances))
                         else:
                             episode_ghost_avgs.append(0.0)
-                    
+
                     per_ghost_avg_distances.append(episode_ghost_avgs)
-            
+
             # Create metrics for each ghost
             if per_ghost_avg_distances:
                 for ghost_id in range(self.num_ghosts):
-                    ghost_distances = [episode_avgs[ghost_id] for episode_avgs in per_ghost_avg_distances 
-                                     if ghost_id < len(episode_avgs)]
+                    ghost_distances = [
+                        episode_avgs[ghost_id]
+                        for episode_avgs in per_ghost_avg_distances
+                        if ghost_id < len(episode_avgs)
+                    ]
                     if ghost_distances:
                         avg_distance = np.mean(ghost_distances)
                         ci_low, ci_high = confidence_interval(ghost_distances)
@@ -1034,11 +1107,11 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             """Apply color tint to sprite image."""
             # Create a colored overlay
             overlay = Image.new("RGBA", image.size, color)
-            
+
             # Blend the overlay with the original image
             # This creates a tinted version while preserving the original alpha
             result = Image.blend(image.convert("RGBA"), overlay, 0.3)
-            
+
             # Preserve original alpha channel
             result.putalpha(image.split()[-1])
             return result
@@ -1074,9 +1147,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):
 
             # Load multiple ghost sprites with different colors
             ghost_colors = [
-                (255, 0, 0, 255),    # Red ghost
-                (0, 255, 0, 255),    # Green ghost  
-                (0, 0, 255, 255),    # Blue ghost
+                (255, 0, 0, 255),  # Red ghost
+                (0, 255, 0, 255),  # Green ghost
+                (0, 0, 255, 255),  # Blue ghost
                 (255, 0, 255, 255),  # Magenta ghost
                 (255, 165, 0, 255),  # Orange ghost
                 (0, 255, 255, 255),  # Cyan ghost
@@ -1146,7 +1219,11 @@ class PacManPOMDP(DiscreteActionsEnvironment):
                     ghost_x, ghost_y = gc * TILE_SIZE, gr * TILE_SIZE
                     ghost_sprite_key = f"ghost_{i % 8}"  # Cycle through 8 colors
                     if ghost_sprite_key in sprites:
-                        canvas.paste(sprites[ghost_sprite_key], (ghost_x, ghost_y), sprites[ghost_sprite_key])
+                        canvas.paste(
+                            sprites[ghost_sprite_key],
+                            (ghost_x, ghost_y),
+                            sprites[ghost_sprite_key],
+                        )
 
             # Draw PacMan (last so it can overlap with ghost if collision)
             pr, pc = state.pacman_pos
@@ -1164,9 +1241,19 @@ class PacManPOMDP(DiscreteActionsEnvironment):
                         fill=(255, 0, 0, 200),
                     )
                     # Add multiple explosion symbols for multi-ghost collision effect
-                    num_colliding_ghosts = sum(1 for ghost_pos in state.ghost_positions if ghost_pos == state.pacman_pos)
-                    explosion_text = "💥" * min(num_colliding_ghosts, 3)  # Limit to 3 symbols
-                    draw.text((pacman_x + 2, pacman_y + 2), explosion_text, fill=(255, 255, 255))
+                    num_colliding_ghosts = sum(
+                        1
+                        for ghost_pos in state.ghost_positions
+                        if ghost_pos == state.pacman_pos
+                    )
+                    explosion_text = "💥" * min(
+                        num_colliding_ghosts, 3
+                    )  # Limit to 3 symbols
+                    draw.text(
+                        (pacman_x + 2, pacman_y + 2),
+                        explosion_text,
+                        fill=(255, 255, 255),
+                    )
                 else:
                     canvas.paste(
                         sprites["pacman"], (pacman_x, pacman_y), sprites["pacman"]
@@ -1235,15 +1322,16 @@ class PacManPOMDP(DiscreteActionsEnvironment):
 
         # Extract path and actions
         path = [step.state for step in history]
-        actions = [
-            step.action for step in history[:-1]
-        ]  # Last step has no action
+        actions = [step.action for step in history[:-1]]  # Last step has no action
 
         self.visualize_path(path, actions, cache_path)
 
 
 def create_simple_maze_pacman(
-    maze_size: int = 7, num_walls: int = 5, num_ghosts: int = 1, seed: Optional[int] = None
+    maze_size: int = 7,
+    num_walls: int = 5,
+    num_ghosts: int = 1,
+    seed: Optional[int] = None,
 ) -> PacManPOMDP:
     """Create a simple PacMan instance with random walls and multiple ghosts.
 

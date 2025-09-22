@@ -12,7 +12,10 @@ import numpy as np
 import random
 from pathlib import Path
 
-from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI, RiskAverseEnvironmentConfigsAPI
+from POMDPPlanners.configs.environment_configs import (
+    EnvironmentConfigsAPI,
+    RiskAverseEnvironmentConfigsAPI,
+)
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.belief import WeightedParticleBelief
 
@@ -23,294 +26,394 @@ random.seed(42)
 
 class TestEnvironmentConfigs:
     """Test class for environment configuration API."""
-    
+
     def setup_method(self):
         """Set up test environment before each test method."""
         self.config_api = EnvironmentConfigsAPI(discount_factor=0.95, debug=False)
         self.test_n_particles = 10  # Small number for faster tests
-    
+
     def test_tiger_pomdp_config(self):
         """Test TigerPOMDP configuration creation."""
         print("Testing TigerPOMDP configuration...")
-        
-        pomdp, belief = self.config_api.tiger_pomdp_config(n_particles=self.test_n_particles)
-        
+
+        pomdp, belief = self.config_api.tiger_pomdp_config(
+            n_particles=self.test_n_particles
+        )
+
         # Verify types
-        assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert isinstance(belief, WeightedParticleBelief), f"Expected WeightedParticleBelief, got {type(belief)}"
-        
+        assert isinstance(
+            pomdp, Environment
+        ), f"Expected Environment, got {type(pomdp)}"
+        assert isinstance(
+            belief, WeightedParticleBelief
+        ), f"Expected WeightedParticleBelief, got {type(belief)}"
+
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
         assert len(belief.particles) > 0
-        
+
         # Test basic functionality
         actions = pomdp.get_actions()
         assert len(actions) > 0, "Environment should have at least one action"
-        
+
         print("  ✓ TigerPOMDP configuration test passed!")
-    
+
     def test_cartpole_pomdp_config(self):
         """Test CartPolePOMDP configuration creation."""
         print("Testing CartPolePOMDP configuration...")
-        
-        pomdp, belief = self.config_api.cartpole_pomdp_config(n_particles=self.test_n_particles)
-        
+
+        pomdp, belief = self.config_api.cartpole_pomdp_config(
+            n_particles=self.test_n_particles
+        )
+
         # Verify types
-        assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert isinstance(belief, WeightedParticleBelief), f"Expected WeightedParticleBelief, got {type(belief)}"
-        
+        assert isinstance(
+            pomdp, Environment
+        ), f"Expected Environment, got {type(pomdp)}"
+        assert isinstance(
+            belief, WeightedParticleBelief
+        ), f"Expected WeightedParticleBelief, got {type(belief)}"
+
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
         assert len(belief.particles) > 0
-        
+
         print("  ✓ CartPolePOMDP configuration test passed!")
-    
+
     def test_mountain_car_pomdp_config(self):
         """Test MountainCarPOMDP configuration creation."""
         print("Testing MountainCarPOMDP configuration...")
-        
-        pomdp, belief = self.config_api.mountain_car_pomdp_config(n_particles=self.test_n_particles)
-        
+
+        pomdp, belief = self.config_api.mountain_car_pomdp_config(
+            n_particles=self.test_n_particles
+        )
+
         # Verify types
-        assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert isinstance(belief, WeightedParticleBelief), f"Expected WeightedParticleBelief, got {type(belief)}"
-        
+        assert isinstance(
+            pomdp, Environment
+        ), f"Expected Environment, got {type(pomdp)}"
+        assert isinstance(
+            belief, WeightedParticleBelief
+        ), f"Expected WeightedParticleBelief, got {type(belief)}"
+
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
         assert len(belief.particles) > 0
-        
+
         print("  ✓ MountainCarPOMDP configuration test passed!")
-    
+
     def test_push_pomdp_config(self):
         """Test PushPOMDP configuration creation."""
         print("Testing PushPOMDP configuration...")
-        
-        pomdp, belief = self.config_api.push_pomdp_config(n_particles=self.test_n_particles)
-        
+
+        pomdp, belief = self.config_api.push_pomdp_config(
+            n_particles=self.test_n_particles
+        )
+
         # Verify types
-        assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert isinstance(belief, WeightedParticleBelief), f"Expected WeightedParticleBelief, got {type(belief)}"
-        
+        assert isinstance(
+            pomdp, Environment
+        ), f"Expected Environment, got {type(pomdp)}"
+        assert isinstance(
+            belief, WeightedParticleBelief
+        ), f"Expected WeightedParticleBelief, got {type(belief)}"
+
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
         assert len(belief.particles) > 0
-        
+
         print("  ✓ PushPOMDP configuration test passed!")
-    
+
     def test_continuous_light_dark_discrete_actions_config(self):
         """Test ContinuousLightDarkPOMDPDiscreteActions configuration creation."""
         print("Testing ContinuousLightDarkPOMDPDiscreteActions configuration...")
-        
-        pomdp, belief = self.config_api.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=self.test_n_particles)
-        
+
+        pomdp, belief = (
+            self.config_api.continuous_observations_discrete_actions_light_dark_pomdp_config(
+                n_particles=self.test_n_particles
+            )
+        )
+
         # Verify types
-        assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert hasattr(belief, 'particles'), f"Belief should have particles attribute"
-        
+        assert isinstance(
+            pomdp, Environment
+        ), f"Expected Environment, got {type(pomdp)}"
+        assert hasattr(belief, "particles"), f"Belief should have particles attribute"
+
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
-        
+
         # Test specific light-dark properties
-        assert hasattr(pomdp, 'beacons'), "Light-dark POMDP should have beacons"
-        assert hasattr(pomdp, 'goal_state'), "Light-dark POMDP should have goal_state"
-        assert hasattr(pomdp, 'start_state'), "Light-dark POMDP should have start_state"
-        
+        assert hasattr(pomdp, "beacons"), "Light-dark POMDP should have beacons"
+        assert hasattr(pomdp, "goal_state"), "Light-dark POMDP should have goal_state"
+        assert hasattr(pomdp, "start_state"), "Light-dark POMDP should have start_state"
+
         print("  ✓ ContinuousLightDarkPOMDPDiscreteActions configuration test passed!")
-    
+
     def test_continuous_light_dark_continuous_actions_config(self):
         """Test ContinuousLightDarkPOMDP configuration creation."""
         print("Testing ContinuousLightDarkPOMDP configuration...")
-        
+
         # Note: This calls the method with the same name but different implementation
         # The method name appears to be duplicated in the original file
-        pomdp, belief = self.config_api.continuous_observations_continuous_actions_light_dark_pomdp_config(n_particles=self.test_n_particles)
-        
+        pomdp, belief = (
+            self.config_api.continuous_observations_continuous_actions_light_dark_pomdp_config(
+                n_particles=self.test_n_particles
+            )
+        )
+
         # Verify types
-        assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert hasattr(belief, 'particles'), f"Belief should have particles attribute"
-        
+        assert isinstance(
+            pomdp, Environment
+        ), f"Expected Environment, got {type(pomdp)}"
+        assert hasattr(belief, "particles"), f"Belief should have particles attribute"
+
         # Verify basic properties
         assert pomdp.discount_factor is not None
-        
+
         print("  ✓ ContinuousLightDarkPOMDP configuration test passed!")
-    
+
     def test_rock_sample_pomdp_config(self):
         """Test RockSamplePOMDP configuration creation."""
         print("Testing RockSamplePOMDP configuration...")
-        
-        pomdp, belief = self.config_api.rock_sample_pomdp_config(n_particles=self.test_n_particles)
-        
+
+        pomdp, belief = self.config_api.rock_sample_pomdp_config(
+            n_particles=self.test_n_particles
+        )
+
         # Verify types
-        assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert isinstance(belief, WeightedParticleBelief), f"Expected WeightedParticleBelief, got {type(belief)}"
-        
+        assert isinstance(
+            pomdp, Environment
+        ), f"Expected Environment, got {type(pomdp)}"
+        assert isinstance(
+            belief, WeightedParticleBelief
+        ), f"Expected WeightedParticleBelief, got {type(belief)}"
+
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
         assert len(belief.particles) > 0
-        
+
         print("  ✓ RockSamplePOMDP configuration test passed!")
-    
+
     def test_pacman_pomdp_config(self):
         """Test PacManPOMDP configuration creation."""
         print("Testing PacManPOMDP configuration...")
-        
-        pomdp, belief = self.config_api.pacman_pomdp_config(n_particles=self.test_n_particles)
-        
+
+        pomdp, belief = self.config_api.pacman_pomdp_config(
+            n_particles=self.test_n_particles
+        )
+
         # Verify types
-        assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert isinstance(belief, WeightedParticleBelief), f"Expected WeightedParticleBelief, got {type(belief)}"
-        
+        assert isinstance(
+            pomdp, Environment
+        ), f"Expected Environment, got {type(pomdp)}"
+        assert isinstance(
+            belief, WeightedParticleBelief
+        ), f"Expected WeightedParticleBelief, got {type(belief)}"
+
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
         assert len(belief.particles) > 0
-        
+
         print("  ✓ PacManPOMDP configuration test passed!")
-    
+
     def test_laser_tag_pomdp_config(self):
         """Test LaserTagPOMDP configuration creation."""
         print("Testing LaserTagPOMDP configuration...")
-        
-        pomdp, belief = self.config_api.laser_tag_pomdp_config(n_particles=self.test_n_particles)
-        
+
+        pomdp, belief = self.config_api.laser_tag_pomdp_config(
+            n_particles=self.test_n_particles
+        )
+
         # Verify types
-        assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert isinstance(belief, WeightedParticleBelief), f"Expected WeightedParticleBelief, got {type(belief)}"
-        
+        assert isinstance(
+            pomdp, Environment
+        ), f"Expected Environment, got {type(pomdp)}"
+        assert isinstance(
+            belief, WeightedParticleBelief
+        ), f"Expected WeightedParticleBelief, got {type(belief)}"
+
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
         assert len(belief.particles) > 0
-        
+
         print("  ✓ LaserTagPOMDP configuration test passed!")
-    
+
     def test_safety_ant_velocity_pomdp_config(self):
         """Test SafeAntVelocityPOMDP configuration creation."""
         print("Testing SafeAntVelocityPOMDP configuration...")
-        
-        pomdp, belief = self.config_api.safety_ant_velocity_pomdp_config(n_particles=self.test_n_particles)
-        
+
+        pomdp, belief = self.config_api.safety_ant_velocity_pomdp_config(
+            n_particles=self.test_n_particles
+        )
+
         # Verify types
-        assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert isinstance(belief, WeightedParticleBelief), f"Expected WeightedParticleBelief, got {type(belief)}"
-        
+        assert isinstance(
+            pomdp, Environment
+        ), f"Expected Environment, got {type(pomdp)}"
+        assert isinstance(
+            belief, WeightedParticleBelief
+        ), f"Expected WeightedParticleBelief, got {type(belief)}"
+
         # Verify basic properties
         assert pomdp.discount_factor is not None
         assert pomdp.name is not None
         assert len(belief.particles) > 0
-        
+
         print("  ✓ SafeAntVelocityPOMDP configuration test passed!")
-    
+
     def test_risk_averse_push_pomdp_config(self):
         """Test RiskAverseEnvironmentConfigsAPI push POMDP configuration creation."""
         print("Testing RiskAverseEnvironmentConfigsAPI push POMDP configuration...")
-        
+
         # Create risk averse config API
-        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False)
-        
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(
+            discount_factor=0.95, debug=False
+        )
+
         # Test initialization without errors
-        pomdp, belief = risk_averse_api.push_pomdp_config(n_particles=self.test_n_particles)
-        
-        print("  ✓ RiskAverseEnvironmentConfigsAPI push POMDP configuration test passed!")
-    
+        pomdp, belief = risk_averse_api.push_pomdp_config(
+            n_particles=self.test_n_particles
+        )
+
+        print(
+            "  ✓ RiskAverseEnvironmentConfigsAPI push POMDP configuration test passed!"
+        )
+
     def test_risk_averse_rock_sample_pomdp_config(self):
         """Test RiskAverseEnvironmentConfigsAPI rock sample POMDP configuration creation."""
-        print("Testing RiskAverseEnvironmentConfigsAPI rock sample POMDP configuration...")
-        
+        print(
+            "Testing RiskAverseEnvironmentConfigsAPI rock sample POMDP configuration..."
+        )
+
         # Create risk averse config API
-        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False)
-        
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(
+            discount_factor=0.95, debug=False
+        )
+
         # Test initialization without errors
-        pomdp, belief = risk_averse_api.rock_sample_pomdp_config(n_particles=self.test_n_particles)
-        
-        print("  ✓ RiskAverseEnvironmentConfigsAPI rock sample POMDP configuration test passed!")
-    
+        pomdp, belief = risk_averse_api.rock_sample_pomdp_config(
+            n_particles=self.test_n_particles
+        )
+
+        print(
+            "  ✓ RiskAverseEnvironmentConfigsAPI rock sample POMDP configuration test passed!"
+        )
+
     def test_risk_averse_light_dark_discrete_actions_config(self):
         """Test RiskAverseEnvironmentConfigsAPI light dark discrete actions configuration creation."""
-        print("Testing RiskAverseEnvironmentConfigsAPI light dark discrete actions configuration...")
-        
+        print(
+            "Testing RiskAverseEnvironmentConfigsAPI light dark discrete actions configuration..."
+        )
+
         # Create risk averse config API
-        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False)
-        
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(
+            discount_factor=0.95, debug=False
+        )
+
         # Test initialization without errors
-        pomdp, belief = risk_averse_api.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=self.test_n_particles)
-        
-        print("  ✓ RiskAverseEnvironmentConfigsAPI light dark discrete actions configuration test passed!")
-    
+        pomdp, belief = (
+            risk_averse_api.continuous_observations_discrete_actions_light_dark_pomdp_config(
+                n_particles=self.test_n_particles
+            )
+        )
+
+        print(
+            "  ✓ RiskAverseEnvironmentConfigsAPI light dark discrete actions configuration test passed!"
+        )
+
     def test_risk_averse_light_dark_continuous_actions_config(self):
         """Test RiskAverseEnvironmentConfigsAPI light dark continuous actions configuration creation."""
-        print("Testing RiskAverseEnvironmentConfigsAPI light dark continuous actions configuration...")
-        
+        print(
+            "Testing RiskAverseEnvironmentConfigsAPI light dark continuous actions configuration..."
+        )
+
         # Create risk averse config API
-        risk_averse_api = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95, debug=False)
-        
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI(
+            discount_factor=0.95, debug=False
+        )
+
         # Test initialization without errors
-        pomdp, belief = risk_averse_api.continuous_observations_continuous_actions_light_dark_pomdp_config(n_particles=self.test_n_particles)
-        
-        print("  ✓ RiskAverseEnvironmentConfigsAPI light dark continuous actions configuration test passed!")
-    
+        pomdp, belief = (
+            risk_averse_api.continuous_observations_continuous_actions_light_dark_pomdp_config(
+                n_particles=self.test_n_particles
+            )
+        )
+
+        print(
+            "  ✓ RiskAverseEnvironmentConfigsAPI light dark continuous actions configuration test passed!"
+        )
+
     def test_config_api_initialization(self):
         """Test EnvironmentConfigsAPI initialization with different parameters."""
         print("Testing EnvironmentConfigsAPI initialization...")
-        
+
         # Test default initialization
         api_default = EnvironmentConfigsAPI()
         assert api_default.discount_factor is not None
         assert api_default.debug is not None
-        
+
         # Test custom initialization
         api_custom = EnvironmentConfigsAPI(discount_factor=0.99, debug=True)
         assert api_custom.discount_factor is not None
         assert api_custom.debug is not None
-        
+
         print("  ✓ EnvironmentConfigsAPI initialization test passed!")
-    
+
     def test_risk_averse_config_api_initialization(self):
         """Test RiskAverseEnvironmentConfigsAPI initialization with different parameters."""
         print("Testing RiskAverseEnvironmentConfigsAPI initialization...")
-        
+
         # Test default initialization
         api_default = RiskAverseEnvironmentConfigsAPI()
         assert api_default.discount_factor is not None
         assert api_default.debug is not None
-        
+
         # Test custom initialization
         api_custom = RiskAverseEnvironmentConfigsAPI(discount_factor=0.99, debug=True)
         assert api_custom.discount_factor is not None
         assert api_custom.debug is not None
-        
+
         print("  ✓ RiskAverseEnvironmentConfigsAPI initialization test passed!")
-    
+
     def test_all_configs_have_consistent_interface(self):
         """Test that all configuration methods return consistent types."""
         print("Testing all configurations have consistent interface...")
-        
+
         config_methods = [
-            'tiger_pomdp_config',
-            'cartpole_pomdp_config', 
-            'mountain_car_pomdp_config',
-            'push_pomdp_config',
-            'rock_sample_pomdp_config',
-            'pacman_pomdp_config',
-            'laser_tag_pomdp_config',
-            'safety_ant_velocity_pomdp_config'
+            "tiger_pomdp_config",
+            "cartpole_pomdp_config",
+            "mountain_car_pomdp_config",
+            "push_pomdp_config",
+            "rock_sample_pomdp_config",
+            "pacman_pomdp_config",
+            "laser_tag_pomdp_config",
+            "safety_ant_velocity_pomdp_config",
         ]
-        
+
         for method_name in config_methods:
             method = getattr(self.config_api, method_name)
             pomdp, belief = method(n_particles=self.test_n_particles)
-            
+
             # Verify consistent return types
-            assert isinstance(pomdp, Environment), f"{method_name} should return Environment"
-            assert hasattr(belief, 'particles'), f"{method_name} should return object with particles"
-            assert pomdp.discount_factor is not None, f"{method_name} should have discount factor"
-            
+            assert isinstance(
+                pomdp, Environment
+            ), f"{method_name} should return Environment"
+            assert hasattr(
+                belief, "particles"
+            ), f"{method_name} should return object with particles"
+            assert (
+                pomdp.discount_factor is not None
+            ), f"{method_name} should have discount factor"
+
         print("  ✓ All configurations have consistent interface test passed!")
 
 
@@ -318,13 +421,13 @@ def main():
     """Run all environment configuration tests."""
     print("🚀 Running Environment Configuration Tests")
     print("=" * 60)
-    
+
     test_class = TestEnvironmentConfigs()
-    test_methods = [method for method in dir(test_class) if method.startswith('test_')]
-    
+    test_methods = [method for method in dir(test_class) if method.startswith("test_")]
+
     passed = 0
     total = len(test_methods)
-    
+
     for method_name in test_methods:
         try:
             test_class.setup_method()
@@ -334,11 +437,12 @@ def main():
         except Exception as e:
             print(f"  ❌ {method_name} failed: {e}")
             import traceback
+
             traceback.print_exc()
-    
+
     print("=" * 60)
     print(f"Test Results: {passed}/{total} tests passed")
-    
+
     if passed == total:
         print("🎉 All environment configuration tests passed!")
         return 0

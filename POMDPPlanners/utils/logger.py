@@ -9,6 +9,7 @@ import signal
 import time
 from logging.handlers import QueueHandler
 
+
 class QueueLoggerManager:
     """Centralized queue-based logger manager with individual task log files.
 
@@ -25,8 +26,12 @@ class QueueLoggerManager:
     - Scales to thousands of concurrent processes
     """
 
-    def __init__(self, max_handlers: int = 100, cleanup_interval: int = 60,
-                 handler_timeout: int = 300):
+    def __init__(
+        self,
+        max_handlers: int = 100,
+        cleanup_interval: int = 60,
+        handler_timeout: int = 300,
+    ):
         self._log_queue = queue.Queue(maxsize=10000)  # Bounded queue
         self._writer_thread = None
         self._task_handlers = {}  # task_id -> file handler
@@ -44,9 +49,7 @@ class QueueLoggerManager:
         """Start the background logging thread."""
         if self._writer_thread is None or not self._writer_thread.is_alive():
             self._writer_thread = threading.Thread(
-                target=self._log_writer_worker,
-                name="QueueLogWriter",
-                daemon=True
+                target=self._log_writer_worker, name="QueueLogWriter", daemon=True
             )
             self._writer_thread.start()
 
@@ -72,8 +75,13 @@ class QueueLoggerManager:
                 pass  # Queue full, thread will timeout and check shutdown event
             self._writer_thread.join(timeout=5.0)
 
-    def get_queue_logger(self, task_id: str, cache_dir: Optional[Path] = None,
-                        debug: bool = False, console_output: bool = True) -> logging.Logger:
+    def get_queue_logger(
+        self,
+        task_id: str,
+        cache_dir: Optional[Path] = None,
+        debug: bool = False,
+        console_output: bool = True,
+    ) -> logging.Logger:
         """Get a logger that writes to the centralized queue with individual task file.
 
         Args:
@@ -103,10 +111,10 @@ class QueueLoggerManager:
 
             # Store configuration for the writer thread
             self._loggers[logger_name] = {
-                'task_id': task_id,
-                'cache_dir': cache_dir,
-                'debug': debug,
-                'console_output': console_output
+                "task_id": task_id,
+                "cache_dir": cache_dir,
+                "debug": debug,
+                "console_output": console_output,
             }
 
             # Ensure writer thread is started
@@ -130,7 +138,7 @@ class QueueLoggerManager:
                         break
 
                     config = self._loggers.get(record.name, {})
-                    task_id = config.get('task_id')
+                    task_id = config.get("task_id")
 
                     if not task_id:
                         continue
@@ -147,9 +155,11 @@ class QueueLoggerManager:
                             pass  # Don't let handler errors crash writer thread
 
                     # Write to shared console handler if enabled
-                    if config.get('console_output', True):
+                    if config.get("console_output", True):
                         if console_handler is None:
-                            console_handler = self._create_console_handler(config.get('debug', False))
+                            console_handler = self._create_console_handler(
+                                config.get("debug", False)
+                            )
 
                         try:
                             console_handler.emit(record)
@@ -179,11 +189,13 @@ class QueueLoggerManager:
                 except:
                     pass
 
-    def _get_or_create_task_handler(self, task_id: str, config: dict) -> Optional[logging.Handler]:
+    def _get_or_create_task_handler(
+        self, task_id: str, config: dict
+    ) -> Optional[logging.Handler]:
         """Get or create file handler for specific task (maintains individual files)."""
 
         if task_id not in self._task_handlers:
-            cache_dir = config.get('cache_dir')
+            cache_dir = config.get("cache_dir")
             if not cache_dir:
                 return None
 
@@ -193,15 +205,15 @@ class QueueLoggerManager:
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             # Use the full task ID for filename (maintains existing behavior)
-            task_name = task_id.replace('.', '_')
+            task_name = task_id.replace(".", "_")
             log_file = logs_dir / f"{task_name}_{timestamp}.log"
 
             # Create handler in writer thread (not worker processes)
             handler = logging.FileHandler(log_file)
-            handler.setLevel(logging.DEBUG if config.get('debug') else logging.INFO)
+            handler.setLevel(logging.DEBUG if config.get("debug") else logging.INFO)
 
             formatter = logging.Formatter(
-                '%(asctime)s - %(name)s - %(levelname)s - %(pathname)s:%(lineno)d - %(message)s'
+                "%(asctime)s - %(name)s - %(levelname)s - %(pathname)s:%(lineno)d - %(message)s"
             )
             handler.setFormatter(formatter)
 
@@ -217,7 +229,9 @@ class QueueLoggerManager:
         else:
             # Update reference count and last used time
             handler = self._task_handlers[task_id]
-            self._handler_ref_count[handler] = self._handler_ref_count.get(handler, 0) + 1
+            self._handler_ref_count[handler] = (
+                self._handler_ref_count.get(handler, 0) + 1
+            )
             self._handler_last_used[handler] = time.time()
 
         return self._task_handlers.get(task_id)
@@ -229,7 +243,7 @@ class QueueLoggerManager:
         handler.setLevel(logging.DEBUG if debug else logging.INFO)
 
         formatter = logging.Formatter(
-            '%(asctime)s - %(levelname)s: %(pathname)s:%(lineno)d - %(message)s'
+            "%(asctime)s - %(levelname)s: %(pathname)s:%(lineno)d - %(message)s"
         )
         handler.setFormatter(formatter)
 
@@ -240,7 +254,9 @@ class QueueLoggerManager:
         if not self._shutdown_event.is_set():
             self._cleanup_unused_handlers()
             # Schedule next cleanup
-            self._cleanup_timer = threading.Timer(self._cleanup_interval, self._start_periodic_cleanup)
+            self._cleanup_timer = threading.Timer(
+                self._cleanup_interval, self._start_periodic_cleanup
+            )
             self._cleanup_timer.start()
 
     def _cleanup_unused_handlers(self):
@@ -270,9 +286,11 @@ class QueueLoggerManager:
         """Force cleanup when approaching resource limits."""
         # Close oldest 50% of handlers
         sorted_handlers = sorted(
-            [(task_id, self._handler_last_used.get(handler, 0))
-             for task_id, handler in self._task_handlers.items()],
-            key=lambda x: x[1]
+            [
+                (task_id, self._handler_last_used.get(handler, 0))
+                for task_id, handler in self._task_handlers.items()
+            ],
+            key=lambda x: x[1],
         )
 
         cleanup_count = len(sorted_handlers) // 2
@@ -303,6 +321,7 @@ class QueueLoggerManager:
 # Global singleton instance
 _queue_logger_manager = None
 
+
 def get_queue_logger_manager() -> QueueLoggerManager:
     """Get the global queue logger manager instance."""
     global _queue_logger_manager
@@ -317,7 +336,7 @@ def get_logger(
     output_dir: Optional[Path] = None,
     debug: bool = False,
     console_output: bool = True,
-    use_queue: bool = False
+    use_queue: bool = False,
 ) -> logging.Logger:
     """Get a configured logger for POMDP experiments and algorithm execution.
 
@@ -344,27 +363,27 @@ def get_logger(
         to prevent "too many open files" errors. It uses a single writer thread
         to handle all file I/O operations while workers only interact with a
         memory queue, maintaining individual log files per task.
-        
+
     Example:
         Basic logging setup for algorithm execution::
-        
+
             from POMDPPlanners.utils.logger import get_logger
             import logging
-            
+
             # Create logger for POMCP algorithm
             logger = get_logger("POMCP_Tiger", level=logging.INFO)
-            
+
             # Log algorithm progress
             logger.info("Starting POMCP planning on Tiger POMDP")
             logger.info("Tree construction complete: 1000 simulations")
             logger.warning("Low particle count detected: 50 particles")
             logger.error("Planning failed: invalid belief state")
-            
+
     Example:
         File logging for experimental studies::
-        
+
             from pathlib import Path
-            
+
             # Setup file logging for experiment tracking
             experiment_dir = Path("experiments/tiger_study_2024")
             logger = get_logger(
@@ -373,18 +392,18 @@ def get_logger(
                 output_dir=experiment_dir,
                 console_output=True
             )
-            
+
             # Log files will be created at:
             # experiments/tiger_study_2024/logs/TigerExperiment_20240315_143022.log
-            
+
             logger.info("Starting Tiger POMDP comparative study")
             logger.info("Environments: TigerPOMDP")
             logger.info("Planners: POMCP, PFT-DPW, SparsePFT")
             logger.info("Episodes per run: 100")
-            
+
     Example:
         Debug mode for algorithm development::
-        
+
             # Enable detailed debug logging
             debug_logger = get_logger(
                 name="POMCP_Debug",
@@ -392,15 +411,15 @@ def get_logger(
                 output_dir=Path("debug_logs"),
                 console_output=True
             )
-            
+
             debug_logger.debug("UCB values: [0.45, 0.67, 0.23]")
             debug_logger.debug("Selected action: listen (index=0)")
             debug_logger.debug("Tree depth reached: 15/20")
             debug_logger.info("Simulation complete: reward=8.5")
-            
+
     Example:
         Batch experiment logging (console disabled)::
-        
+
             # For batch experiments where console output clutters results
             batch_logger = get_logger(
                 name="BatchExperiment",
@@ -408,22 +427,22 @@ def get_logger(
                 output_dir=Path("batch_results"),
                 console_output=False      # Only file logging
             )
-            
+
             # All output goes to file only - clean console for batch processing
             for run in range(100):
                 batch_logger.info(f"Run {run+1}: reward={reward:.3f}, steps={steps}")
-            
+
     Example:
         Integration with simulation framework::
-        
+
             from POMDPPlanners.simulations.episodes import run_episode
             from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
             from POMDPPlanners.core.belief import get_initial_belief
-            
+
             # Setup logging for episode execution
             episode_logger = get_logger("EpisodeRunner", level=logging.INFO)
-            
+
             # Create environment and planner
             env = TigerPOMDP(discount_factor=0.95)
             planner = POMCP(
@@ -434,9 +453,9 @@ def get_logger(
                 name="POMCP_Tiger",
                 n_simulations=1000
             )
-            
+
             initial_belief = get_initial_belief(env, n_particles=200)
-            
+
             # Run episode with logging
             history = run_episode(
                 environment=env,
@@ -445,38 +464,38 @@ def get_logger(
                 num_steps=50,
                 logger=episode_logger     # Pass logger to episode runner
             )
-            
+
             episode_logger.info(f"Episode completed: {len(history.history)} steps")
             episode_logger.info(f"Total reward: {history.total_return:.3f}")
-            
+
     Logging Best Practices:
         **Log Levels**:
         - DEBUG: Detailed algorithm internals, variable values
-        - INFO: Algorithm progress, major milestones, results  
+        - INFO: Algorithm progress, major milestones, results
         - WARNING: Suboptimal conditions, parameter issues
         - ERROR: Algorithm failures, invalid inputs
         - CRITICAL: System failures, experiment termination
-        
+
         **Message Format**:
         - Use descriptive messages with context
         - Include relevant numerical values
         - Timestamp and location automatically included
-        
+
         **Performance Considerations**:
         - Disable debug logging in production experiments
         - Use file-only logging for batch processing
         - Consider log rotation for long-running experiments
-        
+
     File Organization:
         Log files are automatically organized with timestamps:
         ```
         output_dir/
         └── logs/
             ├── POMCP_Tiger_20240315_143022.log
-            ├── PFT_DPW_CartPole_20240315_143155.log  
+            ├── PFT_DPW_CartPole_20240315_143155.log
             └── Experiment_Batch_20240315_144301.log
         ```
-        
+
     Thread Safety:
         The logger is thread-safe and suitable for use with distributed
         computing frameworks like Dask or Joblib for parallel experiments.
@@ -489,15 +508,16 @@ def get_logger(
             task_id=name,
             cache_dir=output_dir,
             debug=debug,
-            console_output=console_output
+            console_output=console_output,
         )
     else:
         # Original individual logger implementation
         return _create_individual_logger(name, level, output_dir, debug, console_output)
 
 
-def _create_individual_logger(name: str, level: int, output_dir: Optional[Path],
-                            debug: bool, console_output: bool) -> logging.Logger:
+def _create_individual_logger(
+    name: str, level: int, output_dir: Optional[Path], debug: bool, console_output: bool
+) -> logging.Logger:
     """Create individual logger (original implementation).
 
     This is the original logger creation logic, preserved for backward compatibility
@@ -514,7 +534,9 @@ def _create_individual_logger(name: str, level: int, output_dir: Optional[Path],
     if console_output:
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.DEBUG if debug else level)
-        console_formatter = logging.Formatter('%(asctime)s - %(levelname)s: %(pathname)s:%(lineno)d - %(message)s')
+        console_formatter = logging.Formatter(
+            "%(asctime)s - %(levelname)s: %(pathname)s:%(lineno)d - %(message)s"
+        )
         console_handler.setFormatter(console_formatter)
         logger.addHandler(console_handler)
 
@@ -529,13 +551,15 @@ def _create_individual_logger(name: str, level: int, output_dir: Optional[Path],
         # Create log file with timestamp
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         # Use logger name (which includes policy name) in the filename
-        name_part = name.replace('.', '_')  # Replace dots with underscores for filename
+        name_part = name.replace(".", "_")  # Replace dots with underscores for filename
         log_file = logs_dir / f"{name_part}_{timestamp}.log"
 
         # Create file handler
         file_handler = logging.FileHandler(log_file)
         file_handler.setLevel(logging.DEBUG if debug else level)
-        file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(pathname)s:%(lineno)d - %(message)s')
+        file_formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(pathname)s:%(lineno)d - %(message)s"
+        )
         file_handler.setFormatter(file_formatter)
         logger.addHandler(file_handler)
 
@@ -558,15 +582,16 @@ def get_queue_logger_diagnostics() -> Dict[str, Any]:
         manager = get_queue_logger_manager()
 
         return {
-            'queue_size': manager._log_queue.qsize(),
-            'writer_thread_alive': manager._writer_thread and manager._writer_thread.is_alive(),
-            'registered_loggers': len(manager._loggers),
-            'active_handlers': len(manager._task_handlers),
-            'max_handlers': manager._max_handlers,
-            'shutdown_event_set': manager._shutdown_event.is_set(),
+            "queue_size": manager._log_queue.qsize(),
+            "writer_thread_alive": manager._writer_thread
+            and manager._writer_thread.is_alive(),
+            "registered_loggers": len(manager._loggers),
+            "active_handlers": len(manager._task_handlers),
+            "max_handlers": manager._max_handlers,
+            "shutdown_event_set": manager._shutdown_event.is_set(),
         }
     except Exception as e:
-        return {'error': str(e)}
+        return {"error": str(e)}
 
 
 def cleanup_all_loggers():
@@ -580,6 +605,7 @@ def cleanup_all_loggers():
     if _queue_logger_manager is not None:
         _queue_logger_manager.stop()
         _queue_logger_manager = None
+
 
 def reset_logger_state():
     """Reset the global logger state for testing.
@@ -598,9 +624,10 @@ def reset_logger_state():
 
     # Clear all loggers that start with "queue." to reset state
     import logging
+
     loggers_to_clear = []
     for name in logging.Logger.manager.loggerDict.keys():
-        if name.startswith('queue.'):
+        if name.startswith("queue."):
             loggers_to_clear.append(name)
 
     for name in loggers_to_clear:

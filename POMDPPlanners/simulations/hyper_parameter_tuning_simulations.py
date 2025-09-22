@@ -293,6 +293,7 @@ class HyperParameterOptimizer:
         # Clean up any active MLflow runs
         try:
             import mlflow
+
             if mlflow.active_run() is not None:
                 mlflow.end_run()
         except Exception:

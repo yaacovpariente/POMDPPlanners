@@ -23,12 +23,18 @@ class PlannersHyperparamConfigs:
         self.discount_factor = discount_factor
 
     def pft_dpw_config(
-        self, env: Environment, action_sampler: ActionSampler, name: str, time_out_in_seconds: float = 3.
+        self,
+        env: Environment,
+        action_sampler: ActionSampler,
+        name: str,
+        time_out_in_seconds: float = 3.0,
     ) -> HyperParamPlannerConfig:
         max_depth_for_tuning = 10
         hyper_parameters = [
             NumericalHyperParameter(
-                0.0, (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning, "exploration_constant"
+                0.0,
+                (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning,
+                "exploration_constant",
             ),  # UCB1 exploration
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
             NumericalHyperParameter(
@@ -50,22 +56,28 @@ class PlannersHyperparamConfigs:
             "name": name,
             "environment": env,
             "action_sampler": action_sampler,
-            "time_out_in_seconds": time_out_in_seconds
+            "time_out_in_seconds": time_out_in_seconds,
         }
 
         return HyperParamPlannerConfig(
             policy_cls=PFT_DPW,
             hyper_parameters=hyper_parameters,
-            constant_parameters=constant_parameters
+            constant_parameters=constant_parameters,
         )
 
     def pomcpow_config(
-        self, env: Environment, action_sampler: ActionSampler, name: str, time_out_in_seconds: float = 3
+        self,
+        env: Environment,
+        action_sampler: ActionSampler,
+        name: str,
+        time_out_in_seconds: float = 3,
     ) -> HyperParamPlannerConfig:
         max_depth_for_tuning = 10
         hyper_parameters = [
             NumericalHyperParameter(
-                0.0, (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning, "exploration_constant"
+                0.0,
+                (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning,
+                "exploration_constant",
             ),  # UCB1 exploration
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
             NumericalHyperParameter(
@@ -87,18 +99,22 @@ class PlannersHyperparamConfigs:
             "name": name,
             "environment": env,
             "action_sampler": action_sampler,
-            "time_out_in_seconds": time_out_in_seconds
+            "time_out_in_seconds": time_out_in_seconds,
         }
 
         return HyperParamPlannerConfig(
             policy_cls=POMCPOW,
             hyper_parameters=hyper_parameters,
-            constant_parameters=constant_parameters
+            constant_parameters=constant_parameters,
         )
 
-    def sparse_pft_config(self, env: Environment, name: str, time_out_in_seconds: float = 3) -> HyperParamPlannerConfig:
+    def sparse_pft_config(
+        self, env: Environment, name: str, time_out_in_seconds: float = 3
+    ) -> HyperParamPlannerConfig:
         max_depth_for_tuning = 10
-        exploration_constant_max = (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning
+        exploration_constant_max = (
+            env.reward_range[1] - env.reward_range[0]
+        ) * max_depth_for_tuning
         hyper_parameters = [
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
             NumericalHyperParameter(
@@ -117,13 +133,13 @@ class PlannersHyperparamConfigs:
             "gamma": self.discount_factor,
             "name": name,
             "environment": env,
-            "time_out_in_seconds": time_out_in_seconds
+            "time_out_in_seconds": time_out_in_seconds,
         }
 
         return HyperParamPlannerConfig(
             policy_cls=SparsePFT,
             hyper_parameters=hyper_parameters,
-            constant_parameters=constant_parameters
+            constant_parameters=constant_parameters,
         )
 
     def sparse_sampling_config(
@@ -142,20 +158,24 @@ class PlannersHyperparamConfigs:
         constant_parameters = {
             "environment": env,
             "name": name,
-            "time_out_in_seconds": time_out_in_seconds
+            "time_out_in_seconds": time_out_in_seconds,
         }
 
         return HyperParamPlannerConfig(
             policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
             hyper_parameters=hyper_parameters,
-            constant_parameters=constant_parameters
+            constant_parameters=constant_parameters,
         )
 
-    def pomcp_config(self, env: Environment, name: str, time_out_in_seconds: float = 3) -> HyperParamPlannerConfig:
+    def pomcp_config(
+        self, env: Environment, name: str, time_out_in_seconds: float = 3
+    ) -> HyperParamPlannerConfig:
         max_depth_for_tuning = 10
         hyper_parameters = [
             NumericalHyperParameter(
-                0.0, (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning, "exploration_constant"
+                0.0,
+                (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning,
+                "exploration_constant",
             ),  # UCB1 exploration
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
         ]
@@ -165,22 +185,28 @@ class PlannersHyperparamConfigs:
             "name": name,
             "environment": env,
             "min_samples_per_node": 1,
-            "time_out_in_seconds": time_out_in_seconds
+            "time_out_in_seconds": time_out_in_seconds,
         }
 
         return HyperParamPlannerConfig(
             policy_cls=POMCP,
             hyper_parameters=hyper_parameters,
-            constant_parameters=constant_parameters
+            constant_parameters=constant_parameters,
         )
 
     def pomcp_dpw_config(
-        self, env: Environment, action_sampler: ActionSampler, name: str, time_out_in_seconds: float = 3
+        self,
+        env: Environment,
+        action_sampler: ActionSampler,
+        name: str,
+        time_out_in_seconds: float = 3,
     ) -> HyperParamPlannerConfig:
         max_depth_for_tuning = 10
         hyper_parameters = [
             NumericalHyperParameter(
-                0.0, (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning, "exploration_constant"
+                0.0,
+                (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning,
+                "exploration_constant",
             ),  # UCB1 exploration
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
             NumericalHyperParameter(
@@ -205,16 +231,18 @@ class PlannersHyperparamConfigs:
             "name": name,
             "environment": env,
             "action_sampler": action_sampler,
-            "time_out_in_seconds": time_out_in_seconds
+            "time_out_in_seconds": time_out_in_seconds,
         }
 
         return HyperParamPlannerConfig(
             policy_cls=POMCP_DPW,
             hyper_parameters=hyper_parameters,
-            constant_parameters=constant_parameters
+            constant_parameters=constant_parameters,
         )
 
-    def discrete_action_sequences_config(self, env: Environment, name: str) -> HyperParamPlannerConfig:
+    def discrete_action_sequences_config(
+        self, env: Environment, name: str
+    ) -> HyperParamPlannerConfig:
         hyper_parameters = [
             NumericalHyperParameter(2, 3, "depth"),  # Planning horizon
             NumericalHyperParameter(
@@ -231,5 +259,5 @@ class PlannersHyperparamConfigs:
         return HyperParamPlannerConfig(
             policy_cls=DiscreteActionSequencesPlanner,
             hyper_parameters=hyper_parameters,
-            constant_parameters=constant_parameters
+            constant_parameters=constant_parameters,
         )

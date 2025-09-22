@@ -1,5 +1,6 @@
 from typing import NamedTuple
 
+
 class MetricValue(NamedTuple):
     name: str
     value: float

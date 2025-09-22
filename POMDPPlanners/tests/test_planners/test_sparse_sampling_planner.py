@@ -34,21 +34,19 @@ def initial_belief(tiger_pomdp):
 @pytest.fixture
 def planner(tiger_pomdp):
     return StandardSparseSamplingDiscreteActionsPlanner(
-        environment=tiger_pomdp,
-        branching_factor=2,
-        depth=2
+        environment=tiger_pomdp, branching_factor=2, depth=2
     )
 
 
 def test_initialization(planner, tiger_pomdp):
     """Test that the planner initializes correctly
-    
-    Purpose: Validates proper initialization of 
-    
+
+    Purpose: Validates proper initialization of
+
     Given: Constructor parameters and initial conditions
     When: Object is initialized
     Then: Object is properly constructed with expected attributes
-    
+
     Test type: unit
     """
     assert planner.environment == tiger_pomdp
@@ -58,13 +56,13 @@ def test_initialization(planner, tiger_pomdp):
 
 def test_action_selection(planner, initial_belief):
     """Test that action selection returns a valid action
-    
+
     Purpose: Validates that StandardSparseSamplingDiscreteActionsPlanner returns valid TigerPOMDP actions through sparse sampling
-    
+
     Given: StandardSparseSamplingDiscreteActionsPlanner with branching_factor=2, depth=2, TigerPOMDP environment, uniform initial belief
     When: action method performs sparse sampling tree construction and action selection
     Then: Returns list with single valid tiger action, PolicyRunData with no info_variables (as expected)
-    
+
     Test type: unit
     """
     action, run_data = planner.action(initial_belief)
@@ -77,13 +75,13 @@ def test_action_selection(planner, initial_belief):
 
 def test_belief_tree_construction(planner, initial_belief):
     """Test that the belief tree is constructed correctly
-    
+
     Purpose: Validates that sparse sampling belief tree construction creates proper structure with correct depth and branching
-    
+
     Given: BeliefNode with uniform initial belief, StandardSparseSamplingPlanner with depth=2
     When: _build_tree constructs sparse sampling tree from root node at current_depth=0
     Then: Tree has correct root belief, no parent, >0 children, height=2*depth+1=5 for alternating belief-action levels
-    
+
     Test type: unit
     """
     tree = BeliefNode(belief=initial_belief)
@@ -101,13 +99,13 @@ def test_belief_tree_construction(planner, initial_belief):
 
 def test_node_statistics(planner, initial_belief):
     """Test that node statistics are updated correctly
-    
+
     Purpose: Validates that sparse sampling node statistics are properly initialized and computed for all node types
-    
+
     Given: BeliefNode with uniform initial belief, sparse sampling tree built with branching_factor=2, depth=2
     When: _build_tree creates tree structure and computes statistics for all nodes
     Then: Leaf nodes have immediate_cost/q_value/visit_count, ActionNodes have visit_count/q_value, BeliefNodes have v_value/visit_count
-    
+
     Test type: unit
     """
     tree = BeliefNode(
@@ -133,13 +131,13 @@ def test_node_statistics(planner, initial_belief):
 
 def test_leaf_node_statistics(planner, initial_belief):
     """Test that leaf node statistics are calculated correctly
-    
+
     Purpose: Validates that sparse sampling leaf node statistics are computed correctly using rollout estimation
-    
+
     Given: StandardSparseSamplingPlanner with uniform initial belief, learned belief tree with depth=2
     When: _learn_belief_tree constructs full tree and computes leaf node statistics
     Then: All leaf nodes are ActionNodes with visit_count=1 and q_value=immediate_cost (rollout result)
-    
+
     Test type: unit
     """
     tree = planner._learn_belief_tree(initial_belief)
@@ -153,13 +151,13 @@ def test_leaf_node_statistics(planner, initial_belief):
 
 def test_non_leaf_action_node_statistics(planner, initial_belief):
     """Test that non-leaf action node statistics are calculated correctly using fixed expected values
-    
+
     Purpose: Validates that non-leaf ActionNode statistics are computed using immediate cost plus discounted future value
-    
+
     Given: ActionNode with immediate_cost=1.0, two BeliefNode children with v_values [2.0, 4.0], discount_factor=0.95
     When: _update_non_leaf_action_node_statistics computes q_value from children
     Then: q_value = 1.0 + 0.95 * mean([2.0, 4.0]) = 3.85, visit_count > 0
-    
+
     Test type: unit
     """
     tree = BeliefNode(belief=initial_belief)
@@ -194,13 +192,13 @@ def test_non_leaf_action_node_statistics(planner, initial_belief):
 
 def test_belief_node_statistics(planner, initial_belief):
     """Test that belief node statistics are calculated correctly using fixed expected values
-    
+
     Purpose: Validates that BeliefNode statistics are computed using minimum q_value and sum of visit counts from children
-    
+
     Given: BeliefNode with two ActionNode children having q_values [3.0, 5.0] and visit_counts [2, 3]
     When: _update_belief_node_statistics computes v_value and visit_count from children
     Then: v_value = min([3.0, 5.0]) = 3.0, visit_count = sum([2, 3]) = 5
-    
+
     Test type: unit
     """
     # Create a belief node
@@ -230,53 +228,49 @@ def test_belief_node_statistics(planner, initial_belief):
 
 def test_invalid_branching_factor():
     """Test that invalid branching factor raises an error
-    
+
     Purpose: Validates that StandardSparseSamplingPlanner rejects invalid branching_factor parameters
-    
+
     Given: TigerPOMDP environment, invalid branching_factor=0, valid depth=1
     When: StandardSparseSamplingDiscreteActionsPlanner constructor is called with branching_factor=0
     Then: ValueError is raised for non-positive branching factor parameter
-    
+
     Test type: unit
     """
     env = TigerPOMDP(discount_factor=0.95)
     with pytest.raises(ValueError):
         StandardSparseSamplingDiscreteActionsPlanner(
-            environment=env,
-            branching_factor=0,
-            depth=1
+            environment=env, branching_factor=0, depth=1
         )
 
 
 def test_invalid_depth():
     """Test that invalid depth raises an error
-    
+
     Purpose: Validates that StandardSparseSamplingPlanner rejects invalid depth parameters
-    
+
     Given: TigerPOMDP environment, valid branching_factor=2, invalid depth=0
     When: StandardSparseSamplingDiscreteActionsPlanner constructor is called with depth=0
     Then: ValueError is raised for non-positive depth parameter
-    
+
     Test type: unit
     """
     env = TigerPOMDP(discount_factor=0.95)
     with pytest.raises(ValueError):
         StandardSparseSamplingDiscreteActionsPlanner(
-            environment=env,
-            branching_factor=2,
-            depth=0
+            environment=env, branching_factor=2, depth=0
         )
 
 
 def test_sanity_pomdp_action_selection():
     """Test that the sparse sampling planner correctly identifies the better action in SanityPOMDP
-    
+
     Purpose: Validates that StandardSparseSamplingPlanner identifies optimal actions in SanityPOMDP with deterministic reward structure
-    
+
     Given: SanityPOMDP environment with clear optimal action, sparse sampling planner with branching_factor=4, depth=3, 100 particles
     When: Multiple trials of action selection using sparse sampling tree search
     Then: Action 0 (better action) selected ≥70% of trials, demonstrating systematic planning advantage over random selection
-    
+
     Test type: unit
     """
     # Create environment and planner with higher branching factor and depth for better accuracy
@@ -284,20 +278,16 @@ def test_sanity_pomdp_action_selection():
     planner = StandardSparseSamplingDiscreteActionsPlanner(
         environment=environment,
         branching_factor=4,  # Higher branching factor for better exploration
-        depth=3  # Deeper tree for better planning
+        depth=3,  # Deeper tree for better planning
     )
-    
+
     # Get initial belief
-    belief = get_initial_belief(
-        pomdp=environment,
-        n_particles=100,
-        resampling=True
-    )
-    
+    belief = get_initial_belief(pomdp=environment, n_particles=100, resampling=True)
+
     # Run multiple trials to ensure consistent behavior
     n_trials = 10
     action_0_count = 0
-    
+
     for _ in range(n_trials):
         action, run_data = planner.action(belief)
         assert isinstance(action, list)
@@ -306,24 +296,26 @@ def test_sanity_pomdp_action_selection():
         assert len(run_data.info_variables) == 0
         if action[0] == 0:  # Count how many times action 0 is selected
             action_0_count += 1
-    
+
     # Verify that action 0 (the better action) is selected most of the time
     # We expect at least 70% success rate since sparse sampling is more systematic than MCTS
-    assert action_0_count >= 0.7 * n_trials, \
-        f"Sparse sampling planner selected action 0 only {action_0_count}/{n_trials} times, expected at least {0.7 * n_trials}"
+    assert (
+        action_0_count >= 0.7 * n_trials
+    ), f"Sparse sampling planner selected action 0 only {action_0_count}/{n_trials} times, expected at least {0.7 * n_trials}"
 
 
 # Config ID Tests
 
+
 def test_sparse_sampling_config_id_consistency_identical_parameters(tiger_pomdp):
     """Test that config_id is consistent for identical StandardSparseSampling parameters.
-    
+
     Purpose: Validates that StandardSparseSamplingPlanner with identical parameters produces identical config_id
-    
+
     Given: Two StandardSparseSamplingPlanner instances with identical parameters
     When: config_id is accessed on both instances
     Then: Both instances return the same config_id
-    
+
     Test type: unit
     """
     # Create two StandardSparseSamplingPlanner instances with identical parameters
@@ -352,13 +344,13 @@ def test_sparse_sampling_config_id_consistency_identical_parameters(tiger_pomdp)
 
 def test_sparse_sampling_config_id_different_branching_factor(tiger_pomdp):
     """Test that config_id changes when branching_factor parameter differs.
-    
+
     Purpose: Validates that config_id changes when branching_factor parameter differs
-    
+
     Given: Two StandardSparseSamplingPlanner instances with different branching_factor values
     When: config_id is accessed on both instances
     Then: config_id values are different
-    
+
     Test type: unit
     """
     planner1 = StandardSparseSamplingDiscreteActionsPlanner(
@@ -383,13 +375,13 @@ def test_sparse_sampling_config_id_different_branching_factor(tiger_pomdp):
 
 def test_sparse_sampling_config_id_different_depth(tiger_pomdp):
     """Test that config_id changes when depth parameter differs.
-    
+
     Purpose: Validates that config_id changes when depth parameter differs
-    
+
     Given: Two StandardSparseSamplingPlanner instances with different depth values
     When: config_id is accessed on both instances
     Then: config_id values are different
-    
+
     Test type: unit
     """
     planner1 = StandardSparseSamplingDiscreteActionsPlanner(
@@ -414,13 +406,13 @@ def test_sparse_sampling_config_id_different_depth(tiger_pomdp):
 
 def test_sparse_sampling_config_id_consistency_across_evaluations(tiger_pomdp):
     """Test that config_id remains consistent across different policy evaluations.
-    
+
     Purpose: Validates that config_id is stable across multiple accesses and policy actions
-    
+
     Given: Single StandardSparseSamplingPlanner instance and initial belief
     When: config_id is accessed before and after policy actions
     Then: config_id remains identical across all evaluations
-    
+
     Test type: integration
     """
     planner = StandardSparseSamplingDiscreteActionsPlanner(
@@ -439,11 +431,11 @@ def test_sparse_sampling_config_id_consistency_across_evaluations(tiger_pomdp):
     # Perform multiple policy evaluations
     for i in range(3):
         action, run_data = planner.action(initial_belief)
-        
+
         # Check config_id remains the same
         current_config_id = planner.config_id
         assert current_config_id == initial_config_id
-        
+
         # Verify the action and run_data are valid
         assert isinstance(action, list)
         assert len(action) == 1
@@ -457,13 +449,13 @@ def test_sparse_sampling_config_id_consistency_across_evaluations(tiger_pomdp):
 
 def test_sparse_sampling_config_id_hash_properties(tiger_pomdp):
     """Test that config_id has proper hash properties.
-    
+
     Purpose: Validates that config_id produces valid hash strings
-    
+
     Given: StandardSparseSamplingPlanner instance
     When: config_id is accessed
     Then: config_id is a valid hash string with expected properties
-    
+
     Test type: unit
     """
     planner = StandardSparseSamplingDiscreteActionsPlanner(
@@ -481,4 +473,4 @@ def test_sparse_sampling_config_id_hash_properties(tiger_pomdp):
 
     # Should be a valid hexadecimal hash (SHA-256 produces 64 hex characters)
     assert len(config_id) == 64
-    assert all(c in '0123456789abcdef' for c in config_id.lower())
+    assert all(c in "0123456789abcdef" for c in config_id.lower())

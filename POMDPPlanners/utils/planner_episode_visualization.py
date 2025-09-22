@@ -19,18 +19,20 @@ def _run_single_episode(
 ):
     """Helper function to run a single episode and cache its visualization."""
     logger = get_logger("episode_visualization", debug=False)
-    
+
     episode_result = run_episode(
         environment=environment,
         policy=planner,
         initial_belief=belief,
         num_steps=num_steps,
-        logger=logger
+        logger=logger,
     )
     cache_path = cache_dir / f"{planner.name}_{episode_id}.gif"
-    
+
     # Visualize the episode
-    environment.cache_visualization(history=episode_result.history, cache_path=cache_path)
+    environment.cache_visualization(
+        history=episode_result.history, cache_path=cache_path
+    )
 
 
 def visualize_planner_episode(
@@ -44,7 +46,7 @@ def visualize_planner_episode(
 ):
     """
     Visualize episodes of a planner by running episodes and caching visualizations.
-    
+
     Args:
         planner: The planner policy (used for naming cache files)
         environment: The POMDP environment to run episodes in
@@ -58,10 +60,14 @@ def visualize_planner_episode(
     if n_jobs == 1:
         # Sequential execution
         for episode_id in range(n_episodes):
-            _run_single_episode(episode_id, planner, environment, belief, num_steps, cache_dir)
+            _run_single_episode(
+                episode_id, planner, environment, belief, num_steps, cache_dir
+            )
     else:
         # Parallel execution
         Parallel(n_jobs=n_jobs)(
-            delayed(_run_single_episode)(episode_id, planner, environment, belief, num_steps, cache_dir)
+            delayed(_run_single_episode)(
+                episode_id, planner, environment, belief, num_steps, cache_dir
+            )
             for episode_id in range(n_episodes)
         )

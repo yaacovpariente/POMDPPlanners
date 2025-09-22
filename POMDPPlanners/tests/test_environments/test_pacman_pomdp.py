@@ -22,7 +22,9 @@ from POMDPPlanners.environments.pacman_pomdp import (
 )
 from POMDPPlanners.core.environment import SpaceType, SpaceInfo
 from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.tests.test_utils.confidence_interval_utils import verify_metrics_within_confidence_intervals
+from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
+    verify_metrics_within_confidence_intervals,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -104,7 +106,9 @@ class TestPacManState:
             ValueError, match="pacman_pos must be a tuple of two integers"
         ):
             PacManState(
-                pacman_pos=(1,), ghost_positions=((3, 4),), pellets=((0, 0),)  # Wrong length
+                pacman_pos=(1,),
+                ghost_positions=((3, 4),),
+                pellets=((0, 0),),  # Wrong length
             )
 
     def test_pacman_state_validation_invalid_ghost_positions(self):
@@ -172,7 +176,10 @@ class TestPacManStateTransitionModel:
         )
 
         self.state = PacManState(
-            pacman_pos=(0, 0), ghost_positions=((4, 4),), pellets=((1, 1), (3, 3)), score=0
+            pacman_pos=(0, 0),
+            ghost_positions=((4, 4),),
+            pellets=((1, 1), (3, 3)),
+            score=0,
         )
 
     def test_pacman_movement_north(self):
@@ -188,7 +195,7 @@ class TestPacManStateTransitionModel:
         """
         # Set local random seed for deterministic behavior
         np.random.seed(42)
-        
+
         state = PacManState(
             pacman_pos=(1, 1), ghost_positions=((4, 4),), pellets=((3, 3),), score=0
         )
@@ -272,7 +279,10 @@ class TestPacManStateTransitionModel:
         Test type: unit
         """
         state = PacManState(
-            pacman_pos=(1, 0), ghost_positions=((4, 4),), pellets=((1, 1), (3, 3)), score=10
+            pacman_pos=(1, 0),
+            ghost_positions=((4, 4),),
+            pellets=((1, 1), (3, 3)),
+            score=10,
         )
 
         # Move east to collect pellet at (1, 1)
@@ -299,22 +309,24 @@ class TestPacManStateTransitionModel:
         # Test collision detection by checking if we can get a terminal state
         # when PacMan and ghost end up at the same position after movement.
         # Since ghost movement is stochastic, we'll test multiple scenarios.
-        
+
         # Scenario 1: Test with a state that already has collision
         collision_state = PacManState(
             pacman_pos=(2, 2),
             ghost_positions=((2, 2),),  # Already at same position
             pellets=((1, 1),),
             score=0,
-            terminal=True  # Manually set as terminal to test the logic
+            terminal=True,  # Manually set as terminal to test the logic
         )
-        
+
         # Terminal states should remain unchanged
-        transition = PacManStateTransitionModel(collision_state, action=0, pomdp=self.pomdp)
+        transition = PacManStateTransitionModel(
+            collision_state, action=0, pomdp=self.pomdp
+        )
         next_state = transition.sample()[0]
         assert next_state.terminal
         assert next_state == collision_state  # Should be unchanged
-        
+
         # Scenario 2: Test collision detection in state transition logic
         # Create a scenario where we can trigger collision by checking multiple samples
         test_state = PacManState(
@@ -323,18 +335,23 @@ class TestPacManStateTransitionModel:
             pellets=((3, 3),),
             score=0,
         )
-        
+
         # Test multiple transitions to see if collision can occur
-        transition = PacManStateTransitionModel(test_state, action=1, pomdp=self.pomdp)  # East
+        transition = PacManStateTransitionModel(
+            test_state, action=1, pomdp=self.pomdp
+        )  # East
         collision_found = False
-        
+
         # Sample multiple times since ghost movement is stochastic
         for _ in range(20):  # Try multiple times
             next_state = transition.sample()[0]
-            if next_state.terminal and next_state.pacman_pos in next_state.ghost_positions:
+            if (
+                next_state.terminal
+                and next_state.pacman_pos in next_state.ghost_positions
+            ):
                 collision_found = True
                 break
-        
+
         # Note: Due to stochastic ghost movement, collision might not always occur
         # The test validates that the collision detection logic exists and can work
 
@@ -378,7 +395,11 @@ class TestPacManStateTransitionModel:
         Test type: unit
         """
         terminal_state = PacManState(
-            pacman_pos=(2, 2), ghost_positions=((2, 2),), pellets=(), score=100, terminal=True
+            pacman_pos=(2, 2),
+            ghost_positions=((2, 2),),
+            pellets=(),
+            score=100,
+            terminal=True,
         )
 
         transition = PacManStateTransitionModel(
@@ -465,7 +486,9 @@ class TestPacManObservationModel:
         Test type: unit
         """
         state = PacManState(
-            pacman_pos=(2, 2), ghost_positions=((2, 3),), pellets=((0, 0),)  # Close to PacMan
+            pacman_pos=(2, 2),
+            ghost_positions=((2, 3),),
+            pellets=((0, 0),),  # Close to PacMan
         )
 
         obs_model = PacManObservationModel(state, action=0, pomdp=self.pomdp)
@@ -476,7 +499,8 @@ class TestPacManObservationModel:
         close_observations = sum(
             1
             for obs in observations
-            if abs(obs[0][0] - true_pos[0]) <= 1 and abs(obs[0][1] - true_pos[1]) <= 1  # obs is tuple of positions
+            if abs(obs[0][0] - true_pos[0]) <= 1
+            and abs(obs[0][1] - true_pos[1]) <= 1  # obs is tuple of positions
         )
 
         # At close distance, most observations should be accurate
@@ -494,7 +518,9 @@ class TestPacManObservationModel:
         Test type: unit
         """
         state = PacManState(
-            pacman_pos=(0, 0), ghost_positions=((4, 4),), pellets=((1, 1),)  # Far from PacMan
+            pacman_pos=(0, 0),
+            ghost_positions=((4, 4),),
+            pellets=((1, 1),),  # Far from PacMan
         )
 
         obs_model = PacManObservationModel(state, action=0, pomdp=self.pomdp)
@@ -521,7 +547,9 @@ class TestPacManObservationModel:
 
         Test type: unit
         """
-        state = PacManState(pacman_pos=(0, 0), ghost_positions=((4, 4),), pellets=((1, 1),))
+        state = PacManState(
+            pacman_pos=(0, 0), ghost_positions=((4, 4),), pellets=((1, 1),)
+        )
 
         obs_model = PacManObservationModel(state, action=0, pomdp=self.pomdp)
         observations = obs_model.sample(n_samples=50)
@@ -544,12 +572,18 @@ class TestPacManObservationModel:
 
         Test type: unit
         """
-        state = PacManState(pacman_pos=(2, 2), ghost_positions=((2, 3),), pellets=((0, 0),))
+        state = PacManState(
+            pacman_pos=(2, 2), ghost_positions=((2, 3),), pellets=((0, 0),)
+        )
 
         obs_model = PacManObservationModel(state, action=0, pomdp=self.pomdp)
 
         # Test probabilities for multi-ghost observations at different distances
-        candidate_obs = [((2, 3),), ((2, 4),), ((-1, -1),)]  # True pos, nearby, terminal
+        candidate_obs = [
+            ((2, 3),),
+            ((2, 4),),
+            ((-1, -1),),
+        ]  # True pos, nearby, terminal
         probs = obs_model.probability(candidate_obs)
 
         assert len(probs) == 3
@@ -589,7 +623,9 @@ class TestPacManPOMDP:
         assert pomdp.maze_size == (7, 7)
         assert pomdp.initial_pacman_pos == (0, 0)
         assert pomdp.num_ghosts == 1
-        assert pomdp.initial_ghost_pos == pomdp.initial_ghost_positions[0]  # Backward compatibility
+        assert (
+            pomdp.initial_ghost_pos == pomdp.initial_ghost_positions[0]
+        )  # Backward compatibility
         assert pomdp.pellet_reward == 10.0
         assert pomdp.ghost_collision_penalty == -100.0
         assert pomdp.step_penalty == -1.0
@@ -627,11 +663,17 @@ class TestPacManPOMDP:
 
         Test type: unit
         """
-        with pytest.raises(ValueError, match="PacMan position .* is outside maze bounds"):
+        with pytest.raises(
+            ValueError, match="PacMan position .* is outside maze bounds"
+        ):
             PacManPOMDP(maze_size=(5, 5), initial_pacman_pos=(5, 0))  # Outside bounds
 
-        with pytest.raises(ValueError, match="Ghost 0 position .* is outside maze bounds"):
-            PacManPOMDP(maze_size=(5, 5), num_ghosts=1, initial_ghost_positions=[(0, 5)])  # Outside bounds
+        with pytest.raises(
+            ValueError, match="Ghost 0 position .* is outside maze bounds"
+        ):
+            PacManPOMDP(
+                maze_size=(5, 5), num_ghosts=1, initial_ghost_positions=[(0, 5)]
+            )  # Outside bounds
 
     def test_pomdp_parameter_validation_pellet_in_wall(self):
         """Test parameter validation for pellets placed in walls.
@@ -722,8 +764,12 @@ class TestPacManPOMDP:
 
         assert isinstance(initial_state, PacManState)
         assert initial_state.pacman_pos == self.pomdp.initial_pacman_pos
-        assert initial_state.ghost_positions == tuple(self.pomdp.initial_ghost_positions)
-        assert initial_state.ghost_pos == self.pomdp.initial_ghost_pos  # Backward compatibility
+        assert initial_state.ghost_positions == tuple(
+            self.pomdp.initial_ghost_positions
+        )
+        assert (
+            initial_state.ghost_pos == self.pomdp.initial_ghost_pos
+        )  # Backward compatibility
         assert initial_state.pellets == tuple(self.pomdp.initial_pellets)
         assert initial_state.score == 0
         assert not initial_state.terminal
@@ -865,7 +911,10 @@ class TestPacManPOMDP:
         """
         # Non-terminal state
         non_terminal_state = PacManState(
-            pacman_pos=(0, 0), ghost_positions=((4, 4),), pellets=((1, 1),), terminal=False
+            pacman_pos=(0, 0),
+            ghost_positions=((4, 4),),
+            pellets=((1, 1),),
+            terminal=False,
         )
         assert not self.pomdp.is_terminal(non_terminal_state)
 
@@ -877,23 +926,25 @@ class TestPacManPOMDP:
 
     def test_reward_range(self):
         """Test that reward range is correctly calculated.
-        
+
         Purpose: Validates that PacManPOMDP reward range is properly calculated based on environment parameters
-        
+
         Given: A PacManPOMDP environment with specific reward/penalty parameters
         When: Environment reward_range attribute is checked
         Then: Returns range based on min_reward (step + ghost collision penalties) and max_reward (step + pellet + win rewards)
-        
+
         Test type: unit
         """
         # Expected calculation from PacManPOMDP constructor:
         # min_reward = step_penalty + ghost_collision_penalty = -1.0 + (-100.0) = -101.0
         # max_reward = step_penalty + pellet_reward + win_reward = -1.0 + 10.0 + 100.0 = 109.0
         expected_min = self.pomdp.step_penalty + self.pomdp.ghost_collision_penalty
-        expected_max = self.pomdp.step_penalty + self.pomdp.pellet_reward + self.pomdp.win_reward
-        
+        expected_max = (
+            self.pomdp.step_penalty + self.pomdp.pellet_reward + self.pomdp.win_reward
+        )
+
         assert self.pomdp.reward_range == (expected_min, expected_max)
-        
+
         # Test with custom parameters
         custom_pomdp = PacManPOMDP(
             maze_size=(5, 5),
@@ -904,12 +955,12 @@ class TestPacManPOMDP:
             pellet_reward=20.0,
             ghost_collision_penalty=-200.0,
             step_penalty=-2.0,
-            win_reward=500.0
+            win_reward=500.0,
         )
-        
+
         expected_min_custom = -2.0 + (-200.0)  # -202.0
         expected_max_custom = -2.0 + 20.0 + 500.0  # 518.0
-        
+
         assert custom_pomdp.reward_range == (expected_min_custom, expected_max_custom)
 
     def test_observation_equality(self):
@@ -1177,12 +1228,16 @@ class TestPacManPOMDPMetrics:
         # Episode 1: Two steps with distances 4 and 2 (average = 3)
         state1_ep1 = PacManState(
             pacman_pos=(1, 1),
-            ghost_positions=((3, 3),),  # Multi-ghost format - Manhattan distance = |1-3| + |1-3| = 4
+            ghost_positions=(
+                (3, 3),
+            ),  # Multi-ghost format - Manhattan distance = |1-3| + |1-3| = 4
             pellets=((2, 2),),
         )
         state2_ep1 = PacManState(
             pacman_pos=(2, 2),
-            ghost_positions=((3, 3),),  # Multi-ghost format - Manhattan distance = |2-3| + |2-3| = 2
+            ghost_positions=(
+                (3, 3),
+            ),  # Multi-ghost format - Manhattan distance = |2-3| + |2-3| = 2
             pellets=((2, 2),),
         )
 
@@ -1219,12 +1274,16 @@ class TestPacManPOMDPMetrics:
         # Episode 2: Two steps with distances 6 and 4 (average = 5)
         state1_ep2 = PacManState(
             pacman_pos=(0, 0),
-            ghost_positions=((3, 3),),  # Multi-ghost format - Manhattan distance = |0-3| + |0-3| = 6
+            ghost_positions=(
+                (3, 3),
+            ),  # Multi-ghost format - Manhattan distance = |0-3| + |0-3| = 6
             pellets=((2, 2),),
         )
         state2_ep2 = PacManState(
             pacman_pos=(1, 1),
-            ghost_positions=((3, 3),),  # Multi-ghost format - Manhattan distance = |1-3| + |1-3| = 4
+            ghost_positions=(
+                (3, 3),
+            ),  # Multi-ghost format - Manhattan distance = |1-3| + |1-3| = 4
             pellets=((2, 2),),
         )
 
@@ -1446,7 +1505,9 @@ class TestCreateSimpleMazePacman:
         assert pomdp.maze_size == (5, 5)
         assert len(pomdp.walls) == 3
         assert pomdp.initial_pacman_pos == (0, 0)
-        assert pomdp.initial_ghost_positions == [(4, 4)]  # Multi-ghost format - bottom right corner
+        assert pomdp.initial_ghost_positions == [
+            (4, 4)
+        ]  # Multi-ghost format - bottom right corner
 
     def test_create_simple_maze_deterministic_seed(self):
         """Test create_simple_maze_pacman with deterministic seeding.
@@ -1518,13 +1579,13 @@ class TestMultiGhostFeatures:
 
     def test_multi_ghost_initialization(self):
         """Test PacManPOMDP initialization with multiple ghosts.
-        
+
         Purpose: Validates that PacManPOMDP can be initialized with multiple ghosts
-        
+
         Given: Parameters specifying multiple ghost positions and strategies
         When: PacManPOMDP is initialized
         Then: Environment correctly stores multi-ghost configuration
-        
+
         Test type: unit
         """
         pomdp = PacManPOMDP(
@@ -1535,9 +1596,9 @@ class TestMultiGhostFeatures:
             initial_ghost_positions=[(6, 6), (5, 5), (4, 4)],
             num_ghosts=3,
             ghost_coordination="independent",
-            ghost_strategies=["aggressive", "patrol", "ambush"]
+            ghost_strategies=["aggressive", "patrol", "ambush"],
         )
-        
+
         assert pomdp.num_ghosts == 3
         assert len(pomdp.initial_ghost_positions) == 3
         assert pomdp.initial_ghost_positions == [(6, 6), (5, 5), (4, 4)]
@@ -1546,13 +1607,13 @@ class TestMultiGhostFeatures:
 
     def test_multi_ghost_state_creation(self):
         """Test PacManState creation with multiple ghosts.
-        
+
         Purpose: Validates that PacManState correctly handles multiple ghost positions
-        
+
         Given: State parameters with multiple ghost positions
         When: PacManState is created
         Then: State correctly stores all ghost positions with proper properties
-        
+
         Test type: unit
         """
         state = PacManState(
@@ -1560,9 +1621,9 @@ class TestMultiGhostFeatures:
             ghost_positions=((1, 1), (4, 4), (6, 2)),
             pellets=((0, 0), (5, 5)),
             score=150,
-            terminal=False
+            terminal=False,
         )
-        
+
         assert len(state.ghost_positions) == 3
         assert state.ghost_positions == ((1, 1), (4, 4), (6, 2))
         assert state.num_ghosts == 3
@@ -1571,13 +1632,13 @@ class TestMultiGhostFeatures:
 
     def test_multi_ghost_observation_format(self):
         """Test observation format for multiple ghosts.
-        
+
         Purpose: Validates that observations correctly represent multiple ghost positions
-        
+
         Given: PacManPOMDP with multiple ghosts
         When: Observations are generated
         Then: Observation tuple contains position for each ghost
-        
+
         Test type: unit
         """
         pomdp = PacManPOMDP(
@@ -1586,20 +1647,21 @@ class TestMultiGhostFeatures:
             initial_pellets=[(0, 1)],
             initial_pacman_pos=(0, 0),
             initial_ghost_positions=[(4, 4), (3, 3)],
-            num_ghosts=2
+            num_ghosts=2,
         )
-        
+
         state = PacManState(
-            pacman_pos=(1, 1),
-            ghost_positions=((2, 3), (4, 1)),
-            pellets=((0, 1),)
+            pacman_pos=(1, 1), ghost_positions=((2, 3), (4, 1)), pellets=((0, 1),)
         )
-        
+
         # Create observation model explicitly
-        from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManObservationModel
+        from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (
+            PacManObservationModel,
+        )
+
         obs_model = PacManObservationModel(state, action=0, pomdp=pomdp)
         obs = obs_model.sample(n_samples=1)[0]  # Sample one observation
-        
+
         assert isinstance(obs, tuple)
         assert len(obs) == 2  # One observation per ghost
         for ghost_obs in obs:
@@ -1608,13 +1670,13 @@ class TestMultiGhostFeatures:
 
     def test_ghost_coordination_strategies(self):
         """Test different ghost coordination strategies.
-        
+
         Purpose: Validates that different ghost coordination modes are properly handled
-        
+
         Given: PacManPOMDP with different coordination strategies
         When: State transitions occur
         Then: Ghost movements follow coordination patterns appropriately
-        
+
         Test type: unit
         """
         # Test independent coordination
@@ -1624,10 +1686,10 @@ class TestMultiGhostFeatures:
             initial_pellets=[(0, 1), (2, 2)],  # Explicit pellets within bounds
             initial_ghost_positions=[(3, 3), (4, 4)],
             num_ghosts=2,
-            ghost_coordination="independent"
+            ghost_coordination="independent",
         )
         assert pomdp_independent.ghost_coordination == "independent"
-        
+
         # Test coordinated strategy
         pomdp_coordinated = PacManPOMDP(
             maze_size=(5, 5),
@@ -1635,10 +1697,10 @@ class TestMultiGhostFeatures:
             initial_pellets=[(0, 1), (2, 2)],  # Explicit pellets within bounds
             initial_ghost_positions=[(3, 3), (4, 4)],
             num_ghosts=2,
-            ghost_coordination="coordinated"
+            ghost_coordination="coordinated",
         )
         assert pomdp_coordinated.ghost_coordination == "coordinated"
-        
+
         # Test mixed strategy
         pomdp_mixed = PacManPOMDP(
             maze_size=(5, 5),
@@ -1646,19 +1708,19 @@ class TestMultiGhostFeatures:
             initial_pellets=[(0, 1), (2, 2)],  # Explicit pellets within bounds
             initial_ghost_positions=[(3, 3), (4, 4)],
             num_ghosts=2,
-            ghost_coordination="mixed"
+            ghost_coordination="mixed",
         )
         assert pomdp_mixed.ghost_coordination == "mixed"
 
     def test_individual_ghost_strategies(self):
         """Test individual ghost AI strategies.
-        
+
         Purpose: Validates that individual ghosts can have different AI behaviors
-        
+
         Given: PacManPOMDP with specific ghost strategies
         When: Ghost strategies are configured
         Then: Each ghost has assigned strategy type
-        
+
         Test type: unit
         """
         pomdp = PacManPOMDP(
@@ -1667,63 +1729,67 @@ class TestMultiGhostFeatures:
             initial_pellets=[(0, 1), (1, 0), (2, 2)],  # Explicit pellets within bounds
             initial_ghost_positions=[(5, 5), (4, 4), (3, 3)],
             num_ghosts=3,
-            ghost_strategies=["aggressive", "patrol", "ambush"]
+            ghost_strategies=["aggressive", "patrol", "ambush"],
         )
-        
+
         assert len(pomdp.ghost_strategies) == 3
         assert pomdp.ghost_strategies[0] == "aggressive"
-        assert pomdp.ghost_strategies[1] == "patrol"  
+        assert pomdp.ghost_strategies[1] == "patrol"
         assert pomdp.ghost_strategies[2] == "ambush"
 
     def test_multi_ghost_collision_detection(self):
         """Test collision detection with multiple ghosts.
-        
+
         Purpose: Validates that collisions are detected correctly with any ghost
-        
+
         Given: PacManState with multiple ghosts at various positions
         When: Collision detection is performed
         Then: Collision is detected if PacMan occupies same position as any ghost
-        
+
         Test type: unit
         """
         # Test collision with second ghost
         state_collision = PacManState(
             pacman_pos=(2, 2),
             ghost_positions=((1, 1), (2, 2), (4, 4)),  # Collision with second ghost
-            pellets=((0, 0),)
+            pellets=((0, 0),),
         )
-        
+
         pomdp = PacManPOMDP(
             maze_size=(5, 5),
             walls=set(),  # No walls to avoid conflicts
             initial_pellets=[(0, 1), (1, 0)],  # Explicit pellets within bounds
             initial_ghost_positions=[(1, 1), (2, 2), (4, 4)],
-            num_ghosts=3
+            num_ghosts=3,
         )
-        
+
         # Collision should be detected
-        assert any(ghost_pos == state_collision.pacman_pos 
-                  for ghost_pos in state_collision.ghost_positions)
-        
+        assert any(
+            ghost_pos == state_collision.pacman_pos
+            for ghost_pos in state_collision.ghost_positions
+        )
+
         # Test no collision
         state_no_collision = PacManState(
             pacman_pos=(0, 0),
             ghost_positions=((1, 1), (2, 2), (4, 4)),
-            pellets=((3, 3),)
+            pellets=((3, 3),),
         )
-        
-        assert not any(ghost_pos == state_no_collision.pacman_pos 
-                      for ghost_pos in state_no_collision.ghost_positions)
+
+        assert not any(
+            ghost_pos == state_no_collision.pacman_pos
+            for ghost_pos in state_no_collision.ghost_positions
+        )
 
     def test_multi_ghost_state_transitions(self):
         """Test state transitions with multiple ghosts.
-        
+
         Purpose: Validates that state transitions correctly update all ghost positions
-        
+
         Given: PacManPOMDP with multiple ghosts
         When: State transition is sampled
         Then: Next state contains updated positions for all ghosts
-        
+
         Test type: integration
         """
         pomdp = PacManPOMDP(
@@ -1732,35 +1798,38 @@ class TestMultiGhostFeatures:
             initial_pellets=[(1, 1)],
             initial_ghost_positions=[(3, 3), (4, 4)],
             num_ghosts=2,
-            ghost_aggressiveness=1.0  # Correct parameter name
+            ghost_aggressiveness=1.0,  # Correct parameter name
         )
-        
+
         initial_state = PacManState(
-            pacman_pos=(0, 0),
-            ghost_positions=((3, 3), (4, 4)),
-            pellets=((1, 1),)
+            pacman_pos=(0, 0), ghost_positions=((3, 3), (4, 4)), pellets=((1, 1),)
         )
-        
+
         # Create state transition model explicitly
-        from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManStateTransitionModel
+        from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (
+            PacManStateTransitionModel,
+        )
+
         state_model = PacManStateTransitionModel(initial_state, action=1, pomdp=pomdp)
         next_state = state_model.sample(n_samples=1)[0]  # Sample one next state
-        
+
         # Verify next state has correct ghost count
         assert len(next_state.ghost_positions) == 2
         assert isinstance(next_state.ghost_positions, tuple)
-        assert all(isinstance(pos, tuple) and len(pos) == 2 
-                  for pos in next_state.ghost_positions)
+        assert all(
+            isinstance(pos, tuple) and len(pos) == 2
+            for pos in next_state.ghost_positions
+        )
 
     def test_multi_ghost_reward_calculation(self):
         """Test reward calculation with multiple ghosts.
-        
+
         Purpose: Validates that collision penalties work correctly with multiple ghosts
-        
+
         Given: State with multiple ghosts where collision may occur
         When: Reward is calculated
         Then: Collision penalty applies if PacMan collides with any ghost
-        
+
         Test type: unit
         """
         pomdp = PacManPOMDP(
@@ -1770,71 +1839,67 @@ class TestMultiGhostFeatures:
             initial_ghost_positions=[(2, 2), (3, 3)],
             num_ghosts=2,
             ghost_collision_penalty=-100.0,
-            step_penalty=-1.0
+            step_penalty=-1.0,
         )
-        
+
         # State with collision (PacMan at same position as second ghost)
         collision_state = PacManState(
-            pacman_pos=(3, 3),
-            ghost_positions=((2, 2), (3, 3)),
-            pellets=((1, 1),)
+            pacman_pos=(3, 3), ghost_positions=((2, 2), (3, 3)), pellets=((1, 1),)
         )
-        
+
         reward = pomdp.reward(collision_state, action=0)
         expected_collision_reward = pomdp.step_penalty + pomdp.ghost_collision_penalty
         assert reward == expected_collision_reward
-        
+
         # State with no collision
         safe_state = PacManState(
-            pacman_pos=(0, 0),
-            ghost_positions=((2, 2), (3, 3)),
-            pellets=((1, 1),)
+            pacman_pos=(0, 0), ghost_positions=((2, 2), (3, 3)), pellets=((1, 1),)
         )
-        
+
         safe_reward = pomdp.reward(safe_state, action=0)
         assert safe_reward == pomdp.step_penalty  # Only step penalty, no collision
 
     def test_backward_compatibility_properties(self):
         """Test backward compatibility properties for multi-ghost support.
-        
+
         Purpose: Validates that single-ghost API still works with multi-ghost implementation
-        
+
         Given: PacManState and PacManPOMDP with single ghost
         When: Legacy properties are accessed
         Then: Properties return correct values maintaining backward compatibility
-        
+
         Test type: unit
         """
         # Test PacManState backward compatibility
         state = PacManState(
             pacman_pos=(1, 2),
             ghost_positions=((3, 4),),  # Single ghost in multi-ghost format
-            pellets=((0, 0),)
+            pellets=((0, 0),),
         )
-        
+
         # Legacy property should work
         assert state.ghost_pos == (3, 4)
         assert state.num_ghosts == 1
-        
+
         # Test PacManPOMDP backward compatibility
         pomdp = PacManPOMDP(
             maze_size=(5, 5),
             walls=set(),  # No walls to avoid conflicts
             initial_pellets=[(0, 1), (2, 2)],  # Explicit pellets within bounds
-            initial_ghost_positions=[(4, 4)]  # Single ghost
+            initial_ghost_positions=[(4, 4)],  # Single ghost
         )
-        
+
         # Should work with single ghost
         assert pomdp.num_ghosts == 1
         assert pomdp.initial_ghost_positions == [(4, 4)]
-        
+
         # Legacy initialization should still work
         pomdp_legacy = PacManPOMDP(
             maze_size=(5, 5),
             walls=set(),  # No walls to avoid conflicts
             initial_pellets=[(0, 1), (2, 2)],  # Explicit pellets within bounds
-            initial_ghost_pos=(4, 4)  # Legacy parameter
+            initial_ghost_pos=(4, 4),  # Legacy parameter
         )
-        
+
         assert pomdp_legacy.num_ghosts == 1
         assert pomdp_legacy.initial_ghost_positions == [(4, 4)]
