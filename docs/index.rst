@@ -82,6 +82,7 @@ Basic Usage
    :caption: Examples & Tutorials
 
    examples/basic_usage
+   examples/planners_comparison
 
 .. toctree::
    :maxdepth: 2
