@@ -42,6 +42,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
+        pip install -r docs/requirements.txt
         pip install -e .
 
     - name: Build documentation
@@ -53,7 +54,7 @@ jobs:
         sphinx-build -b html . _build/html -W --keep-going
 
     - name: Upload documentation artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: documentation
         path: docs/_build/html/
@@ -110,6 +111,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
+        pip install -r docs/requirements.txt
         pip install -e .
 
     - name: Check documentation builds

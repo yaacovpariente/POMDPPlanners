@@ -17,14 +17,6 @@ Subpackages
 Submodules
 ----------
 
-POMDPPlanners.tests.test\_environments.test\_all\_environment\_examples module
-------------------------------------------------------------------------------
-
-.. automodule:: POMDPPlanners.tests.test_environments.test_all_environment_examples
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 POMDPPlanners.tests.test\_environments.test\_cartpole\_pomdp module
 -------------------------------------------------------------------
 

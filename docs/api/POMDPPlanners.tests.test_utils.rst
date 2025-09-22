@@ -81,14 +81,6 @@ POMDPPlanners.tests.test\_utils.test\_tree\_statistics module
    :show-inheritance:
    :undoc-members:
 
-POMDPPlanners.tests.test\_utils.test\_utils\_usage\_examples module
--------------------------------------------------------------------
-
-.. automodule:: POMDPPlanners.tests.test_utils.test_utils_usage_examples
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 POMDPPlanners.tests.test\_utils.test\_visualization module
 ----------------------------------------------------------
 

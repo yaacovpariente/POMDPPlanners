@@ -93,9 +93,11 @@ jobs:
     - name: Test visualization examples
       run: |
         # Test visualization examples run without errors
-        python light_dark_pomdp_visualization_example.py --test-mode
-        python pomcpow_rock_sample_visualization_demo.py --test-mode
-        python push_pomdp_visualization_example.py --test-mode
+        # Set matplotlib backend to avoid display issues in CI
+        export MPLBACKEND=Agg
+        python legacy/light_dark_pomdp_visualization_example.py
+        python legacy/pomcpow_rock_sample_visualization_demo.py
+        python legacy/push_pomdp_visualization_example.py
       continue-on-error: true  # Visualization examples may have display issues in CI
 
     - name: Test remaining integration examples

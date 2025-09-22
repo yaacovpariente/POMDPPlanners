@@ -19,14 +19,6 @@ Subpackages
 Submodules
 ----------
 
-POMDPPlanners.tests.test\_planners.test\_planners\_usage\_examples module
--------------------------------------------------------------------------
-
-.. automodule:: POMDPPlanners.tests.test_planners.test_planners_usage_examples
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 POMDPPlanners.tests.test\_planners.test\_sparse\_sampling\_planner module
 -------------------------------------------------------------------------
 

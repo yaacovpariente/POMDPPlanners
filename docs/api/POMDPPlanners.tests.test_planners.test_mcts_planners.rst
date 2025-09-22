@@ -9,14 +9,6 @@ POMDPPlanners.tests.test\_planners.test\_mcts\_planners package
 Submodules
 ----------
 
-POMDPPlanners.tests.test\_planners.test\_mcts\_planners.test\_mcts\_usage\_examples module
-------------------------------------------------------------------------------------------
-
-.. automodule:: POMDPPlanners.tests.test_planners.test_mcts_planners.test_mcts_usage_examples
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 POMDPPlanners.tests.test\_planners.test\_mcts\_planners.test\_path\_simulation\_policy module
 ---------------------------------------------------------------------------------------------
 

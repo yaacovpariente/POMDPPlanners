@@ -30,14 +30,6 @@ POMDPPlanners.tests.conftest module
    :show-inheritance:
    :undoc-members:
 
-POMDPPlanners.tests.test\_all\_usage\_examples module
------------------------------------------------------
-
-.. automodule:: POMDPPlanners.tests.test_all_usage_examples
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 POMDPPlanners.tests.test\_setup module
 --------------------------------------
 
