@@ -34,33 +34,32 @@ def random_rollout_action_sampler(
         Total discounted return from rollout simulation
         
     Examples:
-        Basic rollout with discrete actions::
-        
-            import numpy as np
-            from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
-            from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            
-            # Simple action sampler for Tiger POMDP
-            class TigerActionSampler(ActionSampler):
-                def sample(self, belief_node=None):
-                    return np.random.choice(["listen", "open_left", "open_right"])
-            
-            # Create environment and sampler
-            tiger = TigerPOMDP(discount_factor=0.95)
-            action_sampler = TigerActionSampler()
-            
-            # Perform rollout from initial state
-            initial_state = "tiger_left"
-            rollout_value = random_rollout_action_sampler(
-                state=initial_state,
-                depth=0,
-                action_sampler=action_sampler,
-                environment=tiger,
-                discount_factor=0.95,
-                max_depth=10
-            )
-            print(f"Rollout value estimate: {rollout_value}")
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
+        >>> from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>>
+        >>> # Simple action sampler for Tiger POMDP
+        >>> class TigerActionSampler(ActionSampler):
+        ...     def sample(self, belief_node=None):
+        ...         return np.random.choice(["listen", "open_left", "open_right"])
+        >>>
+        >>> # Create environment and sampler
+        >>> tiger = TigerPOMDP(discount_factor=0.95)
+        >>> action_sampler = TigerActionSampler()
+        >>>
+        >>> # Perform rollout from initial state
+        >>> initial_state = "tiger_left"
+        >>> rollout_value = random_rollout_action_sampler(
+        ...     state=initial_state,
+        ...     depth=0,
+        ...     action_sampler=action_sampler,
+        ...     environment=tiger,
+        ...     discount_factor=0.95,
+        ...     max_depth=10
+        ... )  # doctest: +SKIP
+        >>> # print(f"Rollout value estimate: {rollout_value}")
             
         Rollout with continuous actions::
         
