@@ -1,11 +1,6 @@
 POMDPPlanners.tests.test\_environments.test\_light\_dark\_pomdp package
 =======================================================================
 
-.. automodule:: POMDPPlanners.tests.test_environments.test_light_dark_pomdp
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Subpackages
 -----------
 
@@ -17,18 +12,16 @@ Subpackages
 Submodules
 ----------
 
-POMDPPlanners.tests.test\_environments.test\_light\_dark\_pomdp.test\_continuous\_light\_dark\_pomdp module
------------------------------------------------------------------------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_continuous_light_dark_pomdp
+   POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp
 
-POMDPPlanners.tests.test\_environments.test\_light\_dark\_pomdp.test\_discrete\_light\_dark\_pomdp module
----------------------------------------------------------------------------------------------------------
+Module contents
+---------------
 
-.. automodule:: POMDPPlanners.tests.test_environments.test_light_dark_pomdp.test_discrete_light_dark_pomdp
+.. automodule:: POMDPPlanners.tests.test_environments.test_light_dark_pomdp
    :members:
    :show-inheritance:
    :undoc-members:

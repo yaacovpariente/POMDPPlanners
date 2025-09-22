@@ -1,18 +1,18 @@
 POMDPPlanners.environments.pacman\_pomdp package
 ================================================
 
-.. automodule:: POMDPPlanners.environments.pacman_pomdp
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Submodules
 ----------
 
-POMDPPlanners.environments.pacman\_pomdp.pacman\_pomdp module
--------------------------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: POMDPPlanners.environments.pacman_pomdp.pacman_pomdp
+   POMDPPlanners.environments.pacman_pomdp.pacman_pomdp
+
+Module contents
+---------------
+
+.. automodule:: POMDPPlanners.environments.pacman_pomdp
    :members:
    :show-inheritance:
    :undoc-members:

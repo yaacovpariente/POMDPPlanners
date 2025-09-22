@@ -1,26 +1,19 @@
 POMDPPlanners.tests.test\_configs package
 =========================================
 
-.. automodule:: POMDPPlanners.tests.test_configs
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Submodules
 ----------
 
-POMDPPlanners.tests.test\_configs.test\_environment\_configs module
--------------------------------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: POMDPPlanners.tests.test_configs.test_environment_configs
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.tests.test_configs.test_environment_configs
+   POMDPPlanners.tests.test_configs.test_planners_hyperparam_configs
 
-POMDPPlanners.tests.test\_configs.test\_planners\_hyperparam\_configs module
-----------------------------------------------------------------------------
+Module contents
+---------------
 
-.. automodule:: POMDPPlanners.tests.test_configs.test_planners_hyperparam_configs
+.. automodule:: POMDPPlanners.tests.test_configs
    :members:
    :show-inheritance:
    :undoc-members:

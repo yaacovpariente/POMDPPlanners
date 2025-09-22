@@ -1,26 +1,19 @@
 POMDPPlanners.tests.test\_simulations.test\_simulations\_deployment.test\_tasks package
 =======================================================================================
 
-.. automodule:: POMDPPlanners.tests.test_simulations.test_simulations_deployment.test_tasks
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Submodules
 ----------
 
-POMDPPlanners.tests.test\_simulations.test\_simulations\_deployment.test\_tasks.test\_episode\_simulation\_task module
-----------------------------------------------------------------------------------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: POMDPPlanners.tests.test_simulations.test_simulations_deployment.test_tasks.test_episode_simulation_task
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.tests.test_simulations.test_simulations_deployment.test_tasks.test_episode_simulation_task
+   POMDPPlanners.tests.test_simulations.test_simulations_deployment.test_tasks.test_hyper_parameter_tuning_simulation_task
 
-POMDPPlanners.tests.test\_simulations.test\_simulations\_deployment.test\_tasks.test\_hyper\_parameter\_tuning\_simulation\_task module
----------------------------------------------------------------------------------------------------------------------------------------
+Module contents
+---------------
 
-.. automodule:: POMDPPlanners.tests.test_simulations.test_simulations_deployment.test_tasks.test_hyper_parameter_tuning_simulation_task
+.. automodule:: POMDPPlanners.tests.test_simulations.test_simulations_deployment.test_tasks
    :members:
    :show-inheritance:
    :undoc-members:

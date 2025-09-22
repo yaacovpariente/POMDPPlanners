@@ -1,11 +1,6 @@
 POMDPPlanners package
 =====================
 
-.. automodule:: POMDPPlanners
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Subpackages
 -----------
 
@@ -19,3 +14,11 @@ Subpackages
    POMDPPlanners.simulations
    POMDPPlanners.tests
    POMDPPlanners.utils
+
+Module contents
+---------------
+
+.. automodule:: POMDPPlanners
+   :members:
+   :show-inheritance:
+   :undoc-members:

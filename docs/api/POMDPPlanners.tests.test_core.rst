@@ -1,58 +1,23 @@
 POMDPPlanners.tests.test\_core package
 ======================================
 
-.. automodule:: POMDPPlanners.tests.test_core
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
 Submodules
 ----------
 
-POMDPPlanners.tests.test\_core.test\_belief module
---------------------------------------------------
+.. toctree::
+   :maxdepth: 4
 
-.. automodule:: POMDPPlanners.tests.test_core.test_belief
-   :members:
-   :show-inheritance:
-   :undoc-members:
+   POMDPPlanners.tests.test_core.test_belief
+   POMDPPlanners.tests.test_core.test_distributions
+   POMDPPlanners.tests.test_core.test_environment
+   POMDPPlanners.tests.test_core.test_policy
+   POMDPPlanners.tests.test_core.test_simulation
+   POMDPPlanners.tests.test_core.test_tree
 
-POMDPPlanners.tests.test\_core.test\_distributions module
----------------------------------------------------------
+Module contents
+---------------
 
-.. automodule:: POMDPPlanners.tests.test_core.test_distributions
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.tests.test\_core.test\_environment module
--------------------------------------------------------
-
-.. automodule:: POMDPPlanners.tests.test_core.test_environment
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.tests.test\_core.test\_policy module
---------------------------------------------------
-
-.. automodule:: POMDPPlanners.tests.test_core.test_policy
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.tests.test\_core.test\_simulation module
-------------------------------------------------------
-
-.. automodule:: POMDPPlanners.tests.test_core.test_simulation
-   :members:
-   :show-inheritance:
-   :undoc-members:
-
-POMDPPlanners.tests.test\_core.test\_tree module
-------------------------------------------------
-
-.. automodule:: POMDPPlanners.tests.test_core.test_tree
+.. automodule:: POMDPPlanners.tests.test_core
    :members:
    :show-inheritance:
    :undoc-members:
