@@ -49,15 +49,23 @@ class SanityStateTransitionModel(Distribution):
     Example:
         Using the state transition model::
         
-            # Create transition model from bad state with good action
-            transition_model = SanityStateTransitionModel(state=1, action=0)
-            
-            # Sample next state (always deterministic)
-            next_state = transition_model.sample()[0]  # Returns 0 (good state)
-            
-            # Check probability of specific outcomes
-            prob = transition_model.probability([0])  # Returns [1.0]
-            prob_wrong = transition_model.probability([1])  # Returns [0.0]
+            >>> import numpy as np
+            >>> np.random.seed(42)  # For reproducible results
+            >>> # Create transition model from bad state with good action
+            >>> transition_model = SanityStateTransitionModel(state=1, action=0)
+            >>> 
+            >>> # Sample next state (always deterministic)
+            >>> next_state = transition_model.sample()[0]  # Returns 0 (good state)
+            >>> next_state == 0
+            True
+            >>> 
+            >>> # Check probability of specific outcomes
+            >>> prob = transition_model.probability([0])  # Returns [1.0]
+            >>> bool(prob[0] == 1.0)
+            True
+            >>> prob_wrong = transition_model.probability([1])  # Returns [0.0]
+            >>> bool(prob_wrong[0] == 0.0)
+            True
     """
     
     def __init__(self, state: int, action: int):
@@ -100,15 +108,23 @@ class SanityObservationModel(Distribution):
     Example:
         Using the observation model::
         
-            # Create observation model for good state
-            obs_model = SanityObservationModel(next_state=0, action=0)
-            
-            # Sample observation (always matches state)
-            observation = obs_model.sample()[0]  # Returns 0
-            
-            # Check observation probabilities
-            prob_correct = obs_model.probability([0])  # Returns [1.0]
-            prob_wrong = obs_model.probability([1])  # Returns [0.0]
+            >>> import numpy as np
+            >>> np.random.seed(42)  # For reproducible results
+            >>> # Create observation model for good state
+            >>> obs_model = SanityObservationModel(next_state=0, action=0)
+            >>> 
+            >>> # Sample observation (always matches state)
+            >>> observation = obs_model.sample()[0]  # Returns 0
+            >>> observation == 0
+            True
+            >>> 
+            >>> # Check observation probabilities
+            >>> prob_correct = obs_model.probability([0])  # Returns [1.0]
+            >>> bool(prob_correct[0] == 1.0)
+            True
+            >>> prob_wrong = obs_model.probability([1])  # Returns [0.0]
+            >>> bool(prob_wrong[0] == 0.0)
+            True
     """
     
     def __init__(self, next_state: int, action: int):
@@ -142,18 +158,30 @@ class SanityInitialStateDist(Distribution):
     Example:
         Using the initial state distribution::
         
-            # Create initial state distribution
-            initial_dist = SanityInitialStateDist()
-            
-            # Sample initial state (always returns good state)
-            initial_state = initial_dist.sample()[0]  # Returns 0
-            
-            # Sample multiple initial states
-            states = initial_dist.sample(n_samples=5)  # Returns [0, 0, 0, 0, 0]
-            
-            # Check probability of initial states
-            prob_good = initial_dist.probability([0])  # Returns [1.0]
-            prob_bad = initial_dist.probability([1])   # Returns [0.0]
+            >>> import numpy as np
+            >>> np.random.seed(42)  # For reproducible results
+            >>> # Create initial state distribution
+            >>> initial_dist = SanityInitialStateDist()
+            >>> 
+            >>> # Sample initial state (always returns good state)
+            >>> initial_state = initial_dist.sample()[0]  # Returns 0
+            >>> initial_state == 0
+            True
+            >>> 
+            >>> # Sample multiple initial states
+            >>> states = initial_dist.sample(n_samples=5)  # Returns [0, 0, 0, 0, 0]
+            >>> len(states) == 5
+            True
+            >>> all(state == 0 for state in states)
+            True
+            >>> 
+            >>> # Check probability of initial states
+            >>> prob_good = initial_dist.probability([0])  # Returns [1.0]
+            >>> bool(prob_good[0] == 1.0)
+            True
+            >>> prob_bad = initial_dist.probability([1])   # Returns [0.0]
+            >>> bool(prob_bad[0] == 0.0)
+            True
     """
     
     def sample(self, n_samples: int = 1) -> List[int]:
@@ -185,17 +213,27 @@ class SanityInitialObservationDist(Distribution):
     Example:
         Using the initial observation distribution::
         
-            # Create initial observation distribution
-            initial_obs_dist = SanityInitialObservationDist()
-            
-            # Sample initial observation
-            initial_obs = initial_obs_dist.sample()[0]  # Returns 0
-            
-            # Sample multiple observations
-            observations = initial_obs_dist.sample(n_samples=3)  # Returns [0, 0, 0]
-            
-            # Check observation probabilities
-            prob = initial_obs_dist.probability([0])  # Returns [1.0]
+            >>> import numpy as np
+            >>> np.random.seed(42)  # For reproducible results
+            >>> # Create initial observation distribution
+            >>> initial_obs_dist = SanityInitialObservationDist()
+            >>> 
+            >>> # Sample initial observation
+            >>> initial_obs = initial_obs_dist.sample()[0]  # Returns 0
+            >>> initial_obs == 0
+            True
+            >>> 
+            >>> # Sample multiple observations
+            >>> observations = initial_obs_dist.sample(n_samples=3)  # Returns [0, 0, 0]
+            >>> len(observations) == 3
+            True
+            >>> all(obs == 0 for obs in observations)
+            True
+            >>> 
+            >>> # Check observation probabilities
+            >>> prob = initial_obs_dist.probability([0])  # Returns [1.0]
+            >>> bool(prob[0] == 1.0)
+            True
     """
     
     def sample(self, n_samples: int = 1) -> List[int]:
@@ -236,19 +274,31 @@ class SanityPOMDP(DiscreteActionsEnvironment):
     Example:
         Creating and using a Sanity POMDP::
         
-            # Create sanity test environment
-            sanity = SanityPOMDP(discount_factor=0.95)
-            
-            # Get actions and verify simple dynamics
-            actions = sanity.get_actions()  # [0, 1]
-            
-            # Test state transitions
-            reward_good = sanity.reward(state=0, action=0)  # Should be 1.0
-            reward_bad = sanity.reward(state=1, action=0)   # Should be 1.0 (goes to good state)
-            
-            # Verify perfect observability
-            obs_model = sanity.observation_model(next_state=0, action=0)
-            observation = obs_model.sample()[0]  # Should be 0
+            >>> import numpy as np
+            >>> np.random.seed(42)  # For reproducible results
+            >>> # Create sanity test environment
+            >>> sanity = SanityPOMDP(discount_factor=0.95)
+            >>> 
+            >>> # Get actions and verify simple dynamics
+            >>> actions = sanity.get_actions()  # [0, 1]
+            >>> len(actions) == 2
+            True
+            >>> 0 in actions and 1 in actions
+            True
+            >>> 
+            >>> # Test state transitions
+            >>> reward_good = sanity.reward(state=0, action=0)  # Should be 1.0
+            >>> reward_good == 1.0
+            True
+            >>> reward_bad = sanity.reward(state=1, action=0)   # Should be 1.0 (goes to good state)
+            >>> reward_bad == 1.0
+            True
+            >>> 
+            >>> # Verify perfect observability
+            >>> obs_model = sanity.observation_model(next_state=0, action=0)
+            >>> observation = obs_model.sample()[0]  # Should be 0
+            >>> observation == 0
+            True
     """
     
     def __init__(self, discount_factor: float = 0.95, output_dir: Optional[Path] = None, debug: bool = False, use_queue_logger: bool = False):

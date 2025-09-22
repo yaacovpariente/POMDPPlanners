@@ -202,24 +202,30 @@ class WeightedParticleBelief(Belief):
         eps: Small epsilon value for numerical stability in weight updates
         
     Example:
-        Creating and using a weighted particle belief::
-        
-            import numpy as np
-            
-            # Create belief with 1000 particles
-            particles = [[x, y] for x, y in zip(np.random.randn(1000), np.random.randn(1000))]
-            log_weights = np.log(np.ones(1000) / 1000)  # Uniform weights
-            
-            belief = WeightedParticleBelief(
-                particles=particles,
-                log_weights=log_weights,
-                resampling=True,
-                ess_factor=0.5
-            )
-            
-            # Sample a state and update belief
-            state = belief.sample()
-            updated_belief = belief.update(action, observation, pomdp)
+        >>> import numpy as np
+        >>> # Create belief with 10 particles (smaller for testing)
+        >>> particles = [[x, y] for x, y in zip(np.random.randn(10), np.random.randn(10))]
+        >>> log_weights = np.log(np.ones(10) / 10)  # Uniform weights
+
+        >>> belief = WeightedParticleBelief(
+        ...     particles=particles,
+        ...     log_weights=log_weights,
+        ...     resampling=True,
+        ...     ess_factor=0.5
+        ... )
+
+        >>> # Verify belief creation
+        >>> len(belief.particles) == 10
+        True
+        >>> len(belief.log_weights) == 10
+        True
+        >>> belief.resampling
+        True
+
+        >>> # Sample a state from belief
+        >>> state = belief.sample()
+        >>> len(state) == 2  # [x, y] coordinate
+        True
     """
     
     def __init__(
@@ -482,85 +488,79 @@ class WeightedParticleBeliefStateUpdate(Belief):
         weights_sum: Running sum of all weights for efficient normalization
         
     Examples:
-        Basic incremental belief construction::
-        
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> # Create environment and empty belief
+        >>> env = TigerPOMDP(discount_factor=0.95)
+        >>> belief = WeightedParticleBeliefStateUpdate(particles=[], weights=[])
+
+        >>> # Add states incrementally with observations
+        >>> belief.inplace_update("listen", "hear_left", env, "tiger_left")
+        >>> belief.inplace_update("listen", "hear_left", env, "tiger_right")
+        >>> belief.inplace_update("listen", "hear_left", env, "tiger_left")
+
+        >>> # Verify belief construction
+        >>> len(belief.particles) == 3
+        True
+        >>> bool(belief.weights_sum > 0)
+        True
+        >>> "tiger_left" in belief.particles
+        True
+
+        >>> # Sample weighted by observation probabilities
+        >>> sampled_state = belief.sample()
+        >>> sampled_state in ["tiger_left", "tiger_right"]
+        True
             
-            # Create environment and empty belief
-            env = TigerPOMDP(discount_factor=0.95)
-            belief = WeightedParticleBeliefStateUpdate(particles=[], weights=[])
-            
-            # Add states incrementally with observations
-            belief.inplace_update("listen", "hear_left", env, "tiger_left")
-            belief.inplace_update("listen", "hear_left", env, "tiger_right") 
-            belief.inplace_update("listen", "hear_left", env, "tiger_left")
-            
-            print(f"Belief has {len(belief.particles)} particles")
-            print(f"Total weight: {belief.weights_sum}")
-            
-            # Sample weighted by observation probabilities
-            sampled_state = belief.sample()  # More likely to be "tiger_left"
-            
-        Immutable belief updates for tree search::
-        
-            import numpy as np
-            from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-            from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
-            
-            # Create continuous state environment
-            noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-            env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
-            
-            # Start with single particle
-            initial_state = np.array([0.0, 0.0, 0.1, 0.0])  # [x, x_dot, theta, theta_dot]
-            belief = WeightedParticleBeliefStateUpdate([initial_state], [1.0])
-            
-            # Create child beliefs for different observations (tree expansion)
-            action = 1  # Apply force right
-            observations = [
-                np.array([0.1, 0.0, 0.08, 0.0]),  # Likely observation
-                np.array([0.2, 0.0, 0.12, 0.0]),  # Less likely observation  
-            ]
-            
-            child_beliefs = []
-            for obs in observations:
-                # Generate potential next state
-                next_state = env.state_transition_model(initial_state, action).sample()[0]
+        >>> import numpy as np
+        >>> from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+        >>> # Create continuous state environment
+        >>> noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
+        >>> env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+
+        >>> # Start with single particle
+        >>> initial_state = np.array([0.0, 0.0, 0.1, 0.0])
+        >>> belief = WeightedParticleBeliefStateUpdate([initial_state], [1.0])
+        >>> len(belief.particles) == 1
+        True
+
+        >>> # Create child belief with new observation
+        >>> action = 1  # Apply force right
+        >>> obs = np.array([0.1, 0.0, 0.08, 0.0])
+        >>> next_state = env.state_transition_model(initial_state, action).sample()[0]
+        >>> child_belief = belief.update(action, obs, env, next_state)
+
+        >>> # Verify immutable update
+        >>> len(belief.particles) == 1  # Original unchanged
+        True
+        >>> len(child_belief.particles) == 2  # New belief has additional particle
+        True
+        >>> bool(child_belief.weights[-1] > 0)  # New particle has positive weight
+        True
                 
-                # Create new belief (immutable update)
-                child_belief = belief.update(action, obs, env, next_state)
-                child_beliefs.append(child_belief)
-                
-                print(f"Child belief weight: {child_belief.weights[-1]:.4f}")
-                
-        Comparing belief update strategies::
-        
-            from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-            from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
-            
-            env = SanityPOMDP(discount_factor=0.95)
-            
-            # Strategy 1: In-place updates (memory efficient)
-            belief_inplace = WeightedParticleBeliefStateUpdate([], [])
-            states_observations = [
-                (0, 0), (1, 0), (0, 0), (1, 1), (0, 0)  # (state, observation) pairs
-            ]
-            
-            for state, obs in states_observations:
-                belief_inplace.inplace_update("action", obs, env, state)
-                
-            print(f"In-place belief: {len(belief_inplace.particles)} particles")
-            
-            # Strategy 2: Immutable updates (functional style)
-            belief_immutable = WeightedParticleBeliefStateUpdate([], [])
-            for state, obs in states_observations:
-                belief_immutable = belief_immutable.update("action", obs, env, state)
-                
-            print(f"Immutable belief: {len(belief_immutable.particles)} particles")
-            
-            # Both should have same final state
-            assert len(belief_inplace.particles) == len(belief_immutable.particles)
+        >>> from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+        >>> env = SanityPOMDP(discount_factor=0.95)
+
+        >>> # Strategy 1: In-place updates (memory efficient)
+        >>> belief_inplace = WeightedParticleBeliefStateUpdate([], [])
+        >>> states_observations = [(0, 0), (1, 0), (0, 0)]
+
+        >>> for state, obs in states_observations:
+        ...     belief_inplace.inplace_update("action", obs, env, state)
+
+        >>> len(belief_inplace.particles) == 3
+        True
+
+        >>> # Strategy 2: Immutable updates (functional style)
+        >>> belief_immutable = WeightedParticleBeliefStateUpdate([], [])
+        >>> for state, obs in states_observations:
+        ...     belief_immutable = belief_immutable.update("action", obs, env, state)
+
+        >>> len(belief_immutable.particles) == 3
+        True
+
+        >>> # Both should have same final state
+        >>> len(belief_inplace.particles) == len(belief_immutable.particles)
+        True
             
         Monte Carlo Tree Search integration::
         

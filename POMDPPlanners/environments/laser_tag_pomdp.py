@@ -52,12 +52,13 @@ class LaserTagState:
         terminal: Whether the episode has terminated
         
     Example:
-        Creating a LaserTag state::
-        
-            state = LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)
-            print(state.robot)     # (0, 0)
-            print(state.opponent)  # (6, 10)
-            print(state.terminal)  # False
+        >>> state = LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)
+        >>> state.robot
+        (0, 0)
+        >>> state.opponent
+        (6, 10)
+        >>> state.terminal
+        False
     """
     robot: Tuple[int, int]
     opponent: Tuple[int, int]
@@ -87,17 +88,17 @@ class LaserTagStateTransition(StateTransitionModel):
         walls: Set of wall positions
         
     Example:
-        Creating and using the state transition model::
-        
-            state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
-            transition = LaserTagStateTransition(
-                state=state, 
-                action=0,  # North
-                floor_shape=(7, 11),
-                walls=set()
-            )
-            next_states = transition.sample(n_samples=5)
-            probabilities = transition.probability(next_states)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
+        >>> transition = LaserTagStateTransition(
+        ...     state=state,
+        ...     action=0,  # North
+        ...     floor_shape=(7, 11),
+        ...     walls=set()
+        ... )
+        >>> next_states = transition.sample(n_samples=5)  # doctest: +SKIP
+        >>> probabilities = transition.probability(next_states)  # doctest: +SKIP
     """
     
     def __init__(self, state: LaserTagState, action: int, floor_shape: Tuple[int, int], 
@@ -309,18 +310,18 @@ class LaserTagObservation(ObservationModel):
         walls: Set of wall positions
         
     Example:
-        Creating and using the observation model::
-        
-            state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
-            obs_model = LaserTagObservation(
-                next_state=state,
-                action=0,
-                measurement_noise=1.0,
-                floor_shape=(7, 11),
-                walls=set()
-            )
-            observations = obs_model.sample(n_samples=3)
-            probabilities = obs_model.probability(observations)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
+        >>> obs_model = LaserTagObservation(
+        ...     next_state=state,
+        ...     action=0,
+        ...     measurement_noise=1.0,
+        ...     floor_shape=(7, 11),
+        ...     walls=set()
+        ... )
+        >>> observations = obs_model.sample(n_samples=3)  # doctest: +SKIP
+        >>> probabilities = obs_model.probability(observations)  # doctest: +SKIP
     """
     
     def __init__(self, next_state: LaserTagState, action: int, measurement_noise: float = 1.0,
@@ -475,25 +476,30 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         measurement_noise: Standard deviation of observation noise
         
     Example:
-        Creating and using a LaserTag POMDP::
-        
-            # Create LaserTag environment
-            env = LaserTagPOMDP(
-                discount_factor=0.95,
-                floor_shape=(7, 11),
-                tag_reward=10.0,
-                step_cost=1.0
-            )
-            
-            # Sample initial state and get actions
-            initial_state = env.initial_state_dist().sample()[0]
-            actions = env.get_actions()
-            
-            # Execute action and get reward
-            reward = env.reward(initial_state, action=0)  # Move north
-            
-            # Check terminal condition
-            is_done = env.is_terminal(initial_state)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Create LaserTag environment
+        >>> env = LaserTagPOMDP(
+        ...     discount_factor=0.95,
+        ...     floor_shape=(7, 11),
+        ...     tag_reward=10.0,
+        ...     step_cost=1.0
+        ... )
+        >>>
+        >>> # Sample initial state and get actions
+        >>> initial_state = env.initial_state_dist().sample()[0]  # doctest: +SKIP
+        >>> actions = env.get_actions()
+        >>> len(actions) == 5
+        True
+        >>>
+        >>> # Create test state for reward calculation
+        >>> test_state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
+        >>> reward = env.reward(test_state, action=0)  # Move north  # doctest: +SKIP
+        >>>
+        >>> # Check terminal condition
+        >>> is_done = env.is_terminal(test_state)
+        >>> is_done
+        False
     """
     
     def __init__(self, 

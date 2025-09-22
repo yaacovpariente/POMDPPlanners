@@ -91,50 +91,44 @@ class POMCPOW(PathSimulationPolicy):
         debug: Enable debug logging if True
         
     Example:
-        Creating and using a POMCPOW planner::
-        
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.core.belief import get_initial_belief
-            from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-            from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-            
-            # Create a simple action sampler
-            class DiscreteActionSampler(ActionSampler):
-                def __init__(self, actions):
-                    self.actions = actions
-                    
-                def sample(self, belief_node=None):
-                    return random.choice(self.actions)
-            
-            # Initialize environment and belief
-            environment = TigerPOMDP(discount_factor=0.95)
-            action_sampler = DiscreteActionSampler(environment.get_actions())
-            
-            # Create POMCPOW planner
-            planner = POMCPOW(
-                environment=environment,
-                discount_factor=0.95,
-                depth=10,
-                exploration_constant=1.0,
-                k_o=3.0,           # Observation progressive widening coefficient
-                k_a=3.0,           # Action progressive widening coefficient  
-                alpha_o=0.5,       # Observation progressive widening exponent
-                alpha_a=0.5,       # Action progressive widening exponent
-                action_sampler=action_sampler,
-                n_simulations=1000,
-                name="POMCPOW_Planner"
-            )
-            
-            # Get initial belief and plan action
-            belief = get_initial_belief(
-                pomdp=environment,
-                n_particles=100,
-                resampling=True
-            )
-            
-            action, run_data = planner.action(belief)
-            print(f"Selected action: {action[0]}")
-            print(f"Tree metrics: {run_data.info_variables}")
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> from POMDPPlanners.core.belief import get_initial_belief
+        >>> from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+        >>> import random
+        >>> # Create a simple action sampler
+        >>> class DiscreteActionSampler(ActionSampler):
+        ...     def __init__(self, actions):
+        ...         self.actions = actions
+        ...     def sample(self, belief_node=None):
+        ...         return random.choice(self.actions)
+
+        >>> # Initialize environment and belief
+        >>> environment = TigerPOMDP(discount_factor=0.95)
+        >>> action_sampler = DiscreteActionSampler(environment.get_actions())
+
+        >>> # Create POMCPOW planner
+        >>> planner = POMCPOW(
+        ...     environment=environment,
+        ...     discount_factor=0.95,
+        ...     depth=10,
+        ...     exploration_constant=1.0,
+        ...     k_o=3.0,
+        ...     k_a=3.0,
+        ...     alpha_o=0.5,
+        ...     alpha_a=0.5,
+        ...     action_sampler=action_sampler,
+        ...     n_simulations=1000,
+        ...     name="POMCPOW_Planner"
+        ... )
+
+        >>> # Get initial belief and plan action
+        >>> belief = get_initial_belief(
+        ...     pomdp=environment,
+        ...     n_particles=100,
+        ...     resampling=True
+        ... )
+
+        >>> action, run_data = planner.action(belief)  # doctest: +SKIP
     """
 
     def __init__(

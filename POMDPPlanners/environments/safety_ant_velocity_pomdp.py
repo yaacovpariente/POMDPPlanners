@@ -66,29 +66,27 @@ class SafeAntVelocityStateTransition(StateTransitionModel):
         velocity: Current velocity [vx, vy]
         
     Example:
-        Using the Safety Ant Velocity state transition model::
-        
-            import numpy as np
-            
-            # Define current state [pos_x, pos_y, vel_x, vel_y]
-            state = np.array([0.5, -0.2, 1.0, 0.5])
-            action = 2  # Apply medium force
-            
-            # Create transition model
-            transition = SafeAntVelocityStateTransition(
-                state=state,
-                action=action,
-                dt=0.1,
-                mass=1.0,
-                damping=0.1,
-                max_force=1.0
-            )
-            
-            # Simulate physics step with random force direction
-            next_state = transition.sample()[0]
-            # Returns new [pos_x, pos_y, vel_x, vel_y] after physics
-            new_pos = next_state[:2]
-            new_vel = next_state[2:4]
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Define current state [pos_x, pos_y, vel_x, vel_y]
+        >>> state = np.array([0.5, -0.2, 1.0, 0.5])
+        >>> action = 2  # Apply medium force
+        >>>
+        >>> # Create transition model
+        >>> transition = SafeAntVelocityStateTransition(
+        ...     state=state,
+        ...     action=action,
+        ...     dt=0.1,
+        ...     mass=1.0,
+        ...     damping=0.1,
+        ...     max_force=1.0
+        ... )
+        >>>
+        >>> # Simulate physics step with random force direction
+        >>> next_state = transition.sample()[0]  # doctest: +SKIP
+        >>> # Returns new [pos_x, pos_y, vel_x, vel_y] after physics
+        >>> new_pos = next_state[:2]  # doctest: +SKIP
+        >>> new_vel = next_state[2:4]  # doctest: +SKIP
     """
     
     def __init__(
@@ -152,29 +150,27 @@ class SafeAntVelocityObservation(ObservationModel):
         velocity: True velocity [vx, vy]
         
     Example:
-        Using the Safety Ant Velocity observation model::
-        
-            import numpy as np
-            
-            # True state after physics simulation
-            true_state = np.array([0.6, -0.1, 1.2, 0.8])  # [x, y, vx, vy]
-            action = 2
-            
-            # Create observation model
-            obs_model = SafeAntVelocityObservation(
-                next_state=true_state,
-                action=action,
-                position_noise=0.1,
-                velocity_noise=0.2
-            )
-            
-            # Sample noisy observation
-            observation = obs_model.sample()[0]
-            # Returns [noisy_x, noisy_y, noisy_vx, noisy_vy]
-            # Position noise: ±0.1, velocity noise: ±0.2
-            
-            # Calculate observation probability
-            prob = obs_model.probability(observation)
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # True state after physics simulation
+        >>> true_state = np.array([0.6, -0.1, 1.2, 0.8])  # [x, y, vx, vy]
+        >>> action = 2
+        >>>
+        >>> # Create observation model
+        >>> obs_model = SafeAntVelocityObservation(
+        ...     next_state=true_state,
+        ...     action=action,
+        ...     position_noise=0.1,
+        ...     velocity_noise=0.2
+        ... )
+        >>>
+        >>> # Sample noisy observation
+        >>> observation = obs_model.sample()[0]  # doctest: +SKIP
+        >>> # Returns [noisy_x, noisy_y, noisy_vx, noisy_vy]
+        >>> # Position noise: ±0.1, velocity noise: ±0.2
+        >>>
+        >>> # Calculate observation probability
+        >>> prob = obs_model.probability([observation])  # doctest: +SKIP
     """
     
     def __init__(
@@ -250,29 +246,34 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
     - Physics simulation with uncertainty in force direction
     
     Example:
-        Creating and using a Safety Ant Velocity POMDP::
-        
-            # Create safety-critical environment
-            safe_env = SafeAntVelocityPOMDP(
-                discount_factor=0.99,
-                safe_velocity_threshold=2.0,
-                safety_violation_penalty=-100.0,
-                movement_reward_scale=1.0
-            )
-            
-            # Get initial state
-            initial_state_dist = safe_env.initial_state_dist()
-            state = initial_state_dist.sample()[0]  # [x, y, vx, vy]
-            
-            # Choose force magnitude action
-            actions = safe_env.get_actions()  # [0, 1, 2, 3]
-            action = 1  # Apply small force
-            reward = safe_env.reward(state, action)
-            
-            # Check safety constraint
-            velocity = state[2:4]
-            speed = np.linalg.norm(velocity)
-            is_safe = speed <= safe_env.safe_velocity_threshold
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>> # Create safety-critical environment
+        >>> safe_env = SafeAntVelocityPOMDP(
+        ...     discount_factor=0.99,
+        ...     safe_velocity_threshold=2.0,
+        ...     safety_violation_penalty=-100.0,
+        ...     movement_reward_scale=1.0
+        ... )
+        >>>
+        >>> # Get initial state
+        >>> initial_state_dist = safe_env.initial_state_dist()
+        >>> state = initial_state_dist.sample()[0]  # [x, y, vx, vy]  # doctest: +SKIP
+        >>>
+        >>> # Choose force magnitude action
+        >>> actions = safe_env.get_actions()  # [0, 1, 2, 3]
+        >>> len(actions) == 4
+        True
+        >>> action = 1  # Apply small force
+        >>> # reward = safe_env.reward(state, action)
+        >>>
+        >>> # Check safety constraint
+        >>> test_state = np.array([0.0, 0.0, 1.0, 0.5])  # Test state
+        >>> velocity = test_state[2:4]
+        >>> speed = np.linalg.norm(velocity)
+        >>> is_safe = speed <= safe_env.safe_velocity_threshold
+        >>> bool(is_safe)
+        True
     """
     
     def __init__(

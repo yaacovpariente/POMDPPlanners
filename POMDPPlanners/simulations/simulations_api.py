@@ -45,23 +45,14 @@ class SimulationsAPI:
     - MLflow experiment tracking and result management
 
     Example:
-        Running a comprehensive algorithm comparison study::
-
-            from pathlib import Path
-            from POMDPPlanners.simulations.simulations_api import SimulationsAPI
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-            from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-            from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
-            from POMDPPlanners.core.belief import get_initial_belief
-            from POMDPPlanners.core.simulation import EnvironmentRunParams
-            import numpy as np
-
-            # Initialize the API
-            api = SimulationsAPI(
-                cache_dir_path=Path("./simulation_results"),
-                debug=True  # Enable debug logging
-            )
+        >>> from pathlib import Path
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> import numpy as np
+        >>> # Initialize the API
+        >>> api = SimulationsAPI(
+        ...     cache_dir_path=Path("./simulation_results"),
+        ...     debug=True
+        ... )  # doctest: +SKIP
 
             # Create environments
             tiger = TigerPOMDP(discount_factor=0.95)

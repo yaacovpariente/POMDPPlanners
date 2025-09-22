@@ -70,18 +70,23 @@ class DiscreteDistribution(Distribution):
         probs: Numpy array of probabilities corresponding to each value
         
     Example:
-        Creating and sampling from a discrete distribution::
-        
-            import numpy as np
-            
-            # Create a distribution over actions
-            actions = ["up", "down", "left", "right"]
-            probs = np.array([0.4, 0.3, 0.2, 0.1])
-            dist = DiscreteDistribution(actions, probs)
-            
-            # Sample actions
-            samples = dist.sample(5)  # Sample 5 actions
-            prob_up = dist.probability(["up"])[0]  # Get probability of "up"
+        >>> import numpy as np
+        >>> # Create a distribution over actions
+        >>> actions = ["up", "down", "left", "right"]
+        >>> probs = np.array([0.4, 0.3, 0.2, 0.1])
+        >>> dist = DiscreteDistribution(actions, probs)
+
+        >>> # Sample actions
+        >>> samples = dist.sample(5)
+        >>> len(samples) == 5
+        True
+        >>> all(sample in actions for sample in samples)
+        True
+
+        >>> # Get probability of specific action
+        >>> prob_up = dist.probability(["up"])[0]
+        >>> bool(prob_up == 0.4)
+        True
     """
     
     def __init__(self, values: list, probs: np.array):
