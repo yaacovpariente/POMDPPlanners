@@ -1,23 +1,58 @@
 POMDPPlanners.planners.mcts\_planners package
 =============================================
 
+.. automodule:: POMDPPlanners.planners.mcts_planners
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+POMDPPlanners.planners.mcts\_planners.path\_simulations\_policy module
+----------------------------------------------------------------------
 
-   POMDPPlanners.planners.mcts_planners.path_simulations_policy
-   POMDPPlanners.planners.mcts_planners.pft_dpw
-   POMDPPlanners.planners.mcts_planners.pomcp
-   POMDPPlanners.planners.mcts_planners.pomcp_dpw
-   POMDPPlanners.planners.mcts_planners.pomcpow
-   POMDPPlanners.planners.mcts_planners.sparse_pft
+.. automodule:: POMDPPlanners.planners.mcts_planners.path_simulations_policy
+   :members:
+   :show-inheritance:
+   :undoc-members:
 
-Module contents
----------------
+POMDPPlanners.planners.mcts\_planners.pft\_dpw module
+-----------------------------------------------------
 
-.. automodule:: POMDPPlanners.planners.mcts_planners
+.. automodule:: POMDPPlanners.planners.mcts_planners.pft_dpw
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.planners.mcts\_planners.pomcp module
+--------------------------------------------------
+
+.. automodule:: POMDPPlanners.planners.mcts_planners.pomcp
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.planners.mcts\_planners.pomcp\_dpw module
+-------------------------------------------------------
+
+.. automodule:: POMDPPlanners.planners.mcts_planners.pomcp_dpw
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.planners.mcts\_planners.pomcpow module
+----------------------------------------------------
+
+.. automodule:: POMDPPlanners.planners.mcts_planners.pomcpow
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.planners.mcts\_planners.sparse\_pft module
+--------------------------------------------------------
+
+.. automodule:: POMDPPlanners.planners.mcts_planners.sparse_pft
    :members:
    :show-inheritance:
    :undoc-members:

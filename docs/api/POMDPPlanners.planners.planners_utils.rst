@@ -1,19 +1,26 @@
 POMDPPlanners.planners.planners\_utils package
 ==============================================
 
+.. automodule:: POMDPPlanners.planners.planners_utils
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+POMDPPlanners.planners.planners\_utils.dpw module
+-------------------------------------------------
 
-   POMDPPlanners.planners.planners_utils.dpw
-   POMDPPlanners.planners.planners_utils.rollout
+.. automodule:: POMDPPlanners.planners.planners_utils.dpw
+   :members:
+   :show-inheritance:
+   :undoc-members:
 
-Module contents
----------------
+POMDPPlanners.planners.planners\_utils.rollout module
+-----------------------------------------------------
 
-.. automodule:: POMDPPlanners.planners.planners_utils
+.. automodule:: POMDPPlanners.planners.planners_utils.rollout
    :members:
    :show-inheritance:
    :undoc-members:

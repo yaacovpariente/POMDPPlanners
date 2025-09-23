@@ -1,6 +1,11 @@
 POMDPPlanners.tests.test\_simulations package
 =============================================
 
+.. automodule:: POMDPPlanners.tests.test_simulations
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 Subpackages
 -----------
 
@@ -12,19 +17,42 @@ Subpackages
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+POMDPPlanners.tests.test\_simulations.conftest module
+-----------------------------------------------------
 
-   POMDPPlanners.tests.test_simulations.conftest
-   POMDPPlanners.tests.test_simulations.test_hyper_parameter_tuning_simulations
-   POMDPPlanners.tests.test_simulations.test_simulation_statistics
-   POMDPPlanners.tests.test_simulations.test_simulations_api
-   POMDPPlanners.tests.test_simulations.test_simulator
+.. automodule:: POMDPPlanners.tests.test_simulations.conftest
+   :members:
+   :show-inheritance:
+   :undoc-members:
 
-Module contents
----------------
+POMDPPlanners.tests.test\_simulations.test\_hyper\_parameter\_tuning\_simulations module
+----------------------------------------------------------------------------------------
 
-.. automodule:: POMDPPlanners.tests.test_simulations
+.. automodule:: POMDPPlanners.tests.test_simulations.test_hyper_parameter_tuning_simulations
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.tests.test\_simulations.test\_simulation\_statistics module
+-------------------------------------------------------------------------
+
+.. automodule:: POMDPPlanners.tests.test_simulations.test_simulation_statistics
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.tests.test\_simulations.test\_simulations\_api module
+-------------------------------------------------------------------
+
+.. automodule:: POMDPPlanners.tests.test_simulations.test_simulations_api
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.tests.test\_simulations.test\_simulator module
+------------------------------------------------------------
+
+.. automodule:: POMDPPlanners.tests.test_simulations.test_simulator
    :members:
    :show-inheritance:
    :undoc-members:

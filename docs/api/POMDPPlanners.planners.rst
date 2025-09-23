@@ -1,6 +1,11 @@
 POMDPPlanners.planners package
 ==============================
 
+.. automodule:: POMDPPlanners.planners
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 Subpackages
 -----------
 
@@ -14,15 +19,10 @@ Subpackages
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+POMDPPlanners.planners.sparse\_sampling\_planner module
+-------------------------------------------------------
 
-   POMDPPlanners.planners.sparse_sampling_planner
-
-Module contents
----------------
-
-.. automodule:: POMDPPlanners.planners
+.. automodule:: POMDPPlanners.planners.sparse_sampling_planner
    :members:
    :show-inheritance:
    :undoc-members:
