@@ -33,7 +33,7 @@ import numpy as np
 
 # Python 3.9 compatibility - KW_ONLY was introduced in Python 3.10
 try:
-    from dataclasses import KW_ONLY
+    from dataclasses import KW_ONLY  # type: ignore[attr-defined]
 except ImportError:
     # For Python 3.9 compatibility, define KW_ONLY as None
     KW_ONLY = None
@@ -154,8 +154,8 @@ class POMCP_DPW(PathSimulationPolicy):
         alpha_a: float,
         name: str,
         action_sampler: ActionSampler,
-        time_out_in_seconds: int = None,
-        n_simulations: int = None,
+        time_out_in_seconds: Optional[int] = None,
+        n_simulations: Optional[int] = None,
         min_samples_per_node: int = 10,
         log_path: Optional[Path] = None,
         debug: bool = False,
@@ -198,7 +198,7 @@ class POMCP_DPW(PathSimulationPolicy):
         self.depth = depth
         self.exploration_constant = exploration_constant
         self.min_samples_per_node = min_samples_per_node
-        self.action_sampler = action_sampler
+        self.action_sampler: ActionSampler = action_sampler
 
         self.k_o = k_o
         self.k_a = k_a
