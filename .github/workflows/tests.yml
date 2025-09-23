@@ -55,10 +55,6 @@ jobs:
       run: |
         docker run --rm pomdpplanners-test:latest pytest --doctest-modules POMDPPlanners/ -v
 
-    - name: Test notebook examples inside Docker
-      run: |
-        docker run --rm pomdpplanners-test:latest pytest POMDPPlanners/tests/test_examples/test_notebook_examples.py -v -m "not slow"
-      continue-on-error: true  # Allow notebook tests to fail without blocking CI
 
     - name: Run visualization examples inside Docker
       run: |

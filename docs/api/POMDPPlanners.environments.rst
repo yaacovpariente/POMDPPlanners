@@ -1,6 +1,11 @@
 POMDPPlanners.environments package
 ==================================
 
+.. automodule:: POMDPPlanners.environments
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 Subpackages
 -----------
 
@@ -13,22 +18,66 @@ Subpackages
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+POMDPPlanners.environments.cartpole\_pomdp module
+-------------------------------------------------
 
-   POMDPPlanners.environments.cartpole_pomdp
-   POMDPPlanners.environments.laser_tag_pomdp
-   POMDPPlanners.environments.mountain_car_pomdp
-   POMDPPlanners.environments.push_pomdp
-   POMDPPlanners.environments.rock_sample_pomdp
-   POMDPPlanners.environments.safety_ant_velocity_pomdp
-   POMDPPlanners.environments.sanity_pomdp
-   POMDPPlanners.environments.tiger_pomdp
+.. automodule:: POMDPPlanners.environments.cartpole_pomdp
+   :members:
+   :show-inheritance:
+   :undoc-members:
 
-Module contents
----------------
+POMDPPlanners.environments.laser\_tag\_pomdp module
+---------------------------------------------------
 
-.. automodule:: POMDPPlanners.environments
+.. automodule:: POMDPPlanners.environments.laser_tag_pomdp
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.environments.mountain\_car\_pomdp module
+------------------------------------------------------
+
+.. automodule:: POMDPPlanners.environments.mountain_car_pomdp
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.environments.push\_pomdp module
+---------------------------------------------
+
+.. automodule:: POMDPPlanners.environments.push_pomdp
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.environments.rock\_sample\_pomdp module
+-----------------------------------------------------
+
+.. automodule:: POMDPPlanners.environments.rock_sample_pomdp
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.environments.safety\_ant\_velocity\_pomdp module
+--------------------------------------------------------------
+
+.. automodule:: POMDPPlanners.environments.safety_ant_velocity_pomdp
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.environments.sanity\_pomdp module
+-----------------------------------------------
+
+.. automodule:: POMDPPlanners.environments.sanity_pomdp
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.environments.tiger\_pomdp module
+----------------------------------------------
+
+.. automodule:: POMDPPlanners.environments.tiger_pomdp
    :members:
    :show-inheritance:
    :undoc-members:

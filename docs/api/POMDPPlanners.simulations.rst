@@ -1,6 +1,11 @@
 POMDPPlanners.simulations package
 =================================
 
+.. automodule:: POMDPPlanners.simulations
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
 Subpackages
 -----------
 
@@ -12,19 +17,42 @@ Subpackages
 Submodules
 ----------
 
-.. toctree::
-   :maxdepth: 4
+POMDPPlanners.simulations.episodes module
+-----------------------------------------
 
-   POMDPPlanners.simulations.episodes
-   POMDPPlanners.simulations.hyper_parameter_tuning_simulations
-   POMDPPlanners.simulations.simulation_statistics
-   POMDPPlanners.simulations.simulations_api
-   POMDPPlanners.simulations.simulator
+.. automodule:: POMDPPlanners.simulations.episodes
+   :members:
+   :show-inheritance:
+   :undoc-members:
 
-Module contents
----------------
+POMDPPlanners.simulations.hyper\_parameter\_tuning\_simulations module
+----------------------------------------------------------------------
 
-.. automodule:: POMDPPlanners.simulations
+.. automodule:: POMDPPlanners.simulations.hyper_parameter_tuning_simulations
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.simulations.simulation\_statistics module
+-------------------------------------------------------
+
+.. automodule:: POMDPPlanners.simulations.simulation_statistics
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.simulations.simulations\_api module
+-------------------------------------------------
+
+.. automodule:: POMDPPlanners.simulations.simulations_api
+   :members:
+   :show-inheritance:
+   :undoc-members:
+
+POMDPPlanners.simulations.simulator module
+------------------------------------------
+
+.. automodule:: POMDPPlanners.simulations.simulator
    :members:
    :show-inheritance:
    :undoc-members:

@@ -77,19 +77,23 @@ Basic Usage
    installation
    quickstart
 
-.. toctree::
-   :maxdepth: 2
-   :caption: Examples & Tutorials
-
-   examples/basic_usage.ipynb
-   examples/hyperparameter_tuning.ipynb
-   examples/planners_comparison.ipynb
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: Core Components
 
-   core
+   core/beliefs
+   core/environments
+   core/planners
+   core/simulations
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Examples
+
+   examples/basic_usage
+   examples/planners_comparison
+   examples/hyperparameter_tuning
 
 .. toctree::
    :maxdepth: 1
