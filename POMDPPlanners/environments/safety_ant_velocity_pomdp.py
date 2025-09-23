@@ -119,9 +119,7 @@ class SafeAntVelocityStateTransition(StateTransitionModel):
 
             # Random force direction
             force_direction = np.random.uniform(-np.pi, np.pi)
-            force = force_magnitude * np.array(
-                [np.cos(force_direction), np.sin(force_direction)]
-            )
+            force = force_magnitude * np.array([np.cos(force_direction), np.sin(force_direction)])
 
             # Physics simulation (simplified)
             acceleration = (force - self.damping * self.velocity) / self.mass
@@ -194,12 +192,8 @@ class SafeAntVelocityObservation(ObservationModel):
         observations = []
         for _ in range(n_samples):
             # Add noise to position and velocity observations
-            noisy_position = self.position + np.random.normal(
-                0, self.position_noise, size=2
-            )
-            noisy_velocity = self.velocity + np.random.normal(
-                0, self.velocity_noise, size=2
-            )
+            noisy_position = self.position + np.random.normal(0, self.position_noise, size=2)
+            noisy_velocity = self.velocity + np.random.normal(0, self.velocity_noise, size=2)
 
             # Combine observations
             observation = np.concatenate([noisy_position, noisy_velocity])
@@ -217,19 +211,13 @@ class SafeAntVelocityObservation(ObservationModel):
                 )
 
             if observation.shape != (4,):
-                raise ValueError(
-                    f"Expected observation shape (4,), got {observation.shape}"
-                )
+                raise ValueError(f"Expected observation shape (4,), got {observation.shape}")
 
             position_diff = observation[:2] - self.position
             velocity_diff = observation[2:4] - self.velocity
 
-            position_log_prob = (
-                -0.5 * np.sum(position_diff**2) / (self.position_noise**2)
-            )
-            velocity_log_prob = (
-                -0.5 * np.sum(velocity_diff**2) / (self.velocity_noise**2)
-            )
+            position_log_prob = -0.5 * np.sum(position_diff**2) / (self.position_noise**2)
+            velocity_log_prob = -0.5 * np.sum(velocity_diff**2) / (self.velocity_noise**2)
 
             prob = np.exp(position_log_prob + velocity_log_prob)
             probabilities.append(prob)
@@ -341,9 +329,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    def state_transition_model(
-        self, state: np.ndarray, action: int
-    ) -> StateTransitionModel:
+    def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
         return SafeAntVelocityStateTransition(
             state=state,
             action=action,
@@ -353,9 +339,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             max_force=self.max_force,
         )
 
-    def observation_model(
-        self, next_state: np.ndarray, action: int
-    ) -> ObservationModel:
+    def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
         return SafeAntVelocityObservation(
             next_state=next_state,
             action=action,
@@ -403,9 +387,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
     def get_actions(self) -> List[int]:
         return self.actions
 
-    def is_equal_observation(
-        self, observation1: np.ndarray, observation2: np.ndarray
-    ) -> bool:
+    def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
@@ -499,9 +481,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             zorder=5,
             label="Ant",
         )
-        (path_line,) = ax_main.plot(
-            [], [], "b-", alpha=0.6, linewidth=2, label="Trajectory"
-        )
+        (path_line,) = ax_main.plot([], [], "b-", alpha=0.6, linewidth=2, label="Trajectory")
 
         # Velocity vector arrow
         velocity_arrow = ax_main.annotate(
@@ -703,7 +683,9 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
                 (
                     "green"
                     if s <= self.safe_velocity_threshold
-                    else "orange" if s <= self.safe_velocity_threshold * 1.5 else "red"
+                    else "orange"
+                    if s <= self.safe_velocity_threshold * 1.5
+                    else "red"
                 )
                 for s in speeds
             ]
@@ -712,14 +694,11 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
                 speed_points.set_color(colors)
 
             # Update text displays
-            action_name = (
-                f"Force Level {actions[frame]}" if frame < len(actions) else "Terminal"
-            )
+            action_name = f"Force Level {actions[frame]}" if frame < len(actions) else "Terminal"
             step_text.set_text(f"Step: {frame+1}/{len(states)}\nAction: {action_name}")
 
             velocity_text.set_text(
-                f"Velocity: [{velocity[0]:.2f}, {velocity[1]:.2f}]\n"
-                + f"Speed: {speed:.2f}"
+                f"Velocity: [{velocity[0]:.2f}, {velocity[1]:.2f}]\n" + f"Speed: {speed:.2f}"
             )
 
             current_reward = rewards[frame] if frame < len(rewards) else 0.0
@@ -798,31 +777,22 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
 
         # Calculate average rates and confidence intervals
         total_steps = sum(len(history.history) for history in histories)
-        avg_safety_violations = (
-            sum(safety_violations) / total_steps if total_steps > 0 else 0
-        )
-        avg_critical_violations = (
-            sum(critical_violations) / total_steps if total_steps > 0 else 0
-        )
+        avg_safety_violations = sum(safety_violations) / total_steps if total_steps > 0 else 0
+        avg_critical_violations = sum(critical_violations) / total_steps if total_steps > 0 else 0
 
         # Calculate confidence intervals using bootstrap
         safety_rates = [
             v / len(history.history) for v, history in zip(safety_violations, histories)
         ]
         critical_rates = [
-            v / len(history.history)
-            for v, history in zip(critical_violations, histories)
+            v / len(history.history) for v, history in zip(critical_violations, histories)
         ]
 
         safety_violations_ci = confidence_interval(data=safety_rates, confidence=0.95)
-        critical_violations_ci = confidence_interval(
-            data=critical_rates, confidence=0.95
-        )
+        critical_violations_ci = confidence_interval(data=critical_rates, confidence=0.95)
 
         # Calculate confidence intervals for total violations
-        total_safety_violations_ci = confidence_interval(
-            data=safety_violations, confidence=0.95
-        )
+        total_safety_violations_ci = confidence_interval(data=safety_violations, confidence=0.95)
         total_critical_violations_ci = confidence_interval(
             data=critical_violations, confidence=0.95
         )
@@ -858,9 +828,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         self, state: np.ndarray, action: np.ndarray
     ) -> Tuple[np.ndarray, np.ndarray, float]:
         next_state = self.state_transition_model(state=state, action=action).sample()[0]
-        next_observation = self.observation_model(
-            next_state=next_state, action=action
-        ).sample()[0]
+        next_observation = self.observation_model(next_state=next_state, action=action).sample()[0]
         reward = self.reward(state=next_state, action=action)
 
         return next_state, next_observation, reward

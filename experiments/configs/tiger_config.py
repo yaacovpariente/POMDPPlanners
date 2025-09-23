@@ -12,17 +12,12 @@ np.random.seed(42)
 random.seed(42)
 
 # Environment instance
-tiger_env = TigerPOMDP(
-    discount_factor=0.95,
-    name="TigerPOMDP"
-)
+tiger_env = TigerPOMDP(discount_factor=0.95, name="TigerPOMDP")
 
 # Belief instance
 tiger_belief = get_initial_belief(
-    pomdp=tiger_env,
-    n_particles=20,  # Small number of particles for testing
-    resampling=True
-) 
+    pomdp=tiger_env, n_particles=20, resampling=True  # Small number of particles for testing
+)
 
 pomcp_policies = [
     POMCP(
@@ -31,7 +26,7 @@ pomcp_policies = [
         depth=3,
         exploration_constant=1.0,
         name="POMCP_Depth3_Tiger",
-        n_simulations=1000
+        n_simulations=1000,
     ),
     POMCP(
         environment=tiger_env,
@@ -39,9 +34,9 @@ pomcp_policies = [
         depth=7,
         exploration_constant=1.0,
         name="POMCP_Depth7_Tiger",
-        n_simulations=1000
-    )
-] 
+        n_simulations=1000,
+    ),
+]
 
 # Experiment configuration
 tiger_experiment_config = ExperimentConfig(
@@ -49,5 +44,5 @@ tiger_experiment_config = ExperimentConfig(
     policies=pomcp_policies,
     belief=tiger_belief,
     num_episodes=100,
-    num_steps=200
-) 
+    num_steps=200,
+)

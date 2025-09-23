@@ -38,9 +38,7 @@ from POMDPPlanners.utils.weighted_particle_beliefs import (
 def create_belief(env, config):
     """Create a belief from configuration."""
     if config.class_name == "WeightedParticleBelief":
-        particles = env.initial_state_dist().sample(
-            n_samples=config.params.get("n_particles", 10)
-        )
+        particles = env.initial_state_dist().sample(n_samples=config.params.get("n_particles", 10))
         log_weights = np.log(np.ones(len(particles)) / len(particles))
         return WeightedParticleBelief(
             particles=particles,
@@ -49,9 +47,7 @@ def create_belief(env, config):
             ess_factor=config.params.get("ess_factor", 0.5),
         )
     elif config.class_name == "WeightedParticleBeliefDiscreteLightDark":
-        particles = env.initial_state_dist().sample(
-            n_samples=config.params.get("n_particles", 10)
-        )
+        particles = env.initial_state_dist().sample(n_samples=config.params.get("n_particles", 10))
         log_weights = np.log(np.ones(len(particles)) / len(particles))
         return WeightedParticleBeliefDiscreteLightDark(
             particles=particles,
@@ -61,9 +57,7 @@ def create_belief(env, config):
             reinvigoration_fraction=config.params.get("reinvigoration_fraction", 0.2),
         )
     elif config.class_name == "WeightedParticleBeliefDiscreteLightDarkFullCoverage":
-        particles = env.initial_state_dist().sample(
-            n_samples=config.params.get("n_particles", 10)
-        )
+        particles = env.initial_state_dist().sample(n_samples=config.params.get("n_particles", 10))
         log_weights = np.log(np.ones(len(particles)) / len(particles))
         return WeightedParticleBeliefDiscreteLightDarkFullCoverage(
             particles=particles,
@@ -72,23 +66,17 @@ def create_belief(env, config):
             reinvigoration_fraction=config.params.get("reinvigoration_fraction", 0.05),
         )
     elif config.class_name == "WeightedParticleBeliefContinuousLightDarkFullCoverage":
-        particles = env.initial_state_dist().sample(
-            n_samples=config.params.get("n_particles", 10)
-        )
+        particles = env.initial_state_dist().sample(n_samples=config.params.get("n_particles", 10))
         log_weights = np.log(np.ones(len(particles)) / len(particles))
         return WeightedParticleBeliefContinuousLightDarkFullCoverage(
             particles=particles,
             log_weights=log_weights,
             ess_factor=config.params.get("ess_factor", 0.5),
             reinvigoration_fraction=config.params.get("reinvigoration_fraction", 0.05),
-            reinvigoration_cov_matrix=config.params.get(
-                "reinvigoration_cov_matrix", np.eye(2)
-            ),
+            reinvigoration_cov_matrix=config.params.get("reinvigoration_cov_matrix", np.eye(2)),
         )
     elif config.class_name == "WeightedParticleBeliefSanityPOMDP":
-        particles = env.initial_state_dist().sample(
-            n_samples=config.params.get("n_particles", 10)
-        )
+        particles = env.initial_state_dist().sample(n_samples=config.params.get("n_particles", 10))
         log_weights = np.log(np.ones(len(particles)) / len(particles))
         return WeightedParticleBeliefSanityPOMDP(
             particles=particles,
@@ -252,9 +240,7 @@ def test_belief_objects_usable_as_dictionary_keys_and_set_members():
 
     # ASSERT: Verify hashable behavior works correctly
     assert len(belief_set) == 1  # Identical beliefs deduplicated in set
-    assert (
-        dict_access_result == "cached_value"
-    )  # Dictionary access works with equivalent belief
+    assert dict_access_result == "cached_value"  # Dictionary access works with equivalent belief
     assert belief1 in belief_set
     assert belief2 in belief_set
 
@@ -380,12 +366,8 @@ def test_weighted_particle_belief_config_id_with_resampling():
     particles = [1, 2, 3]
     log_weights = np.array([0.1, 0.2, 0.3])
 
-    belief1 = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=True
-    )
-    belief2 = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    belief1 = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=True)
+    belief2 = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
     # Config IDs should be different due to different resampling settings
     assert belief1.config_id != belief2.config_id
@@ -506,12 +488,8 @@ def test_weighted_particle_belief_equality_with_resampling():
     particles = [1, 2, 3]
     log_weights = np.array([0.1, 0.2, 0.3])
 
-    belief1 = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=True
-    )
-    belief2 = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    belief1 = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=True)
+    belief2 = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
     # Should not be equal due to different resampling settings
     assert belief1 != belief2
@@ -662,9 +640,7 @@ def test_create_belief_from_config_basic():
     belief = create_belief(env, config)
     assert isinstance(belief, WeightedParticleBelief)
     assert len(belief.particles) == 5
-    assert np.isclose(
-        np.sum(np.exp(belief.log_weights - np.max(belief.log_weights))), 5
-    )
+    assert np.isclose(np.sum(np.exp(belief.log_weights - np.max(belief.log_weights))), 5)
     assert all(p in env.states for p in belief.particles)
     assert belief.resampling is True
     assert np.isclose(
@@ -681,9 +657,7 @@ def test_create_belief_particles_and_weights():
     belief = create_belief(env, config)
     assert len(belief.particles) == 3
     assert all(p in env.states for p in belief.particles)
-    assert np.allclose(
-        np.exp(belief.log_weights - np.max(belief.log_weights)), np.ones(3)
-    )
+    assert np.allclose(np.exp(belief.log_weights - np.max(belief.log_weights)), np.ones(3))
     assert belief.resampling is False
     assert np.isclose(
         belief.ess_threshold, 0.3
@@ -759,9 +733,7 @@ def test_reinvigoration_sanity_pomdp():
     belief = create_belief(env, config)
     assert isinstance(belief, WeightedParticleBeliefSanityPOMDP)
     # Call reinvigorate with dummy action and observation
-    reinvigorated = belief.reinvigorate(
-        action="up", observation=np.array([0, 0]), pomdp=env
-    )
+    reinvigorated = belief.reinvigorate(action="up", observation=np.array([0, 0]), pomdp=env)
     assert isinstance(reinvigorated, WeightedParticleBelief)
 
 
@@ -774,9 +746,7 @@ def test_belief_update_basic():
     env = SanityPOMDP()
     particles = [0, 1, 0, 1]  # Mix of states
     log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
-    belief = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
     # Perform an update
     action = 0
@@ -817,9 +787,7 @@ def test_belief_update_with_resampling():
     assert len(updated_belief.particles) == len(belief.particles)
 
     # Check that weights are normalized after resampling
-    normalized_weights = np.exp(
-        updated_belief.log_weights - np.max(updated_belief.log_weights)
-    )
+    normalized_weights = np.exp(updated_belief.log_weights - np.max(updated_belief.log_weights))
     assert np.isclose(np.sum(normalized_weights), len(updated_belief.particles))
 
 
@@ -830,9 +798,7 @@ def test_belief_update_state_transitions():
     env = SanityPOMDP()
     particles = [0, 0, 0]  # All particles start in state 0
     log_weights = np.array([0.1, 0.1, 0.1])  # Non-zero weights
-    belief = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
     action = 0
     observation = 0
@@ -850,9 +816,7 @@ def test_belief_update_observation_probabilities():
     env = SanityPOMDP()
     particles = [0, 1, 0, 1]
     log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
-    belief = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
     action = 0
     observation = 0
@@ -868,9 +832,7 @@ def test_belief_update_with_tiger_pomdp():
     env = TigerPOMDP(discount_factor=0.95)
     particles = ["tiger_left", "tiger_right", "tiger_left"]
     log_weights = np.array([0.1, 0.1, 0.1])  # Non-zero weights
-    belief = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
     action = "listen"
     observation = "hear_left"
@@ -892,9 +854,7 @@ def test_belief_update_preserves_particle_count():
     n_particles = 10
     particles = [0] * n_particles
     log_weights = np.ones(n_particles) * 0.1  # Non-zero weights
-    belief = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
     action = 0
     observation = 0
@@ -910,9 +870,7 @@ def test_belief_update_weight_normalization():
     env = SanityPOMDP()
     particles = [0, 1, 0, 1]
     log_weights = np.array([1.0, 2.0, 3.0, 4.0])  # Unequal weights
-    belief = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
     action = 0
     observation = 0
@@ -932,9 +890,7 @@ def test_belief_update_with_extreme_weights():
     env = SanityPOMDP()
     particles = [0, 1, 0, 1]
     log_weights = np.array([-1000.0, -1000.0, -1000.0, -1000.0])  # Very small weights
-    belief = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
     action = 0
     observation = 0
@@ -952,9 +908,7 @@ def test_belief_update_consistency():
     env = SanityPOMDP()
     particles = [0, 1, 0, 1]
     log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
-    belief = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
     action = 0
     observation = 0
@@ -975,9 +929,7 @@ def test_belief_update_with_different_actions():
     env = SanityPOMDP()
     particles = [0, 1, 0, 1]
     log_weights = np.array([0.1, 0.1, 0.1, 0.1])  # Non-zero weights
-    belief = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
     observation = 0
 
@@ -1019,12 +971,8 @@ def test_weighted_particle_belief_state_update_mutable_default_arguments():
     belief2 = WeightedParticleBeliefStateUpdate()
 
     # Verify that each instance has its own separate list objects
-    assert (
-        belief1.particles is not belief2.particles
-    ), "Particles lists should not share references"
-    assert (
-        belief1.weights is not belief2.weights
-    ), "Weights lists should not share references"
+    assert belief1.particles is not belief2.particles, "Particles lists should not share references"
+    assert belief1.weights is not belief2.weights, "Weights lists should not share references"
 
     # Both should still be empty
     assert belief1.particles == []
@@ -1068,9 +1016,7 @@ def test_weighted_particle_belief_state_update_inplace_update():
     action = 0
     observation = 1
 
-    belief.inplace_update(
-        action=action, observation=observation, pomdp=env, state=new_state
-    )
+    belief.inplace_update(action=action, observation=observation, pomdp=env, state=new_state)
 
     # Check that the state was added
     assert new_state in belief.particles
@@ -1093,9 +1039,7 @@ def test_weighted_particle_belief_state_update_inplace_update_observation_probab
     action = 0
     observation = 0  # Should have high probability for state 0 in SanityPOMDP
 
-    belief.inplace_update(
-        action=action, observation=observation, pomdp=env, state=state
-    )
+    belief.inplace_update(action=action, observation=observation, pomdp=env, state=state)
 
     # Check that the observation probability was computed and added
     assert len(belief.weights) == 1
@@ -1117,9 +1061,7 @@ def test_weighted_particle_belief_state_update_multiple_inplace_updates():
     observation = 0
 
     for state in states:
-        belief.inplace_update(
-            action=action, observation=observation, pomdp=env, state=state
-        )
+        belief.inplace_update(action=action, observation=observation, pomdp=env, state=state)
 
     assert len(belief.particles) == 3
     assert len(belief.weights) == 3
@@ -1205,9 +1147,7 @@ def test_weighted_particle_belief_state_update_inplace_vs_update_comparison():
     assert belief1.particles[0] == 0  # Original particle preserved
     assert belief1.particles[1] == 1  # New particle added
     assert belief1.weights[0] == 0.5  # Original weight preserved
-    assert (
-        belief1.weights[1] > 0
-    )  # New weight added (should be 1.0 for matching observation)
+    assert belief1.weights[1] > 0  # New weight added (should be 1.0 for matching observation)
     assert belief1.weights_sum > original_weights_sum1  # Weight sum updated
 
     # Test 2: update returns a new belief without modifying the original
@@ -1254,12 +1194,8 @@ def test_weighted_particle_belief_state_update_inplace_vs_update_comparison():
     # Create a new belief using update method
     belief4 = WeightedParticleBeliefStateUpdate(particles=[], weights=[])
     updated_belief4 = belief4.update(action=0, observation=0, pomdp=env, state=0)
-    updated_belief4 = updated_belief4.update(
-        action=0, observation=1, pomdp=env, state=1
-    )
-    updated_belief4 = updated_belief4.update(
-        action=0, observation=0, pomdp=env, state=0
-    )
+    updated_belief4 = updated_belief4.update(action=0, observation=1, pomdp=env, state=1)
+    updated_belief4 = updated_belief4.update(action=0, observation=0, pomdp=env, state=0)
 
     # Verify belief4 was not modified
     assert len(belief4.particles) == 0
@@ -1327,9 +1263,7 @@ def test_weighted_particle_belief_state_update_sample_empty_belief_raises_error(
     """Test that sampling from empty belief raises ValueError."""
     belief = WeightedParticleBeliefStateUpdate([], [])
 
-    with pytest.raises(
-        ValueError, match="Cannot sample from empty or unnormalized belief"
-    ):
+    with pytest.raises(ValueError, match="Cannot sample from empty or unnormalized belief"):
         belief.sample()
 
 
@@ -1340,9 +1274,7 @@ def test_weighted_particle_belief_state_update_sample_zero_weights_raises_error(
 
     belief = WeightedParticleBeliefStateUpdate(particles=particles, weights=weights)
 
-    with pytest.raises(
-        ValueError, match="Cannot sample from empty or unnormalized belief"
-    ):
+    with pytest.raises(ValueError, match="Cannot sample from empty or unnormalized belief"):
         belief.sample()
 
 
@@ -1352,9 +1284,7 @@ def test_weighted_particle_belief_state_update_sample_empty_particles_raises_err
     weights = [0.5]  # Non-empty weights but empty particles
 
     # Should raise ValueError during initialization due to length mismatch
-    with pytest.raises(
-        ValueError, match="particles and weights must have the same length"
-    ):
+    with pytest.raises(ValueError, match="particles and weights must have the same length"):
         WeightedParticleBeliefStateUpdate(particles=particles, weights=weights)
 
 
@@ -1394,9 +1324,7 @@ def test_weighted_particle_belief_state_update_with_tiger_pomdp():
     observation = "hear_left"
 
     for state in states:
-        belief.inplace_update(
-            action=action, observation=observation, pomdp=env, state=state
-        )
+        belief.inplace_update(action=action, observation=observation, pomdp=env, state=state)
 
     # Check that all states were added
     assert len(belief.particles) == 3
@@ -1422,14 +1350,10 @@ def test_weighted_particle_belief_state_update_with_tiger_pomdp_different_observ
     action = "listen"
 
     # Update with observation that matches the state
-    belief1.inplace_update(
-        action=action, observation="hear_left", pomdp=env, state=state
-    )
+    belief1.inplace_update(action=action, observation="hear_left", pomdp=env, state=state)
 
     # Update with observation that doesn't match the state
-    belief2.inplace_update(
-        action=action, observation="hear_right", pomdp=env, state=state
-    )
+    belief2.inplace_update(action=action, observation="hear_right", pomdp=env, state=state)
 
     # The matching observation should have higher probability
     assert belief1.weights[0] > belief2.weights[0]
@@ -1607,9 +1531,7 @@ def test_weighted_particle_belief_state_update_config_id_uniqueness():
     belief2 = WeightedParticleBeliefStateUpdate(particles=[1, 3], weights=[0.5, 0.5])
     belief3 = WeightedParticleBeliefStateUpdate(particles=[1, 2], weights=[0.3, 0.7])
     belief4 = WeightedParticleBeliefStateUpdate(particles=[], weights=[])
-    belief5 = WeightedParticleBeliefStateUpdate(
-        particles=[np.array([1, 2])], weights=[1.0]
-    )
+    belief5 = WeightedParticleBeliefStateUpdate(particles=[np.array([1, 2])], weights=[1.0])
 
     # All config_ids should be unique
     config_ids = [
@@ -1725,12 +1647,8 @@ def test_weighted_particle_belief_state_update_comprehensive_usage_example():
     belief = WeightedParticleBeliefStateUpdate(particles=[], weights=[])
 
     # Add states incrementally with observations (from docstring)
-    belief.inplace_update(
-        action="listen", observation="hear_left", pomdp=env, state="tiger_left"
-    )
-    belief.inplace_update(
-        action="listen", observation="hear_left", pomdp=env, state="tiger_right"
-    )
+    belief.inplace_update(action="listen", observation="hear_left", pomdp=env, state="tiger_left")
+    belief.inplace_update(action="listen", observation="hear_left", pomdp=env, state="tiger_right")
 
     # Verify belief state
     assert len(belief.particles) == 2
@@ -1883,9 +1801,7 @@ def test_unweighted_particle_belief_state_update_inplace_update():
     action = 0
     observation = 1
 
-    belief.inplace_update(
-        action=action, observation=observation, pomdp=env, state=new_state
-    )
+    belief.inplace_update(action=action, observation=observation, pomdp=env, state=new_state)
 
     # Check that the state was added
     assert new_state in belief.particles
@@ -1907,9 +1823,7 @@ def test_unweighted_particle_belief_state_update_inplace_update_ignores_observat
     action = 0
     observation = 1  # Different from state, should still be added
 
-    belief.inplace_update(
-        action=action, observation=observation, pomdp=env, state=state
-    )
+    belief.inplace_update(action=action, observation=observation, pomdp=env, state=state)
 
     # Check that the state was added regardless of observation probability
     assert len(belief.particles) == 1
@@ -1929,9 +1843,7 @@ def test_unweighted_particle_belief_state_update_multiple_inplace_updates():
     observation = 0
 
     for state in states:
-        belief.inplace_update(
-            action=action, observation=observation, pomdp=env, state=state
-        )
+        belief.inplace_update(action=action, observation=observation, pomdp=env, state=state)
 
     assert len(belief.particles) == 4
     assert belief.particles == states
@@ -2027,9 +1939,7 @@ def test_unweighted_particle_belief_state_update_inplace_vs_update_comparison():
     assert len(updated_belief2.particles) == 2  # New belief has additional particle
     assert updated_belief2.particles[0] == 0  # Original particle preserved
     assert updated_belief2.particles[1] == 1  # New particle added
-    assert (
-        updated_belief2.weights_sum == original_weights_sum2 + 1
-    )  # Weight sum updated
+    assert updated_belief2.weights_sum == original_weights_sum2 + 1  # Weight sum updated
 
 
 def test_unweighted_particle_belief_state_update_sample_basic():
@@ -2124,9 +2034,7 @@ def test_unweighted_particle_belief_state_update_with_tiger_pomdp():
     observation = "hear_left"
 
     for state in states:
-        belief.inplace_update(
-            action=action, observation=observation, pomdp=env, state=state
-        )
+        belief.inplace_update(action=action, observation=observation, pomdp=env, state=state)
 
     # Check that all states were added
     assert len(belief.particles) == 3
@@ -2280,9 +2188,7 @@ def test_unweighted_particle_belief_state_update_config_id_uniqueness():
     belief2 = UnweightedParticleBeliefStateUpdate(particles=[1, 3])
     belief3 = UnweightedParticleBeliefStateUpdate(particles=[])
     belief4 = UnweightedParticleBeliefStateUpdate(particles=[np.array([1, 2])])
-    belief5 = UnweightedParticleBeliefStateUpdate(
-        particles=[1, 1, 2]
-    )  # Different duplicates
+    belief5 = UnweightedParticleBeliefStateUpdate(particles=[1, 1, 2])  # Different duplicates
 
     # All config_ids should be unique
     config_ids = [
@@ -2383,12 +2289,8 @@ def test_unweighted_particle_belief_state_update_comprehensive_usage_example():
     belief = UnweightedParticleBeliefStateUpdate(particles=[])
 
     # Add states incrementally (observations are ignored in unweighted version)
-    belief.inplace_update(
-        action="listen", observation="hear_left", pomdp=env, state="tiger_left"
-    )
-    belief.inplace_update(
-        action="listen", observation="hear_right", pomdp=env, state="tiger_right"
-    )
+    belief.inplace_update(action="listen", observation="hear_left", pomdp=env, state="tiger_left")
+    belief.inplace_update(action="listen", observation="hear_right", pomdp=env, state="tiger_right")
 
     # Verify belief state
     assert len(belief.particles) == 2
@@ -2476,9 +2378,7 @@ def test_unweighted_particle_belief_state_update_sample_with_extreme_cases():
         elif particle is sample2:
             found_sample = True
             break
-        elif not isinstance(particle, np.ndarray) and not isinstance(
-            sample2, np.ndarray
-        ):
+        elif not isinstance(particle, np.ndarray) and not isinstance(sample2, np.ndarray):
             if particle == sample2:
                 found_sample = True
                 break
@@ -2504,13 +2404,9 @@ def test_weighted_particle_belief_basic_incremental_construction_usage_example()
     belief.inplace_update("listen", "hear_left", env, "tiger_left")
 
     # Verify results
-    assert (
-        len(belief.particles) == 3
-    ), f"Expected 3 particles, got {len(belief.particles)}"
+    assert len(belief.particles) == 3, f"Expected 3 particles, got {len(belief.particles)}"
     assert len(belief.weights) == 3, f"Expected 3 weights, got {len(belief.weights)}"
-    assert (
-        belief.weights_sum > 0
-    ), f"Expected positive weights_sum, got {belief.weights_sum}"
+    assert belief.weights_sum > 0, f"Expected positive weights_sum, got {belief.weights_sum}"
 
     # Verify particles
     assert belief.particles == ["tiger_left", "tiger_right", "tiger_left"]
@@ -2554,9 +2450,7 @@ def test_weighted_particle_belief_immutable_updates_usage_example():
         child_beliefs.append(child_belief)
 
     # Verify results
-    assert (
-        len(child_beliefs) == 2
-    ), f"Expected 2 child beliefs, got {len(child_beliefs)}"
+    assert len(child_beliefs) == 2, f"Expected 2 child beliefs, got {len(child_beliefs)}"
 
     for child_belief in child_beliefs:
         assert len(child_belief.particles) == 2, f"Each child should have 2 particles"
@@ -2602,12 +2496,8 @@ def test_weighted_particle_belief_update_strategies_comparison_usage_example():
     ), f"Expected 5 particles, got {len(belief_inplace.particles)}"
 
     # Verify particles match
-    assert (
-        belief_inplace.particles == belief_immutable.particles
-    ), "Particle sequences should match"
-    assert (
-        belief_inplace.weights == belief_immutable.weights
-    ), "Weight sequences should match"
+    assert belief_inplace.particles == belief_immutable.particles, "Particle sequences should match"
+    assert belief_inplace.weights == belief_immutable.weights, "Weight sequences should match"
 
 
 def test_weighted_particle_belief_mcts_integration_usage_example():
@@ -2644,9 +2534,7 @@ def test_weighted_particle_belief_mcts_integration_usage_example():
             child_belief.inplace_update(action, observation, env, next_state)
 
         # Create belief node for tree (from docstring)
-        belief_node = BeliefNode(
-            belief=child_belief, observation=observation, parent=action_node
-        )
+        belief_node = BeliefNode(belief=child_belief, observation=observation, parent=action_node)
         belief_nodes.append(belief_node)
 
     # Verify tree structure
@@ -2654,12 +2542,8 @@ def test_weighted_particle_belief_mcts_integration_usage_example():
     assert len(action_node.children) == 2, f"Action node should have 2 children"
 
     for belief_node in belief_nodes:
-        assert (
-            len(belief_node.belief.particles) == 5
-        ), f"Each child belief should have 5 particles"
-        assert (
-            belief_node.parent == action_node
-        ), f"Belief node should be child of action node"
+        assert len(belief_node.belief.particles) == 5, f"Each child belief should have 5 particles"
+        assert belief_node.parent == action_node, f"Belief node should be child of action node"
         assert belief_node.observation in possible_observations, f"Invalid observation"
 
 
@@ -2717,20 +2601,14 @@ def test_weighted_particle_belief_config_id_caching_usage_example():
     config_id_1 = belief1.config_id
     config_id_2 = belief2.config_id
 
-    assert (
-        config_id_1 == config_id_2
-    ), f"Config IDs should match: {config_id_1} vs {config_id_2}"
+    assert config_id_1 == config_id_2, f"Config IDs should match: {config_id_1} vs {config_id_2}"
 
     # Useful for caching in planning algorithms (from docstring)
     belief_cache = {belief1.config_id: "cached_result"}
 
     # Should find cache hit
-    assert (
-        belief2.config_id in belief_cache
-    ), "Should find cache hit with order-invariant config ID"
-    assert (
-        belief_cache[belief2.config_id] == "cached_result"
-    ), "Cache should return correct result"
+    assert belief2.config_id in belief_cache, "Should find cache hit with order-invariant config ID"
+    assert belief_cache[belief2.config_id] == "cached_result", "Cache should return correct result"
 
 
 def test_weighted_particle_belief_custom_particle_types_usage_example():
@@ -2762,12 +2640,8 @@ def test_weighted_particle_belief_custom_particle_types_usage_example():
     sampled_state = new_belief.sample()
 
     # Verify results (from docstring)
-    assert isinstance(
-        sampled_state, np.ndarray
-    ), f"Expected numpy array, got {type(sampled_state)}"
-    assert sampled_state.shape == (
-        4,
-    ), f"Expected shape (4,), got {sampled_state.shape}"
+    assert isinstance(sampled_state, np.ndarray), f"Expected numpy array, got {type(sampled_state)}"
+    assert sampled_state.shape == (4,), f"Expected shape (4,), got {sampled_state.shape}"
     assert len(new_belief.particles) == 4, f"Expected 4 particles after update"
     assert len(new_belief.weights) == 4, f"Expected 4 weights after update"
 
@@ -2835,9 +2709,7 @@ def test_unweighted_particle_belief_state_update_mcts_with_uniform_beliefs_usage
             child_belief.inplace_update(action, observation, env, next_state)
 
         # Create belief node
-        belief_node = BeliefNode(
-            belief=child_belief, observation=observation, parent=action_node
-        )
+        belief_node = BeliefNode(belief=child_belief, observation=observation, parent=action_node)
         assert len(child_belief.particles) > 0
 
 
@@ -2868,14 +2740,10 @@ def test_unweighted_particle_belief_state_update_comparing_weighted_vs_unweighte
         unweighted_belief.inplace_update(action, obs, env, state)
 
     # Compare sampling distributions
-    weighted_samples = [
-        weighted_belief.sample() for _ in range(100)
-    ]  # Reduced for test speed
+    weighted_samples = [weighted_belief.sample() for _ in range(100)]  # Reduced for test speed
     weighted_counts = collections.Counter(weighted_samples)
 
-    unweighted_samples = [
-        unweighted_belief.sample() for _ in range(100)
-    ]  # Reduced for test speed
+    unweighted_samples = [unweighted_belief.sample() for _ in range(100)]  # Reduced for test speed
     unweighted_counts = collections.Counter(unweighted_samples)
 
     # Verify both work and have reasonable distributions

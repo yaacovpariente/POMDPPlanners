@@ -338,9 +338,7 @@ class SanityPOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    def state_transition_model(
-        self, state: int, action: int
-    ) -> SanityStateTransitionModel:
+    def state_transition_model(self, state: int, action: int) -> SanityStateTransitionModel:
         return SanityStateTransitionModel(state, action)
 
     def observation_model(self, next_state: int, action: int) -> SanityObservationModel:

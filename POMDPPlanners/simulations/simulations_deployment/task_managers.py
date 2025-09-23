@@ -68,9 +68,7 @@ class DaskTaskManager(TaskManager):
                 )
         else:
             # Create local cluster with persistent storage
-            cluster = LocalCluster(
-                n_workers=self.n_workers, local_directory="./dask-worker-space"
-            )
+            cluster = LocalCluster(n_workers=self.n_workers, local_directory="./dask-worker-space")
             self.client = Client(cluster)
 
         # Initialize cache but don't register it by default
@@ -207,9 +205,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
             verbose: Verbosity level for joblib
             logger_debug: Whether to enable debug logging
         """
-        super().__init__(
-            cache_db=cache_db, cache_dir=cache_dir, logger_debug=logger_debug
-        )
+        super().__init__(cache_db=cache_db, cache_dir=cache_dir, logger_debug=logger_debug)
         self.n_jobs = n_jobs
         self.verbose = verbose
 
@@ -297,9 +293,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
             )
 
             if failed_count > 0:
-                self.logger.warning(
-                    f"{failed_count} tasks failed during parallel processing"
-                )
+                self.logger.warning(f"{failed_count} tasks failed during parallel processing")
 
             # Log cache statistics
             self._log_cache_statistics()
@@ -483,9 +477,9 @@ class PBSTaskManager(DaskTaskManager):
         # Prepare scheduler options for dashboard configuration
         scheduler_options = {}
         if self.enable_dashboard:
-            scheduler_options["dashboard_address"] = (
-                f"{self.dashboard_address}:{self.dashboard_port}"
-            )
+            scheduler_options[
+                "dashboard_address"
+            ] = f"{self.dashboard_address}:{self.dashboard_port}"
             if self.dashboard_prefix:
                 scheduler_options["dashboard_prefix"] = self.dashboard_prefix
 
@@ -661,9 +655,7 @@ class SequentialTaskManager(JoblibTaskManager):
             )
 
             if failed_count > 0:
-                self.logger.warning(
-                    f"{failed_count} tasks failed during sequential processing"
-                )
+                self.logger.warning(f"{failed_count} tasks failed during sequential processing")
 
             # Log cache statistics
             self._log_cache_statistics()

@@ -216,9 +216,7 @@ class PFT_DPW(PathSimulationPolicy):
         self.alpha_o = alpha_o
         self.exploration_constant = exploration_constant
 
-    def __type_check_inputs(
-        self, min_samples_per_node: int, min_visit_count_per_action: int
-    ):
+    def __type_check_inputs(self, min_samples_per_node: int, min_visit_count_per_action: int):
         if not isinstance(min_samples_per_node, int):
             raise TypeError("min_samples_per_node must be an int")
         if not isinstance(min_visit_count_per_action, int):
@@ -256,10 +254,7 @@ class PFT_DPW(PathSimulationPolicy):
     def _simulate_return(
         self, belief_node: BeliefNode, action_node: ActionNode, depth: int
     ) -> float:
-        if (
-            len(action_node.children)
-            <= self.k_o * action_node.visit_count**self.alpha_o
-        ):
+        if len(action_node.children) <= self.k_o * action_node.visit_count**self.alpha_o:
             next_belief_node, immediate_reward = self._sample_new_belief_node(
                 belief_node=belief_node, action_node=action_node
             )
@@ -327,6 +322,4 @@ class PFT_DPW(PathSimulationPolicy):
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
-        return PolicySpaceInfo(
-            action_space=SpaceType.CONTINUOUS, observation_space=SpaceType.MIXED
-        )
+        return PolicySpaceInfo(action_space=SpaceType.CONTINUOUS, observation_space=SpaceType.MIXED)

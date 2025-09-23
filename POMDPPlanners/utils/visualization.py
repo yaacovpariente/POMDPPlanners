@@ -43,9 +43,7 @@ def plot_metrics_comparison(
         cache_dir_path: Path to save the plots
     """
     if not (len(statistics) > 0 and len(environments) > 0 and len(policies) > 0):
-        raise ValueError(
-            "Statistics, environments, and policies lists must not be empty"
-        )
+        raise ValueError("Statistics, environments, and policies lists must not be empty")
 
     # Create plots directory if it doesn't exist
     plots_dir = cache_dir_path / "plots"
@@ -160,9 +158,7 @@ def plot_discounted_returns_histogram(
         cache_path: Path where the histogram plot will be saved
     """
     # Convert histories to discounted returns
-    discounted_returns = [
-        history_to_discounted_return_value(history) for history in histories
-    ]
+    discounted_returns = [history_to_discounted_return_value(history) for history in histories]
 
     # Set seaborn style
     sns.set_style("whitegrid")
@@ -172,14 +168,10 @@ def plot_discounted_returns_histogram(
     plt.figure(figsize=(10, 6))
 
     # Create the histogram using seaborn
-    sns.histplot(
-        data=discounted_returns, bins=15, edgecolor="black", color="skyblue", alpha=0.7
-    )
+    sns.histplot(data=discounted_returns, bins=15, edgecolor="black", color="skyblue", alpha=0.7)
 
     # Customize the plot
-    plt.xlabel(
-        f"Discounted Return for {policy.name} in {environment.name}", fontsize=12
-    )
+    plt.xlabel(f"Discounted Return for {policy.name} in {environment.name}", fontsize=12)
     plt.ylabel("Frequency", fontsize=12)
     plt.title("Distribution of Discounted Returns", fontsize=14, pad=20)
 
@@ -287,9 +279,7 @@ def plot_policies_comparison_on_environment(
         raise TypeError("metrics_dict must be a dictionary")
     if len(metrics_dict) == 0:
         raise ValueError("metrics_dict cannot be empty")
-    if not all(
-        isinstance(policy_metrics, dict) for policy_metrics in metrics_dict.values()
-    ):
+    if not all(isinstance(policy_metrics, dict) for policy_metrics in metrics_dict.values()):
         raise TypeError("All policy_metrics must be dictionaries")
     if not all(
         isinstance(metric, MetricValue)
@@ -342,10 +332,8 @@ def plot_policies_comparison_on_environment(
                 # Create 2D array for yerr: [lower_errors, upper_errors]
                 yerr = np.vstack(
                     [
-                        np.array(metric_values)
-                        - np.array(lower_bounds),  # Lower errors
-                        np.array(upper_bounds)
-                        - np.array(metric_values),  # Upper errors
+                        np.array(metric_values) - np.array(lower_bounds),  # Lower errors
+                        np.array(upper_bounds) - np.array(metric_values),  # Upper errors
                     ]
                 )
 
@@ -398,9 +386,7 @@ def plot_policies_comparison_on_environment(
                         va="bottom",
                         fontsize=28,
                         fontweight="bold",
-                        bbox=dict(
-                            boxstyle="round,pad=0.2", facecolor="white", alpha=0.8
-                        ),
+                        bbox=dict(boxstyle="round,pad=0.2", facecolor="white", alpha=0.8),
                     )
 
                 # Grid and layout
@@ -413,9 +399,7 @@ def plot_policies_comparison_on_environment(
                 plt.close()
 
             except Exception as e:
-                logger.warning(
-                    f"Error creating plot for {env_name} - {metric_name}: {str(e)}"
-                )
+                logger.warning(f"Error creating plot for {env_name} - {metric_name}: {str(e)}")
                 plt.close()  # Make sure to close the figure even if there's an error
                 continue
 
@@ -481,9 +465,7 @@ def plot_tree_graphs(root_node: BeliefNode):
             value_type = "v_value"
             if hasattr(node, "observation") and node.observation is not None:
                 if isinstance(node.observation, np.ndarray):
-                    node_info = (
-                        f"Obs: [{node.observation[0]:.1f}, {node.observation[1]:.1f}]"
-                    )
+                    node_info = f"Obs: [{node.observation[0]:.1f}, {node.observation[1]:.1f}]"
                 else:
                     node_info = f"Obs: {node.observation}"
             else:
@@ -571,9 +553,7 @@ def plot_tree_graphs(root_node: BeliefNode):
 
     # Add value labels to both plots
     node_trace_values.text = node_labels
-    node_trace_visits.text = [
-        f"n={v}" for v in node_visits
-    ]  # Show visit counts in right plot
+    node_trace_visits.text = [f"n={v}" for v in node_visits]  # Show visit counts in right plot
 
     # Add traces to both subplots
     fig.add_trace(edge_trace, row=1, col=1)
@@ -602,9 +582,7 @@ def plot_tree_graphs(root_node: BeliefNode):
     # Print statistics
     print(f"Total number of nodes: {len(all_nodes)}")
     print(f"Tree depth: {max(node.depth for node in all_nodes)}")
-    print(
-        f"Number of leaf nodes: {len([node for node in all_nodes if not node.children])}"
-    )
+    print(f"Number of leaf nodes: {len([node for node in all_nodes if not node.children])}")
     print(f"Value range: [{min(node_values):.3f}, {max(node_values):.3f}]")
     print(f"Visit count range: [{min(node_visits)}, {max(node_visits)}]")
 
@@ -681,9 +659,7 @@ def plot_policy_returns(
         if path.n_particles <= 0:
             raise ValueError(f"agent_paths[{i}].n_particles must be greater than 0")
         if len(path.state_sequence) != len(path.action_sequence):
-            raise ValueError(
-                f"agent_paths[{i}] has mismatched state and action sequence lengths"
-            )
+            raise ValueError(f"agent_paths[{i}] has mismatched state and action sequence lengths")
 
     # Create directory if it doesn't exist
     dir_path.mkdir(parents=True, exist_ok=True)
@@ -729,9 +705,7 @@ def plot_policy_returns(
             log_weights = np.log(
                 np.array(np.ones(agent_path.n_particles) / agent_path.n_particles)
             )  # One with log(1), one with log(exp(-1))
-            belief = WeightedParticleBelief(
-                particles=particles, log_weights=log_weights
-            )
+            belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
             # Use belief_expectation_cost to compute the reward
             step_reward = -belief_expectation_cost(
@@ -765,23 +739,15 @@ def plot_policy_returns(
         # Final validation of total reward
         if not np.isfinite(total_reward):
             if logger:
-                logger.warning(
-                    f"Invalid total reward {total_reward} for path {agent_path.name}"
-                )
+                logger.warning(f"Invalid total reward {total_reward} for path {agent_path.name}")
             else:
-                print(
-                    f"Warning: Invalid total reward {total_reward} for path {agent_path.name}"
-                )
+                print(f"Warning: Invalid total reward {total_reward} for path {agent_path.name}")
             total_reward = 0.0
         elif abs(total_reward) > 1e6:
             if logger:
-                logger.warning(
-                    f"Extreme total reward {total_reward} for path {agent_path.name}"
-                )
+                logger.warning(f"Extreme total reward {total_reward} for path {agent_path.name}")
             else:
-                print(
-                    f"Warning: Extreme total reward {total_reward} for path {agent_path.name}"
-                )
+                print(f"Warning: Extreme total reward {total_reward} for path {agent_path.name}")
             total_reward = np.clip(total_reward, -1e6, 1e6)
 
         return total_reward
@@ -792,9 +758,7 @@ def plot_policy_returns(
     # Run simulations in parallel
     all_returns = []
     for i in range(len(agent_paths)):
-        returns = Parallel(n_jobs=n_jobs)(
-            delayed(run_simulation)(i) for _ in range(n_samples)
-        )
+        returns = Parallel(n_jobs=n_jobs)(delayed(run_simulation)(i) for _ in range(n_samples))
         all_returns.append(returns)
 
     # Create the plot
@@ -838,9 +802,7 @@ def plot_policy_returns(
             max_val = np.max(valid_returns)
 
             # If the range is extremely large or small, skip plotting
-            if max_val - min_val > 1e6 or (
-                max_val - min_val < 1e-10 and max_val - min_val > 0
-            ):
+            if max_val - min_val > 1e6 or (max_val - min_val < 1e-10 and max_val - min_val > 0):
                 if logger:
                     logger.warning(
                         f"Returns for {agent_path.name} have extreme range [{min_val}, {max_val}]. Skipping this path."

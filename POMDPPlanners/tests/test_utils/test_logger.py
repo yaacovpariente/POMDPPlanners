@@ -63,9 +63,7 @@ def test_logger_file_output(tmp_path):
     Test type: unit
     """
     log_dir = tmp_path / "logs"
-    logger = get_logger(
-        "test.file", debug=True, output_dir=tmp_path, console_output=False
-    )
+    logger = get_logger("test.file", debug=True, output_dir=tmp_path, console_output=False)
     logger.info("This is a test message for file output.")
     # Find the log file
     log_files = list(log_dir.glob("test_file_*.log"))
@@ -86,14 +84,10 @@ def test_logger_no_duplicate_handlers(tmp_path):
 
     Test type: unit
     """
-    logger = get_logger(
-        "test.duplicate", debug=True, output_dir=tmp_path, console_output=True
-    )
+    logger = get_logger("test.duplicate", debug=True, output_dir=tmp_path, console_output=True)
     logger.info("First message.")
     # Call get_logger again to simulate repeated calls
-    logger = get_logger(
-        "test.duplicate", debug=True, output_dir=tmp_path, console_output=True
-    )
+    logger = get_logger("test.duplicate", debug=True, output_dir=tmp_path, console_output=True)
     logger.info("Second message.")
     # Should not duplicate messages in the log file
     log_dir = tmp_path / "logs"
@@ -198,9 +192,7 @@ def test_queue_logger_individual_task_files(tmp_path):
 
         # Check each file has correct content
         for i in range(3):
-            matching_files = [
-                f for f in log_files if f"task_{i}_task_id_abc{i:03d}" in f.name
-            ]
+            matching_files = [f for f in log_files if f"task_{i}_task_id_abc{i:03d}" in f.name]
             assert len(matching_files) == 1
 
             with open(matching_files[0], "r") as f:

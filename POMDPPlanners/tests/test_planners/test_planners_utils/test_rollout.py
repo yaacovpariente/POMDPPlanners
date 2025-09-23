@@ -104,15 +104,11 @@ def test_rollout_basic_functionality(tiger_environment, tiger_action_sampler):
     )
 
     # Should return a float value
-    assert isinstance(
-        rollout_value, float
-    ), f"Expected float, got {type(rollout_value)}"
+    assert isinstance(rollout_value, float), f"Expected float, got {type(rollout_value)}"
 
     # Value should be within reasonable bounds for Tiger POMDP
     # Tiger rewards range from -100 to 10, so discounted sum should be reasonable
-    assert (
-        -500 <= rollout_value <= 50
-    ), f"Rollout value {rollout_value} outside expected range"
+    assert -500 <= rollout_value <= 50, f"Rollout value {rollout_value} outside expected range"
 
 
 def test_rollout_terminal_state_handling(tiger_environment, tiger_action_sampler):
@@ -237,9 +233,7 @@ def test_rollout_discount_factor_effect(sanity_environment, sanity_action_sample
 
     # Generally, higher discount factors should lead to higher values
     # (though this can be noisy due to randomness)
-    assert (
-        rollout_values[0] <= rollout_values[-1] + 1.0
-    ), "Discount factor effect not as expected"
+    assert rollout_values[0] <= rollout_values[-1] + 1.0, "Discount factor effect not as expected"
 
 
 def test_rollout_deterministic_behavior(sanity_environment):
@@ -266,9 +260,7 @@ def test_rollout_deterministic_behavior(sanity_environment):
     )
 
     # With deterministic good actions from good state, should get positive value
-    assert (
-        rollout_value > 0
-    ), f"Expected positive value with good actions, got {rollout_value}"
+    assert rollout_value > 0, f"Expected positive value with good actions, got {rollout_value}"
 
     # Sampler should have been called multiple times
     assert det_sampler.call_count > 0, "Action sampler should have been called"
@@ -324,9 +316,7 @@ def test_rollout_different_initial_states(sanity_environment, sanity_action_samp
     ), f"Good state mean {mean_good} should be >= bad state mean {mean_bad}"
 
 
-def test_rollout_with_continuous_environment(
-    cartpole_environment, cartpole_action_sampler
-):
+def test_rollout_with_continuous_environment(cartpole_environment, cartpole_action_sampler):
     """Test rollout with continuous state environment.
 
     Purpose: Validates that rollout function works correctly with continuous state environments
@@ -351,14 +341,10 @@ def test_rollout_with_continuous_environment(
     )
 
     # Should return a float value
-    assert isinstance(
-        rollout_value, float
-    ), f"Expected float, got {type(rollout_value)}"
+    assert isinstance(rollout_value, float), f"Expected float, got {type(rollout_value)}"
 
     # CartPole rewards are typically 1.0 per step, so value should be reasonable
-    assert (
-        -20 <= rollout_value <= 20
-    ), f"Rollout value {rollout_value} outside reasonable range"
+    assert -20 <= rollout_value <= 20, f"Rollout value {rollout_value} outside reasonable range"
 
 
 def test_rollout_variance_reduction():
@@ -404,9 +390,7 @@ def test_rollout_variance_reduction():
     std_multiple = np.std(multiple_values)
 
     # Mean should be reasonable
-    assert (
-        0 <= mean_multiple <= 15
-    ), f"Mean value {mean_multiple} outside reasonable range"
+    assert 0 <= mean_multiple <= 15, f"Mean value {mean_multiple} outside reasonable range"
 
     # Standard error should be reasonable (not too high variance)
     std_error = std_multiple / np.sqrt(n_rollouts)
@@ -541,9 +525,7 @@ def test_cartpole_rollout_usage_example():
     )
 
     # Verify results
-    assert isinstance(
-        rollout_value, float
-    ), "CartPole rollout should return float value"
+    assert isinstance(rollout_value, float), "CartPole rollout should return float value"
     assert isinstance(state, np.ndarray), "CartPole state should be numpy array"
     assert len(state) == 4, "CartPole state should be 4-dimensional"
 
@@ -596,9 +578,7 @@ def test_multiple_rollouts_usage_example():
 
     # Verify results
     assert len(rollout_values) == n_rollouts, "Should have correct number of rollouts"
-    assert all(
-        isinstance(v, float) for v in rollout_values
-    ), "All rollout values should be floats"
+    assert all(isinstance(v, float) for v in rollout_values), "All rollout values should be floats"
     assert mean_value >= 0, "Mean value should be non-negative for good initial state"
     assert std_value >= 0, "Standard deviation should be non-negative"
     assert confidence_interval >= 0, "Confidence interval should be non-negative"
@@ -721,15 +701,9 @@ def test_informed_action_sampler_usage_example():
     ]
 
     # Verify results
-    assert (
-        len(random_values) == n_trials
-    ), "Should have correct number of random rollouts"
-    assert (
-        len(informed_values) == n_trials
-    ), "Should have correct number of informed rollouts"
-    assert all(
-        isinstance(v, float) for v in random_values
-    ), "All random values should be floats"
+    assert len(random_values) == n_trials, "Should have correct number of random rollouts"
+    assert len(informed_values) == n_trials, "Should have correct number of informed rollouts"
+    assert all(isinstance(v, float) for v in random_values), "All random values should be floats"
     assert all(
         isinstance(v, float) for v in informed_values
     ), "All informed values should be floats"
@@ -737,12 +711,8 @@ def test_informed_action_sampler_usage_example():
     # Both should produce reasonable values (though we can't guarantee informed is better due to randomness)
     random_mean = np.mean(random_values)
     informed_mean = np.mean(informed_values)
-    assert (
-        -500 <= random_mean <= 100
-    ), "Random policy mean should be in reasonable range"
-    assert (
-        -500 <= informed_mean <= 100
-    ), "Informed policy mean should be in reasonable range"
+    assert -500 <= random_mean <= 100, "Random policy mean should be in reasonable range"
+    assert -500 <= informed_mean <= 100, "Informed policy mean should be in reasonable range"
 
 
 def test_rollout_parameter_validation():
@@ -816,10 +786,6 @@ def test_rollout_action_sampler_integration():
             max_depth=5,
         )
 
-        assert isinstance(
-            rollout_value, float
-        ), f"Sampler {i} should return float value"
+        assert isinstance(rollout_value, float), f"Sampler {i} should return float value"
         # Values should be reasonable regardless of action space size
-        assert (
-            -300 <= rollout_value <= 50
-        ), f"Sampler {i} value {rollout_value} outside range"
+        assert -300 <= rollout_value <= 50, f"Sampler {i} value {rollout_value} outside range"

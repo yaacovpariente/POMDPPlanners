@@ -115,17 +115,11 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
             return
 
         for action in self.environment.get_actions():
-            child = ActionNode(
-                action=action, parent=belief_node, children=tuple(), data=None
-            )
+            child = ActionNode(action=action, parent=belief_node, children=tuple(), data=None)
 
             state = belief_node.belief.sample()
-            next_state = self.environment.state_transition_model(
-                state, action
-            ).sample()[0]
-            next_observation = self.environment.observation_model(
-                next_state, action
-            ).sample()[0]
+            next_state = self.environment.state_transition_model(state, action).sample()[0]
+            next_observation = self.environment.observation_model(next_state, action).sample()[0]
 
             next_belief = belief_node.belief.update(
                 action=action, observation=next_observation, pomdp=self.environment
@@ -134,9 +128,7 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
                 belief=next_belief, parent=child, children=tuple(), data=None
             )
 
-            self._build_tree(
-                belief_node=next_belief_node, current_depth=current_depth + 1
-            )
+            self._build_tree(belief_node=next_belief_node, current_depth=current_depth + 1)
 
     def _update_node_statistics(self, tree: BeliefNode):
         for node in PostOrderIter(tree):
@@ -184,9 +176,7 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
-        return PolicySpaceInfo(
-            action_space=SpaceType.DISCRETE, observation_space=SpaceType.MIXED
-        )
+        return PolicySpaceInfo(action_space=SpaceType.DISCRETE, observation_space=SpaceType.MIXED)
 
     def random_rollout(self, belief_node: BeliefNode, depth: int) -> float:
         if depth == 0:
@@ -206,9 +196,7 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         ).sample()[0]
 
 
-class StandardSparseSamplingDiscreteActionsPlanner(
-    SparseSamplingDiscreteActionsPlanner
-):
+class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActionsPlanner):
     """Standard implementation of sparse sampling for POMDP planning.
 
     This concrete implementation of sparse sampling uses standard value updates:

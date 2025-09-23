@@ -200,9 +200,7 @@ def random_rollout_action_sampler(
         return 0.0
 
     action = action_sampler.sample()
-    next_state = environment.state_transition_model(
-        state=state, action=action
-    ).sample()[0]
+    next_state = environment.state_transition_model(state=state, action=action).sample()[0]
     reward = environment.reward(state=state, action=action)
 
     return reward + discount_factor * random_rollout_action_sampler(

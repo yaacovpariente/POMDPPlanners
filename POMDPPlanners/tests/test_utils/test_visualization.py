@@ -54,9 +54,7 @@ def create_mock_history(rewards, discount_factor=0.95):
             next_state=f"state_{i+1}",
             observation=f"obs_{i}",
             reward=reward,
-            belief=WeightedParticleBelief(
-                particles=[f"state_{i}"], log_weights=np.array([0.1])
-            ),
+            belief=WeightedParticleBelief(particles=[f"state_{i}"], log_weights=np.array([0.1])),
         )
         steps.append(step)
 
@@ -133,9 +131,7 @@ def temp_cache_dir():
                 # Try to remove the directory
                 shutil.rmtree(temp_cache_dir, ignore_errors=True)
         except Exception as e:
-            print(
-                f"Warning: Failed to clean up temporary directory {temp_cache_dir}: {e}"
-            )
+            print(f"Warning: Failed to clean up temporary directory {temp_cache_dir}: {e}")
 
 
 def test_plot_statistics_comparison():
@@ -730,9 +726,7 @@ def test_plot_policies_comparison_on_environment(temp_cache_dir):
     output_path = temp_cache_dir / "policies_comparison"
     output_path.mkdir(parents=True, exist_ok=True)
 
-    plot_policies_comparison_on_environment(
-        metrics_dict=metrics_dict, cache_dir_path=output_path
-    )
+    plot_policies_comparison_on_environment(metrics_dict=metrics_dict, cache_dir_path=output_path)
 
     # Verify plots were created
     expected_plots = [
@@ -757,9 +751,7 @@ def test_plot_policies_comparison_on_environment_empty_input(temp_cache_dir):
     """
     # Test with empty metrics dictionary
     with pytest.raises(ValueError, match="metrics_dict cannot be empty"):
-        plot_policies_comparison_on_environment(
-            metrics_dict={}, cache_dir_path=temp_cache_dir
-        )
+        plot_policies_comparison_on_environment(metrics_dict={}, cache_dir_path=temp_cache_dir)
 
 
 def test_plot_policies_comparison_on_environment_invalid_input(temp_cache_dir):
@@ -781,9 +773,7 @@ def test_plot_policies_comparison_on_environment_invalid_input(temp_cache_dir):
 
     # Test with invalid metric values
     invalid_metrics_dict = {"TigerPOMDP": {"Policy1": ["invalid_metric_value"]}}
-    with pytest.raises(
-        TypeError, match="All metric values must be MetricValue objects"
-    ):
+    with pytest.raises(TypeError, match="All metric values must be MetricValue objects"):
         plot_policies_comparison_on_environment(
             metrics_dict=invalid_metrics_dict, cache_dir_path=temp_cache_dir
         )
@@ -842,9 +832,7 @@ def test_plot_tree_graphs(temp_cache_dir):
         # If there's an exception, it should be related to display/interaction, not core functionality
         # Check that it's not a fundamental error
         assert (
-            "display" in str(e).lower()
-            or "show" in str(e).lower()
-            or "browser" in str(e).lower()
+            "display" in str(e).lower() or "show" in str(e).lower() or "browser" in str(e).lower()
         )
 
 
@@ -1155,9 +1143,7 @@ def test_plot_policies_comparison_on_environment_single_policy(temp_cache_dir):
     output_path = temp_cache_dir / "single_policy_comparison"
     output_path.mkdir(parents=True, exist_ok=True)
 
-    plot_policies_comparison_on_environment(
-        metrics_dict=metrics_dict, cache_dir_path=output_path
-    )
+    plot_policies_comparison_on_environment(metrics_dict=metrics_dict, cache_dir_path=output_path)
 
     # Verify plots were created
     expected_plots = [
@@ -1206,9 +1192,7 @@ def test_plot_policies_comparison_on_environment_single_metric(temp_cache_dir):
     output_path = temp_cache_dir / "single_metric_comparison"
     output_path.mkdir(parents=True, exist_ok=True)
 
-    plot_policies_comparison_on_environment(
-        metrics_dict=metrics_dict, cache_dir_path=output_path
-    )
+    plot_policies_comparison_on_environment(metrics_dict=metrics_dict, cache_dir_path=output_path)
 
     # Verify plot was created
     expected_plot = "TigerPOMDP_average_return_comparison.png"
@@ -1253,9 +1237,7 @@ def test_plot_policies_comparison_on_environment_zero_values(temp_cache_dir):
     output_path = temp_cache_dir / "zero_values_comparison"
     output_path.mkdir(parents=True, exist_ok=True)
 
-    plot_policies_comparison_on_environment(
-        metrics_dict=metrics_dict, cache_dir_path=output_path
-    )
+    plot_policies_comparison_on_environment(metrics_dict=metrics_dict, cache_dir_path=output_path)
 
     # Verify plot was created
     expected_plot = "TigerPOMDP_average_return_comparison.png"
@@ -1300,9 +1282,7 @@ def test_plot_policies_comparison_on_environment_large_values(temp_cache_dir):
     output_path = temp_cache_dir / "large_values_comparison"
     output_path.mkdir(parents=True, exist_ok=True)
 
-    plot_policies_comparison_on_environment(
-        metrics_dict=metrics_dict, cache_dir_path=output_path
-    )
+    plot_policies_comparison_on_environment(metrics_dict=metrics_dict, cache_dir_path=output_path)
 
     # Verify plot was created
     expected_plot = "TigerPOMDP_average_return_comparison.png"
@@ -1342,9 +1322,7 @@ def test_plot_tree_graphs_single_node(temp_cache_dir):
     except Exception as e:
         # If there's an exception, it should be related to display/interaction, not core functionality
         assert (
-            "display" in str(e).lower()
-            or "show" in str(e).lower()
-            or "browser" in str(e).lower()
+            "display" in str(e).lower() or "show" in str(e).lower() or "browser" in str(e).lower()
         )
 
 
@@ -1403,7 +1381,5 @@ def test_plot_tree_graphs_deep_tree(temp_cache_dir):
     except Exception as e:
         # If there's an exception, it should be related to display/interaction, not core functionality
         assert (
-            "display" in str(e).lower()
-            or "show" in str(e).lower()
-            or "browser" in str(e).lower()
+            "display" in str(e).lower() or "show" in str(e).lower() or "browser" in str(e).lower()
         )

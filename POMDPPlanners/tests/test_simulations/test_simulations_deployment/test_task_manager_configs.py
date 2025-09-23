@@ -160,9 +160,7 @@ class TestPBSConfig:
 
         Test type: unit
         """
-        with pytest.raises(
-            TypeError, match="missing 1 required positional argument: 'queue'"
-        ):
+        with pytest.raises(TypeError, match="missing 1 required positional argument: 'queue'"):
             PBSConfig()
 
     def test_pbs_config_default_initialization(self):
@@ -309,9 +307,7 @@ class TestPBSConfig:
 
         assert config.enable_dashboard is False
         assert config.dashboard_port == 9999  # Should still store the parameter
-        assert (
-            config.dashboard_address == "10.0.0.1"
-        )  # Should still store the parameter
+        assert config.dashboard_address == "10.0.0.1"  # Should still store the parameter
 
     def test_pbs_config_dashboard_parameter_validation(self):
         """Test PBSConfig accepts various dashboard parameter values.

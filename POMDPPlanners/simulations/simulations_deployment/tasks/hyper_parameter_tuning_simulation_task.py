@@ -168,9 +168,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.logger.info(f"Policy class: {self.policy_cls.__name__}")
         self.logger.info(f"Parameter to optimize: {self.parameter_to_optimize}")
         self.logger.info(f"Optimization direction: {self.direction.value}")
-        self.logger.info(
-            f"Hyperparameters: {[param.name for param in self.hyper_parameters]}"
-        )
+        self.logger.info(f"Hyperparameters: {[param.name for param in self.hyper_parameters]}")
         self.logger.info(
             f"Configuration: num_episodes={self.num_episodes}, num_steps={self.num_steps}"
         )
@@ -206,18 +204,14 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         # Add optimization parameters based on their types
         for param in hyperparameters:
             if isinstance(param, CategoricalHyperParameter):
-                policy_params[param.name] = trial.suggest_categorical(
-                    param.name, param.choices
-                )
+                policy_params[param.name] = trial.suggest_categorical(param.name, param.choices)
             elif isinstance(param, NumericalHyperParameter):
                 if isinstance(param.low, float):
                     policy_params[param.name] = trial.suggest_float(
                         param.name, param.low, param.high
                     )
                 else:
-                    policy_params[param.name] = trial.suggest_int(
-                        param.name, param.low, param.high
-                    )
+                    policy_params[param.name] = trial.suggest_int(param.name, param.low, param.high)
 
         return policy_params
 
@@ -275,9 +269,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             )
 
         except Exception as e:
-            self.logger.error(
-                f"Error in evaluation function for trial {trial.number}: {e}"
-            )
+            self.logger.error(f"Error in evaluation function for trial {trial.number}: {e}")
             # Return a very poor value to signal failure
             raise e
 
@@ -296,9 +288,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                     trial, self.hyper_parameters
                 )
 
-                self.logger.debug(
-                    f"Trial {trial.number}: Testing parameters {policy_params}"
-                )
+                self.logger.debug(f"Trial {trial.number}: Testing parameters {policy_params}")
 
                 # Create policy instance with suggested parameters
                 policy = self.policy_cls(**policy_params)
@@ -309,9 +299,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 return result
 
             except Exception as e:
-                self.logger.error(
-                    f"Error in objective function for trial {trial.number}: {e}"
-                )
+                self.logger.error(f"Error in objective function for trial {trial.number}: {e}")
                 self.logger.exception("Full exception details:")
                 # Return a very poor value to signal failure
                 raise e
@@ -319,9 +307,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
         return objective
 
-    def _execute_optimization_study(
-        self, objective_function, n_trials: int, n_jobs: int = 1
-    ):
+    def _execute_optimization_study(self, objective_function, n_trials: int, n_jobs: int = 1):
         """Execute the Optuna optimization study.
 
         Args:
@@ -349,9 +335,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
         return study
 
-    def _build_optimization_results(
-        self, study, optimization_time: float
-    ) -> OptimizedPolicyResult:
+    def _build_optimization_results(self, study, optimization_time: float) -> OptimizedPolicyResult:
         """Build OptimizedPolicyResult from completed optimization study.
 
         Args:
@@ -390,9 +374,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             "config_id": self.get_config_id(),
             "best_trial_number": study.best_trial.number if study.best_trial else None,
             "best_trial_statistics": (
-                study.best_trial.user_attrs.get("statistics")
-                if study.best_trial
-                else None
+                study.best_trial.user_attrs.get("statistics") if study.best_trial else None
             ),
         }
 
@@ -412,9 +394,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
         return result
 
-    def _handle_optimization_failure(
-        self, exception: Exception, start_time: float
-    ) -> None:
+    def _handle_optimization_failure(self, exception: Exception, start_time: float) -> None:
         """Handle optimization failure by logging error details and cleanup.
 
         Args:
@@ -530,15 +510,11 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         """
         # Validate inputs first
         if not isinstance(environment, Environment):
-            raise TypeError(
-                f"environment must be an Environment instance, got {type(environment)}"
-            )
+            raise TypeError(f"environment must be an Environment instance, got {type(environment)}")
         if not isinstance(policy, Policy):
             raise TypeError(f"policy must be a Policy instance, got {type(policy)}")
         if not isinstance(initial_belief, Belief):
-            raise TypeError(
-                f"initial_belief must be a Belief instance, got {type(initial_belief)}"
-            )
+            raise TypeError(f"initial_belief must be a Belief instance, got {type(initial_belief)}")
         if scheduler_address is not None and not isinstance(scheduler_address, str):
             raise TypeError(
                 f"scheduler_address must be a string or None, got {type(scheduler_address)}"
@@ -550,9 +526,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             raise ValueError(f"num_steps must be positive, got {num_steps}")
 
         # Log after validation
-        self.logger.info(
-            f"Starting {num_episodes} episodes with {num_steps} steps each"
-        )
+        self.logger.info(f"Starting {num_episodes} episodes with {num_steps} steps each")
         self.logger.info(f"Environment: {environment.name}, Policy: {policy.name}")
 
         # Create EnvironmentRunParams for the simulator
@@ -576,9 +550,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
         # Extract histories from results
         histories = results[environment.name][policy.name]
-        self.logger.info(
-            f"All episodes completed for {environment.name} with {policy.name}"
-        )
+        self.logger.info(f"All episodes completed for {environment.name} with {policy.name}")
 
         return histories
 

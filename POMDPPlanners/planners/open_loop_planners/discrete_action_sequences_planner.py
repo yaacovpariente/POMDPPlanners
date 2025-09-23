@@ -158,9 +158,7 @@ class DiscreteActionSequencesPlanner(Policy):
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
-        return PolicySpaceInfo(
-            action_space=SpaceType.DISCRETE, observation_space=SpaceType.MIXED
-        )
+        return PolicySpaceInfo(action_space=SpaceType.DISCRETE, observation_space=SpaceType.MIXED)
 
     def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
         return self.search(belief), PolicyRunData(info_variables=[])
@@ -171,9 +169,7 @@ class DiscreteActionSequencesPlanner(Policy):
         returns = []
 
         for action_sequence in action_sequences:
-            returns.append(
-                self.estimate_return(action_sequence=action_sequence, belief=belief)
-            )
+            returns.append(self.estimate_return(action_sequence=action_sequence, belief=belief))
 
         return list(action_sequences[np.argmax(returns)])
 
@@ -184,9 +180,7 @@ class DiscreteActionSequencesPlanner(Policy):
             return_sample = 0
 
             for i, action in enumerate(action_sequence):
-                state, observation, reward = self.environment.sample_next_step(
-                    state, action
-                )
+                state, observation, reward = self.environment.sample_next_step(state, action)
                 return_sample += reward * (self.discount_factor**i)
 
             return_estimator += return_sample

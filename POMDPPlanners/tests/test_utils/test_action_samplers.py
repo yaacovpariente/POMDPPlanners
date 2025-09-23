@@ -84,9 +84,7 @@ class TestUnitCircleActionSampler:
 
             # Check magnitude constraint
             magnitude = np.linalg.norm(action)
-            assert (
-                magnitude <= max_magnitude + 1e-10
-            )  # Small tolerance for floating point
+            assert magnitude <= max_magnitude + 1e-10  # Small tolerance for floating point
 
             # Check that we get finite values
             assert np.all(np.isfinite(action))
@@ -117,9 +115,7 @@ class TestUnitCircleActionSampler:
         # For uniform distribution in a circle, the CDF of radius should be r²
         # This means the mean magnitude should be approximately 2/3 for unit circle
         mean_magnitude = np.mean(magnitudes)
-        expected_mean = (
-            2.0 / 3.0
-        )  # Theoretical mean for uniform distribution in unit circle
+        expected_mean = 2.0 / 3.0  # Theoretical mean for uniform distribution in unit circle
 
         # Allow some statistical variation
         assert abs(mean_magnitude - expected_mean) < 0.05
@@ -186,9 +182,7 @@ class TestUnitCircleActionSampler:
 
             # Check that we actually use the full range (some actions should be near max)
             max_observed = max(np.linalg.norm(action) for action in actions)
-            assert (
-                max_observed > max_mag * 0.8
-            )  # At least 80% of max magnitude observed
+            assert max_observed > max_mag * 0.8  # At least 80% of max magnitude observed
 
     def test_unit_circle_action_sampler_belief_node_parameter(self):
         """Test that belief_node parameter is handled correctly.
@@ -291,10 +285,7 @@ class TestUnitCircleActionSampler:
         deserialized_sampler = pickle.loads(pickled_data)
 
         # Check that attributes are preserved
-        assert (
-            deserialized_sampler.max_action_magnitude
-            == original_sampler.max_action_magnitude
-        )
+        assert deserialized_sampler.max_action_magnitude == original_sampler.max_action_magnitude
         assert type(deserialized_sampler) == type(original_sampler)
 
         # Check that both samplers produce valid actions

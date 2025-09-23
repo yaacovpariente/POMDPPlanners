@@ -52,9 +52,7 @@ def validate_tree_structure_with_progressive_widening(
     # Root node verification
     assert root_belief_node.observation is None  # Root has no observation
     assert root_belief_node.parent is None  # Root has no parent
-    assert (
-        root_belief_node.visit_count == n_simulations
-    )  # Root visited by all simulations
+    assert root_belief_node.visit_count == n_simulations  # Root visited by all simulations
     assert root_belief_node.v_value is not None  # Root must have value
     assert len(root_belief_node.children) > 0  # Root must have action children
 
@@ -80,9 +78,7 @@ def validate_tree_structure_with_progressive_widening(
 
     for node in PostOrderIter(root_belief_node):
         # Common node properties
-        assert (
-            node.visit_count >= 0
-        ), f"Node visit count {node.visit_count} must be non-negative"
+        assert node.visit_count >= 0, f"Node visit count {node.visit_count} must be non-negative"
         assert hasattr(node, "depth"), "All nodes must have depth attribute"
         max_observed_depth = max(max_observed_depth, node.depth)
 
@@ -91,19 +87,13 @@ def validate_tree_structure_with_progressive_widening(
 
             # BeliefNode-specific validations
             assert node.belief is not None, "BeliefNode must have belief"
-            assert isinstance(
-                node.v_value, (int, float)
-            ), "BeliefNode must have a number v_value"
+            assert isinstance(node.v_value, (int, float)), "BeliefNode must have a number v_value"
 
             # Non-root belief nodes must have observations and proper structure
             if node != root_belief_node:
-                assert (
-                    node.observation is not None
-                ), "Non-root BeliefNode must have observation"
+                assert node.observation is not None, "Non-root BeliefNode must have observation"
                 assert node.parent is not None, "Non-root BeliefNode must have parent"
-                assert isinstance(
-                    node.parent, ActionNode
-                ), "BeliefNode parent must be ActionNode"
+                assert isinstance(node.parent, ActionNode), "BeliefNode parent must be ActionNode"
 
             # Verify belief type for specific planners if provided
             if (
@@ -117,9 +107,7 @@ def validate_tree_structure_with_progressive_widening(
             # Visit count consistency for belief nodes
             if not node.is_leaf and node.depth > 0:
                 child_action_visits = sum(
-                    child.visit_count
-                    for child in node.children
-                    if isinstance(child, ActionNode)
+                    child.visit_count for child in node.children if isinstance(child, ActionNode)
                 )
                 # In MCTS with progressive widening, belief node visits should be consistent with action visits
                 # Allow some variance due to progressive widening and rollouts
@@ -136,17 +124,11 @@ def validate_tree_structure_with_progressive_widening(
             else:
                 if depth == node.depth:
                     if planner_type == "POMCP_DPW":
-                        assert (
-                            node.visit_count == 1
-                        ), "Leaf belief node visit count must be 1"
+                        assert node.visit_count == 1, "Leaf belief node visit count must be 1"
                     else:
-                        assert (
-                            node.visit_count >= 1
-                        ), "Leaf belief node visit count must be >= 1"
+                        assert node.visit_count >= 1, "Leaf belief node visit count must be >= 1"
                 else:
-                    assert (
-                        node.visit_count >= 1
-                    ), "Leaf belief node visit count must be >= 1"
+                    assert node.visit_count >= 1, "Leaf belief node visit count must be >= 1"
 
         elif isinstance(node, ActionNode):
             action_node_count += 1
@@ -155,9 +137,7 @@ def validate_tree_structure_with_progressive_widening(
             assert node.action is not None, "ActionNode must have action"
             assert node.q_value is not None, "ActionNode must have q_value"
             assert node.parent is not None, "ActionNode must have parent"
-            assert isinstance(
-                node.parent, BeliefNode
-            ), "ActionNode parent must be BeliefNode"
+            assert isinstance(node.parent, BeliefNode), "ActionNode parent must be BeliefNode"
 
             # Action must be from valid action space
             assert (
@@ -173,9 +153,7 @@ def validate_tree_structure_with_progressive_widening(
             # Visit count consistency for action nodes
             if not node.is_leaf:
                 child_belief_visits = sum(
-                    child.visit_count
-                    for child in node.children
-                    if isinstance(child, BeliefNode)
+                    child.visit_count for child in node.children if isinstance(child, BeliefNode)
                 )
                 # In MCTS, action visit count should equal sum of child belief visits
                 assert (
@@ -220,7 +198,5 @@ def validate_tree_structure_with_progressive_widening(
             ), f"Progressive widening violated at node: {action_children_count} > {max_allowed_actions_for_node:.2f}"
 
     # Value propagation verification - root should have reasonable value after many simulations
-    assert isinstance(
-        root_belief_node.v_value, (int, float)
-    ), "Root v_value must be numeric"
+    assert isinstance(root_belief_node.v_value, (int, float)), "Root v_value must be numeric"
     assert not np.isnan(root_belief_node.v_value), "Root v_value cannot be NaN"

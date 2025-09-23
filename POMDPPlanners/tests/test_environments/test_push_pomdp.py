@@ -49,19 +49,13 @@ class TestPushPOMDP:
         """Test that obstacle collision detection works correctly."""
         # Position in obstacle
         assert self.env._is_colliding_with_obstacle(np.array([3.0, 3.0])) == True
-        assert (
-            self.env._is_colliding_with_obstacle(np.array([3.2, 3.2])) == True
-        )  # Within radius
-        assert (
-            self.env._is_colliding_with_obstacle(np.array([2.8, 3.1])) == True
-        )  # Within radius
+        assert self.env._is_colliding_with_obstacle(np.array([3.2, 3.2])) == True  # Within radius
+        assert self.env._is_colliding_with_obstacle(np.array([2.8, 3.1])) == True  # Within radius
 
         # Position outside obstacle
         assert self.env._is_colliding_with_obstacle(np.array([1.0, 1.0])) == False
         assert self.env._is_colliding_with_obstacle(np.array([5.0, 5.0])) == False
-        assert (
-            self.env._is_colliding_with_obstacle(np.array([3.6, 3.6])) == False
-        )  # Outside radius
+        assert self.env._is_colliding_with_obstacle(np.array([3.6, 3.6])) == False  # Outside radius
 
     def test_reward_difference_obstacle_vs_safe(self):
         """Test that rewards in obstacle states are lower than in safe states."""
@@ -132,9 +126,7 @@ class TestPushPOMDP:
         distance_to_target_near = np.linalg.norm(self.object_pos - self.target_pos)
 
         # Both should have same distance component, but obstacle state has additional penalty
-        expected_obstacle_reward = (
-            -distance_to_target_obstacle + self.env.obstacle_penalty
-        )
+        expected_obstacle_reward = -distance_to_target_obstacle + self.env.obstacle_penalty
         expected_near_reward = -distance_to_target_near
 
         # Verify the penalty is applied correctly
@@ -167,9 +159,7 @@ class TestPushPOMDP:
 
         # Test same action on both states
         object_obstacle_reward = self.env.reward(object_obstacle_state, action="up")
-        object_near_obstacle_reward = self.env.reward(
-            object_near_obstacle_state, action="up"
-        )
+        object_near_obstacle_reward = self.env.reward(object_near_obstacle_state, action="up")
 
         # Object in obstacle should get lower reward due to penalty
         assert (
@@ -177,15 +167,11 @@ class TestPushPOMDP:
         ), f"Object in obstacle reward ({object_obstacle_reward}) should be < near obstacle reward ({object_near_obstacle_reward})"
 
         # Calculate expected penalty
-        distance_to_target_obstacle = np.linalg.norm(
-            self.obstacle_pos - self.target_pos
-        )
+        distance_to_target_obstacle = np.linalg.norm(self.obstacle_pos - self.target_pos)
         distance_to_target_near = np.linalg.norm(np.array([3.6, 3.6]) - self.target_pos)
 
         # Both should have distance component, but obstacle state has additional penalty
-        expected_obstacle_reward = (
-            -distance_to_target_obstacle + self.env.obstacle_penalty
-        )
+        expected_obstacle_reward = -distance_to_target_obstacle + self.env.obstacle_penalty
         expected_near_reward = -distance_to_target_near
 
         # Verify the penalty is applied correctly
@@ -226,15 +212,11 @@ class TestPushPOMDP:
         ), f"Both obstacle reward ({both_obstacle_reward}) should be < both safe reward ({both_safe_reward})"
 
         # Calculate expected penalties
-        distance_to_target_obstacle = np.linalg.norm(
-            np.array([7.0, 7.0]) - self.target_pos
-        )
+        distance_to_target_obstacle = np.linalg.norm(np.array([7.0, 7.0]) - self.target_pos)
         distance_to_target_safe = np.linalg.norm(np.array([2.0, 2.0]) - self.target_pos)
 
         # Both obstacle state should have double penalty
-        expected_obstacle_reward = (
-            -distance_to_target_obstacle + 2 * self.env.obstacle_penalty
-        )
+        expected_obstacle_reward = -distance_to_target_obstacle + 2 * self.env.obstacle_penalty
         expected_safe_reward = -distance_to_target_safe
 
         # Verify the penalties are applied correctly
@@ -280,12 +262,8 @@ class TestPushPOMDP:
         # All states should be numpy arrays with correct shape
         for state in sample_states:
             assert isinstance(state, np.ndarray)
-            assert state.shape == (
-                6,
-            )  # [robot_x, robot_y, object_x, object_y, target_x, target_y]
-            assert not self.env.is_terminal(
-                state
-            )  # Initial states should not be terminal
+            assert state.shape == (6,)  # [robot_x, robot_y, object_x, object_y, target_x, target_y]
+            assert not self.env.is_terminal(state)  # Initial states should not be terminal
 
             # Verify positions are within bounds
             assert np.all(state >= 0)
@@ -667,19 +645,13 @@ class TestPushPOMDP:
         for _ in range(20):
             observations = obs_model.sample(n_samples=5)
 
-            assert (
-                len(observations) == 5
-            ), "Should return requested number of observations"
+            assert len(observations) == 5, "Should return requested number of observations"
 
             for obs in observations:
-                assert isinstance(
-                    obs, np.ndarray
-                ), "Each observation should be numpy array"
+                assert isinstance(obs, np.ndarray), "Each observation should be numpy array"
                 assert obs.shape == (6,), f"Expected shape (6,), got {obs.shape}"
                 assert len(obs) > 0, "Observation should not be empty"
-                assert np.all(
-                    np.isfinite(obs)
-                ), "All observation values should be finite"
+                assert np.all(np.isfinite(obs)), "All observation values should be finite"
 
                 # Test that this observation can be used in probability calculation
                 try:
@@ -718,14 +690,10 @@ class TestPushPOMDP:
             for action in actions:
                 # Call sample_next_step multiple times to check consistency
                 for _ in range(5):
-                    next_state, observation, reward = self.env.sample_next_step(
-                        state, action
-                    )
+                    next_state, observation, reward = self.env.sample_next_step(state, action)
 
                     # Check observation properties
-                    assert isinstance(
-                        observation, np.ndarray
-                    ), "Observation should be numpy array"
+                    assert isinstance(observation, np.ndarray), "Observation should be numpy array"
                     assert observation.shape == (
                         6,
                     ), f"Expected observation shape (6,), got {observation.shape}"

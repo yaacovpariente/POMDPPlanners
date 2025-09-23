@@ -245,9 +245,7 @@ def optimize_and_evaluate_planners(
         logger.info(
             f"Optimization: {n_trials} trials per planner, {optimization_episodes} episodes, {optimization_steps} steps"
         )
-        logger.info(
-            f"Evaluation: {evaluation_episodes} episodes, {evaluation_steps} steps"
-        )
+        logger.info(f"Evaluation: {evaluation_episodes} episodes, {evaluation_steps} steps")
 
     # Step 1: Run hyperparameter optimization for all planners in a single call
     if verbose:
@@ -256,9 +254,7 @@ def optimize_and_evaluate_planners(
         logger.info(f"{'='*60}")
 
     if debug:
-        logger.debug(
-            f"Starting optimization with {len(planner_configs)} planner configurations"
-        )
+        logger.debug(f"Starting optimization with {len(planner_configs)} planner configurations")
         for i, config in enumerate(planner_configs):
             logger.debug(
                 f"Planner {i+1}: {config.policy_cls.__name__} with {len(config.hyper_parameters)} hyperparameters"
@@ -292,12 +288,8 @@ def optimize_and_evaluate_planners(
     optimized_policies = [result.policy for result in optimization_results]
 
     if verbose:
-        logger.info(
-            f"\n✓ Optimization completed for all {len(planner_configs)} planners!"
-        )
-        for i, (result, config) in enumerate(
-            zip(optimization_results, planner_configs)
-        ):
+        logger.info(f"\n✓ Optimization completed for all {len(planner_configs)} planners!")
+        for i, (result, config) in enumerate(zip(optimization_results, planner_configs)):
             logger.info(f"  {i+1}. {config.policy_cls.__name__}: {result.policy.name}")
             logger.info(f"     Best hyperparameters: {result.chosen_hyper_parameters}")
 
@@ -306,14 +298,10 @@ def optimize_and_evaluate_planners(
         logger.info(f"\n{'='*60}")
         logger.info(f"PHASE 2: POLICY EVALUATION")
         logger.info(f"{'='*60}")
-        logger.info(
-            f"Evaluating {len(optimized_policies)} optimized policies together..."
-        )
+        logger.info(f"Evaluating {len(optimized_policies)} optimized policies together...")
 
     if debug:
-        logger.debug(
-            f"Starting evaluation with {len(optimized_policies)} optimized policies"
-        )
+        logger.debug(f"Starting evaluation with {len(optimized_policies)} optimized policies")
         for i, policy in enumerate(optimized_policies):
             logger.debug(f"Policy {i+1}: {policy.name} (type: {type(policy).__name__})")
 
@@ -335,8 +323,7 @@ def optimize_and_evaluate_planners(
     if verbose:
         logger.info(f"\n✓ Evaluation completed successfully!")
         total_episodes = sum(
-            len(evaluation_results[environment.name][policy.name])
-            for policy in optimized_policies
+            len(evaluation_results[environment.name][policy.name]) for policy in optimized_policies
         )
         logger.info(
             f"Evaluated {total_episodes} total episodes across {len(optimized_policies)} policies"
@@ -385,9 +372,7 @@ def optimize_and_evaluate_planners(
             planner_type = planner_configs[i].policy_cls.__name__
             logger.info(f"  {i+1}. {result.policy.name} ({planner_type})")
         logger.info(f"Results saved to: {cache_dir}")
-        logger.info(
-            f"MLflow tracking: {cache_paths['optimization_mlruns']} (optimization)"
-        )
+        logger.info(f"MLflow tracking: {cache_paths['optimization_mlruns']} (optimization)")
         logger.info(f"MLflow tracking: {cache_paths['evaluation_mlruns']} (evaluation)")
 
     if debug:
@@ -436,9 +421,7 @@ def optimize_planner_hyperparameters(
         List of OptimizedPolicyResult objects, one for each planner configuration
     """
     if verbose:
-        total_hyperparams = sum(
-            len(config.hyper_parameters) for config in planner_configs
-        )
+        total_hyperparams = sum(len(config.hyper_parameters) for config in planner_configs)
         planner_names = [config.policy_cls.__name__ for config in planner_configs]
         logger.info(
             f"Optimizing {len(planner_configs)} planners ({planner_names}) with {total_hyperparams} total hyperparameters using {n_trials} trials each..."
@@ -446,9 +429,7 @@ def optimize_planner_hyperparameters(
 
     if debug:
         logger.debug(f"Creating HyperParameterOptimizer with {n_jobs} jobs")
-        logger.debug(
-            f"Confidence interval level: {confidence_interval_level}, Alpha: {alpha}"
-        )
+        logger.debug(f"Confidence interval level: {confidence_interval_level}, Alpha: {alpha}")
 
     # Create optimizer
     optimizer = HyperParameterOptimizer(
@@ -466,9 +447,7 @@ def optimize_planner_hyperparameters(
     optimization_configs = []
     for i, planner_config in enumerate(planner_configs):
         if debug:
-            logger.debug(
-                f"Creating config for planner {i+1}: {planner_config.policy_cls.__name__}"
-            )
+            logger.debug(f"Creating config for planner {i+1}: {planner_config.policy_cls.__name__}")
 
         config = HyperParameterRunParams(
             environment=environment,
@@ -513,9 +492,7 @@ def optimize_planner_hyperparameters(
     # Return all results
     if optimization_results:
         if verbose:
-            logger.info(
-                f"Optimization completed for {len(optimization_results)} planners"
-            )
+            logger.info(f"Optimization completed for {len(optimization_results)} planners")
         if debug:
             logger.debug(f"Returning {len(optimization_results)} optimization results")
         return optimization_results
@@ -573,9 +550,7 @@ def evaluate_optimized_planner(
         )
 
     if verbose:
-        logger.info(
-            f"Evaluating policy '{optimized_policy.name}' on {num_episodes} episodes..."
-        )
+        logger.info(f"Evaluating policy '{optimized_policy.name}' on {num_episodes} episodes...")
 
     # Create environment run parameters for evaluation
     eval_params = [
@@ -591,9 +566,7 @@ def evaluate_optimized_planner(
     # Run evaluation using POMDPSimulator
     if debug:
         logger.debug(f"Creating POMDPSimulator with cache_dir: {eval_cache_dir}")
-        logger.debug(
-            f"Experiment name: {experiment_name}, Task manager: {TaskManagerType.JOBLIB}"
-        )
+        logger.debug(f"Experiment name: {experiment_name}, Task manager: {TaskManagerType.JOBLIB}")
 
     with POMDPSimulator(
         cache_dir_path=eval_cache_dir,
@@ -647,23 +620,17 @@ def evaluate_optimized_planner(
                         logger.info(
                             f"\n📊 Statistics DataFrame columns: {list(statistics_df.columns)}"
                         )
-                        logger.info(
-                            f"📊 Statistics DataFrame shape: {statistics_df.shape}"
-                        )
+                        logger.info(f"📊 Statistics DataFrame shape: {statistics_df.shape}")
 
                     if debug:
                         logger.debug(
                             f"Processing statistics DataFrame with {len(statistics_df)} rows"
                         )
-                        logger.debug(
-                            f"DataFrame columns: {list(statistics_df.columns)}"
-                        )
+                        logger.debug(f"DataFrame columns: {list(statistics_df.columns)}")
 
                     # Check if DataFrame has expected structure
                     if "policy" in statistics_df.columns:
-                        policy_stats = statistics_df[
-                            statistics_df["policy"] == policy_name
-                        ]
+                        policy_stats = statistics_df[statistics_df["policy"] == policy_name]
                         if not policy_stats.empty:
                             logger.info(f"\n📈 KEY METRICS:")
                             logger.info(f"-" * 40)
@@ -691,9 +658,7 @@ def evaluate_optimized_planner(
                                 for col in policy_stats.columns:
                                     if col != "policy":
                                         values = policy_stats[col].values
-                                        if len(values) > 0 and isinstance(
-                                            values[0], (int, float)
-                                        ):
+                                        if len(values) > 0 and isinstance(values[0], (int, float)):
                                             logger.info(f"{col:25}: {values[0]:8.3f}")
                     else:
                         # DataFrame doesn't have expected structure, show what we have
@@ -715,9 +680,7 @@ def evaluate_optimized_planner(
                 for history in policy_histories:
                     # Filter out None rewards and handle edge cases
                     valid_rewards = [
-                        step.reward
-                        for step in history.history
-                        if step.reward is not None
+                        step.reward for step in history.history if step.reward is not None
                     ]
                     if valid_rewards:
                         episode_returns.append(sum(valid_rewards))
@@ -733,14 +696,10 @@ def evaluate_optimized_planner(
 
                 logger.info(f"\n📋 EPISODE STATISTICS:")
                 logger.info(f"-" * 40)
-                logger.info(
-                    f"Average return: {sum(episode_returns)/len(episode_returns):8.3f}"
-                )
+                logger.info(f"Average return: {sum(episode_returns)/len(episode_returns):8.3f}")
                 logger.info(f"Best return: {max(episode_returns):8.3f}")
                 logger.info(f"Worst return: {min(episode_returns):8.3f}")
-                logger.info(
-                    f"Average length: {sum(episode_lengths)/len(episode_lengths):8.1f}"
-                )
+                logger.info(f"Average length: {sum(episode_lengths)/len(episode_lengths):8.1f}")
 
                 logger.info(f"\n💾 Results saved to: {eval_cache_dir}")
                 logger.info(f"🔍 MLflow UI: cd {eval_cache_dir} && mlflow ui")
@@ -804,9 +763,7 @@ def evaluate_multiple_optimized_planners(
         logger.info(f"Policies: {policy_names}")
 
     if debug:
-        logger.debug(
-            f"Evaluation setup: {num_episodes} episodes, {num_steps} steps, {n_jobs} jobs"
-        )
+        logger.debug(f"Evaluation setup: {num_episodes} episodes, {num_steps} steps, {n_jobs} jobs")
         logger.debug(f"Environment: {environment.name}")
         for i, policy in enumerate(optimized_policies):
             logger.debug(f"Policy {i+1}: {policy.name} (type: {type(policy).__name__})")
@@ -825,9 +782,7 @@ def evaluate_multiple_optimized_planners(
     # Run evaluation using POMDPSimulator
     if debug:
         logger.debug(f"Creating POMDPSimulator with cache_dir: {eval_cache_dir}")
-        logger.debug(
-            f"Experiment name: {experiment_name}, Task manager: {TaskManagerType.JOBLIB}"
-        )
+        logger.debug(f"Experiment name: {experiment_name}, Task manager: {TaskManagerType.JOBLIB}")
 
     with POMDPSimulator(
         cache_dir_path=eval_cache_dir,
@@ -890,16 +845,12 @@ def evaluate_multiple_optimized_planners(
                     for history in policy_histories:
                         # Filter out None rewards and handle edge cases
                         valid_rewards = [
-                            step.reward
-                            for step in history.history
-                            if step.reward is not None
+                            step.reward for step in history.history if step.reward is not None
                         ]
                         if valid_rewards:
                             episode_returns.append(sum(valid_rewards))
                         else:
-                            episode_returns.append(
-                                0.0
-                            )  # Default value if no valid rewards
+                            episode_returns.append(0.0)  # Default value if no valid rewards
 
                         episode_lengths.append(len(history.history))
 
@@ -911,14 +862,10 @@ def evaluate_multiple_optimized_planners(
                     logger.info(f"\n📋 {policy_name} STATISTICS:")
                     logger.info(f"-" * 40)
                     logger.info(f"Episodes completed: {len(policy_histories)}")
-                    logger.info(
-                        f"Average return: {sum(episode_returns)/len(episode_returns):8.3f}"
-                    )
+                    logger.info(f"Average return: {sum(episode_returns)/len(episode_returns):8.3f}")
                     logger.info(f"Best return: {max(episode_returns):8.3f}")
                     logger.info(f"Worst return: {min(episode_returns):8.3f}")
-                    logger.info(
-                        f"Average length: {sum(episode_lengths)/len(episode_lengths):8.1f}"
-                    )
+                    logger.info(f"Average length: {sum(episode_lengths)/len(episode_lengths):8.1f}")
 
             logger.info(f"\n💾 Results saved to: {eval_cache_dir}")
             logger.info(f"🔍 MLflow UI: cd {eval_cache_dir} && mlflow ui")
@@ -955,8 +902,7 @@ def create_numerical_hyperparameter_ranges(
             logger.debug(f"  {name}: [{low}, {high}]")
 
     return [
-        NumericalHyperParameter(low, high, name)
-        for name, (low, high) in parameter_configs.items()
+        NumericalHyperParameter(low, high, name) for name, (low, high) in parameter_configs.items()
     ]
 
 
@@ -984,10 +930,7 @@ def create_categorical_hyperparameter_choices(
         for name, choices in parameter_configs.items():
             logger.debug(f"  {name}: {choices}")
 
-    return [
-        CategoricalHyperParameter(name, choices)
-        for name, choices in parameter_configs.items()
-    ]
+    return [CategoricalHyperParameter(name, choices) for name, choices in parameter_configs.items()]
 
 
 def get_fast_optimization_defaults() -> Dict[str, Any]:
@@ -1099,9 +1042,7 @@ def get_benchmark_hyperparameter_planners(
                 )
 
             # Check action space compatibility
-            action_compatible = _is_space_compatible(
-                env_action_space, planner_action_space
-            )
+            action_compatible = _is_space_compatible(env_action_space, planner_action_space)
 
             # Check observation space compatibility
             obs_compatible = _is_space_compatible(env_obs_space, planner_obs_space)

@@ -2,7 +2,9 @@
 
 import numpy as np
 import random
-from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import ContinuousLightDarkPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDP,
+)
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
@@ -18,8 +20,7 @@ continuous_light_dark_env = ContinuousLightDarkPOMDP(
     name="ContinuousLightDarkPOMDP",
     state_transition_cov_matrix=np.eye(2),
     observation_cov_matrix=np.eye(2),
-    beacons=np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], 
-                     [0, 5, 10, 0, 5, 10, 0, 5, 10]]),
+    beacons=np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]),
     goal_state=np.array([10, 5]),
     start_state=np.array([0, 5]),
     obstacles=np.array([[3, 7], [5, 5]]),
@@ -30,15 +31,15 @@ continuous_light_dark_env = ContinuousLightDarkPOMDP(
     grid_size=11,
     goal_state_radius=1.5,
     beacon_radius=1.0,
-    obstacle_radius=1.5
+    obstacle_radius=1.5,
 )
 
 # Belief instance
 continuous_light_dark_belief = get_initial_belief(
     pomdp=continuous_light_dark_env,
     n_particles=20,  # Small number of particles for testing
-    resampling=True
-) 
+    resampling=True,
+)
 
 # Policy instances
 policies = [
@@ -55,9 +56,9 @@ policies = [
         exploration_constant=1.0,
         n_simulations=1000,
         min_samples_per_node=10,
-        min_visit_count_per_action=1
+        min_visit_count_per_action=1,
     )
-] 
+]
 
 # Experiment configuration
 continuous_light_dark_experiment_config = ExperimentConfig(
@@ -65,5 +66,5 @@ continuous_light_dark_experiment_config = ExperimentConfig(
     policies=policies,
     belief=continuous_light_dark_belief,
     num_episodes=100,
-    num_steps=200
-) 
+    num_steps=200,
+)

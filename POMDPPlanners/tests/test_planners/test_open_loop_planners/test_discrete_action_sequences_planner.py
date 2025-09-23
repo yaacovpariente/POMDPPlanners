@@ -113,9 +113,7 @@ def test_action_selection(planner, tiger_pomdp):
     # Test with different belief
     particles_right = ["tiger_right"] * 9 + ["tiger_left"]  # 9 right, 1 left
     log_weights_right = np.log(np.ones(10) / 10)
-    belief_right = WeightedParticleBelief(
-        particles=particles_right, log_weights=log_weights_right
-    )
+    belief_right = WeightedParticleBelief(particles=particles_right, log_weights=log_weights_right)
     actions_right, run_data_right = planner.action(belief_right)
     action_right = actions_right[0]
     assert action_right in tiger_pomdp.get_actions()
@@ -353,9 +351,7 @@ def test_discrete_action_sequences_config_id_consistency_across_evaluations(
     # Create initial belief
     particles = ["tiger_left", "tiger_right"] * 5
     log_weights = np.log(np.ones(10) / 10)
-    initial_belief = WeightedParticleBelief(
-        particles=particles, log_weights=log_weights
-    )
+    initial_belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
     # Perform multiple policy evaluations
     for i in range(3):

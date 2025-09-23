@@ -54,9 +54,7 @@ class Distribution(ABC):
             NotImplementedError: This method is not implemented by default.
                 Subclasses should override if probability calculation is needed.
         """
-        raise NotImplementedError(
-            "The method is not implemented for this distribution."
-        )
+        raise NotImplementedError("The method is not implemented for this distribution.")
 
 
 class DiscreteDistribution(Distribution):

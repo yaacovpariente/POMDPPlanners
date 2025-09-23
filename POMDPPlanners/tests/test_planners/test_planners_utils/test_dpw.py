@@ -208,9 +208,7 @@ def test_action_progressive_widening_existing_action(
     assert action_node in belief_node.children
 
 
-def test_action_progressive_widening_progressive_expansion(
-    belief_node, discrete_action_sampler
-):
+def test_action_progressive_widening_progressive_expansion(belief_node, discrete_action_sampler):
     """Test that action progressive widening expands the action space progressively.
 
     Purpose: Validates that action_progressive_widening progressively expands action space by creating multiple distinct actions
@@ -245,9 +243,7 @@ def test_action_progressive_widening_progressive_expansion(
     assert action_node1 != action_node2
 
 
-def test_action_progressive_widening_alpha_parameter(
-    belief_node, discrete_action_sampler
-):
+def test_action_progressive_widening_alpha_parameter(belief_node, discrete_action_sampler):
     """Test that alpha parameter affects progressive widening behavior.
 
     Purpose: Validates that alpha_a parameter controls the rate of action expansion in progressive widening strategy
@@ -352,8 +348,7 @@ def test_ucb1_exploration_mathematical_correctness(belief_node_with_children):
 
     exploration_constant = 1.0
     ucb_values = [
-        q_val
-        + exploration_constant * np.sqrt(np.log(belief_node.visit_count) / visit_count)
+        q_val + exploration_constant * np.sqrt(np.log(belief_node.visit_count) / visit_count)
         for q_val, visit_count in zip(q_vals, children_visit_counts)
     ]
 
@@ -516,9 +511,7 @@ def test_continuous_control_sampler_usage_example():
     # Verify action properties
     assert isinstance(action, np.ndarray), f"Expected ndarray, got {type(action)}"
     assert len(action) == 4, f"Expected 4D action, got {len(action)} dimensions"
-    assert all(
-        -2.0 <= a <= 2.0 for a in action
-    ), f"Action values outside bounds: {action}"
+    assert all(-2.0 <= a <= 2.0 for a in action), f"Action values outside bounds: {action}"
 
 
 def test_weighted_discrete_action_sampler_usage_example():
@@ -557,14 +550,10 @@ def test_weighted_discrete_action_sampler_usage_example():
     samples = [sampler.sample() for _ in range(100)]
 
     # Verify all samples are valid actions
-    assert all(
-        action in actions for action in samples
-    ), "Some sampled actions are invalid"
+    assert all(action in actions for action in samples), "Some sampled actions are invalid"
 
     # Verify probabilities are normalized
-    assert np.isclose(
-        np.sum(sampler.probabilities), 1.0
-    ), "Probabilities don't sum to 1"
+    assert np.isclose(np.sum(sampler.probabilities), 1.0), "Probabilities don't sum to 1"
 
 
 def test_adaptive_action_sampler_usage_example():
@@ -629,9 +618,7 @@ def test_adaptive_action_sampler_usage_example():
 
     action_informed = sampler.sample(belief_node=belief_node)
     # Should be the best action plus noise, so roughly [1, 0] + noise
-    assert isinstance(
-        action_informed, np.ndarray
-    ), "Expected array for informed sampling"
+    assert isinstance(action_informed, np.ndarray), "Expected array for informed sampling"
     assert len(action_informed) == 2, "Expected 2D action for informed sampling"
 
 
@@ -684,18 +671,14 @@ def test_multi_modal_action_sampler_usage_example():
 
     # Verify discrete samples
     for sample in discrete_samples:
-        assert (
-            sample["action"] in discrete_acts
-        ), f"Invalid discrete action: {sample['action']}"
+        assert sample["action"] in discrete_acts, f"Invalid discrete action: {sample['action']}"
 
     # Verify continuous samples
     for sample in continuous_samples:
         action = sample["action"]
         assert isinstance(action, np.ndarray), "Continuous action should be ndarray"
         assert len(action) == 2, "Expected 2D continuous action"
-        assert all(
-            -5.0 <= a <= 5.0 for a in action
-        ), f"Continuous action out of bounds: {action}"
+        assert all(-5.0 <= a <= 5.0 for a in action), f"Continuous action out of bounds: {action}"
 
 
 def test_goal_directed_action_sampler_usage_example():
@@ -736,9 +719,7 @@ def test_goal_directed_action_sampler_usage_example():
         def _estimate_position(self, belief_node):
             # Simplified: use mean of particles in belief
             if hasattr(belief_node.belief, "particles"):
-                positions = [
-                    p[:2] for p in belief_node.belief.particles
-                ]  # First 2D as position
+                positions = [p[:2] for p in belief_node.belief.particles]  # First 2D as position
                 return np.mean(positions, axis=0)
             return np.array([0.0, 0.0])
 
@@ -750,9 +731,7 @@ def test_goal_directed_action_sampler_usage_example():
     action_random = sampler.sample()
     assert isinstance(action_random, np.ndarray), "Expected ndarray action"
     assert len(action_random) == 2, "Expected 2D action"
-    assert np.isclose(
-        np.linalg.norm(action_random), 2.0
-    ), "Action magnitude should be 2.0"
+    assert np.isclose(np.linalg.norm(action_random), 2.0), "Action magnitude should be 2.0"
 
     # Test goal-directed behavior (with belief node containing position particles)
     particles = [[0.0, 0.0], [1.0, 1.0], [0.5, 0.5]]  # Positions near origin
@@ -766,9 +745,7 @@ def test_goal_directed_action_sampler_usage_example():
     for action in goal_directed_actions:
         assert isinstance(action, np.ndarray), "Expected ndarray action"
         assert len(action) == 2, "Expected 2D action"
-        assert (
-            np.linalg.norm(action) <= 2.1
-        ), "Action magnitude should be approximately 2.0"
+        assert np.linalg.norm(action) <= 2.1, "Action magnitude should be approximately 2.0"
 
 
 def test_action_progressive_widening_basic_usage_example():
@@ -812,14 +789,10 @@ def test_action_progressive_widening_basic_usage_example():
     )
 
     # Verify results
-    assert (
-        action_node.parent == belief_node
-    ), "Action node should have belief node as parent"
+    assert action_node.parent == belief_node, "Action node should have belief node as parent"
     assert isinstance(action_node.action, np.ndarray), "Action should be ndarray"
     assert len(action_node.action) == 2, "Action should be 2D"
-    assert all(
-        -1 <= a <= 1 for a in action_node.action
-    ), "Action should be in [-1, 1] range"
+    assert all(-1 <= a <= 1 for a in action_node.action), "Action should be in [-1, 1] range"
     assert len(belief_node.children) == 1, "Should have created one action node"
 
 
@@ -878,12 +851,8 @@ def test_action_progressive_widening_alpha_comparison_example():
     assert (
         aggressive_action.parent == belief_node_aggressive
     ), "Aggressive action should be child of belief node"
-    assert (
-        len(belief_node_conservative.children) == 1
-    ), "Conservative should create one action"
-    assert (
-        len(belief_node_aggressive.children) == 1
-    ), "Aggressive should create one action"
+    assert len(belief_node_conservative.children) == 1, "Conservative should create one action"
+    assert len(belief_node_aggressive.children) == 1, "Aggressive should create one action"
 
 
 def test_action_progressive_widening_loop_simulation_example():
@@ -946,9 +915,7 @@ def test_action_progressive_widening_loop_simulation_example():
 
     # Action count should generally increase or stay the same (non-decreasing)
     for i in range(1, len(action_counts)):
-        assert (
-            action_counts[i] >= action_counts[i - 1]
-        ), f"Action count decreased at step {i}"
+        assert action_counts[i] >= action_counts[i - 1], f"Action count decreased at step {i}"
 
 
 def test_ucb1_exploration_basic_usage_example():
@@ -993,9 +960,7 @@ def test_ucb1_exploration_basic_usage_example():
     )
 
     # Verify results
-    assert (
-        selected_action in belief_node.children
-    ), "Selected action should be one of the children"
+    assert selected_action in belief_node.children, "Selected action should be one of the children"
     assert selected_action.action in [
         "up",
         "down",
@@ -1038,14 +1003,10 @@ def test_ucb1_exploration_constants_comparison_example():
         action_node.visit_count = data["visits"]
 
     # Low exploration (favor exploitation) - from docstring
-    conservative_action = ucb1_exploration(
-        belief_node=belief_node, exploration_constant=0.1
-    )
+    conservative_action = ucb1_exploration(belief_node=belief_node, exploration_constant=0.1)
 
     # High exploration (favor exploration) - from docstring
-    exploratory_action = ucb1_exploration(
-        belief_node=belief_node, exploration_constant=3.0
-    )
+    exploratory_action = ucb1_exploration(belief_node=belief_node, exploration_constant=3.0)
 
     # Balanced approach (theoretical optimum) - from docstring
     balanced_action = ucb1_exploration(
@@ -1056,12 +1017,8 @@ def test_ucb1_exploration_constants_comparison_example():
     assert (
         conservative_action in belief_node.children
     ), "Conservative selection should be valid child"
-    assert (
-        exploratory_action in belief_node.children
-    ), "Exploratory selection should be valid child"
-    assert (
-        balanced_action in belief_node.children
-    ), "Balanced selection should be valid child"
+    assert exploratory_action in belief_node.children, "Exploratory selection should be valid child"
+    assert balanced_action in belief_node.children, "Balanced selection should be valid child"
 
 
 def test_ucb1_exploration_manual_calculation_example():
@@ -1113,9 +1070,7 @@ def test_ucb1_exploration_manual_calculation_example():
     selected_action = ucb1_exploration(belief_node, exploration_constant)
     actual_best_idx = list(belief_node.children).index(selected_action)
 
-    assert (
-        expected_best_idx == actual_best_idx
-    ), "UCB1 selection should match manual calculation"
+    assert expected_best_idx == actual_best_idx, "UCB1 selection should match manual calculation"
 
     # Verify UCB1 values are calculated correctly
     for i, child in enumerate(belief_node.children):
@@ -1123,9 +1078,7 @@ def test_ucb1_exploration_manual_calculation_example():
             np.log(belief_node.visit_count) / child.visit_count
         )
         expected_ucb1 = child.q_value + expected_exploration
-        assert np.isclose(
-            ucb1_values[i], expected_ucb1
-        ), f"UCB1 calculation mismatch for child {i}"
+        assert np.isclose(ucb1_values[i], expected_ucb1), f"UCB1 calculation mismatch for child {i}"
 
 
 def test_progressive_widening_parameter_tuning_example():
@@ -1157,15 +1110,9 @@ def test_progressive_widening_parameter_tuning_example():
         results[alpha] = total_new_actions
 
     # Verify expected behavior: higher alpha should create more actions
-    assert (
-        results[0.25] <= results[0.5]
-    ), "Lower alpha should create fewer or equal actions"
-    assert (
-        results[0.5] <= results[0.75]
-    ), "Lower alpha should create fewer or equal actions"
-    assert (
-        results[0.75] <= results[1.0]
-    ), "Lower alpha should create fewer or equal actions"
+    assert results[0.25] <= results[0.5], "Lower alpha should create fewer or equal actions"
+    assert results[0.5] <= results[0.75], "Lower alpha should create fewer or equal actions"
+    assert results[0.75] <= results[1.0], "Lower alpha should create fewer or equal actions"
 
     # All should create at least one action (at visit count 1)
     assert all(
@@ -1284,9 +1231,7 @@ def test_action_sampler_serialization():
             assert sampler.dim == restored.dim
         elif hasattr(sampler, "actions"):
             assert sampler.actions == restored.actions
-            np.testing.assert_array_almost_equal(
-                sampler.probabilities, restored.probabilities
-            )
+            np.testing.assert_array_almost_equal(sampler.probabilities, restored.probabilities)
         elif hasattr(sampler, "goal"):
             np.testing.assert_array_almost_equal(sampler.goal, restored.goal)
             assert sampler.noise_level == restored.noise_level

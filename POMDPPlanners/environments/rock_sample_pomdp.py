@@ -112,9 +112,7 @@ class RockSampleStateTransitionModel(Distribution):
 class RockSampleObservationModel(Distribution):
     """Observation model for RockSample POMDP."""
 
-    def __init__(
-        self, next_state: RockSampleState, action: int, pomdp: "RockSamplePOMDP"
-    ):
+    def __init__(self, next_state: RockSampleState, action: int, pomdp: "RockSamplePOMDP"):
         """Initialize observation model.
 
         Args:
@@ -142,9 +140,7 @@ class RockSampleObservationModel(Distribution):
         rock_quality = self.next_state.rocks[rock_idx]
 
         # Calculate Euclidean distance
-        distance = math.sqrt(
-            (robot_pos[0] - rock_pos[0]) ** 2 + (robot_pos[1] - rock_pos[1]) ** 2
-        )
+        distance = math.sqrt((robot_pos[0] - rock_pos[0]) ** 2 + (robot_pos[1] - rock_pos[1]) ** 2)
 
         # Sensor efficiency decreases exponentially with distance
         efficiency = math.exp(-distance / self.pomdp.sensor_efficiency)
@@ -177,9 +173,7 @@ class RockSampleObservationModel(Distribution):
         rock_pos = self.pomdp.rock_positions[rock_idx]
         rock_quality = self.next_state.rocks[rock_idx]
 
-        distance = math.sqrt(
-            (robot_pos[0] - rock_pos[0]) ** 2 + (robot_pos[1] - rock_pos[1]) ** 2
-        )
+        distance = math.sqrt((robot_pos[0] - rock_pos[0]) ** 2 + (robot_pos[1] - rock_pos[1]) ** 2)
 
         efficiency = math.exp(-distance / self.pomdp.sensor_efficiency)
 
@@ -314,9 +308,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
         # Define actions: 0=sample, 1=north, 2=east, 3=south, 4=west, 5+=check_rock_i
         self.action_names = ["sample", "north", "east", "south", "west"]
-        self.action_names.extend(
-            [f"check_rock_{i}" for i in range(len(self.rock_positions))]
-        )
+        self.action_names.extend([f"check_rock_{i}" for i in range(len(self.rock_positions))])
 
         # Action to direction vector mapping for visualization
         self.action_to_vector = {
@@ -336,12 +328,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             raise ValueError("Map size must be positive")
         for pos in self.rock_positions:
             if not (0 <= pos[0] < self.map_size[0] and 0 <= pos[1] < self.map_size[1]):
-                raise ValueError(
-                    f"Rock position {pos} is outside map bounds {self.map_size}"
-                )
+                raise ValueError(f"Rock position {pos} is outside map bounds {self.map_size}")
         if not (
-            0 <= self.init_pos[0] < self.map_size[0]
-            and 0 <= self.init_pos[1] < self.map_size[1]
+            0 <= self.init_pos[0] < self.map_size[0] and 0 <= self.init_pos[1] < self.map_size[1]
         ):
             raise ValueError(
                 f"Initial position {self.init_pos} is outside map bounds {self.map_size}"
@@ -363,9 +352,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
         for danger_row, danger_col in self.dangerous_areas:
             # Calculate Euclidean distance
-            distance = math.sqrt(
-                (pos_row - danger_row) ** 2 + (pos_col - danger_col) ** 2
-            )
+            distance = math.sqrt((pos_row - danger_row) ** 2 + (pos_col - danger_col) ** 2)
             if distance <= self.dangerous_area_radius:
                 return True
 
@@ -522,9 +509,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
         return metrics
 
-    def visualize_path(
-        self, path: List[RockSampleState], actions: List[int], cache_path: Path
-    ):
+    def visualize_path(self, path: List[RockSampleState], actions: List[int], cache_path: Path):
         """Visualize robot path through the environment."""
         if not isinstance(cache_path, Path):
             raise TypeError("cache_path must be a Path object")
@@ -533,9 +518,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
         fig, ax = plt.subplots(figsize=(10, 8))
         ax.set_xlim(-0.5, self.map_size[1] - 0.5)
-        ax.set_ylim(
-            self.map_size[0] - 0.5, -0.5
-        )  # Flip y-axis for standard grid display
+        ax.set_ylim(self.map_size[0] - 0.5, -0.5)  # Flip y-axis for standard grid display
         ax.set_aspect("equal")
         ax.grid(True, alpha=0.3)
         ax.set_xlabel("Column")
@@ -545,9 +528,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         # Initialize empty scatter plots for rocks (will be updated dynamically)
         rock_scatters = []
         for i, rock_pos in enumerate(self.rock_positions):
-            scatter = ax.scatter(
-                [], [], s=200, marker="s", alpha=0.7, label=f"Rock {i}"
-            )
+            scatter = ax.scatter([], [], s=200, marker="s", alpha=0.7, label=f"Rock {i}")
             rock_scatters.append(scatter)
 
         # Plot dangerous areas as red circles
@@ -571,9 +552,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         ax.axvline(x=exit_x, color="gold", linewidth=3, alpha=0.7, label="Exit")
 
         # Initialize robot position
-        robot_scatter = ax.scatter(
-            [], [], s=150, c="blue", marker="o", zorder=5, label="Robot"
-        )
+        robot_scatter = ax.scatter([], [], s=150, c="blue", marker="o", zorder=5, label="Robot")
         (path_line,) = ax.plot([], [], "b-", alpha=0.5, linewidth=2, label="Path")
 
         # Initialize action arrow
@@ -621,8 +600,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         def animate(frame):
             if frame >= len(path):
                 return tuple(
-                    [robot_scatter, path_line, arrow, action_text, sample_text]
-                    + rock_scatters
+                    [robot_scatter, path_line, arrow, action_text, sample_text] + rock_scatters
                 )
 
             state = path[frame]
@@ -668,9 +646,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
             # Update path
             valid_positions = [
-                pos
-                for pos in [p.robot_pos for p in path[: frame + 1]]
-                if pos != (-1, -1)
+                pos for pos in [p.robot_pos for p in path[: frame + 1]] if pos != (-1, -1)
             ]
             if valid_positions:
                 path_x = [pos[1] for pos in valid_positions]
@@ -681,9 +657,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             if frame < len(actions):
                 action = actions[frame]
                 action_name = self.action_names[action]
-                action_text.set_text(
-                    f"Step: {frame+1}/{len(path)}\nAction: {action_name}"
-                )
+                action_text.set_text(f"Step: {frame+1}/{len(path)}\nAction: {action_name}")
 
                 # Check for sample action and determine success/failure
                 if action == 0:  # Sample action
@@ -732,8 +706,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
                 sample_text.set_visible(False)
 
             return tuple(
-                [robot_scatter, path_line, arrow, action_text, sample_text]
-                + rock_scatters
+                [robot_scatter, path_line, arrow, action_text, sample_text] + rock_scatters
             )
 
         ani = animation.FuncAnimation(
@@ -789,9 +762,7 @@ def create_random_rock_sample(
     # Generate random rock positions
     all_positions = [(r, c) for r in range(map_size) for c in range(map_size)]
     rock_positions = list(
-        np.random.choice(
-            len(all_positions), size=min(num_rocks, len(all_positions)), replace=False
-        )
+        np.random.choice(len(all_positions), size=min(num_rocks, len(all_positions)), replace=False)
     )
     rock_positions = [all_positions[i] for i in rock_positions]
 

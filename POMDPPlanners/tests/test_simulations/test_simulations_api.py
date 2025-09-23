@@ -226,9 +226,7 @@ class TestSimulationsAPI:
         """
         api = SimulationsAPI()
         # Force an error by mocking the environment's state_transition_model to return None
-        sample_environment_run_params[0].environment.state_transition_model = (
-            lambda *args: None
-        )
+        sample_environment_run_params[0].environment.state_transition_model = lambda *args: None
         with pytest.raises(Exception):
             api.run_multiple_environments_and_policies_local_run(
                 environment_run_params=sample_environment_run_params,
@@ -260,9 +258,7 @@ class TestSimulationsAPI:
                 cache_dir_path=temp_cache_dir,
             )
         # Test invalid confidence interval
-        with pytest.raises(
-            ValueError, match="confidence_interval_level must be between 0 and 1"
-        ):
+        with pytest.raises(ValueError, match="confidence_interval_level must be between 0 and 1"):
             api.run_multiple_environments_and_policies_local_run(
                 environment_run_params=sample_environment_run_params,
                 alpha=0.1,
@@ -310,9 +306,7 @@ class TestSimulationsAPI:
                 }
             ),
         )
-        mock_simulator_instance.compare_multiple_environments_policies.return_value = (
-            mock_results
-        )
+        mock_simulator_instance.compare_multiple_environments_policies.return_value = mock_results
         mock_simulator.return_value = mock_simulator_instance
 
         api = SimulationsAPI()
@@ -385,9 +379,7 @@ class TestSimulationsAPI:
         mock_simulator_instance.__exit__.return_value = None
 
         mock_results = ({"test_tiger": {"test_sparse_pft": []}}, pd.DataFrame())
-        mock_simulator_instance.compare_multiple_environments_policies.return_value = (
-            mock_results
-        )
+        mock_simulator_instance.compare_multiple_environments_policies.return_value = mock_results
         mock_simulator.return_value = mock_simulator_instance
 
         api = SimulationsAPI()
@@ -436,9 +428,7 @@ class TestSimulationsAPI:
         api = SimulationsAPI()
 
         # Test with empty queue
-        with pytest.raises(
-            TypeError, match="missing 1 required positional argument: 'queue'"
-        ):
+        with pytest.raises(TypeError, match="missing 1 required positional argument: 'queue'"):
             api.run_multiple_environments_and_policies_pbs_run(
                 environment_run_params=sample_environment_run_params,
                 alpha=0.05,
@@ -466,9 +456,7 @@ class TestSimulationsAPI:
         mock_simulator_instance.__exit__.return_value = None
 
         mock_results = ({"test_tiger": {"test_sparse_pft": []}}, pd.DataFrame())
-        mock_simulator_instance.compare_multiple_environments_policies.return_value = (
-            mock_results
-        )
+        mock_simulator_instance.compare_multiple_environments_policies.return_value = mock_results
         mock_simulator.return_value = mock_simulator_instance
 
         custom_job_extra = [
@@ -516,9 +504,7 @@ class TestSimulationsAPI:
         mock_simulator_instance.__exit__.return_value = None
 
         mock_results = ({"test_tiger": {"test_sparse_pft": []}}, pd.DataFrame())
-        mock_simulator_instance.compare_multiple_environments_policies.return_value = (
-            mock_results
-        )
+        mock_simulator_instance.compare_multiple_environments_policies.return_value = mock_results
         mock_simulator.return_value = mock_simulator_instance
 
         api = SimulationsAPI()
@@ -563,9 +549,7 @@ class TestSimulationsAPI:
         mock_simulator_instance.__exit__.return_value = None
 
         mock_results = ({"test_tiger": {"test_sparse_pft": []}}, pd.DataFrame())
-        mock_simulator_instance.compare_multiple_environments_policies.return_value = (
-            mock_results
-        )
+        mock_simulator_instance.compare_multiple_environments_policies.return_value = mock_results
         mock_simulator.return_value = mock_simulator_instance
 
         api = SimulationsAPI()
@@ -585,9 +569,7 @@ class TestSimulationsAPI:
         task_manager_config = call_args[1]["task_manager_config"]
 
         assert task_manager_config.enable_dashboard is False
-        assert (
-            task_manager_config.dashboard_port == 8888
-        )  # Should still store the parameter
+        assert task_manager_config.dashboard_port == 8888  # Should still store the parameter
         assert (
             task_manager_config.dashboard_address == "127.0.0.1"
         )  # Should still store the parameter
@@ -637,9 +619,7 @@ class TestSimulationsAPI:
         assert call_args[1]["use_queue_logger"] is False
 
         # Verify optimizer.optimize was called with correct parameters
-        mock_optimizer_instance.optimize.assert_called_once_with(
-            sample_hyperparameter_run_params
-        )
+        mock_optimizer_instance.optimize.assert_called_once_with(sample_hyperparameter_run_params)
 
         # Verify results
         assert isinstance(results, list)
@@ -685,9 +665,7 @@ class TestSimulationsAPI:
         # Verify default parameters
         call_args = mock_optimizer_class.call_args
 
-        assert (
-            call_args[1]["experiment_name"] == "POMDP_Hyperparameter_Optimization"
-        )  # Default
+        assert call_args[1]["experiment_name"] == "POMDP_Hyperparameter_Optimization"  # Default
         assert call_args[1]["n_jobs"] == -1  # Default
         assert call_args[1]["confidence_interval_level"] == 0.95  # Default
         assert call_args[1]["alpha"] == 0.05  # Default

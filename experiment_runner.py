@@ -98,26 +98,18 @@ def main():
         required=True,
         help="Directory to save experiment results",
     )
-    parser.add_argument(
-        "--experiment_name", type=str, required=True, help="Name of the experiment"
-    )
+    parser.add_argument("--experiment_name", type=str, required=True, help="Name of the experiment")
     parser.add_argument(
         "--alpha", type=float, default=0.1, help="Alpha value for statistical tests"
     )
-    parser.add_argument(
-        "--confidence", type=float, default=0.95, help="Confidence interval level"
-    )
-    parser.add_argument(
-        "--n_jobs", type=int, default=1, help="Number of parallel jobs to run"
-    )
+    parser.add_argument("--confidence", type=float, default=0.95, help="Confidence interval level")
+    parser.add_argument("--n_jobs", type=int, default=1, help="Number of parallel jobs to run")
     parser.add_argument(
         "--scheduler_address",
         type=str,
         help="Dask scheduler address for distributed computing",
     )
-    parser.add_argument(
-        "--cache_visualizations", action="store_true", help="Cache visualizations"
-    )
+    parser.add_argument("--cache_visualizations", action="store_true", help="Cache visualizations")
     parser.add_argument(
         "--debug", action="store_true", help="Run in debug mode with reduced episodes"
     )
@@ -152,9 +144,7 @@ def main():
     logger.info(f"Loaded {len(configs)} configurations")
 
     # Convert to environment run parameters
-    environment_run_params = create_environment_run_params(
-        configs, debug_mode=args.debug
-    )
+    environment_run_params = create_environment_run_params(configs, debug_mode=args.debug)
 
     if args.debug:
         logger.info("Running in DEBUG mode - using only 2 episodes per configuration")
@@ -162,16 +152,17 @@ def main():
     # Run comparison
     logger.info("Starting experiment comparison...")
     api = SimulationsAPI()
-    histories, statistics_df = (
-        api.run_multiple_environments_and_policies_local_run_with_initial_debug_run(
-            environment_run_params=environment_run_params,
-            alpha=args.alpha,
-            confidence_interval_level=args.confidence,
-            experiment_name=args.experiment_name,
-            n_jobs=args.n_jobs,
-            cache_dir_path=output_dir,
-            clear_cache_on_start=args.clear_cache_on_start,
-        )
+    (
+        histories,
+        statistics_df,
+    ) = api.run_multiple_environments_and_policies_local_run_with_initial_debug_run(
+        environment_run_params=environment_run_params,
+        alpha=args.alpha,
+        confidence_interval_level=args.confidence,
+        experiment_name=args.experiment_name,
+        n_jobs=args.n_jobs,
+        cache_dir_path=output_dir,
+        clear_cache_on_start=args.clear_cache_on_start,
     )
 
     logger.info("Experiment completed!")

@@ -203,9 +203,7 @@ def test_cvar_estimator_from_dist():
 
     # Test invalid inputs
     with pytest.raises(ValueError):
-        cvar_estimator_from_dist(
-            np.array([1.0]), np.array([0.5]), 0.2
-        )  # weights don't sum to 1
+        cvar_estimator_from_dist(np.array([1.0]), np.array([0.5]), 0.2)  # weights don't sum to 1
 
     with pytest.raises(ValueError):
         cvar_estimator_from_dist(np.array([]), np.array([]), 0.2)  # empty arrays

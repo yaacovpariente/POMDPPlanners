@@ -44,9 +44,7 @@ def base_light_dark_environment() -> DiscreteLightDarkPOMDP:
 class TestDiscreteLightDarkPOMDPEquality:
     """Test suite for DiscreteLightDarkPOMDP equality comparisons."""
 
-    def test_same_discount_factor(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_same_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with same discount factor are equal.
 
         Purpose: Validates that DiscreteLightDarkPOMDP environments with identical parameters are equal and exhibit symmetry
@@ -71,9 +69,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment == other_env
         assert other_env == base_light_dark_environment  # Test symmetry
 
-    def test_different_discount_factor(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_different_discount_factor(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different discount factors are not equal.
 
         Purpose: Validates that DiscreteLightDarkPOMDP environments with different discount factors are correctly identified as unequal
@@ -98,9 +94,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != other_env
         assert other_env != base_light_dark_environment  # Test symmetry
 
-    def test_different_transition_error(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_different_transition_error(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different transition error probabilities are not equal.
 
         Purpose: Validates that DiscreteLightDarkPOMDP environments with different transition error probabilities are correctly identified as unequal
@@ -124,9 +118,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         )
         assert base_light_dark_environment != other_env
 
-    def test_different_observation_error(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_different_observation_error(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different observation error probabilities are not equal.
 
         Purpose: Validates that DiscreteLightDarkPOMDP environments with different observation error probabilities are correctly identified as unequal
@@ -150,9 +142,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         )
         assert base_light_dark_environment != other_env
 
-    def test_different_beacons(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_different_beacons(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different beacon positions are not equal.
 
         Purpose: Validates that DiscreteLightDarkPOMDP environments with different beacon configurations are correctly identified as unequal
@@ -187,9 +177,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         )
         assert base_light_dark_environment != other_env
 
-    def test_different_obstacles(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_different_obstacles(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different obstacle positions are not equal.
 
         Purpose: Validates that DiscreteLightDarkPOMDP environments with different obstacle configurations are correctly identified as unequal
@@ -214,9 +202,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         )
         assert base_light_dark_environment != other_env
 
-    def test_different_goal_state(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_different_goal_state(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different goal states are not equal.
 
         Purpose: Validates that DiscreteLightDarkPOMDP environments with different goal positions are correctly identified as unequal
@@ -241,9 +227,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         )
         assert base_light_dark_environment != other_env
 
-    def test_different_start_state(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_different_start_state(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different start states are not equal.
 
         Purpose: Validates that DiscreteLightDarkPOMDP environments with different starting positions are correctly identified as unequal
@@ -268,9 +252,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         )
         assert base_light_dark_environment != other_env
 
-    def test_different_rewards(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_different_rewards(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different rewards are not equal.
 
         Purpose: Validates that DiscreteLightDarkPOMDP environments with different reward structures are correctly identified as unequal
@@ -294,9 +276,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         )
         assert base_light_dark_environment != other_env
 
-    def test_different_grid_size(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_different_grid_size(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different grid sizes are not equal.
 
         Purpose: Validates that DiscreteLightDarkPOMDP environments with different grid dimensions are correctly identified as unequal
@@ -320,9 +300,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         )
         assert base_light_dark_environment != other_env
 
-    def test_different_beacon_radius(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_different_beacon_radius(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different beacon radii are not equal.
 
         Purpose: Validates that DiscreteLightDarkPOMDP environments with different beacon influence radii are correctly identified as unequal
@@ -347,9 +325,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         )
         assert base_light_dark_environment != other_env
 
-    def test_different_stochastic_reward(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_different_stochastic_reward(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that DiscreteLightDarkPOMDPs with different stochastic reward settings are not equal.
 
         Purpose: Validates that DiscreteLightDarkPOMDP environments with different reward stochasticity settings are correctly identified as unequal
@@ -390,9 +366,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         assert base_light_dark_environment != 42
         assert base_light_dark_environment != None
 
-    def test_missing_attributes(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_missing_attributes(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test equality when attributes are missing.
 
         Purpose: Validates that DiscreteLightDarkPOMDP equality returns False when comparing with objects missing critical attributes
@@ -431,9 +405,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         delattr(other_env, "obstacles")
         assert base_light_dark_environment != other_env
 
-    def test_deep_copy_equality(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_deep_copy_equality(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that a deep copy of DiscreteLightDarkPOMDP is equal to original.
 
         Purpose: Validates that DiscreteLightDarkPOMDP equality works correctly with deep copied objects and exhibits symmetry
@@ -454,9 +426,7 @@ class TestDiscreteLightDarkPOMDPEquality:
 class TestDiscreteLightDarkPOMDPConfigId:
     """Test suite for DiscreteLightDarkPOMDP config_id functionality."""
 
-    def test_config_id_consistency(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_config_id_consistency(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that config_id is consistent for identical environments.
 
         Purpose: Validates that DiscreteLightDarkPOMDP config_id generation produces consistent hashes for identical configurations
@@ -572,9 +542,7 @@ class TestDiscreteLightDarkPOMDPConfigId:
         )
         assert base_light_dark_environment.config_id != other_env.config_id
 
-    def test_config_id_format(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_config_id_format(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that config_id is a valid SHA-256 hash.
 
         Purpose: Validates that DiscreteLightDarkPOMDP config_id follows proper SHA-256 hash format specification
@@ -590,9 +558,7 @@ class TestDiscreteLightDarkPOMDPConfigId:
         assert len(config_id) == 64  # SHA-256 hash length
         assert all(c in "0123456789abcdef" for c in config_id)  # Valid hex characters
 
-    def test_config_id_deterministic(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_config_id_deterministic(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that config_id is deterministic (same input always produces same output).
 
         Purpose: Validates that DiscreteLightDarkPOMDP config_id property returns consistent values across multiple accesses
@@ -607,9 +573,7 @@ class TestDiscreteLightDarkPOMDPConfigId:
         config_id2 = base_light_dark_environment.config_id
         assert config_id1 == config_id2
 
-    def test_config_id_order_invariance(
-        self, base_light_dark_environment: DiscreteLightDarkPOMDP
-    ):
+    def test_config_id_order_invariance(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test that config_id is invariant to the order of beacons and obstacles.
 
         Purpose: Validates config_id behavior for  order invariance
@@ -723,9 +687,7 @@ def test_initialization():
     assert np.array_equal(env.start_state, np.array([0, 5]))
 
     # Check default beacons
-    expected_beacons = np.array(
-        [[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]
-    )
+    expected_beacons = np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]])
     assert np.array_equal(env.beacons, expected_beacons)
 
     # Check default obstacles (now 2xN format like beacons)
@@ -775,9 +737,7 @@ def test_beacons_and_obstacles_array_structure():
     # Test obstacles structure (now 2xN format like beacons)
     assert isinstance(env.obstacles, np.ndarray), "obstacles should be a numpy array"
     assert env.obstacles.ndim == 2, "obstacles should be 2-dimensional"
-    assert (
-        env.obstacles.shape[0] == 2
-    ), "obstacles should have 2 rows (x and y coordinates)"
+    assert env.obstacles.shape[0] == 2, "obstacles should have 2 rows (x and y coordinates)"
 
     # Default obstacles: [(3,7), (5,5)]
     # So there should be 2 obstacles
@@ -843,21 +803,15 @@ def test_custom_beacons_and_obstacles_array_structure():
     # Test custom beacons structure
     assert isinstance(env.beacons, np.ndarray), "custom beacons should be a numpy array"
     assert env.beacons.ndim == 2, "custom beacons should be 2-dimensional"
-    assert (
-        env.beacons.shape[0] == 2
-    ), "custom beacons should have 2 rows (x and y coordinates)"
+    assert env.beacons.shape[0] == 2, "custom beacons should have 2 rows (x and y coordinates)"
     assert env.beacons.shape[1] == len(
         custom_beacons
     ), f"custom beacons should have {len(custom_beacons)} columns"
 
     # Test custom obstacles structure (now 2xN format like beacons)
-    assert isinstance(
-        env.obstacles, np.ndarray
-    ), "custom obstacles should be a numpy array"
+    assert isinstance(env.obstacles, np.ndarray), "custom obstacles should be a numpy array"
     assert env.obstacles.ndim == 2, "custom obstacles should be 2-dimensional"
-    assert (
-        env.obstacles.shape[0] == 2
-    ), "custom obstacles should have 2 rows (x and y coordinates)"
+    assert env.obstacles.shape[0] == 2, "custom obstacles should have 2 rows (x and y coordinates)"
     assert env.obstacles.shape[1] == len(
         custom_obstacles
     ), f"custom obstacles should have {len(custom_obstacles)} columns"
@@ -928,9 +882,7 @@ def test_empty_beacons_and_obstacles():
     assert env.beacons.shape[1] == 0, "empty beacons should have 0 columns"
 
     # Test empty obstacles structure (now 2xN format like beacons)
-    assert isinstance(
-        env.obstacles, np.ndarray
-    ), "empty obstacles should be a numpy array"
+    assert isinstance(env.obstacles, np.ndarray), "empty obstacles should be a numpy array"
     assert env.obstacles.ndim == 2, "empty obstacles should be 2-dimensional"
     assert env.obstacles.shape[0] == 2, "empty obstacles should have 2 rows"
     assert env.obstacles.shape[1] == 0, "empty obstacles should have 0 columns"
@@ -995,12 +947,8 @@ def test_observation_model():
     assert isinstance(dist, ObservationModel)
 
     # Check that the correct state has highest probability
-    correct_state_idx = (
-        len(dist.distribution.values) - 1
-    )  # Last value is the correct state
-    assert (
-        dist.distribution.probs[correct_state_idx] > 0.5
-    )  # Should be 1 - observation_error_prob
+    correct_state_idx = len(dist.distribution.values) - 1  # Last value is the correct state
+    assert dist.distribution.probs[correct_state_idx] > 0.5  # Should be 1 - observation_error_prob
 
 
 def test_reward_function():
@@ -1026,9 +974,7 @@ def test_reward_function():
     reward = env.reward(state, "right")  # Moves to [5, 5] which is obstacle
     assert (
         reward
-        == -env.fuel_cost
-        - np.linalg.norm(np.array([5, 5]) - env.goal_state)
-        + env.obstacle_reward
+        == -env.fuel_cost - np.linalg.norm(np.array([5, 5]) - env.goal_state) + env.obstacle_reward
     )
 
     # Test normal movement reward
@@ -1122,8 +1068,7 @@ def test_visualize_path(tmp_path):
 
     # Create a simple belief path for testing
     agent_belief_path = [
-        DiscreteDistribution(values=[path[i]], probs=np.array([1.0]))
-        for i in range(len(path))
+        DiscreteDistribution(values=[path[i]], probs=np.array([1.0])) for i in range(len(path))
     ]
 
     # Create actions corresponding to the path
@@ -1327,11 +1272,7 @@ def test_compute_metrics():
     assert "goal_reaching_rate" in metrics_dict
     goal_rate = metrics_dict["goal_reaching_rate"]
     assert goal_rate.value == 2 / 3  # 2 out of 3 histories reach goal
-    assert (
-        goal_rate.lower_confidence_bound
-        <= goal_rate.value
-        <= goal_rate.upper_confidence_bound
-    )
+    assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
 
     # Test obstacle hit rate
     assert "obstacle_hit_rate" in metrics_dict

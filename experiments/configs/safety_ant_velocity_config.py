@@ -5,7 +5,9 @@ import random
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
-from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+from POMDPPlanners.planners.sparse_sampling_planner import (
+    StandardSparseSamplingDiscreteActionsPlanner,
+)
 from POMDPPlanners.core.config_types import ExperimentConfig
 
 # Set random seeds for reproducibility
@@ -24,15 +26,15 @@ safety_ant_velocity_env = SafeAntVelocityPOMDP(
     velocity_noise=0.2,
     safety_violation_penalty=-100.0,
     movement_reward_scale=1.0,
-    name="SafeVelocityPOMDP"
+    name="SafeVelocityPOMDP",
 )
 
 # Belief instance
 safety_ant_velocity_belief = get_initial_belief(
     pomdp=safety_ant_velocity_env,
     n_particles=20,  # Small number of particles for testing
-    resampling=True
-) 
+    resampling=True,
+)
 
 policies = [
     SparsePFT(
@@ -44,15 +46,15 @@ policies = [
         beta_ucb=0.5,
         belief_child_num=8,
         n_simulations=1000,
-        name="SparsePFT_SafetyAntVelocity"
+        name="SparsePFT_SafetyAntVelocity",
     ),
     StandardSparseSamplingDiscreteActionsPlanner(
         environment=safety_ant_velocity_env,
         branching_factor=8,
         depth=3,
-        name="StandardSparseSampling_SafetyAntVelocity"
-    )
-] 
+        name="StandardSparseSampling_SafetyAntVelocity",
+    ),
+]
 
 # Experiment configuration
 safety_ant_velocity_experiment_config = ExperimentConfig(
@@ -60,6 +62,5 @@ safety_ant_velocity_experiment_config = ExperimentConfig(
     policies=policies,
     belief=safety_ant_velocity_belief,
     num_episodes=100,
-    num_steps=200
+    num_steps=200,
 )
-

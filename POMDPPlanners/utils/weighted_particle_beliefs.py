@@ -31,9 +31,7 @@ def create_belief(
     belief_params["particles"] = particles
     belief_params["log_weights"] = log_weights
     # Create a new config with updated params
-    updated_config = BeliefConfig(
-        class_name=belief_config.class_name, params=belief_params
-    )
+    updated_config = BeliefConfig(class_name=belief_config.class_name, params=belief_params)
     return Belief.from_config(updated_config)
 
 
@@ -85,15 +83,11 @@ class WeightedParticleBeliefDiscreteLightDark(WeightedParticleBeliefReinvigorati
         effective_sample_size = 1 / np.sum(np.square(self.normalized_weights))
 
         if effective_sample_size < self.ess_threshold:
-            states = [
-                observation + self.action_to_vector[action] for action in self.actions
-            ]
+            states = [observation + self.action_to_vector[action] for action in self.actions]
             states.append(observation)
 
             n_reinvigorate = int(self.reinvigoration_fraction * len(belief.particles))
-            reinvigorate_indices = np.random.choice(
-                len(states), size=n_reinvigorate, replace=True
-            )
+            reinvigorate_indices = np.random.choice(len(states), size=n_reinvigorate, replace=True)
             reinvigorated_states = [states[i] for i in reinvigorate_indices]
 
             replace_indices = np.random.choice(
@@ -104,9 +98,7 @@ class WeightedParticleBeliefDiscreteLightDark(WeightedParticleBeliefReinvigorati
         return belief
 
 
-class WeightedParticleBeliefDiscreteLightDarkFullCoverage(
-    WeightedParticleBeliefReinvigoration
-):
+class WeightedParticleBeliefDiscreteLightDarkFullCoverage(WeightedParticleBeliefReinvigoration):
     def __init__(
         self,
         particles: list,
@@ -145,13 +137,9 @@ class WeightedParticleBeliefDiscreteLightDarkFullCoverage(
 
         # Recalculate normalized weights after resampling
         self.normalized_weights = np.exp(self.log_weights - np.max(self.log_weights))
-        self.normalized_weights = self.normalized_weights / np.sum(
-            self.normalized_weights
-        )
+        self.normalized_weights = self.normalized_weights / np.sum(self.normalized_weights)
 
-        states = [
-            observation + self.action_to_vector[action] for action in self.actions
-        ]
+        states = [observation + self.action_to_vector[action] for action in self.actions]
         states.append(observation)
 
         n_states = len(states)
@@ -160,9 +148,7 @@ class WeightedParticleBeliefDiscreteLightDarkFullCoverage(
         return self
 
 
-class WeightedParticleBeliefContinuousLightDarkFullCoverage(
-    WeightedParticleBeliefReinvigoration
-):
+class WeightedParticleBeliefContinuousLightDarkFullCoverage(WeightedParticleBeliefReinvigoration):
     def __init__(
         self,
         particles: list,
@@ -203,18 +189,12 @@ class WeightedParticleBeliefContinuousLightDarkFullCoverage(
 
         # Recalculate normalized weights after resampling
         self.normalized_weights = np.exp(self.log_weights - np.max(self.log_weights))
-        self.normalized_weights = self.normalized_weights / np.sum(
-            self.normalized_weights
-        )
+        self.normalized_weights = self.normalized_weights / np.sum(self.normalized_weights)
 
-        states = [
-            observation + self.action_to_vector[action] for action in self.actions
-        ]
+        states = [observation + self.action_to_vector[action] for action in self.actions]
         states.append(observation)
 
-        n_reinvigorate = int(
-            self.reinvigoration_particles_weights_sum * len(self.particles)
-        )
+        n_reinvigorate = int(self.reinvigoration_particles_weights_sum * len(self.particles))
 
         if n_reinvigorate > 0:  # Only proceed if we need to reinvigorate
             # Sample centers for each particle to reinvigorate
@@ -260,9 +240,7 @@ class WeightedParticleBeliefSanityPOMDP(WeightedParticleBeliefReinvigoration):
     def reinvigorate(self, action: Any, observation: Any, pomdp: Environment) -> Belief:
         """Reinvigorate particles by sampling from initial state distribution."""
         n_reinvigorate = int(self.reinvigoration_fraction * len(self.particles))
-        reinvigorated_states = pomdp.initial_state_dist().sample(
-            n_samples=n_reinvigorate
-        )
+        reinvigorated_states = pomdp.initial_state_dist().sample(n_samples=n_reinvigorate)
 
         # Create new belief with reinvigorated particles
         new_particles = self.particles + reinvigorated_states

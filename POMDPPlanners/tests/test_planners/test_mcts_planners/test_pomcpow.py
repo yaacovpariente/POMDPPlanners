@@ -138,9 +138,7 @@ def planner(
 
 @pytest.fixture
 def belief(environment, n_particles):
-    return get_initial_belief(
-        pomdp=environment, n_particles=n_particles, resampling=True
-    )
+    return get_initial_belief(pomdp=environment, n_particles=n_particles, resampling=True)
 
 
 def test_initialization_with_n_simulations(
@@ -513,9 +511,7 @@ def test_simulate_state_path_terminal_state(planner, belief):
     planner.environment.is_terminal = lambda state: True
 
     state = belief.sample()
-    return_value = planner._simulate_state_path(
-        state=state, belief_node=belief_node, depth=depth
-    )
+    return_value = planner._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
     assert return_value == 0
     assert belief_node.visit_count == 1
 
@@ -538,9 +534,7 @@ def test_simulate_state_path_max_depth(planner, belief):
     state = belief.sample()
     depth = planner.depth + 1
 
-    return_value = planner._simulate_state_path(
-        state=state, belief_node=belief_node, depth=depth
-    )
+    return_value = planner._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
     assert return_value == 0
 
 
@@ -648,9 +642,7 @@ def test_belief_node_data_structure(planner, belief):
             # Check that the belief is a WeightedParticleBeliefStateUpdate instance
             from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
 
-            assert isinstance(
-                child_belief_node.belief, WeightedParticleBeliefStateUpdate
-            )
+            assert isinstance(child_belief_node.belief, WeightedParticleBeliefStateUpdate)
             assert hasattr(child_belief_node.belief, "particles")
             assert hasattr(child_belief_node.belief, "weights")
             assert isinstance(child_belief_node.belief.particles, list)
@@ -792,9 +784,7 @@ def test_visit_count_consistency(planner, belief):
 
     # Check that action node visit counts sum correctly
     total_action_visits = sum(
-        child.visit_count
-        for child in belief_node.children
-        if isinstance(child, ActionNode)
+        child.visit_count for child in belief_node.children if isinstance(child, ActionNode)
     )
     assert (
         total_action_visits <= belief_node.visit_count

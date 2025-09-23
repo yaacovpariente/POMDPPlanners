@@ -38,9 +38,7 @@ class TestPlannersHyperparamConfigs:
     def setup_method(self):
         """Set up test fixtures for each test method."""
         self.discount_factor = 0.95
-        self.config_api = PlannersHyperparamConfigs(
-            discount_factor=self.discount_factor
-        )
+        self.config_api = PlannersHyperparamConfigs(discount_factor=self.discount_factor)
 
         # Create mock environment with reward range
         self.mock_env = Mock()
@@ -141,9 +139,7 @@ class TestPlannersHyperparamConfigs:
 
         Test type: unit
         """
-        config = self.config_api.sparse_pft_config(
-            env=self.mock_env, name=self.planner_name
-        )
+        config = self.config_api.sparse_pft_config(env=self.mock_env, name=self.planner_name)
 
         assert isinstance(config, HyperParamPlannerConfig)
         assert config.policy_cls == SparsePFT
@@ -168,9 +164,7 @@ class TestPlannersHyperparamConfigs:
 
         Test type: unit
         """
-        config = self.config_api.sparse_sampling_config(
-            env=self.mock_env, name=self.planner_name
-        )
+        config = self.config_api.sparse_sampling_config(env=self.mock_env, name=self.planner_name)
 
         assert isinstance(config, HyperParamPlannerConfig)
         assert config.policy_cls == StandardSparseSamplingDiscreteActionsPlanner
@@ -266,21 +260,13 @@ class TestPlannersHyperparamConfigs:
         Test type: unit
         """
         configs = [
-            self.config_api.pft_dpw_config(
-                self.mock_env, self.mock_action_sampler, "PFT_DPW"
-            ),
-            self.config_api.pomcpow_config(
-                self.mock_env, self.mock_action_sampler, "POMCPOW"
-            ),
+            self.config_api.pft_dpw_config(self.mock_env, self.mock_action_sampler, "PFT_DPW"),
+            self.config_api.pomcpow_config(self.mock_env, self.mock_action_sampler, "POMCPOW"),
             self.config_api.sparse_pft_config(self.mock_env, "SparsePFT"),
             self.config_api.sparse_sampling_config(self.mock_env, "SparseSampling"),
             self.config_api.pomcp_config(self.mock_env, "POMCP"),
-            self.config_api.pomcp_dpw_config(
-                self.mock_env, self.mock_action_sampler, "POMCP_DPW"
-            ),
-            self.config_api.discrete_action_sequences_config(
-                self.mock_env, "DiscreteSequences"
-            ),
+            self.config_api.pomcp_dpw_config(self.mock_env, self.mock_action_sampler, "POMCP_DPW"),
+            self.config_api.discrete_action_sequences_config(self.mock_env, "DiscreteSequences"),
         ]
 
         for config in configs:
@@ -301,21 +287,13 @@ class TestPlannersHyperparamConfigs:
         Test type: unit
         """
         configs = [
-            self.config_api.pft_dpw_config(
-                self.mock_env, self.mock_action_sampler, "PFT_DPW"
-            ),
-            self.config_api.pomcpow_config(
-                self.mock_env, self.mock_action_sampler, "POMCPOW"
-            ),
+            self.config_api.pft_dpw_config(self.mock_env, self.mock_action_sampler, "PFT_DPW"),
+            self.config_api.pomcpow_config(self.mock_env, self.mock_action_sampler, "POMCPOW"),
             self.config_api.sparse_pft_config(self.mock_env, "SparsePFT"),
             self.config_api.sparse_sampling_config(self.mock_env, "SparseSampling"),
             self.config_api.pomcp_config(self.mock_env, "POMCP"),
-            self.config_api.pomcp_dpw_config(
-                self.mock_env, self.mock_action_sampler, "POMCP_DPW"
-            ),
-            self.config_api.discrete_action_sequences_config(
-                self.mock_env, "DiscreteSequences"
-            ),
+            self.config_api.pomcp_dpw_config(self.mock_env, self.mock_action_sampler, "POMCP_DPW"),
+            self.config_api.discrete_action_sequences_config(self.mock_env, "DiscreteSequences"),
         ]
 
         for config in configs:

@@ -366,14 +366,10 @@ def action_progressive_widening(
         action_node = ActionNode(action=action, parent=belief_node)
         return action_node
 
-    return ucb1_exploration(
-        belief_node=belief_node, exploration_constant=exploration_constant
-    )
+    return ucb1_exploration(belief_node=belief_node, exploration_constant=exploration_constant)
 
 
-def ucb1_exploration(
-    belief_node: BeliefNode, exploration_constant: float
-) -> ActionNode:
+def ucb1_exploration(belief_node: BeliefNode, exploration_constant: float) -> ActionNode:
     """Select action from existing children using UCB1 criterion.
 
     Uses Upper Confidence Bounds (UCB1) to balance exploration and exploitation:

@@ -84,9 +84,7 @@ class TestCartPolePOMDPEquality:
         assert base_cartpole_environment != other_env
         assert other_env != base_cartpole_environment  # Test symmetry
 
-    def test_different_physical_parameters(
-        self, base_cartpole_environment: CartPolePOMDP
-    ):
+    def test_different_physical_parameters(self, base_cartpole_environment: CartPolePOMDP):
         """Test that CartPolePOMDPs with different physical parameters are not equal.
 
         Purpose: Validates that CartPolePOMDP equality comparison correctly identifies different physical parameters
@@ -109,9 +107,7 @@ class TestCartPolePOMDPEquality:
         other_env.masscart = 2.0  # Different cart mass
         assert base_cartpole_environment != other_env
 
-    def test_comparison_with_non_environment(
-        self, base_cartpole_environment: CartPolePOMDP
-    ):
+    def test_comparison_with_non_environment(self, base_cartpole_environment: CartPolePOMDP):
         """Test comparison with non-Environment objects.
 
         Purpose: Validates that CartPolePOMDP equality comparison correctly handles non-Environment objects
@@ -186,9 +182,7 @@ class TestCartPolePOMDPConfigId:
         )
         assert base_cartpole_environment.config_id == other_env.config_id
 
-    def test_config_id_different_discount_factor(
-        self, base_cartpole_environment: CartPolePOMDP
-    ):
+    def test_config_id_different_discount_factor(self, base_cartpole_environment: CartPolePOMDP):
         """Test that config_id changes with different discount factor.
 
         Purpose: Validates that CartPolePOMDP config_id generates different identifiers for different discount factors
@@ -204,9 +198,7 @@ class TestCartPolePOMDPConfigId:
         )
         assert base_cartpole_environment.config_id != other_env.config_id
 
-    def test_config_id_different_noise_covariance(
-        self, base_cartpole_environment: CartPolePOMDP
-    ):
+    def test_config_id_different_noise_covariance(self, base_cartpole_environment: CartPolePOMDP):
         """Test that config_id changes with different noise covariance.
 
         Purpose: Validates that CartPolePOMDP config_id generates different identifiers for different noise covariance matrices

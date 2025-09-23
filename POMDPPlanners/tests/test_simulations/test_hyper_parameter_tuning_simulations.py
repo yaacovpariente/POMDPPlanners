@@ -72,9 +72,7 @@ def real_belief(real_environment):
 def sample_hyperparameters():
     """Create sample hyperparameters for testing."""
     return [
-        NumericalHyperParameter(
-            1, 3, "branching_factor"
-        ),  # Correct order: low, high, name
+        NumericalHyperParameter(1, 3, "branching_factor"),  # Correct order: low, high, name
         NumericalHyperParameter(1, 3, "depth"),  # Correct order: low, high, name
     ]
 
@@ -120,9 +118,7 @@ def sample_configs(real_environment, real_policy_class, real_belief):
 def real_optimized_policy_result(real_environment, real_policy_class):
     """Create a real OptimizedPolicyResult for testing."""
     # Create a real policy instance
-    policy = real_policy_class(
-        environment=real_environment, branching_factor=2, depth=2
-    )
+    policy = real_policy_class(environment=real_environment, branching_factor=2, depth=2)
 
     return OptimizedPolicyResult(
         environment=real_environment,
@@ -167,9 +163,7 @@ class TestHyperParameterOptimizerInitialization:
         assert optimizer.n_jobs == 4
         assert optimizer.confidence_interval_level == 0.99
         assert optimizer.alpha == 0.01
-        assert (
-            optimizer.mlflow_tracking_uri == f"file://{custom_tracking_uri.absolute()}"
-        )
+        assert optimizer.mlflow_tracking_uri == f"file://{custom_tracking_uri.absolute()}"
         assert optimizer.mlruns_path == custom_tracking_uri
 
     def test_initialization_creates_mlruns_directory(self, temp_cache_dir):
@@ -213,9 +207,7 @@ class TestHyperParameterOptimizerTaskCreation:
             assert hasattr(task, "policy_cls")
             assert hasattr(task, "hyper_parameters")
 
-    def test_create_tasks_preserves_config_parameters(
-        self, temp_cache_dir, sample_configs
-    ):
+    def test_create_tasks_preserves_config_parameters(self, temp_cache_dir, sample_configs):
         """Test task creation preserves configuration parameters."""
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
 
@@ -253,9 +245,7 @@ class TestHyperParameterOptimizerTaskCreation:
         # Check that the list has the expected length
         assert len(tasks) == len(sample_configs)
 
-    def test_execute_optimization_tasks_returns_correct_type(
-        self, temp_cache_dir, sample_configs
-    ):
+    def test_execute_optimization_tasks_returns_correct_type(self, temp_cache_dir, sample_configs):
         """Test that _execute_optimization_tasks returns Tuple[List[OptimizedPolicyResult], List[HyperParameterTuningSimulationTask]]."""
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
 
@@ -398,9 +388,7 @@ class TestHyperParameterOptimizerHelperMethods:
         assert params["parameter_to_optimize"] == config.parameter_to_optimize
         assert params["n_trials"] == config.n_trials
 
-    def test_log_optimization_results_success(
-        self, temp_cache_dir, real_optimized_policy_result
-    ):
+    def test_log_optimization_results_success(self, temp_cache_dir, real_optimized_policy_result):
         """Test logging optimization results for successful optimization."""
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
 
@@ -411,9 +399,7 @@ class TestHyperParameterOptimizerHelperMethods:
 
         task = HyperParameterTuningSimulationTask(
             environment=real_optimized_policy_result.environment,
-            belief=get_initial_belief(
-                real_optimized_policy_result.environment, n_particles=10
-            ),
+            belief=get_initial_belief(real_optimized_policy_result.environment, n_particles=10),
             policy_cls=type(real_optimized_policy_result.policy),
             hyper_parameters=[],
             constant_parameters={},  # No constant parameters needed for this planner
@@ -613,18 +599,14 @@ class TestHyperParameterOptimizerEdgeCases:
         large_n_jobs = [100, 1000, 10000]
 
         for n_jobs in large_n_jobs:
-            optimizer = HyperParameterOptimizer(
-                cache_dir_path=temp_cache_dir, n_jobs=n_jobs
-            )
+            optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir, n_jobs=n_jobs)
             assert optimizer.n_jobs == n_jobs
 
 
 # Create a test policy class that requires specific constant parameters
 # This needs to be defined outside the test method to avoid pickling issues
 class PolicyRequiringConstants(StandardSparseSamplingDiscreteActionsPlanner):
-    def __init__(
-        self, environment, branching_factor, depth, required_constant=None, **kwargs
-    ):
+    def __init__(self, environment, branching_factor, depth, required_constant=None, **kwargs):
         if required_constant is None:
             raise TypeError(
                 "PolicyRequiringConstants.__init__() missing 1 required keyword argument: 'required_constant'"
@@ -683,9 +665,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         assert len(runs) > 0  # Should have at least batch run
 
         # Find the batch run (parent run)
-        batch_runs = runs[
-            runs["tags.mlflow.runName"].str.contains("optimize_batch_", na=False)
-        ]
+        batch_runs = runs[runs["tags.mlflow.runName"].str.contains("optimize_batch_", na=False)]
         assert len(batch_runs) >= 1
 
         batch_run = batch_runs.iloc[0]
@@ -711,8 +691,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             assert config_run["params.config_index"] == "1"
             assert config_run["params.environment_type"] == "TigerPOMDP"
             assert (
-                config_run["params.policy_type"]
-                == "StandardSparseSamplingDiscreteActionsPlanner"
+                config_run["params.policy_type"] == "StandardSparseSamplingDiscreteActionsPlanner"
             )
 
             # Verify optimization results were logged
@@ -742,9 +721,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
 
         # Test correct parameter order: low, high, name
         correct_hyperparams = [
-            NumericalHyperParameter(
-                1, 3, "branching_factor"
-            ),  # Correct: low, high, name
+            NumericalHyperParameter(1, 3, "branching_factor"),  # Correct: low, high, name
             NumericalHyperParameter(1, 3, "depth"),
         ]
 
@@ -775,9 +752,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         # Test that incorrect parameter order (name, low, high) fails
         # This was the original issue in hyper_param_runner.py
         incorrect_hyperparams = [
-            NumericalHyperParameter(
-                "branching_factor", 1, 3
-            ),  # Wrong order: name, low, high
+            NumericalHyperParameter("branching_factor", 1, 3),  # Wrong order: name, low, high
             NumericalHyperParameter("depth", 1, 3),  # Wrong order: name, low, high
         ]
 
@@ -801,11 +776,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
 
         # Verify the error is related to parameter type issues
         error_message = str(exc_info.value).lower()
-        assert (
-            "type" in error_message
-            or ">" in error_message
-            or "comparison" in error_message
-        )
+        assert "type" in error_message or ">" in error_message or "comparison" in error_message
 
     def test_missing_constant_parameters_for_complex_policies(
         self, temp_cache_dir, real_environment, real_belief
@@ -850,9 +821,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
 
         # Verify the error message indicates missing parameter
         error_message = str(exc_info.value)
-        assert (
-            "required_constant" in error_message or "missing" in error_message.lower()
-        )
+        assert "required_constant" in error_message or "missing" in error_message.lower()
 
         # Test configuration with correct constant parameters
         config_with_constants = HyperParameterRunParams(
@@ -863,9 +832,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
                 NumericalHyperParameter(1, 2, "branching_factor"),
                 NumericalHyperParameter(1, 2, "depth"),
             ],
-            constant_parameters={
-                "required_constant": "test_value"
-            },  # Providing required parameter
+            constant_parameters={"required_constant": "test_value"},  # Providing required parameter
             num_episodes=2,  # Need at least 2 for confidence intervals
             num_steps=1,
             n_trials=1,
@@ -929,9 +896,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         # Batch-level parameters
         expected_batch_params = ["num_configurations", "batch_method"]
         for param in expected_batch_params:
-            assert (
-                f"params.{param}" in batch_run.index
-            ), f"Missing batch parameter: {param}"
+            assert f"params.{param}" in batch_run.index, f"Missing batch parameter: {param}"
 
         # Batch-level metrics
         expected_batch_metrics = [
@@ -940,9 +905,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             "batch_failed_configs",
         ]
         for metric in expected_batch_metrics:
-            assert (
-                f"metrics.{metric}" in batch_run.index
-            ), f"Missing batch metric: {metric}"
+            assert f"metrics.{metric}" in batch_run.index, f"Missing batch metric: {metric}"
 
         # If we have results, check configuration run logging
         if len(result) > 0:
@@ -1021,9 +984,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
                 NumericalHyperParameter(
                     0.1, 1.0, "exploration_constant"
                 ),  # Smaller range for fast tests
-                NumericalHyperParameter(
-                    10, 50, "n_simulations"
-                ),  # Smaller range for fast tests
+                NumericalHyperParameter(10, 50, "n_simulations"),  # Smaller range for fast tests
                 NumericalHyperParameter(2, 5, "depth"),  # Smaller range for fast tests
             ],
             constant_parameters={
@@ -1058,7 +1019,4 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             # If it fails, it should not be due to missing discount_factor or parameter order issues
             error_message = str(e).lower()
             assert "discount_factor" not in error_message
-            assert (
-                "missing" not in error_message
-                or "positional argument" not in error_message
-            )
+            assert "missing" not in error_message or "positional argument" not in error_message

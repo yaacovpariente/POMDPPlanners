@@ -93,18 +93,14 @@ class TestPacManState:
 
         Test type: unit
         """
-        with pytest.raises(
-            ValueError, match="pacman_pos must be a tuple of two integers"
-        ):
+        with pytest.raises(ValueError, match="pacman_pos must be a tuple of two integers"):
             PacManState(
                 pacman_pos=[1, 2],  # List instead of tuple
                 ghost_positions=((3, 4),),
                 pellets=((0, 0),),
             )
 
-        with pytest.raises(
-            ValueError, match="pacman_pos must be a tuple of two integers"
-        ):
+        with pytest.raises(ValueError, match="pacman_pos must be a tuple of two integers"):
             PacManState(
                 pacman_pos=(1,),
                 ghost_positions=((3, 4),),
@@ -122,9 +118,7 @@ class TestPacManState:
 
         Test type: unit
         """
-        with pytest.raises(
-            ValueError, match="ghost_positions must be a tuple of position tuples"
-        ):
+        with pytest.raises(ValueError, match="ghost_positions must be a tuple of position tuples"):
             PacManState(
                 pacman_pos=(1, 2),
                 ghost_positions="invalid",  # String instead of tuple
@@ -151,9 +145,7 @@ class TestPacManState:
 
         Test type: unit
         """
-        with pytest.raises(
-            ValueError, match="pellets must be a tuple of position tuples"
-        ):
+        with pytest.raises(ValueError, match="pellets must be a tuple of position tuples"):
             PacManState(
                 pacman_pos=(1, 2),
                 ghost_positions=((3, 4),),
@@ -200,9 +192,7 @@ class TestPacManStateTransitionModel:
             pacman_pos=(1, 1), ghost_positions=((4, 4),), pellets=((3, 3),), score=0
         )
 
-        transition = PacManStateTransitionModel(
-            state, action=0, pomdp=self.pomdp
-        )  # North
+        transition = PacManStateTransitionModel(state, action=0, pomdp=self.pomdp)  # North
         next_state = transition.sample()[0]
 
         assert next_state.pacman_pos == (0, 1)  # Moved north
@@ -237,9 +227,7 @@ class TestPacManStateTransitionModel:
         )
 
         # Try to move east into wall at (2, 2)
-        transition = PacManStateTransitionModel(
-            state, action=1, pomdp=self.pomdp
-        )  # East
+        transition = PacManStateTransitionModel(state, action=1, pomdp=self.pomdp)  # East
         next_state = transition.sample()[0]
 
         assert next_state.pacman_pos == (2, 1)  # Stayed in place due to wall
@@ -260,9 +248,7 @@ class TestPacManStateTransitionModel:
         )
 
         # Try to move north from top boundary
-        transition = PacManStateTransitionModel(
-            state, action=0, pomdp=self.pomdp
-        )  # North
+        transition = PacManStateTransitionModel(state, action=0, pomdp=self.pomdp)  # North
         next_state = transition.sample()[0]
 
         assert next_state.pacman_pos == (0, 0)  # Stayed at boundary
@@ -286,9 +272,7 @@ class TestPacManStateTransitionModel:
         )
 
         # Move east to collect pellet at (1, 1)
-        transition = PacManStateTransitionModel(
-            state, action=1, pomdp=self.pomdp
-        )  # East
+        transition = PacManStateTransitionModel(state, action=1, pomdp=self.pomdp)  # East
         next_state = transition.sample()[0]
 
         assert next_state.pacman_pos == (1, 1)
@@ -320,9 +304,7 @@ class TestPacManStateTransitionModel:
         )
 
         # Terminal states should remain unchanged
-        transition = PacManStateTransitionModel(
-            collision_state, action=0, pomdp=self.pomdp
-        )
+        transition = PacManStateTransitionModel(collision_state, action=0, pomdp=self.pomdp)
         next_state = transition.sample()[0]
         assert next_state.terminal
         assert next_state == collision_state  # Should be unchanged
@@ -337,18 +319,13 @@ class TestPacManStateTransitionModel:
         )
 
         # Test multiple transitions to see if collision can occur
-        transition = PacManStateTransitionModel(
-            test_state, action=1, pomdp=self.pomdp
-        )  # East
+        transition = PacManStateTransitionModel(test_state, action=1, pomdp=self.pomdp)  # East
         collision_found = False
 
         # Sample multiple times since ghost movement is stochastic
         for _ in range(20):  # Try multiple times
             next_state = transition.sample()[0]
-            if (
-                next_state.terminal
-                and next_state.pacman_pos in next_state.ghost_positions
-            ):
+            if next_state.terminal and next_state.pacman_pos in next_state.ghost_positions:
                 collision_found = True
                 break
 
@@ -374,9 +351,7 @@ class TestPacManStateTransitionModel:
         )
 
         # Move east to collect last pellet
-        transition = PacManStateTransitionModel(
-            state, action=1, pomdp=self.pomdp
-        )  # East
+        transition = PacManStateTransitionModel(state, action=1, pomdp=self.pomdp)  # East
         next_state = transition.sample()[0]
 
         assert next_state.terminal
@@ -402,9 +377,7 @@ class TestPacManStateTransitionModel:
             terminal=True,
         )
 
-        transition = PacManStateTransitionModel(
-            terminal_state, action=1, pomdp=self.pomdp
-        )
+        transition = PacManStateTransitionModel(terminal_state, action=1, pomdp=self.pomdp)
         next_state = transition.sample()[0]
 
         assert next_state == terminal_state  # Unchanged
@@ -547,9 +520,7 @@ class TestPacManObservationModel:
 
         Test type: unit
         """
-        state = PacManState(
-            pacman_pos=(0, 0), ghost_positions=((4, 4),), pellets=((1, 1),)
-        )
+        state = PacManState(pacman_pos=(0, 0), ghost_positions=((4, 4),), pellets=((1, 1),))
 
         obs_model = PacManObservationModel(state, action=0, pomdp=self.pomdp)
         observations = obs_model.sample(n_samples=50)
@@ -572,9 +543,7 @@ class TestPacManObservationModel:
 
         Test type: unit
         """
-        state = PacManState(
-            pacman_pos=(2, 2), ghost_positions=((2, 3),), pellets=((0, 0),)
-        )
+        state = PacManState(pacman_pos=(2, 2), ghost_positions=((2, 3),), pellets=((0, 0),))
 
         obs_model = PacManObservationModel(state, action=0, pomdp=self.pomdp)
 
@@ -623,9 +592,7 @@ class TestPacManPOMDP:
         assert pomdp.maze_size == (7, 7)
         assert pomdp.initial_pacman_pos == (0, 0)
         assert pomdp.num_ghosts == 1
-        assert (
-            pomdp.initial_ghost_pos == pomdp.initial_ghost_positions[0]
-        )  # Backward compatibility
+        assert pomdp.initial_ghost_pos == pomdp.initial_ghost_positions[0]  # Backward compatibility
         assert pomdp.pellet_reward == 10.0
         assert pomdp.ghost_collision_penalty == -100.0
         assert pomdp.step_penalty == -1.0
@@ -663,14 +630,10 @@ class TestPacManPOMDP:
 
         Test type: unit
         """
-        with pytest.raises(
-            ValueError, match="PacMan position .* is outside maze bounds"
-        ):
+        with pytest.raises(ValueError, match="PacMan position .* is outside maze bounds"):
             PacManPOMDP(maze_size=(5, 5), initial_pacman_pos=(5, 0))  # Outside bounds
 
-        with pytest.raises(
-            ValueError, match="Ghost 0 position .* is outside maze bounds"
-        ):
+        with pytest.raises(ValueError, match="Ghost 0 position .* is outside maze bounds"):
             PacManPOMDP(
                 maze_size=(5, 5), num_ghosts=1, initial_ghost_positions=[(0, 5)]
             )  # Outside bounds
@@ -707,9 +670,7 @@ class TestPacManPOMDP:
 
         Test type: unit
         """
-        with pytest.raises(
-            ValueError, match="Initial PacMan position .* is inside a wall"
-        ):
+        with pytest.raises(ValueError, match="Initial PacMan position .* is inside a wall"):
             PacManPOMDP(
                 maze_size=(5, 5),
                 walls={(0, 0)},
@@ -719,9 +680,7 @@ class TestPacManPOMDP:
                 initial_ghost_positions=[(4, 4)],
             )
 
-        with pytest.raises(
-            ValueError, match="Initial ghost 0 position .* is inside a wall"
-        ):
+        with pytest.raises(ValueError, match="Initial ghost 0 position .* is inside a wall"):
             PacManPOMDP(
                 maze_size=(5, 5),
                 walls={(4, 4)},
@@ -764,12 +723,8 @@ class TestPacManPOMDP:
 
         assert isinstance(initial_state, PacManState)
         assert initial_state.pacman_pos == self.pomdp.initial_pacman_pos
-        assert initial_state.ghost_positions == tuple(
-            self.pomdp.initial_ghost_positions
-        )
-        assert (
-            initial_state.ghost_pos == self.pomdp.initial_ghost_pos
-        )  # Backward compatibility
+        assert initial_state.ghost_positions == tuple(self.pomdp.initial_ghost_positions)
+        assert initial_state.ghost_pos == self.pomdp.initial_ghost_pos  # Backward compatibility
         assert initial_state.pellets == tuple(self.pomdp.initial_pellets)
         assert initial_state.score == 0
         assert not initial_state.terminal
@@ -866,9 +821,7 @@ class TestPacManPOMDP:
         # If collision penalty is included, reward should be much more negative
         if reward < self.pomdp.step_penalty:
             # Collision occurred - verify it's the expected penalty
-            expected_collision_reward = (
-                self.pomdp.step_penalty + self.pomdp.ghost_collision_penalty
-            )
+            expected_collision_reward = self.pomdp.step_penalty + self.pomdp.ghost_collision_penalty
             assert reward == expected_collision_reward
 
     def test_reward_calculation_win_condition(self):
@@ -893,9 +846,7 @@ class TestPacManPOMDP:
         reward = self.pomdp.reward(state, action=1)
 
         # Should include step penalty, pellet reward, and win reward
-        expected_reward = (
-            self.pomdp.step_penalty + self.pomdp.pellet_reward + self.pomdp.win_reward
-        )
+        expected_reward = self.pomdp.step_penalty + self.pomdp.pellet_reward + self.pomdp.win_reward
         assert reward == expected_reward
 
     def test_terminal_state_check(self):
@@ -939,9 +890,7 @@ class TestPacManPOMDP:
         # min_reward = step_penalty + ghost_collision_penalty = -1.0 + (-100.0) = -101.0
         # max_reward = step_penalty + pellet_reward + win_reward = -1.0 + 10.0 + 100.0 = 109.0
         expected_min = self.pomdp.step_penalty + self.pomdp.ghost_collision_penalty
-        expected_max = (
-            self.pomdp.step_penalty + self.pomdp.pellet_reward + self.pomdp.win_reward
-        )
+        expected_max = self.pomdp.step_penalty + self.pomdp.pellet_reward + self.pomdp.win_reward
 
         assert self.pomdp.reward_range == (expected_min, expected_max)
 
@@ -1200,9 +1149,7 @@ class TestPacManPOMDPMetrics:
         metrics = self.pomdp.compute_metrics(histories)
 
         # Find pellets collected metric
-        pellets_metric = next(
-            (m for m in metrics if m.name == "avg_pellets_collected"), None
-        )
+        pellets_metric = next((m for m in metrics if m.name == "avg_pellets_collected"), None)
         assert pellets_metric is not None
         assert abs(pellets_metric.value - 1.5) < 0.01  # Average of 2 and 1 pellets
 
@@ -1452,9 +1399,7 @@ class TestPacManPOMDPMetrics:
         metrics = self.pomdp.compute_metrics([history1, history2])
 
         # Find collision encounters metric
-        collision_metric = next(
-            (m for m in metrics if m.name == "avg_collision_encounters"), None
-        )
+        collision_metric = next((m for m in metrics if m.name == "avg_collision_encounters"), None)
         assert collision_metric is not None
 
         # Expected: average of episode collisions: (2 + 1) / 2 = 1.5
@@ -1505,9 +1450,7 @@ class TestCreateSimpleMazePacman:
         assert pomdp.maze_size == (5, 5)
         assert len(pomdp.walls) == 3
         assert pomdp.initial_pacman_pos == (0, 0)
-        assert pomdp.initial_ghost_positions == [
-            (4, 4)
-        ]  # Multi-ghost format - bottom right corner
+        assert pomdp.initial_ghost_positions == [(4, 4)]  # Multi-ghost format - bottom right corner
 
     def test_create_simple_maze_deterministic_seed(self):
         """Test create_simple_maze_pacman with deterministic seeding.
@@ -1650,9 +1593,7 @@ class TestMultiGhostFeatures:
             num_ghosts=2,
         )
 
-        state = PacManState(
-            pacman_pos=(1, 1), ghost_positions=((2, 3), (4, 1)), pellets=((0, 1),)
-        )
+        state = PacManState(pacman_pos=(1, 1), ghost_positions=((2, 3), (4, 1)), pellets=((0, 1),))
 
         # Create observation model explicitly
         from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (
@@ -1765,8 +1706,7 @@ class TestMultiGhostFeatures:
 
         # Collision should be detected
         assert any(
-            ghost_pos == state_collision.pacman_pos
-            for ghost_pos in state_collision.ghost_positions
+            ghost_pos == state_collision.pacman_pos for ghost_pos in state_collision.ghost_positions
         )
 
         # Test no collision
@@ -1816,10 +1756,7 @@ class TestMultiGhostFeatures:
         # Verify next state has correct ghost count
         assert len(next_state.ghost_positions) == 2
         assert isinstance(next_state.ghost_positions, tuple)
-        assert all(
-            isinstance(pos, tuple) and len(pos) == 2
-            for pos in next_state.ghost_positions
-        )
+        assert all(isinstance(pos, tuple) and len(pos) == 2 for pos in next_state.ghost_positions)
 
     def test_multi_ghost_reward_calculation(self):
         """Test reward calculation with multiple ghosts.

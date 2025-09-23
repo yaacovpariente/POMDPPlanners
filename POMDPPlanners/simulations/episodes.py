@@ -102,15 +102,11 @@ def run_episode(
         raise ValueError("num_steps cannot be None")
 
     if not isinstance(environment, Environment):
-        raise TypeError(
-            f"environment must be an instance of Environment, got {type(environment)}"
-        )
+        raise TypeError(f"environment must be an instance of Environment, got {type(environment)}")
     if not isinstance(policy, Policy):
         raise TypeError(f"policy must be an instance of Policy, got {type(policy)}")
     if not isinstance(initial_belief, Belief):
-        raise TypeError(
-            f"initial_belief must be an instance of Belief, got {type(initial_belief)}"
-        )
+        raise TypeError(f"initial_belief must be an instance of Belief, got {type(initial_belief)}")
     if not isinstance(num_steps, int):
         raise TypeError(f"num_steps must be an integer, got {type(num_steps)}")
     if num_steps <= 0:
@@ -120,9 +116,7 @@ def run_episode(
     if not hasattr(environment, "state_transition_model") or not hasattr(
         environment, "observation_model"
     ):
-        raise ValueError(
-            "environment must implement state_transition_model and observation_model"
-        )
+        raise ValueError("environment must implement state_transition_model and observation_model")
     if not hasattr(policy, "action"):
         raise ValueError("policy must implement action method")
     if not hasattr(initial_belief, "sample") or not hasattr(initial_belief, "update"):
@@ -190,9 +184,7 @@ def run_episode(
             observation_start_time = time()
             observation = environment.observation_model(next_state, action).sample()[0]
             observation_time = time() - observation_start_time
-            average_observation_time = (
-                average_observation_time * (i - 1) + observation_time
-            ) / i
+            average_observation_time = (average_observation_time * (i - 1) + observation_time) / i
 
             history.append(
                 StepData(

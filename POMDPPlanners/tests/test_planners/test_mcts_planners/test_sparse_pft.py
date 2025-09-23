@@ -55,9 +55,7 @@ def environment(discount_factor):
 
 @pytest.fixture
 def initial_belief(environment, n_particles):
-    return get_initial_belief(
-        pomdp=environment, n_particles=n_particles, resampling=True
-    )
+    return get_initial_belief(pomdp=environment, n_particles=n_particles, resampling=True)
 
 
 @pytest.fixture
@@ -137,9 +135,7 @@ def test_get_explored_action_node(planner):
         particles=["tiger_left", "tiger_right"],
         log_weights=np.array([-0.69314718, -0.69314718]),  # log(0.5) for equal weights
     )
-    belief_node = BeliefNode(
-        belief=belief, observation=None, parent=None, children=tuple()
-    )
+    belief_node = BeliefNode(belief=belief, observation=None, parent=None, children=tuple())
     belief_node.visit_count = 1
 
     # Create action nodes with different Q-values
@@ -177,9 +173,7 @@ def test_sample_next_existing_belief(planner):
         particles=["tiger_left", "tiger_right"],
         log_weights=np.array([-0.69314718, -0.69314718]),
     )
-    belief_node = BeliefNode(
-        belief=belief, observation=None, parent=None, children=tuple()
-    )
+    belief_node = BeliefNode(belief=belief, observation=None, parent=None, children=tuple())
 
     action_node = ActionNode(action="listen", parent=belief_node, children=tuple())
 
@@ -215,15 +209,11 @@ def test_generate_belief(planner):
         particles=["tiger_left", "tiger_right"],
         log_weights=np.array([-0.69314718, -0.69314718]),
     )
-    belief_node = BeliefNode(
-        belief=belief, observation=None, parent=None, children=tuple()
-    )
+    belief_node = BeliefNode(belief=belief, observation=None, parent=None, children=tuple())
 
     action_node = ActionNode(action="listen", parent=belief_node, children=tuple())
 
-    next_belief_node, immediate_reward = planner._generate_belief(
-        action_node=action_node
-    )
+    next_belief_node, immediate_reward = planner._generate_belief(action_node=action_node)
     assert isinstance(next_belief_node, BeliefNode)
     assert next_belief_node.parent == action_node
     assert next_belief_node.observation is not None
@@ -271,9 +261,7 @@ def test_update_node_statistics(planner):
         particles=["tiger_left", "tiger_right"],
         log_weights=np.array([-0.69314718, -0.69314718]),
     )
-    belief_node = BeliefNode(
-        belief=belief, observation=None, parent=None, children=tuple()
-    )
+    belief_node = BeliefNode(belief=belief, observation=None, parent=None, children=tuple())
     belief_node.visit_count = 1
 
     action_node = ActionNode(action="listen", parent=belief_node, children=tuple())
@@ -292,9 +280,7 @@ def test_update_node_statistics(planner):
     assert belief_node.v_value is not None
 
 
-def test_integration_with_tiger_pomdp(
-    planner, initial_belief, environment, n_particles
-):
+def test_integration_with_tiger_pomdp(planner, initial_belief, environment, n_particles):
     """Test integration with Tiger POMDP environment
 
     Purpose: Validates that SparsePFT integrates correctly with TigerPOMDP for complete POMDP planning workflow including belief updates
@@ -314,9 +300,7 @@ def test_integration_with_tiger_pomdp(
 
         # Add action nodes
         for action in planner.environment.get_actions():
-            action_node = ActionNode(
-                action=action, parent=belief_node, children=tuple()
-            )
+            action_node = ActionNode(action=action, parent=belief_node, children=tuple())
             action_node.q_value = -1.0
             action_node.visit_count = 1
 
@@ -327,9 +311,7 @@ def test_integration_with_tiger_pomdp(
 
         # Simulate environment step
         state = current_belief.sample()
-        next_state = environment.state_transition_model(
-            state=state, action=action[0]
-        ).sample()[0]
+        next_state = environment.state_transition_model(state=state, action=action[0]).sample()[0]
         next_observation = environment.observation_model(
             next_state=next_state, action=action[0]
         ).sample()[0]
@@ -387,16 +369,12 @@ def test_tree_structure_construction(planner, initial_belief, environment):
             assert node.action is not None
             assert node.q_value is not None
             if not node.is_leaf:
-                assert node.visit_count == sum(
-                    child.visit_count for child in node.children
-                )
+                assert node.visit_count == sum(child.visit_count for child in node.children)
                 # In SparsePFT, each action node can have at most belief_child_num children
                 assert len(node.children) <= planner.belief_child_num
 
     # Verify tree depth
-    assert (
-        tree.height == 2 * planner.depth + 1
-    )  # Each level has both belief and action nodes
+    assert tree.height == 2 * planner.depth + 1  # Each level has both belief and action nodes
 
     # Verify that all actions are explored
     root_action_nodes = tree.children
@@ -479,9 +457,7 @@ def test_sanity_pomdp_belief_children():
     belief = get_initial_belief(pomdp=environment, n_particles=100, resampling=True)
 
     belief_node = BeliefNode(belief=belief, observation=None)
-    action_node = ActionNode(
-        action=0, parent=belief_node
-    )  # Test with the better action
+    action_node = ActionNode(action=0, parent=belief_node)  # Test with the better action
 
     # Generate a few belief children
     for _ in range(3):

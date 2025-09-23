@@ -2,7 +2,9 @@
 
 import numpy as np
 import random
-from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import DiscreteLightDarkPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
+)
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.core.config_types import ExperimentConfig
@@ -17,8 +19,7 @@ discrete_light_dark_env = DiscreteLightDarkPOMDP(
     name="DiscreteLightDarkPOMDP",
     transition_error_prob=0.05,
     observation_error_prob=0.05,
-    beacons=np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], 
-                     [0, 5, 10, 0, 5, 10, 0, 5, 10]]),
+    beacons=np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]),
     goal_state=np.array([10, 5]),
     start_state=np.array([0, 5]),
     obstacles=np.array([[3, 7], [5, 5]]),
@@ -28,14 +29,14 @@ discrete_light_dark_env = DiscreteLightDarkPOMDP(
     beacon_radius=1.0,
     fuel_cost=2.0,
     grid_size=11,
-    is_stochastic_reward=True
+    is_stochastic_reward=True,
 )
 
 # Belief instance
 discrete_light_dark_belief = get_initial_belief(
     pomdp=discrete_light_dark_env,
     n_particles=20,  # Small number of particles for testing
-    resampling=True
+    resampling=True,
 )
 
 # POMCP policy instances
@@ -46,7 +47,7 @@ pomcp_policies = [
         depth=5,
         exploration_constant=1.0,
         name="POMCP_Depth5",
-        n_simulations=1000
+        n_simulations=1000,
     ),
     POMCP(
         environment=discrete_light_dark_env,
@@ -54,8 +55,8 @@ pomcp_policies = [
         depth=10,
         exploration_constant=1.0,
         name="POMCP_Depth10",
-        n_simulations=1000
-    )
+        n_simulations=1000,
+    ),
 ]
 
 # Experiment configuration
@@ -64,5 +65,5 @@ discrete_light_dark_experiment_config = ExperimentConfig(
     policies=pomcp_policies,
     belief=discrete_light_dark_belief,
     num_episodes=100,
-    num_steps=200
-) 
+    num_steps=200,
+)

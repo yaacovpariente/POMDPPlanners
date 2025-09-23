@@ -27,9 +27,7 @@ from POMDPPlanners.core.policy import Policy
 def create_test_belief(environment):
     """Helper function to create a valid belief state for testing."""
     # Use get_initial_belief to create a proper belief for the environment
-    return get_initial_belief(
-        environment, n_particles=10
-    )  # Small number for fast tests
+    return get_initial_belief(environment, n_particles=10)  # Small number for fast tests
 
 
 @pytest.fixture
@@ -64,9 +62,7 @@ def hyper_parameters():
         NumericalHyperParameter(
             name="branching_factor", low=1, high=3
         ),  # Smaller range for fast tests
-        NumericalHyperParameter(
-            name="depth", low=1, high=3
-        ),  # Smaller range for fast tests
+        NumericalHyperParameter(name="depth", low=1, high=3),  # Smaller range for fast tests
     ]
 
 
@@ -138,9 +134,7 @@ def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters):
     assert len(config_id) > 0
 
 
-def test_hyper_parameter_tuning_task_creation_with_default_seed(
-    environment, hyper_parameters
-):
+def test_hyper_parameter_tuning_task_creation_with_default_seed(environment, hyper_parameters):
     """Test creation of HyperParameterTuningSimulationTask with default seed value.
 
     Purpose: Validates that HyperParameterTuningSimulationTask uses default seed when not specified
@@ -169,9 +163,7 @@ def test_hyper_parameter_tuning_task_creation_with_default_seed(
     assert task.seed == 42  # Default seed value
 
 
-def test_hyper_parameter_tuning_task_creation_with_custom_seed(
-    environment, hyper_parameters
-):
+def test_hyper_parameter_tuning_task_creation_with_custom_seed(environment, hyper_parameters):
     """Test creation of HyperParameterTuningSimulationTask with custom seed value.
 
     Purpose: Validates that HyperParameterTuningSimulationTask accepts custom seed values
@@ -331,9 +323,7 @@ def test_hyper_parameter_tuning_task_to_dict(environment, hyper_parameters):
     assert task_dict["seed"] == 42  # Test seed is included in serialization
 
 
-def test_hyper_parameter_tuning_task_to_dict_with_default_seed(
-    environment, hyper_parameters
-):
+def test_hyper_parameter_tuning_task_to_dict_with_default_seed(environment, hyper_parameters):
     """Test task serialization for HyperParameterTuningSimulationTask with default seed.
 
     Purpose: Validates that HyperParameterTuningSimulationTask includes default seed in serialization
@@ -562,9 +552,7 @@ def test_hyper_parameter_tuning_task_run_with_categorical_params(
     assert "depth" in result.chosen_hyper_parameters
 
 
-def test_hyper_parameter_tuning_task_run_failure_logging(
-    environment, hyper_parameters, caplog
-):
+def test_hyper_parameter_tuning_task_run_failure_logging(environment, hyper_parameters, caplog):
     """Test that HyperParameterTuningSimulationTask logs failures properly.
 
     Purpose: Validates that HyperParameterTuningSimulationTask logs failures with appropriate detail
@@ -601,10 +589,7 @@ def test_hyper_parameter_tuning_task_run_failure_logging(
 
     # Verify error was logged appropriately
     assert "Error in evaluation function" in caplog.text
-    assert (
-        "Parameter nonexistent_parameter not found in computed statistics"
-        in caplog.text
-    )
+    assert "Parameter nonexistent_parameter not found in computed statistics" in caplog.text
 
 
 def test_hyper_parameter_tuning_task_run_missing_parameter_logging(
@@ -765,9 +750,7 @@ def test_hyper_parameter_tuning_task_seed_in_config_id(environment, hyper_parame
     assert config_id1 != config_id2
 
 
-def test_hyper_parameter_tuning_task_seed_in_optimization_results(
-    environment, hyper_parameters
-):
+def test_hyper_parameter_tuning_task_seed_in_optimization_results(environment, hyper_parameters):
     """Test that seed parameter is included in optimization results.
 
     Purpose: Validates that seed parameter is properly stored in optimization result metadata
@@ -841,9 +824,7 @@ def test_run_function_return_type_explicitly(environment, hyper_parameters):
     assert isinstance(result.parameter_to_optimize, str)
 
 
-def test_hyper_parameter_tuning_task_with_constant_parameters(
-    environment, hyper_parameters
-):
+def test_hyper_parameter_tuning_task_with_constant_parameters(environment, hyper_parameters):
     """Test HyperParameterTuningSimulationTask with non-empty constant_parameters.
 
     Purpose: Validates that HyperParameterTuningSimulationTask correctly handles constant parameters
@@ -862,9 +843,7 @@ def test_hyper_parameter_tuning_task_with_constant_parameters(
     belief = create_test_belief(environment)
 
     # Create constant parameters that will be passed to the policy constructor
-    constant_parameters = {
-        "name": "CustomSparseSamplingPlanner"  # Custom name for the planner
-    }
+    constant_parameters = {"name": "CustomSparseSamplingPlanner"}  # Custom name for the planner
 
     task = HyperParameterTuningSimulationTask(
         environment=environment,
@@ -950,9 +929,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             NumericalHyperParameter(
                 0.1, 2.0, "exploration_constant"
             ),  # Correct order: low, high, name
-            NumericalHyperParameter(
-                10, 50, "n_simulations"
-            ),  # Correct order: low, high, name
+            NumericalHyperParameter(10, 50, "n_simulations"),  # Correct order: low, high, name
         ]
 
         # Create task WITHOUT discount_factor in constant_parameters (this should fail)
@@ -977,9 +954,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
         )
 
         # Execute task and expect it to fail due to missing discount_factor
-        with pytest.raises(
-            TypeError, match=".*missing.*required.*argument.*discount_factor.*"
-        ):
+        with pytest.raises(TypeError, match=".*missing.*required.*argument.*discount_factor.*"):
             task.run()
 
     def test_pomcp_with_correct_constant_parameters(
@@ -1000,9 +975,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             NumericalHyperParameter(
                 0.1, 1.0, "exploration_constant"
             ),  # Correct order: low, high, name
-            NumericalHyperParameter(
-                10, 20, "n_simulations"
-            ),  # Correct order: low, high, name
+            NumericalHyperParameter(10, 20, "n_simulations"),  # Correct order: low, high, name
         ]
 
         # Create task WITH discount_factor in constant_parameters (this should work)
@@ -1060,9 +1033,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             NumericalHyperParameter(
                 0.1, 10.0, "exploration_constant"
             ),  # Correct order: low, high, name
-            NumericalHyperParameter(
-                100, 500, "n_simulations"
-            ),  # Correct order: low, high, name
+            NumericalHyperParameter(100, 500, "n_simulations"),  # Correct order: low, high, name
         ]
 
         # Verify correct parameters can be used in task creation
@@ -1100,9 +1071,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
         assert exploration_param.high == 10.0
         assert exploration_param.name == "exploration_constant"
 
-        simulations_param = next(
-            p for p in task.hyper_parameters if p.name == "n_simulations"
-        )
+        simulations_param = next(p for p in task.hyper_parameters if p.name == "n_simulations")
         assert simulations_param.low == 100
         assert simulations_param.high == 500
         assert simulations_param.name == "n_simulations"
@@ -1128,9 +1097,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             NumericalHyperParameter(
                 0.1, 10.0, "exploration_constant"
             ),  # Correct order: low, high, name
-            NumericalHyperParameter(
-                100, 1000, "n_simulations"
-            ),  # Correct order: low, high, name
+            NumericalHyperParameter(100, 1000, "n_simulations"),  # Correct order: low, high, name
         ]
 
         # FIXED: Include all required parameters in constant_parameters
@@ -1251,9 +1218,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
         """
         # Create simple hyperparameters for fast execution
         hyper_parameters = [
-            NumericalHyperParameter(
-                1, 2, "branching_factor"
-            ),  # Correct order: low, high, name
+            NumericalHyperParameter(1, 2, "branching_factor"),  # Correct order: low, high, name
             NumericalHyperParameter(1, 2, "depth"),  # Correct order: low, high, name
         ]
 

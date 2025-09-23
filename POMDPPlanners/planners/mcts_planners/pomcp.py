@@ -113,9 +113,7 @@ class POMCP(PathSimulationPolicy):
         combination1 = time_out_in_seconds is not None and n_simulations is None
         combination2 = time_out_in_seconds is None and n_simulations is not None
         if not (combination1 or combination2):
-            raise ValueError(
-                "Only one of time_out_in_seconds and n_simulations must be provided."
-            )
+            raise ValueError("Only one of time_out_in_seconds and n_simulations must be provided.")
 
         super().__init__(
             environment=environment,
@@ -136,9 +134,7 @@ class POMCP(PathSimulationPolicy):
         state = belief_node.belief.sample()
         self._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
 
-    def _simulate_state_path(
-        self, state: Any, belief_node: BeliefNode, depth: int
-    ) -> float:
+    def _simulate_state_path(self, state: Any, belief_node: BeliefNode, depth: int) -> float:
         if depth > self.depth:
             belief_node.parent = None  # remove the node from the tree
             return 0
@@ -149,9 +145,7 @@ class POMCP(PathSimulationPolicy):
 
         if belief_node.is_leaf:
             for action in self.environment.get_actions():
-                action_node = ActionNode(
-                    action=action, parent=belief_node, children=tuple()
-                )
+                action_node = ActionNode(action=action, parent=belief_node, children=tuple())
 
             belief_node.visit_count += 1
             return self.random_rollout(state=state, depth=depth)
@@ -198,16 +192,12 @@ class POMCP(PathSimulationPolicy):
         if not isinstance(belief_node, BeliefNode):
             raise TypeError("belief_node must be a BeliefNode instance")
 
-        action_nodes_visits = np.array(
-            [child.visit_count for child in belief_node.children]
-        )
+        action_nodes_visits = np.array([child.visit_count for child in belief_node.children])
         unvisited_action_indices = np.where(action_nodes_visits == 0)[0]
         if len(unvisited_action_indices) > 0:
             return belief_node.children[np.random.choice(unvisited_action_indices)]
 
-        action_nodes_q_values = np.array(
-            [child.q_value for child in belief_node.children]
-        )
+        action_nodes_q_values = np.array([child.q_value for child in belief_node.children])
         ucb = action_nodes_q_values + self.exploration_constant * np.sqrt(
             np.log(belief_node.visit_count) / action_nodes_visits
         )
@@ -241,9 +231,7 @@ class POMCP(PathSimulationPolicy):
 
         belief_node.visit_count += 1
         action_node.visit_count += 1
-        action_node.q_value += (
-            return_sample - action_node.q_value
-        ) / action_node.visit_count
+        action_node.q_value += (return_sample - action_node.q_value) / action_node.visit_count
         belief_node.v_value = np.max(
             [child.q_value for child in belief_node.children if child.visit_count > 0]
         )

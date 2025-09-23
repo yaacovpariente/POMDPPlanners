@@ -198,9 +198,7 @@ class TestLaserTagStateTransition:
         floor_shape = (7, 11)
         walls = set()
 
-        transition = LaserTagStateTransition(
-            state, 1, floor_shape, walls
-        )  # Robot moves South
+        transition = LaserTagStateTransition(state, 1, floor_shape, walls)  # Robot moves South
         samples = transition.sample(n_samples=1000)
 
         # Count opponent positions
@@ -301,9 +299,7 @@ class TestLaserTagObservation:
         obs_array = np.array(observations)
 
         # Check all observations are 8-dimensional
-        assert (
-            obs_array.shape[1] == 8
-        ), "Observations should be 8-dimensional laser measurements"
+        assert obs_array.shape[1] == 8, "Observations should be 8-dimensional laser measurements"
 
         # Check observations are reasonable laser ranges (non-negative)
         assert np.all(obs_array >= 0), "Laser measurements should be non-negative"
@@ -460,9 +456,7 @@ class TestLaserTagPOMDP:
 
         Test type: unit
         """
-        env = LaserTagPOMDP(
-            discount_factor=0.95, tag_reward=15.0, tag_penalty=20.0, step_cost=2.0
-        )
+        env = LaserTagPOMDP(discount_factor=0.95, tag_reward=15.0, tag_penalty=20.0, step_cost=2.0)
 
         # Expected calculation from LaserTagPOMDP constructor:
         # reward_range=(-tag_penalty, tag_reward) = (-20.0, 15.0)
@@ -622,9 +616,7 @@ class TestLaserTagPOMDP:
                 dangerous_area_metric = metric
                 break
 
-        assert (
-            dangerous_area_metric is not None
-        ), "Dangerous area steps metric not found"
+        assert dangerous_area_metric is not None, "Dangerous area steps metric not found"
         # Should have 0 dangerous area steps since robot positions are not in default dangerous areas
         assert (
             dangerous_area_metric.value == 0.0
@@ -674,9 +666,7 @@ class TestLaserTagPOMDP:
         # Create simple test history
 
         # Create a belief for testing
-        dummy_particles = [
-            LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)
-        ]
+        dummy_particles = [LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)]
         dummy_log_weights = np.array([-0.1])  # Small non-zero log weight
         test_belief = WeightedParticleBelief(
             particles=dummy_particles, log_weights=dummy_log_weights
@@ -758,9 +748,7 @@ class TestLaserTagPOMDP:
         )
 
         # Create non-empty history for cache_path tests
-        dummy_particles = [
-            LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)
-        ]
+        dummy_particles = [LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)]
         dummy_log_weights = np.array([-0.1])
         test_belief = WeightedParticleBelief(
             particles=dummy_particles, log_weights=dummy_log_weights
@@ -838,9 +826,7 @@ class TestLaserTagPOMDP:
                 action = np.random.choice(env.get_actions())
 
                 # Sample next step using environment
-                next_state, observation, reward = env.sample_next_step(
-                    current_state, action
-                )
+                next_state, observation, reward = env.sample_next_step(current_state, action)
 
                 # Create a belief for testing
                 dummy_particles = [current_state]
@@ -929,16 +915,12 @@ class TestLaserTagPOMDP:
             assert len(history.history) > 0, "History should contain steps"
 
             for step in history.history:
-                assert isinstance(
-                    step.state, LaserTagState
-                ), "State should be LaserTagState"
+                assert isinstance(step.state, LaserTagState), "State should be LaserTagState"
                 assert (
                     step.action in env.get_actions()
                 ), f"Action {step.action} not in valid actions"
                 assert isinstance(step.reward, (int, float)), "Reward should be numeric"
-                assert (
-                    len(step.observation) == 8
-                ), "LaserTag observation should be 8-dimensional"
+                assert len(step.observation) == 8, "LaserTag observation should be 8-dimensional"
 
                 # Validate robot and opponent positions are within grid bounds
                 robot_pos = step.state.robot
@@ -1066,18 +1048,14 @@ class TestLaserTagPOMDP:
                     failed_tags_metric = metric
                     break
 
-            assert (
-                failed_tags_metric is not None
-            ), "average_failed_tag_attempts metric not found"
+            assert failed_tags_metric is not None, "average_failed_tag_attempts metric not found"
             # Should be 0.0 since None reward is ignored (not counted as failed tag)
             assert (
                 failed_tags_metric.value == 0.0
             ), f"Expected 0.0 failed tags, got {failed_tags_metric.value}"
 
         except Exception as e:
-            pytest.fail(
-                f"compute_metrics should handle None rewards gracefully, but raised: {e}"
-            )
+            pytest.fail(f"compute_metrics should handle None rewards gracefully, but raised: {e}")
 
 
 def test_metrics_confidence_intervals():

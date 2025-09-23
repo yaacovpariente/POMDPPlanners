@@ -97,9 +97,7 @@ class TestContinuousLightDarkRewardModel:
 
         # Should get goal reward minus fuel cost and distance penalty
         expected_reward = (
-            -self.fuel_cost
-            + self.goal_reward
-            - np.linalg.norm(state + action - self.goal_state)
+            -self.fuel_cost + self.goal_reward - np.linalg.norm(state + action - self.goal_state)
         )
 
         assert abs(reward - expected_reward) < 1e-6
@@ -157,9 +155,7 @@ class TestContinuousLightDarkRewardModel:
         reward = self.model.compute_reward(state, action)
 
         # Should only get fuel cost and distance penalty
-        expected_reward = -self.fuel_cost - np.linalg.norm(
-            state + action - self.goal_state
-        )
+        expected_reward = -self.fuel_cost - np.linalg.norm(state + action - self.goal_state)
 
         assert abs(reward - expected_reward) < 1e-6
 
@@ -168,17 +164,13 @@ class TestContinuousLightDarkRewardModel:
         # Test positions near obstacles
         near_obstacle = np.array([3.5, 3.5])
         # Check if this position would be detected as in obstacle range
-        distances = np.linalg.norm(
-            near_obstacle.reshape(-1, 1) - self.obstacles, axis=0
-        )
+        distances = np.linalg.norm(near_obstacle.reshape(-1, 1) - self.obstacles, axis=0)
         is_near = np.any(distances <= self.obstacle_radius)
         assert is_near
 
         # Test positions far from obstacles
         far_from_obstacle = np.array([1.0, 1.0])
-        distances = np.linalg.norm(
-            far_from_obstacle.reshape(-1, 1) - self.obstacles, axis=0
-        )
+        distances = np.linalg.norm(far_from_obstacle.reshape(-1, 1) - self.obstacles, axis=0)
         is_far = np.any(distances <= self.obstacle_radius)
         assert not is_far
 
@@ -287,9 +279,7 @@ class TestContinuousLDDangerousStatesRewardModel:
         penalty_ratio = penalty_count / len(rewards)
         bonus_ratio = bonus_count / len(rewards)
 
-        assert (
-            0.4 < penalty_ratio < 0.6
-        ), f"Penalty ratio {penalty_ratio} not close to 0.5"
+        assert 0.4 < penalty_ratio < 0.6, f"Penalty ratio {penalty_ratio} not close to 0.5"
         assert 0.4 < bonus_ratio < 0.6, f"Bonus ratio {bonus_ratio} not close to 0.5"
 
     def test_inheritance_from_base(self):
@@ -504,9 +494,7 @@ class TestContinuousLightDarkDecayingHitProbabilityRewardModel:
 
         # The obstacle reward component is probabilistic, so we can't test exact value
         # But we can verify the structure - reward should be <= base_reward (obstacle penalty makes it worse)
-        assert (
-            reward <= base_reward
-        ), f"Reward {reward} should be <= base_reward {base_reward}"
+        assert reward <= base_reward, f"Reward {reward} should be <= base_reward {base_reward}"
 
         # Test goal state
         goal_state = np.array([7.5, 7.5])

@@ -67,12 +67,8 @@ def _validate_environment_policy_comparison_parameters(
     # Type checks for all parameters
     if not isinstance(environment_run_params, list):
         raise ValueError("environment_run_params must be a list")
-    if not all(
-        isinstance(param, EnvironmentRunParams) for param in environment_run_params
-    ):
-        raise ValueError(
-            "All elements in environment_run_params must be EnvironmentRunParams"
-        )
+    if not all(isinstance(param, EnvironmentRunParams) for param in environment_run_params):
+        raise ValueError("All elements in environment_run_params must be EnvironmentRunParams")
     if not isinstance(alpha, float):
         raise ValueError("alpha must be a float")
     if not (0 <= alpha <= 1):
@@ -254,9 +250,7 @@ class BaseSimulator(ABC):
 
         s = io.StringIO()
         ps = pstats.Stats(self.profiler, stream=s).sort_stats("cumulative")
-        ps.print_stats(
-            self.profiling_output_limit
-        )  # Show all functions, no restriction
+        ps.print_stats(self.profiling_output_limit)  # Show all functions, no restriction
 
         profiling_output = s.getvalue()
         self.logger.info(f"Profiling results (all functions):\n{profiling_output}")
@@ -266,9 +260,7 @@ class BaseSimulator(ABC):
             profiling_file = self.cache_dir_path / "profiling_results.txt"
             with open(profiling_file, "w") as f:
                 ps = pstats.Stats(self.profiler, stream=f).sort_stats("cumulative")
-                ps.print_stats(
-                    self.profiling_output_limit
-                )  # Show all functions, no restriction
+                ps.print_stats(self.profiling_output_limit)  # Show all functions, no restriction
             self.logger.info(f"Detailed profiling results saved to: {profiling_file}")
 
     def cleanup_mlflow_runs(self) -> None:
@@ -342,9 +334,7 @@ class BaseSimulator(ABC):
 
         return results, merged_df
 
-    def _log_comparison_overview(
-        self, environment_run_params: List[EnvironmentRunParams]
-    ) -> None:
+    def _log_comparison_overview(self, environment_run_params: List[EnvironmentRunParams]) -> None:
         """Log overview information about the environments and algorithms being compared."""
         env_algo_info = "\n".join(
             [
@@ -426,9 +416,7 @@ class BaseSimulator(ABC):
                 for run_params in environment_run_params
             ]
         )
-        merged_df = pd.merge(
-            statistics_df, policy_configs_df, on=["environment", "policy"]
-        )
+        merged_df = pd.merge(statistics_df, policy_configs_df, on=["environment", "policy"])
 
         return merged_df
 
@@ -554,9 +542,7 @@ class BaseSimulator(ABC):
 
     def _create_policy_configurations_df(
         self,
-        environment_belief_policy_tuples: List[
-            Tuple[Environment, Belief, List[Policy]]
-        ],
+        environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
     ) -> pd.DataFrame:
         """Create a DataFrame containing policy configurations for all environment-policy pairs."""
         policy_configs = []
@@ -583,9 +569,7 @@ class BaseSimulator(ABC):
     def _organize_simulation_results(
         self,
         results_list: list,
-        environment_belief_policy_tuples: List[
-            Tuple[Environment, Belief, List[Policy]]
-        ],
+        environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
         num_episodes: int,
         task_identifiers: List[Tuple[str, str]],
     ) -> Dict[str, Dict[str, list]]:
@@ -655,9 +639,7 @@ class BaseSimulator(ABC):
         )
 
         if len(results_list) != len(task_identifiers):
-            raise ValueError(
-                "results_list and task_identifiers must have the same length"
-            )
+            raise ValueError("results_list and task_identifiers must have the same length")
         if len(results_list) == 0:
             raise ValueError("All tasks failed.")
 
@@ -688,15 +670,11 @@ class BaseSimulator(ABC):
             if not isinstance(params, EnvironmentRunParams):
                 raise ValueError(f"Expected EnvironmentRunParams, got {type(params)}")
             if not isinstance(params.environment, Environment):
-                raise ValueError(
-                    f"Expected Environment, got {type(params.environment)}"
-                )
+                raise ValueError(f"Expected Environment, got {type(params.environment)}")
             if not isinstance(params.belief, Belief):
                 raise ValueError(f"Expected Belief, got {type(params.belief)}")
             if not isinstance(params.policies, list):
-                raise ValueError(
-                    f"Expected list of policies, got {type(params.policies)}"
-                )
+                raise ValueError(f"Expected list of policies, got {type(params.policies)}")
             if len(params.policies) == 0:
                 raise ValueError("Policy list cannot be empty")
             for policy in params.policies:
@@ -709,9 +687,7 @@ class BaseSimulator(ABC):
         env_names = [params.environment.name for params in environment_run_params]
         if len(env_names) != len(set(env_names)):
             raise ValueError("All environments must have unique names")
-        all_policies = [
-            policy for params in environment_run_params for policy in params.policies
-        ]
+        all_policies = [policy for params in environment_run_params for policy in params.policies]
         policy_names = [policy.name for policy in all_policies]
         if len(policy_names) != len(set(policy_names)):
             raise ValueError("All policies must have unique names")
@@ -749,9 +725,7 @@ class BaseSimulator(ABC):
         """Compute metrics for the simulation results."""
         pass
 
-    def _log_metrics_to_mlflow(
-        self, metrics: Dict[str, Dict[str, List[MetricValue]]]
-    ) -> None:
+    def _log_metrics_to_mlflow(self, metrics: Dict[str, Dict[str, List[MetricValue]]]) -> None:
         """Log all metrics to MLflow for tracking and comparison.
 
         Args:
@@ -779,12 +753,8 @@ class BaseSimulator(ABC):
                     )
 
                     # Log confidence interval width for easy comparison
-                    ci_width = (
-                        metric.upper_confidence_bound - metric.lower_confidence_bound
-                    )
-                    mlflow.log_metric(
-                        f"{metric_prefix}_{metric.name}_ci_width", ci_width
-                    )
+                    ci_width = metric.upper_confidence_bound - metric.lower_confidence_bound
+                    mlflow.log_metric(f"{metric_prefix}_{metric.name}_ci_width", ci_width)
 
         self.logger.info(f"Logged metrics for {len(metrics)} environments")
 
@@ -956,9 +926,7 @@ class POMDPSimulator(BaseSimulator):
                 policy_name = policy.name
                 for episode_id in range(params.num_episodes):
                     seed = int(
-                        hashlib.md5(
-                            f"{env_name}_{policy_name}_{episode_id}".encode()
-                        ).hexdigest(),
+                        hashlib.md5(f"{env_name}_{policy_name}_{episode_id}".encode()).hexdigest(),
                         16,
                     ) % (2**32)
                     task = EpisodeSimulationTask(
@@ -1004,8 +972,7 @@ class POMDPSimulator(BaseSimulator):
         """
         metrics_dict = {}
         envs_dict = {
-            params.environment.name: params.environment
-            for params in environment_run_params
+            params.environment.name: params.environment for params in environment_run_params
         }
 
         for env_name, policy_histories_dict in results.items():
@@ -1127,6 +1094,4 @@ class POMDPSimulator(BaseSimulator):
                     cache_path=cache_path,
                 )
             except Exception as e:
-                self.logger.warning(
-                    f"Visualization failed for episode {episode_idx}: {str(e)}"
-                )
+                self.logger.warning(f"Visualization failed for episode {episode_idx}: {str(e)}")

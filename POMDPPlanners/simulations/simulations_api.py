@@ -145,9 +145,7 @@ class SimulationsAPI:
             cache_dir_path: Optional path for storing simulation results and logs
             debug: Whether to enable debug-level logging output
         """
-        self.logger = get_logger(
-            name="simulations_api", output_dir=cache_dir_path, debug=debug
-        )
+        self.logger = get_logger(name="simulations_api", output_dir=cache_dir_path, debug=debug)
         self.logger.info("Initialized SimulationsAPI")
 
     def run_multiple_environments_and_policies_local_run(
@@ -258,9 +256,7 @@ class SimulationsAPI:
             f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}"
         )
 
-        task_manager_config = JoblibConfig(
-            n_jobs=n_jobs, clear_cache_on_start=clear_cache_on_start
-        )
+        task_manager_config = JoblibConfig(n_jobs=n_jobs, clear_cache_on_start=clear_cache_on_start)
 
         with POMDPSimulator(
             task_manager_config=task_manager_config,

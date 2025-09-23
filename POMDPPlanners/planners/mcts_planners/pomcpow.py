@@ -211,13 +211,9 @@ class POMCPOW(PathSimulationPolicy):
             Total discounted return from this simulation path
         """
         state = belief_node.belief.sample()
-        return self._simulate_state_path(
-            state=state, belief_node=belief_node, depth=depth
-        )
+        return self._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
 
-    def _simulate_state_path(
-        self, state: Any, belief_node: BeliefNode, depth: int
-    ) -> float:
+    def _simulate_state_path(self, state: Any, belief_node: BeliefNode, depth: int) -> float:
         """Simulate MCTS path from given state and belief node with progressive widening.
 
         This is the core simulation method that implements the POMCPOW algorithm:
@@ -257,10 +253,7 @@ class POMCPOW(PathSimulationPolicy):
             state=state, action=action_node.action
         )
 
-        if (
-            len(action_node.children)
-            <= self.k_o * action_node.visit_count**self.alpha_o
-        ):
+        if len(action_node.children) <= self.k_o * action_node.visit_count**self.alpha_o:
             next_belief_node = action_node.get_belief_node_child(
                 observation=next_observation, environment=self.environment
             )
@@ -315,6 +308,4 @@ class POMCPOW(PathSimulationPolicy):
         Returns:
             PolicySpaceInfo with MIXED space types for both actions and observations
         """
-        return PolicySpaceInfo(
-            action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED
-        )
+        return PolicySpaceInfo(action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED)

@@ -156,13 +156,9 @@ class TigerObservation(ObservationModel):
             if self.action == "listen":
                 # Listen action is 85% accurate
                 if self.next_state == "tiger_left":
-                    samples.append(
-                        "hear_left" if np.random.random() < 0.85 else "hear_right"
-                    )
+                    samples.append("hear_left" if np.random.random() < 0.85 else "hear_right")
                 else:
-                    samples.append(
-                        "hear_right" if np.random.random() < 0.85 else "hear_left"
-                    )
+                    samples.append("hear_right" if np.random.random() < 0.85 else "hear_left")
             else:
                 # When opening a door, observation is random (hearing nothing)
                 samples.append("hear_nothing")
@@ -301,9 +297,7 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         return False  # Since we handle terminal states in the transition model
 
     def initial_state_dist(self) -> Distribution:
-        return DiscreteDistribution(
-            values=STATES, probs=np.ones(len(STATES)) / len(STATES)
-        )
+        return DiscreteDistribution(values=STATES, probs=np.ones(len(STATES)) / len(STATES))
 
     def initial_observation_dist(self) -> Distribution:
         return DiscreteDistribution(values=["hear_nothing"], probs=np.array([1.0]))
@@ -399,9 +393,7 @@ class TigerPOMDP(DiscreteActionsEnvironment):
             last_step = history.history[-1]
             if last_step.action in ["open_left", "open_right"]:
                 # Check if the door opened was correct
-                if (
-                    last_step.action == "open_left" and last_step.state == "tiger_right"
-                ) or (
+                if (last_step.action == "open_left" and last_step.state == "tiger_right") or (
                     last_step.action == "open_right" and last_step.state == "tiger_left"
                 ):
                     success_count += 1

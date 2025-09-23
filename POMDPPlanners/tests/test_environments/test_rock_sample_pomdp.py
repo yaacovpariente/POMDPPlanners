@@ -80,14 +80,10 @@ class TestRockSampleState:
 
         Test type: unit
         """
-        with pytest.raises(
-            ValueError, match="robot_pos must be a tuple of two integers"
-        ):
+        with pytest.raises(ValueError, match="robot_pos must be a tuple of two integers"):
             RockSampleState([1, 2], (True,))
 
-        with pytest.raises(
-            ValueError, match="robot_pos must be a tuple of two integers"
-        ):
+        with pytest.raises(ValueError, match="robot_pos must be a tuple of two integers"):
             RockSampleState((1, 2, 3), (True,))
 
     def test_state_validation_invalid_rocks(self):
@@ -245,14 +241,10 @@ class TestRockSamplePOMDP:
 
         Test type: unit
         """
-        with pytest.raises(
-            ValueError, match="Initial position .* is outside map bounds"
-        ):
+        with pytest.raises(ValueError, match="Initial position .* is outside map bounds"):
             RockSamplePOMDP(map_size=(3, 3), rock_positions=[], init_pos=(3, 2))
 
-        with pytest.raises(
-            ValueError, match="Initial position .* is outside map bounds"
-        ):
+        with pytest.raises(ValueError, match="Initial position .* is outside map bounds"):
             RockSamplePOMDP(map_size=(5, 5), rock_positions=[], init_pos=(2, -1))
 
     def test_get_actions(self):
@@ -287,9 +279,7 @@ class TestRockSamplePOMDP:
 
         Test type: unit
         """
-        pomdp = RockSamplePOMDP(
-            map_size=(3, 3), rock_positions=[(0, 0), (1, 1)], init_pos=(0, 0)
-        )
+        pomdp = RockSamplePOMDP(map_size=(3, 3), rock_positions=[(0, 0), (1, 1)], init_pos=(0, 0))
         dist = pomdp.initial_state_dist()
 
         assert len(dist.values) == 4  # 2^2 possible rock configurations
@@ -643,18 +633,14 @@ class TestObservationModel:
             rock_positions=[(0, 0), (1, 2)],  # Closer rocks
             sensor_efficiency=2.0,  # Moderate efficiency for reasonable uncertainty
         )
-        state = RockSampleState(
-            (0, 0), (True, False)
-        )  # At rock 0, check rock 1 at (1,2)
+        state = RockSampleState((0, 0), (True, False))  # At rock 0, check rock 1 at (1,2)
         obs_model = RockSampleObservationModel(state, 6, pomdp)  # Check rock 1
 
         probs = obs_model.probability(["good", "bad", "none"])
         # Distance = sqrt((0-1)^2 + (0-2)^2) = sqrt(5) ≈ 2.24
         # Efficiency = exp(-2.24/2.0) ≈ 0.33
         # For bad rock: P(good) = 1-0.33 = 0.67, P(bad) = 0.33
-        assert (
-            0.6 < probs[0] < 0.8
-        )  # P(good|bad_rock) should be high due to low efficiency
+        assert 0.6 < probs[0] < 0.8  # P(good|bad_rock) should be high due to low efficiency
         assert 0.2 < probs[1] < 0.4  # P(bad|bad_rock) should be low
         assert probs[2] == 0.0
 
@@ -671,9 +657,7 @@ class TestObservationModel:
         """
         pomdp = RockSamplePOMDP(rock_positions=[(0, 0), (2, 2)])  # Only 2 rocks
         state = RockSampleState((1, 1), (True, False))
-        obs_model = RockSampleObservationModel(
-            state, 7, pomdp
-        )  # Check rock 2 (invalid)
+        obs_model = RockSampleObservationModel(state, 7, pomdp)  # Check rock 2 (invalid)
 
         observation = obs_model.sample()[0]
         assert observation == "none"
@@ -1198,9 +1182,7 @@ class TestIntegration:
 
         Test type: integration
         """
-        pomdp = RockSamplePOMDP(
-            map_size=(3, 3), rock_positions=[(0, 0), (2, 2)], init_pos=(0, 0)
-        )
+        pomdp = RockSamplePOMDP(map_size=(3, 3), rock_positions=[(0, 0), (2, 2)], init_pos=(0, 0))
 
         # Start with initial state
         initial_dist = pomdp.initial_state_dist()
@@ -1214,9 +1196,7 @@ class TestIntegration:
 
         for i, action in enumerate(actions):
             # Sample next step
-            next_state, observation, reward = pomdp.sample_next_step(
-                current_state, action
-            )
+            next_state, observation, reward = pomdp.sample_next_step(current_state, action)
             total_reward += reward
 
             # Verify step is valid
