@@ -71,9 +71,7 @@ def planner(environment, discount_factor, depth, exploration_constant, n_simulat
 
 @pytest.fixture
 def belief(environment, n_particles):
-    return get_initial_belief(
-        pomdp=environment, n_particles=n_particles, resampling=True
-    )
+    return get_initial_belief(pomdp=environment, n_particles=n_particles, resampling=True)
 
 
 def test_initialization_with_n_simulations(
@@ -105,9 +103,7 @@ def test_initialization_with_n_simulations(
     assert planner.time_out_in_seconds is None
 
 
-def test_initialization_with_timeout(
-    environment, discount_factor, depth, exploration_constant
-):
+def test_initialization_with_timeout(environment, discount_factor, depth, exploration_constant):
     """Test initialization with timeout.
 
     Purpose: Validates proper initialization of  with timeout
@@ -134,9 +130,7 @@ def test_initialization_with_timeout(
     assert planner.n_simulations is None
 
 
-def test_invalid_initialization(
-    environment, discount_factor, depth, exploration_constant
-):
+def test_invalid_initialization(environment, discount_factor, depth, exploration_constant):
     """Test invalid initialization.
 
     Purpose: Validates proper initialization of invalid
@@ -243,9 +237,7 @@ def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles)
         assert len(current_belief.particles) == n_particles
 
 
-def test_construct_tree_using_timeout(
-    environment, discount_factor, depth, exploration_constant
-):
+def test_construct_tree_using_timeout(environment, discount_factor, depth, exploration_constant):
     """Test construct tree using timeout.
 
     Purpose: Validates that POMCP tree construction terminates correctly when timeout constraint is reached
@@ -318,14 +310,10 @@ def test_construct_tree_using_n_simulations(
 
     # Verify total visits increased by approximately n_sims
     # Note: The actual number might be slightly different due to tree structure
-    assert (
-        belief_node.visit_count >= initial_visit_count + n_sims * 0.5
-    )  # Allow for some variance
+    assert belief_node.visit_count >= initial_visit_count + n_sims * 0.5  # Allow for some variance
 
 
-def test_tree_structure_construction(
-    environment, discount_factor, depth, exploration_constant
-):
+def test_tree_structure_construction(environment, discount_factor, depth, exploration_constant):
     """Test tree structure construction.
 
     Purpose: Validates that POMCP builds proper tree structure with BeliefNode and ActionNode hierarchy during MCTS
@@ -370,9 +358,7 @@ def test_tree_structure_construction(
             assert node.q_value is not None
             if not node.is_leaf:
                 assert node.q_value != 0
-                assert node.visit_count == sum(
-                    child.visit_count for child in node.children
-                )
+                assert node.visit_count == sum(child.visit_count for child in node.children)
 
     # Verify root belief node
     assert root_belief_node.observation is None

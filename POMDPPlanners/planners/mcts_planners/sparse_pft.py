@@ -258,9 +258,7 @@ class SparsePFT(PathSimulationPolicy):
 
         if belief_node.is_leaf:
             for action in self.environment.get_actions():
-                action_node = ActionNode(
-                    action=action, parent=belief_node, children=tuple()
-                )
+                action_node = ActionNode(action=action, parent=belief_node, children=tuple())
 
             state = belief_node.belief.sample()
             belief_node.visit_count += 1
@@ -274,9 +272,7 @@ class SparsePFT(PathSimulationPolicy):
                 action_node=action_node
             )
         else:
-            next_belief_node, immediate_reward = self._generate_belief(
-                action_node=action_node
-            )
+            next_belief_node, immediate_reward = self._generate_belief(action_node=action_node)
 
         return_sample = immediate_reward + self.gamma * self._simulate_path(
             belief_node=next_belief_node, depth=depth + 1
@@ -292,22 +288,18 @@ class SparsePFT(PathSimulationPolicy):
 
     def is_terminal_belief(self, belief: Belief) -> bool:
         """Checks if all paricles are terminal states."""
-        return sum(
-            self.environment.is_terminal(state) for state in belief.particles
-        ) == len(belief.particles)
+        return sum(self.environment.is_terminal(state) for state in belief.particles) == len(
+            belief.particles
+        )
 
     def get_explored_action_node(self, belief_node: BeliefNode) -> ActionNode:
-        children_visit_counts = np.array(
-            [child.visit_count for child in belief_node.children]
-        )
+        children_visit_counts = np.array([child.visit_count for child in belief_node.children])
         unvisited_action_indices = np.where(children_visit_counts == 0)[0]
         if len(unvisited_action_indices) > 0:
             return belief_node.children[np.random.choice(unvisited_action_indices)]
 
         q_vals = np.array([child.q_value for child in belief_node.children])
-        children_visit_counts = np.array(
-            [child.visit_count for child in belief_node.children]
-        )
+        children_visit_counts = np.array([child.visit_count for child in belief_node.children])
 
         sprase_pft_exploration_addtion = (
             self.c_ucb
@@ -320,12 +312,8 @@ class SparsePFT(PathSimulationPolicy):
 
         return belief_node.children[selected_action_index]
 
-    def _sample_next_existing_belief(
-        self, action_node: ActionNode
-    ) -> Tuple[BeliefNode, float]:
-        child_visit_counts = np.array(
-            [child.visit_count for child in action_node.children]
-        )
+    def _sample_next_existing_belief(self, action_node: ActionNode) -> Tuple[BeliefNode, float]:
+        child_visit_counts = np.array([child.visit_count for child in action_node.children])
         if sum(child_visit_counts) == 0:
             # If no children have been visited, randomly select one and return with its immediate cost
             sampled_belief_node = np.random.choice(action_node.children)
@@ -376,9 +364,7 @@ class SparsePFT(PathSimulationPolicy):
             state=next_state, depth=depth + 1
         )
 
-    def update_nodes(
-        self, belief_node: BeliefNode, action_node: ActionNode, return_sample: float
-    ):
+    def update_nodes(self, belief_node: BeliefNode, action_node: ActionNode, return_sample: float):
         belief_node.visit_count += 1
         action_node.visit_count += 1
 
@@ -389,13 +375,9 @@ class SparsePFT(PathSimulationPolicy):
                 env=self.environment,
             )
 
-        action_node.q_value += (
-            return_sample - action_node.q_value
-        ) / action_node.visit_count
+        action_node.q_value += (return_sample - action_node.q_value) / action_node.visit_count
         belief_node.v_value = max(child.q_value for child in belief_node.children)
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
-        return PolicySpaceInfo(
-            action_space=SpaceType.DISCRETE, observation_space=SpaceType.MIXED
-        )
+        return PolicySpaceInfo(action_space=SpaceType.DISCRETE, observation_space=SpaceType.MIXED)

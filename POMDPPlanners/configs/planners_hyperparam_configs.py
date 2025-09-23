@@ -37,15 +37,9 @@ class PlannersHyperparamConfigs:
                 "exploration_constant",
             ),  # UCB1 exploration
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
-            NumericalHyperParameter(
-                1, 10, "k_a"
-            ),  # Action progressive widening coefficient
-            NumericalHyperParameter(
-                0.01, 0.5, "alpha_a"
-            ),  # Action progressive widening exponent
-            NumericalHyperParameter(
-                1, 10, "k_o"
-            ),  # Observation progressive widening coefficient
+            NumericalHyperParameter(1, 10, "k_a"),  # Action progressive widening coefficient
+            NumericalHyperParameter(0.01, 0.5, "alpha_a"),  # Action progressive widening exponent
+            NumericalHyperParameter(1, 10, "k_o"),  # Observation progressive widening coefficient
             NumericalHyperParameter(
                 0.01, 0.5, "alpha_o"
             ),  # Observation progressive widening exponent
@@ -80,15 +74,9 @@ class PlannersHyperparamConfigs:
                 "exploration_constant",
             ),  # UCB1 exploration
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
-            NumericalHyperParameter(
-                1, 10, "k_a"
-            ),  # Action progressive widening coefficient
-            NumericalHyperParameter(
-                0.01, 0.5, "alpha_a"
-            ),  # Action progressive widening exponent
-            NumericalHyperParameter(
-                1, 10, "k_o"
-            ),  # Observation progressive widening coefficient
+            NumericalHyperParameter(1, 10, "k_a"),  # Action progressive widening coefficient
+            NumericalHyperParameter(0.01, 0.5, "alpha_a"),  # Action progressive widening exponent
+            NumericalHyperParameter(1, 10, "k_o"),  # Observation progressive widening coefficient
             NumericalHyperParameter(
                 0.01, 0.5, "alpha_o"
             ),  # Observation progressive widening exponent
@@ -146,13 +134,9 @@ class PlannersHyperparamConfigs:
         self, env: Environment, name: str, time_out_in_seconds: float = 3
     ) -> HyperParamPlannerConfig:
         hyper_parameters = [
-            NumericalHyperParameter(
-                3, 10, "branching_factor"
-            ),  # Number of samples at each node
+            NumericalHyperParameter(3, 10, "branching_factor"),  # Number of samples at each node
             NumericalHyperParameter(2, 3, "depth"),  # Search depth
-            CategoricalHyperParameter(
-                [True, False], "resampling"
-            ),  # Whether to resample particles
+            CategoricalHyperParameter([True, False], "resampling"),  # Whether to resample particles
         ]
 
         constant_parameters = {
@@ -209,21 +193,15 @@ class PlannersHyperparamConfigs:
                 "exploration_constant",
             ),  # UCB1 exploration
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
-            NumericalHyperParameter(
-                1.0, 8.0, "k_a"
-            ),  # Action progressive widening coefficient
-            NumericalHyperParameter(
-                0.01, 0.5, "alpha_a"
-            ),  # Action progressive widening exponent
+            NumericalHyperParameter(1.0, 8.0, "k_a"),  # Action progressive widening coefficient
+            NumericalHyperParameter(0.01, 0.5, "alpha_a"),  # Action progressive widening exponent
             NumericalHyperParameter(
                 1.0, 8.0, "k_o"
             ),  # Observation progressive widening coefficient
             NumericalHyperParameter(
                 0.01, 0.5, "alpha_o"
             ),  # Observation progressive widening exponent
-            NumericalHyperParameter(
-                5, 50, "min_samples_per_node"
-            ),  # Minimum samples per node
+            NumericalHyperParameter(5, 50, "min_samples_per_node"),  # Minimum samples per node
         ]
 
         constant_parameters = {

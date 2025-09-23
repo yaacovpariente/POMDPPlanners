@@ -328,9 +328,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         if obstacle_radius <= 0:
             raise ValueError("obstacle_radius must be greater than 0")
 
-    def state_transition_model(
-        self, state: np.ndarray, action: np.ndarray
-    ) -> Distribution:
+    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> Distribution:
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
         if action.shape != (2,):
@@ -342,9 +340,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             state_transition_cov_matrix=self.state_transition_cov_matrix,
         )
 
-    def observation_model(
-        self, next_state: np.ndarray, action: np.ndarray
-    ) -> Distribution:
+    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> Distribution:
         if next_state.shape != (2,):
             raise ValueError("next_state must be a 2D vector")
         if action.shape != (2,):
@@ -366,9 +362,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
 
-        is_goal_state = (
-            np.linalg.norm(state - self.goal_state) <= self.goal_state_radius
-        )
+        is_goal_state = np.linalg.norm(state - self.goal_state) <= self.goal_state_radius
 
         if self.is_obstacle_hit_terminal:
             # Calculate distance to each obstacle (obstacles are 2xN format)
@@ -393,17 +387,12 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             obstacle_hit_counter_in_history = 0
 
             for i, step in enumerate(history.history):
-                if (
-                    np.linalg.norm(step.state - self.goal_state)
-                    <= self.goal_state_radius
-                ):
+                if np.linalg.norm(step.state - self.goal_state) <= self.goal_state_radius:
                     goal_reached_in_history = True
                     break
 
                 # Calculate distance to each obstacle (obstacles are 2xN format)
-                distances = np.linalg.norm(
-                    step.state.reshape(-1, 1) - self.obstacles, axis=0
-                )
+                distances = np.linalg.norm(step.state.reshape(-1, 1) - self.obstacles, axis=0)
                 if np.any(distances <= self.obstacle_radius):
                     obstacle_hit_in_history = True
                     obstacle_hit_counter_in_history += 1
@@ -417,9 +406,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         avg_obstacle_hit_counter = np.mean(obstacle_hit_counter)
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
         obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)
-        obstacle_hit_counter_ci = confidence_interval(
-            data=obstacle_hit_counter, confidence=0.95
-        )
+        obstacle_hit_counter_ci = confidence_interval(data=obstacle_hit_counter, confidence=0.95)
 
         return [
             MetricValue(
@@ -450,12 +437,8 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             return False
 
         return (
-            np.array_equal(
-                self.state_transition_cov_matrix, other.state_transition_cov_matrix
-            )
-            and np.array_equal(
-                self.observation_cov_matrix, other.observation_cov_matrix
-            )
+            np.array_equal(self.state_transition_cov_matrix, other.state_transition_cov_matrix)
+            and np.array_equal(self.observation_cov_matrix, other.observation_cov_matrix)
             and self.goal_state_radius == other.goal_state_radius
             and self.beacon_radius == other.beacon_radius
             and self.obstacle_radius == other.obstacle_radius
@@ -584,12 +567,8 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
         # Compare only configuration parameters, ignoring internal objects like reward_model
         return (
             self.discount_factor == other.discount_factor
-            and np.array_equal(
-                self.state_transition_cov_matrix, other.state_transition_cov_matrix
-            )
-            and np.array_equal(
-                self.observation_cov_matrix, other.observation_cov_matrix
-            )
+            and np.array_equal(self.state_transition_cov_matrix, other.state_transition_cov_matrix)
+            and np.array_equal(self.observation_cov_matrix, other.observation_cov_matrix)
             and np.array_equal(self.beacons, other.beacons)
             and np.array_equal(self.goal_state, other.goal_state)
             and np.array_equal(self.start_state, other.start_state)

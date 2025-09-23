@@ -217,13 +217,9 @@ class POMCP_DPW(PathSimulationPolicy):
             Total discounted return from this simulation path
         """
         state = belief_node.belief.sample()
-        return self._simulate_state_path(
-            state=state, belief_node=belief_node, depth=depth
-        )
+        return self._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
 
-    def _simulate_state_path(
-        self, state: Any, belief_node: BeliefNode, depth: int
-    ) -> float:
+    def _simulate_state_path(self, state: Any, belief_node: BeliefNode, depth: int) -> float:
         """Simulate MCTS path from given state and belief node with progressive widening.
 
         This is the core simulation method that implements the POMCP_DPW algorithm:
@@ -259,10 +255,7 @@ class POMCP_DPW(PathSimulationPolicy):
             k_a=self.k_a,
         )
 
-        if (
-            len(action_node.children)
-            <= self.k_o * action_node.visit_count**self.alpha_o
-        ):
+        if len(action_node.children) <= self.k_o * action_node.visit_count**self.alpha_o:
             next_state = self.environment.state_transition_model(
                 state=state, action=action_node.action
             ).sample()[0]
@@ -303,9 +296,7 @@ class POMCP_DPW(PathSimulationPolicy):
         else:
             next_belief_node = action_node.sample_child_node()
             next_state = next_belief_node.belief.sample()
-            reward = self.environment.reward(
-                state=next_state, action=action_node.action
-            )
+            reward = self.environment.reward(state=next_state, action=action_node.action)
             total = reward + self.discount_factor * self._simulate_state_path(
                 state=next_state, belief_node=next_belief_node, depth=depth + 1
             )
@@ -327,6 +318,4 @@ class POMCP_DPW(PathSimulationPolicy):
         Returns:
             PolicySpaceInfo with MIXED space types for both actions and observations
         """
-        return PolicySpaceInfo(
-            action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED
-        )
+        return PolicySpaceInfo(action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED)

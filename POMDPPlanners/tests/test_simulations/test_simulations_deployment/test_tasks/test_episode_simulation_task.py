@@ -14,9 +14,7 @@ def create_test_belief():
     """Helper function to create a valid belief state for testing."""
     particles = ["tiger_left", "tiger_right"]
     log_weights = np.array([np.log(0.5), np.log(0.5)])
-    return WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    return WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
 
 @pytest.fixture
@@ -319,7 +317,6 @@ def test_episode_simulation_task_value_error_logging(caplog, environment, policy
     with patch.object(
         test_env, "state_transition_model", side_effect=ValueError("Test value error")
     ):
-
         # Create task using the real environment
         task = EpisodeSimulationTask(
             environment=test_env,
@@ -366,7 +363,6 @@ def test_episode_simulation_task_runtime_error_logging(caplog, environment, poli
     with patch.object(
         test_env, "observation_model", side_effect=RuntimeError("Test runtime error")
     ):
-
         # Create task using the real environment
         task = EpisodeSimulationTask(
             environment=test_env,
@@ -411,7 +407,6 @@ def test_episode_simulation_task_type_error_logging(caplog, environment, policy)
     test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
     # Patch the environment to fail when reward is called
     with patch.object(test_env, "reward", side_effect=TypeError("Test type error")):
-
         # Create task using the real environment
         task = EpisodeSimulationTask(
             environment=test_env,
@@ -464,7 +459,6 @@ def test_episode_simulation_task_custom_exception_logging(caplog, environment, p
         "is_terminal",
         side_effect=CustomTestException("Test custom exception"),
     ):
-
         # Create task using the real environment
         task = EpisodeSimulationTask(
             environment=test_env,
@@ -488,9 +482,7 @@ def test_episode_simulation_task_custom_exception_logging(caplog, environment, p
         assert "[EPISODE_001] Error running episode:" in caplog.text
 
 
-def test_episode_simulation_task_logging_includes_traceback(
-    caplog, environment, policy
-):
+def test_episode_simulation_task_logging_includes_traceback(caplog, environment, policy):
     """Test that EpisodeSimulationTask logs include full traceback information.
 
     Purpose: Validates that EpisodeSimulationTask logs include full exception traceback for debugging
@@ -515,7 +507,6 @@ def test_episode_simulation_task_logging_includes_traceback(
         "state_transition_model",
         side_effect=Exception("Test exception with traceback"),
     ):
-
         # Create task using the real environment
         task = EpisodeSimulationTask(
             environment=test_env,

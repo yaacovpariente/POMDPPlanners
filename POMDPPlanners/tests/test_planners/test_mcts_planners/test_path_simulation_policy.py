@@ -30,12 +30,8 @@ random.seed(42)
 class MockEnvironment(Environment):
     """Mock environment for testing PathSimulationPolicy."""
 
-    def __init__(
-        self, discount_factor: float, action_space: SpaceType = SpaceType.DISCRETE
-    ):
-        space_info = SpaceInfo(
-            action_space=action_space, observation_space=SpaceType.DISCRETE
-        )
+    def __init__(self, discount_factor: float, action_space: SpaceType = SpaceType.DISCRETE):
+        space_info = SpaceInfo(action_space=action_space, observation_space=SpaceType.DISCRETE)
         super().__init__(
             discount_factor=discount_factor,
             name="MockEnvironment",
@@ -101,9 +97,7 @@ class ConcretePathSimulationPolicy(PathSimulationPolicy):
         # Create action nodes if they don't exist
         if belief_node.is_leaf:
             for action in self.environment.get_actions():
-                action_node = ActionNode(
-                    action=action, parent=belief_node, children=tuple()
-                )
+                action_node = ActionNode(action=action, parent=belief_node, children=tuple())
                 # Set Q-values so that action 1 has the highest value
                 if action == 1:
                     action_node.q_value = 2.0
@@ -157,9 +151,7 @@ def terminal_belief():
 class TestPathSimulationPolicyInitialization:
     """Test PathSimulationPolicy initialization and parameter validation."""
 
-    def test_discrete_environment_initialization_with_n_simulations(
-        self, discrete_environment
-    ):
+    def test_discrete_environment_initialization_with_n_simulations(self, discrete_environment):
         """Test initialization with discrete environment and simulation count.
 
         Purpose: Validates PathSimulationPolicy initializes correctly for discrete action spaces with simulation count
@@ -185,9 +177,7 @@ class TestPathSimulationPolicyInitialization:
         assert policy.time_out_in_seconds is None
         assert policy.action_sampler is None
 
-    def test_discrete_environment_initialization_with_timeout(
-        self, discrete_environment
-    ):
+    def test_discrete_environment_initialization_with_timeout(self, discrete_environment):
         """Test initialization with discrete environment and timeout.
 
         Purpose: Validates PathSimulationPolicy initializes correctly for discrete action spaces with timeout
@@ -351,9 +341,7 @@ class TestPathSimulationPolicyInitialization:
 class TestPathSimulationPolicyTerminalBeliefHandling:
     """Test terminal belief handling in PathSimulationPolicy action method."""
 
-    @patch(
-        "POMDPPlanners.planners.mcts_planners.path_simulations_policy.is_terminal_belief"
-    )
+    @patch("POMDPPlanners.planners.mcts_planners.path_simulations_policy.is_terminal_belief")
     def test_terminal_belief_returns_random_action_discrete(
         self, mock_is_terminal, discrete_environment
     ):
@@ -379,9 +367,7 @@ class TestPathSimulationPolicyTerminalBeliefHandling:
 
         particles = ["terminal"]
         log_weights = np.array([-0.5])  # Non-zero log weight for single particle
-        terminal_belief = WeightedParticleBelief(
-            particles=particles, log_weights=log_weights
-        )
+        terminal_belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
         actions, policy_data = policy.action(terminal_belief)
 
@@ -389,13 +375,9 @@ class TestPathSimulationPolicyTerminalBeliefHandling:
         assert actions[0] in discrete_environment.get_actions()
         assert isinstance(policy_data, PolicyRunData)
         assert policy_data.info_variables == []
-        mock_is_terminal.assert_called_once_with(
-            belief=terminal_belief, env=discrete_environment
-        )
+        mock_is_terminal.assert_called_once_with(belief=terminal_belief, env=discrete_environment)
 
-    @patch(
-        "POMDPPlanners.planners.mcts_planners.path_simulations_policy.is_terminal_belief"
-    )
+    @patch("POMDPPlanners.planners.mcts_planners.path_simulations_policy.is_terminal_belief")
     def test_terminal_belief_returns_random_action_continuous(
         self, mock_is_terminal, continuous_environment, action_sampler
     ):
@@ -422,9 +404,7 @@ class TestPathSimulationPolicyTerminalBeliefHandling:
 
         particles = ["terminal"]
         log_weights = np.array([-0.5])  # Non-zero log weight for single particle
-        terminal_belief = WeightedParticleBelief(
-            particles=particles, log_weights=log_weights
-        )
+        terminal_belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
         # Mock the action sampler sample method
         with patch.object(action_sampler, "sample", return_value=1.5) as mock_sample:
@@ -439,12 +419,8 @@ class TestPathSimulationPolicyTerminalBeliefHandling:
             )
             mock_sample.assert_called_once()
 
-    @patch(
-        "POMDPPlanners.planners.mcts_planners.path_simulations_policy.is_terminal_belief"
-    )
-    @patch(
-        "POMDPPlanners.planners.mcts_planners.path_simulations_policy.compute_tree_metrics"
-    )
+    @patch("POMDPPlanners.planners.mcts_planners.path_simulations_policy.is_terminal_belief")
+    @patch("POMDPPlanners.planners.mcts_planners.path_simulations_policy.compute_tree_metrics")
     @patch(
         "POMDPPlanners.planners.mcts_planners.path_simulations_policy.get_optimal_action_reward_setting"
     )
@@ -497,9 +473,7 @@ class TestPathSimulationPolicyTerminalBeliefHandling:
         # Verify tree construction happened by checking simulate_path was called
         assert len(policy.simulate_path_calls) == 5
 
-        mock_is_terminal.assert_called_once_with(
-            belief=belief, env=discrete_environment
-        )
+        mock_is_terminal.assert_called_once_with(belief=belief, env=discrete_environment)
         mock_compute_metrics.assert_called_once()
         mock_get_optimal.assert_called_once()
 
@@ -570,9 +544,7 @@ class TestPathSimulationPolicyTreeConstruction:
             assert call[0] == belief_node
             assert call[1] == 0  # depth
 
-    def test_construct_tree_with_none_n_simulations_raises_error(
-        self, discrete_environment
-    ):
+    def test_construct_tree_with_none_n_simulations_raises_error(self, discrete_environment):
         """Test error when n_simulations is None during simulation-based construction.
 
         Purpose: Validates proper error handling when n_simulations is None but method expects it

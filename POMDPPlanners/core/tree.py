@@ -97,9 +97,7 @@ class BeliefNode(BaseNode):
     def print(self):
         print_tree(self)
 
-    def update_belief(
-        self, action: Any, observation: Any, pomdp: Environment, **kwargs
-    ):
+    def update_belief(self, action: Any, observation: Any, pomdp: Environment, **kwargs):
         self.belief = self.belief.update(
             action=action, observation=observation, pomdp=pomdp, **kwargs
         )

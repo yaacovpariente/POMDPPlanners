@@ -172,9 +172,7 @@ def test_multiple_planner_configs(test_environment):
 class TestOptimizeAndEvaluatePlanners:
     """Test cases for the main optimize_and_evaluate_planners function."""
 
-    @patch(
-        "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
-    )
+    @patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters")
     @patch(
         "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
     )
@@ -263,9 +261,7 @@ class TestOptimizeAndEvaluatePlanners:
         assert planner_info["policy_type"] == "POMCP"
         assert planner_info["best_hyperparameters"]["exploration_constant"] == 1.5
 
-    @patch(
-        "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
-    )
+    @patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters")
     def test_optimize_and_evaluate_planners_optimization_failure(
         self,
         mock_optimize,
@@ -317,7 +313,6 @@ class TestOptimizeAndEvaluatePlanners:
         ) as mock_opt, patch(
             "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
         ) as mock_eval:
-
             # Setup mocks
             mock_policy = Mock()
             mock_policy.name = "MinimizedPOMCP"
@@ -348,15 +343,10 @@ class TestOptimizeAndEvaluatePlanners:
             # Verify optimization was called with correct parameters
             mock_opt.assert_called_once()
             args, kwargs = mock_opt.call_args
-            assert (
-                kwargs["optimization_direction"]
-                == HyperParameterOptimizationDirection.MINIMIZE
-            )
+            assert kwargs["optimization_direction"] == HyperParameterOptimizationDirection.MINIMIZE
             assert kwargs["parameter_to_optimize"] == "average_cost"
 
-    @patch(
-        "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
-    )
+    @patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters")
     @patch(
         "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
     )
@@ -753,9 +743,7 @@ class TestOptimizePlannerHyperparameters:
         # Verify optimizer was called with multiple configs
         mock_optimizer.optimize.assert_called_once()
         run_params_list = mock_optimizer.optimize.call_args[0][0]
-        assert (
-            len(run_params_list) == 2
-        )  # Two configs from test_multiple_planner_configs
+        assert len(run_params_list) == 2  # Two configs from test_multiple_planner_configs
 
         # Verify first config
         assert run_params_list[0].policy_cls == POMCP
@@ -799,9 +787,7 @@ class TestEvaluateOptimizedPlanner:
         optimized_policy.name = "EvaluatedPolicy"
 
         # Mock evaluation results
-        mock_episode_results = {
-            "TestTiger": {"EvaluatedPolicy": [Mock(), Mock(), Mock()]}
-        }
+        mock_episode_results = {"TestTiger": {"EvaluatedPolicy": [Mock(), Mock(), Mock()]}}
         mock_statistics = pd.DataFrame(
             {
                 "policy": ["EvaluatedPolicy"],
@@ -916,9 +902,7 @@ class TestEvaluateOptimizedPlanner:
 
         Test type: unit
         """
-        with patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.POMDPSimulator"
-        ) as mock_sim:
+        with patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.POMDPSimulator") as mock_sim:
             mock_simulator = Mock()
             mock_sim.return_value.__enter__ = Mock(return_value=mock_simulator)
             mock_sim.return_value.__exit__ = Mock(return_value=None)
@@ -969,16 +953,12 @@ class TestHelperFunctions:
         assert len(hyper_params) == 3
 
         # Check exploration_constant parameter
-        exploration_param = next(
-            hp for hp in hyper_params if hp.name == "exploration_constant"
-        )
+        exploration_param = next(hp for hp in hyper_params if hp.name == "exploration_constant")
         assert exploration_param.low == 0.1
         assert exploration_param.high == 5.0
 
         # Check n_simulations parameter
-        simulations_param = next(
-            hp for hp in hyper_params if hp.name == "n_simulations"
-        )
+        simulations_param = next(hp for hp in hyper_params if hp.name == "n_simulations")
         assert simulations_param.low == 10
         assert simulations_param.high == 100
 
@@ -1033,9 +1013,7 @@ class TestHelperFunctions:
         assert heuristic_param.name == ["random", "informed"]
 
         # Check rollout_policy parameter
-        rollout_param = next(
-            hp for hp in hyper_params if hp.choices == "rollout_policy"
-        )
+        rollout_param = next(hp for hp in hyper_params if hp.choices == "rollout_policy")
         assert rollout_param.name == ["random", "greedy", "heuristic"]
 
     def test_create_categorical_hyperparameter_choices_mixed_types(self):
@@ -1064,9 +1042,7 @@ class TestHelperFunctions:
         assert strategy_param.name == ["aggressive", "conservative"]
 
         # Check integer choices
-        iterations_param = next(
-            hp for hp in hyper_params if hp.choices == "max_iterations"
-        )
+        iterations_param = next(hp for hp in hyper_params if hp.choices == "max_iterations")
         assert iterations_param.name == [50, 100, 200]
 
         # Check boolean choices
@@ -1142,9 +1118,7 @@ class TestHelperFunctions:
 
         # Check that values are higher than fast defaults for thoroughness
         fast_defaults = get_fast_optimization_defaults()
-        assert (
-            defaults["optimization_episodes"] > fast_defaults["optimization_episodes"]
-        )
+        assert defaults["optimization_episodes"] > fast_defaults["optimization_episodes"]
         assert defaults["optimization_steps"] > fast_defaults["optimization_steps"]
         assert defaults["n_trials"] > fast_defaults["n_trials"]
         assert defaults["evaluation_episodes"] > fast_defaults["evaluation_episodes"]
@@ -1179,7 +1153,6 @@ class TestUsageExamples:
         ) as mock_opt, patch(
             "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
         ) as mock_eval:
-
             # Setup mocks to return valid results
             env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
             mock_policy = Mock()
@@ -1199,9 +1172,7 @@ class TestUsageExamples:
             )
             mock_opt.return_value = [mock_optimization_result]
 
-            mock_evaluation_results = {
-                "Tiger_095": {"OptimizedPOMCP": [Mock(), Mock()]}
-            }
+            mock_evaluation_results = {"Tiger_095": {"OptimizedPOMCP": [Mock(), Mock()]}}
             mock_evaluation_statistics = pd.DataFrame()
             mock_eval.return_value = (
                 mock_evaluation_results,
@@ -1279,9 +1250,7 @@ class TestUsageExamples:
             "algorithm": ["ucb", "thompson", "epsilon_greedy"],
             "heuristic": ["random", "informed"],
         }
-        categorical_params = create_categorical_hyperparameter_choices(
-            categorical_config
-        )
+        categorical_params = create_categorical_hyperparameter_choices(categorical_config)
 
         assert len(categorical_params) == 2
         categorical_names = [
@@ -1291,9 +1260,7 @@ class TestUsageExamples:
         assert "heuristic" in categorical_names
 
         # Check choices are preserved correctly
-        algorithm_param = next(
-            cp for cp in categorical_params if cp.choices == "algorithm"
-        )
+        algorithm_param = next(cp for cp in categorical_params if cp.choices == "algorithm")
         assert algorithm_param.name == ["ucb", "thompson", "epsilon_greedy"]
 
     def test_default_configurations_usage(self, temp_dir):
@@ -1318,15 +1285,12 @@ class TestUsageExamples:
         ) as mock_opt, patch(
             "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_optimized_planner"
         ) as mock_eval:
-
             mock_opt.return_value = None  # Will trigger ValueError, but that's expected
             mock_eval.return_value = ({}, pd.DataFrame())
 
             env = TigerPOMDP(discount_factor=0.95, name="FastTest")
             initial_belief = get_initial_belief(env, n_particles=10)
-            hyper_parameters = [
-                NumericalHyperParameter(0.1, 2.0, "exploration_constant")
-            ]
+            hyper_parameters = [NumericalHyperParameter(0.1, 2.0, "exploration_constant")]
             constant_parameters = {"discount_factor": 0.95, "name": "TestPOMCP"}
 
             # This should call the function with unpacked fast defaults
@@ -1374,7 +1338,6 @@ class TestHyperParamRunnerUseCases:
         ) as mock_opt, patch(
             "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
         ) as mock_eval:
-
             # Set up environment
             env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
             initial_belief = get_initial_belief(env, n_particles=10)
@@ -1467,9 +1430,7 @@ class TestHyperParamRunnerUseCases:
                 opt_call_kwargs["num_steps"] == 10
             )  # Function uses num_steps, not optimization_steps
             assert opt_call_kwargs["n_trials"] == 7
-            assert (
-                opt_call_kwargs["n_jobs"] == 2
-            )  # Function uses n_jobs, not optimization_n_jobs
+            assert opt_call_kwargs["n_jobs"] == 2  # Function uses n_jobs, not optimization_n_jobs
             assert opt_call_kwargs["confidence_interval_level"] == 0.9
             assert opt_call_kwargs["alpha"] == 0.1
             assert opt_call_kwargs["debug"] == True
@@ -1535,9 +1496,7 @@ class TestHyperParamRunnerUseCases:
             )
             mock_optimizer.optimize.return_value = [mock_result]
 
-            single_hyper_param = [
-                NumericalHyperParameter(0.1, 5.0, "exploration_constant")
-            ]
+            single_hyper_param = [NumericalHyperParameter(0.1, 5.0, "exploration_constant")]
             planner_config = HyperParamPlannerConfig(
                 policy_cls=POMCP,
                 hyper_parameters=single_hyper_param,
@@ -1577,9 +1536,7 @@ class TestHyperParamRunnerUseCases:
         initial_belief = get_initial_belief(env, n_particles=10)
 
         # Test with minimal evaluation parameters
-        with patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.POMDPSimulator"
-        ) as mock_sim:
+        with patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.POMDPSimulator") as mock_sim:
             mock_simulator = Mock()
             mock_sim.return_value.__enter__ = Mock(return_value=mock_simulator)
             mock_sim.return_value.__exit__ = Mock(return_value=None)
@@ -1612,9 +1569,7 @@ class TestHyperParamRunnerUseCases:
             assert call_kwargs["experiment_name"] == "planner_evaluation"
 
         # Test with custom experiment name and debug mode
-        with patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.POMDPSimulator"
-        ) as mock_sim:
+        with patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.POMDPSimulator") as mock_sim:
             mock_simulator = Mock()
             mock_sim.return_value.__enter__ = Mock(return_value=mock_simulator)
             mock_sim.return_value.__exit__ = Mock(return_value=None)
@@ -1670,19 +1625,10 @@ class TestHyperParamRunnerUseCases:
         param_dict = {hp.name: hp for hp in hyper_params}
 
         assert param_dict["int_param"].low == 1 and param_dict["int_param"].high == 100
-        assert (
-            param_dict["float_param"].low == 0.1
-            and param_dict["float_param"].high == 10.5
-        )
+        assert param_dict["float_param"].low == 0.1 and param_dict["float_param"].high == 10.5
         assert param_dict["zero_range"].low == 0 and param_dict["zero_range"].high == 0
-        assert (
-            param_dict["negative_range"].low == -10
-            and param_dict["negative_range"].high == -1
-        )
-        assert (
-            param_dict["mixed_range"].low == -5.5
-            and param_dict["mixed_range"].high == 5.5
-        )
+        assert param_dict["negative_range"].low == -10 and param_dict["negative_range"].high == -1
+        assert param_dict["mixed_range"].low == -5.5 and param_dict["mixed_range"].high == 5.5
 
         # Test with single parameter
         single_config = {"single": (0, 1)}
@@ -1886,9 +1832,7 @@ class TestHyperParamRunnerUseCases:
         assert temp_dir.is_dir()
 
         # Test evaluation subdirectory creation
-        with patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.POMDPSimulator"
-        ) as mock_sim:
+        with patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.POMDPSimulator") as mock_sim:
             mock_simulator = Mock()
             mock_sim.return_value.__enter__ = Mock(return_value=mock_simulator)
             mock_sim.return_value.__exit__ = Mock(return_value=None)
@@ -1943,9 +1887,7 @@ class TestHyperParamRunnerUseCases:
         assert isinstance(empty_cat_params, list)
 
         # Test with single categorical parameter
-        single_cat_params = create_categorical_hyperparameter_choices(
-            {"single": ["choice"]}
-        )
+        single_cat_params = create_categorical_hyperparameter_choices({"single": ["choice"]})
         assert len(single_cat_params) == 1
         assert single_cat_params[0].choices == "single"
 
@@ -1985,7 +1927,6 @@ class TestHyperParamRunnerUseCases:
         ) as mock_opt, patch(
             "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
         ) as mock_eval:
-
             # Create real environment and belief
             env = TigerPOMDP(discount_factor=0.95, name="RealTiger")
             initial_belief = get_initial_belief(env, n_particles=10)
@@ -2016,9 +1957,7 @@ class TestHyperParamRunnerUseCases:
             )
 
             # Test with real classes
-            hyper_parameters = [
-                NumericalHyperParameter(0.1, 5.0, "exploration_constant")
-            ]
+            hyper_parameters = [NumericalHyperParameter(0.1, 5.0, "exploration_constant")]
             constant_parameters = {"discount_factor": 0.95, "name": "RealPOMCP"}
 
             planner_config = HyperParamPlannerConfig(

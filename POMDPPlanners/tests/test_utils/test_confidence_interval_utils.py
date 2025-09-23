@@ -89,9 +89,7 @@ def test_verify_metrics_invalid_bounds():
         )
     ]
 
-    with pytest.raises(
-        AssertionError, match="invalid_bounds: Lower bound 8.0 > upper bound 6.0"
-    ):
+    with pytest.raises(AssertionError, match="invalid_bounds: Lower bound 8.0 > upper bound 6.0"):
         verify_metrics_within_confidence_intervals(metrics)
 
 

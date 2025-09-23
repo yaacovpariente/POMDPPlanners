@@ -124,9 +124,7 @@ def planner(
 
 @pytest.fixture
 def belief(environment, n_particles):
-    return get_initial_belief(
-        pomdp=environment, n_particles=n_particles, resampling=True
-    )
+    return get_initial_belief(pomdp=environment, n_particles=n_particles, resampling=True)
 
 
 def test_pomcp_dpw_initialization_n_simulations_creates_configured_planner():
@@ -245,8 +243,7 @@ def test_pomcp_dpw_initialization_both_termination_criteria_raises_error():
 
     # ASSERT: Verify error message content
     assert (
-        "mutually exclusive" in str(exc_info.value).lower()
-        or "both" in str(exc_info.value).lower()
+        "mutually exclusive" in str(exc_info.value).lower() or "both" in str(exc_info.value).lower()
     )
 
 
@@ -273,9 +270,7 @@ def test_pomcp_dpw_action_selection_returns_valid_action_from_sampler(planner, b
     assert hasattr(policy_run_data, "info_variables")  # Contains MCTS tree statistics
 
 
-def test_pomcp_dpw_progressive_widening_adds_new_action_to_unvisited_node(
-    belief, planner
-):
+def test_pomcp_dpw_progressive_widening_adds_new_action_to_unvisited_node(belief, planner):
     """
     Purpose: Verifies action progressive widening adds new actions to unvisited belief nodes
 
@@ -438,9 +433,7 @@ def test_simulate_state_path_terminal_state(planner, belief):
     planner.environment.is_terminal = lambda state: True
 
     state = belief.sample()
-    return_value = planner._simulate_state_path(
-        state=state, belief_node=belief_node, depth=depth
-    )
+    return_value = planner._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
     assert return_value == 0
     assert belief_node.visit_count == 1
 
@@ -453,9 +446,7 @@ def test_simulate_state_path_max_depth(planner, belief):
     state = belief.sample()
     depth = planner.depth + 1
 
-    return_value = planner._simulate_state_path(
-        state=state, belief_node=belief_node, depth=depth
-    )
+    return_value = planner._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
     assert return_value == 0
 
 
@@ -522,9 +513,7 @@ def test_belief_node_data_structure(planner, belief):
             # Check that the belief is an UnweightedParticleBeliefStateUpdate instance (POMCP tradition)
             from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
 
-            assert isinstance(
-                child_belief_node.belief, UnweightedParticleBeliefStateUpdate
-            )
+            assert isinstance(child_belief_node.belief, UnweightedParticleBeliefStateUpdate)
             assert hasattr(child_belief_node.belief, "particles")
             assert isinstance(child_belief_node.belief.particles, list)
 
@@ -630,9 +619,7 @@ def test_visit_count_consistency(planner, belief):
 
     # Check that action node visit counts sum correctly
     total_action_visits = sum(
-        child.visit_count
-        for child in belief_node.children
-        if isinstance(child, ActionNode)
+        child.visit_count for child in belief_node.children if isinstance(child, ActionNode)
     )
     assert (
         total_action_visits <= belief_node.visit_count
@@ -661,14 +648,10 @@ def test_pomcp_dpw_vs_pomcp_differences(planner, belief):
     # Check observation progressive widening for action nodes
     for action_node in belief_node.children:
         if action_node.visit_count > 0:
-            max_allowed_observations = (
-                planner.k_o * action_node.visit_count**planner.alpha_o
-            )
+            max_allowed_observations = planner.k_o * action_node.visit_count**planner.alpha_o
             actual_observations = len(action_node.children)
             # Should respect the progressive widening constraint (within reasonable bounds)
-            assert (
-                actual_observations <= max_allowed_observations + 1
-            )  # Allow small variance
+            assert actual_observations <= max_allowed_observations + 1  # Allow small variance
 
 
 def test_unweighted_particle_belief_usage(planner, belief):
@@ -684,9 +667,7 @@ def test_unweighted_particle_belief_usage(planner, belief):
     # Check that any created observation nodes use UnweightedParticleBeliefStateUpdate
     for action_node in belief_node.children:
         for observation_node in action_node.children:
-            assert isinstance(
-                observation_node.belief, UnweightedParticleBeliefStateUpdate
-            )
+            assert isinstance(observation_node.belief, UnweightedParticleBeliefStateUpdate)
             # Verify it has the expected structure
             assert hasattr(observation_node.belief, "particles")
             assert isinstance(observation_node.belief.particles, list)
@@ -704,9 +685,7 @@ def test_double_progressive_widening_integration(planner, belief):
     # 1. Actions are added progressively
     # 2. Observations are constrained by progressive widening
 
-    action_nodes = [
-        child for child in belief_node.children if isinstance(child, ActionNode)
-    ]
+    action_nodes = [child for child in belief_node.children if isinstance(child, ActionNode)]
     assert len(action_nodes) > 0
 
     total_observations = 0
@@ -769,40 +748,24 @@ def test_basic_tree_structure(
     for node in PostOrderIter(root_belief_node):
         if isinstance(node, BeliefNode):
             # BeliefNode basic validations
-            assert (
-                node.visit_count == 1
-            ), "BeliefNode visit count must be 1 with single simulation"
-            assert isinstance(
-                node.v_value, (int, float)
-            ), "BeliefNode must have numeric v_value"
+            assert node.visit_count == 1, "BeliefNode visit count must be 1 with single simulation"
+            assert isinstance(node.v_value, (int, float)), "BeliefNode must have numeric v_value"
 
             # Root vs non-root belief node properties
             if node.depth > 0:
-                assert (
-                    node.observation is not None
-                ), "Non-root BeliefNode must have observation"
+                assert node.observation is not None, "Non-root BeliefNode must have observation"
                 assert node.parent is not None, "Non-root BeliefNode must have parent"
-                assert isinstance(
-                    node.parent, ActionNode
-                ), "BeliefNode parent must be ActionNode"
+                assert isinstance(node.parent, ActionNode), "BeliefNode parent must be ActionNode"
             else:
-                assert (
-                    node.observation is None
-                ), "Root BeliefNode must have no observation"
+                assert node.observation is None, "Root BeliefNode must have no observation"
                 assert node.parent is None, "Root BeliefNode must have no parent"
 
         elif isinstance(node, ActionNode):
             # ActionNode basic validations
-            assert (
-                node.visit_count == 1
-            ), "ActionNode visit count must be 1 with single simulation"
-            assert isinstance(
-                node.q_value, (int, float)
-            ), "ActionNode must have numeric q_value"
+            assert node.visit_count == 1, "ActionNode visit count must be 1 with single simulation"
+            assert isinstance(node.q_value, (int, float)), "ActionNode must have numeric q_value"
             assert node.parent is not None, "ActionNode must have parent"
-            assert isinstance(
-                node.parent, BeliefNode
-            ), "ActionNode parent must be BeliefNode"
+            assert isinstance(node.parent, BeliefNode), "ActionNode parent must be BeliefNode"
             assert node.action is not None, "ActionNode must have action"
         else:
             raise ValueError(f"Unknown node type: {type(node)}")
@@ -930,9 +893,7 @@ def test_numpy_array_observation_comparison():
 
     # This should not raise an error about array truth values
     try:
-        return_value = planner._simulate_state_path(
-            state=state, belief_node=belief_node, depth=0
-        )
+        return_value = planner._simulate_state_path(state=state, belief_node=belief_node, depth=0)
         assert isinstance(return_value, (int, float))
     except ValueError as e:
         if "truth value of an array" in str(e):
@@ -944,9 +905,7 @@ def test_numpy_array_observation_comparison():
 # Config ID Tests
 
 
-def test_pomcp_dpw_config_id_consistency_identical_parameters(
-    environment, discrete_action_sampler
-):
+def test_pomcp_dpw_config_id_consistency_identical_parameters(environment, discrete_action_sampler):
     """Test that config_id is consistent for identical POMCP_DPW parameters.
 
     Purpose: Validates that POMCP_DPW with identical parameters produces identical config_id
@@ -1108,9 +1067,7 @@ def test_pomcp_dpw_config_id_different_progressive_widening_parameters(
     assert config_id1 != config_id2
 
 
-def test_pomcp_dpw_config_id_consistency_across_evaluations(
-    environment, discrete_action_sampler
-):
+def test_pomcp_dpw_config_id_consistency_across_evaluations(environment, discrete_action_sampler):
     """Test that config_id remains consistent across different policy evaluations.
 
     Purpose: Validates that config_id is stable across multiple accesses and policy actions

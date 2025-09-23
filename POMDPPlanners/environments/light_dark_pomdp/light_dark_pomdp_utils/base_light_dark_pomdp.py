@@ -81,9 +81,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         self.fuel_cost = fuel_cost
         self.grid_size = grid_size
 
-    def _convert_beacons_to_array(
-        self, beacons_list: List[Tuple[float, float]]
-    ) -> np.ndarray:
+    def _convert_beacons_to_array(self, beacons_list: List[Tuple[float, float]]) -> np.ndarray:
         """Convert list of (x, y) tuples to 2xN numpy array format for beacons.
 
         Args:
@@ -99,9 +97,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
         coords_array = np.array(beacons_list).T  # Shape: (2, N)
         return coords_array
 
-    def _convert_obstacles_to_array(
-        self, obstacles_list: List[Tuple[float, float]]
-    ) -> np.ndarray:
+    def _convert_obstacles_to_array(self, obstacles_list: List[Tuple[float, float]]) -> np.ndarray:
         """Convert list of (x, y) tuples to 2xN numpy array format for obstacles.
 
         Args:
@@ -281,13 +277,9 @@ class BaseLightDarkPOMDP(Environment, ABC):
             label="Goal State",
         )
         # Plot the start state
-        ax.scatter(
-            self.start_state[0], self.start_state[1], color="red", label="Start State"
-        )
+        ax.scatter(self.start_state[0], self.start_state[1], color="red", label="Start State")
         # Plot circles around obstacles with transparent red background
-        for i in range(
-            self.obstacles.shape[1]
-        ):  # obstacles.shape[1] is number of obstacles
+        for i in range(self.obstacles.shape[1]):  # obstacles.shape[1] is number of obstacles
             obstacle_x, obstacle_y = (
                 self.obstacles[0, i],
                 self.obstacles[1, i],
@@ -303,9 +295,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
 
         # Plot the obstacles
         if self.obstacles.size > 0:
-            ax.scatter(
-                self.obstacles[0], self.obstacles[1], color="black", label="Obstacles"
-            )
+            ax.scatter(self.obstacles[0], self.obstacles[1], color="black", label="Obstacles")
 
         # Initialize the agent's position and path line
         (agent,) = ax.plot([], [], "ro", markersize=10)
@@ -334,9 +324,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
             t = (max_history - 1 - i) / max_history  # 0 for current, 1 for oldest
             color = yellow_color * (1 - t) + red_color * t
             # Apply additional intensity decay
-            alpha_factor = 0.1 + 0.9 * (
-                i / max_history
-            )  # 0.1 to 1.0 - more extreme decay
+            alpha_factor = 0.1 + 0.9 * (i / max_history)  # 0.1 to 1.0 - more extreme decay
             color = color * alpha_factor
             colors.append(color)
 

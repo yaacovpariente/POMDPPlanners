@@ -23,9 +23,7 @@ def create_test_belief():
     """Helper function to create a valid belief state for testing."""
     particles = ["tiger_left", "tiger_right"]
     log_weights = np.array([np.log(0.5), np.log(0.5)])
-    return WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    return WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
 
 @pytest.fixture
@@ -210,9 +208,7 @@ def test_joblib_task_manager_with_cache_clear(cache_db):
 
     Test type: unit
     """
-    with JoblibTaskManager(
-        cache_db=cache_db, clear_cache_on_start=True
-    ) as task_manager:
+    with JoblibTaskManager(cache_db=cache_db, clear_cache_on_start=True) as task_manager:
         assert task_manager.memory is not None
         # Cache should be empty after clearing
         assert len(list(task_manager.memory.store_backend.get_items())) == 0
@@ -306,9 +302,7 @@ def test_joblib_task_manager_cache(cache_db, environment, policy):
             # If we can't clear the cache, log a warning but continue with the test
             import warnings
 
-            warnings.warn(
-                "Could not clear cache due to file being in use, continuing with test"
-            )
+            warnings.warn("Could not clear cache due to file being in use, continuing with test")
 
         result3, ids3 = task_manager.run_tasks([task], [task_identifier])
 
@@ -521,9 +515,7 @@ def test_sequential_task_manager_initialization(cache_db):
         assert task_manager.verbose == 0
         assert task_manager.memory is not None
         assert isinstance(task_manager, SequentialTaskManager)
-        assert isinstance(
-            task_manager, JoblibTaskManager
-        )  # Should inherit from JoblibTaskManager
+        assert isinstance(task_manager, JoblibTaskManager)  # Should inherit from JoblibTaskManager
 
 
 def test_sequential_task_manager_with_cache_clear(cache_db):
@@ -537,9 +529,7 @@ def test_sequential_task_manager_with_cache_clear(cache_db):
 
     Test type: unit
     """
-    with SequentialTaskManager(
-        cache_db=cache_db, clear_cache_on_start=True
-    ) as task_manager:
+    with SequentialTaskManager(cache_db=cache_db, clear_cache_on_start=True) as task_manager:
         assert task_manager.memory is not None
         # Cache should be empty after clearing
         assert len(list(task_manager.memory.store_backend.get_items())) == 0
@@ -633,9 +623,7 @@ def test_sequential_task_manager_cache(cache_db, environment, policy):
             # If we can't clear the cache, log a warning but continue with the test
             import warnings
 
-            warnings.warn(
-                "Could not clear cache due to file being in use, continuing with test"
-            )
+            warnings.warn("Could not clear cache due to file being in use, continuing with test")
 
         result3, ids3 = task_manager.run_tasks([task], [task_identifier])
 
@@ -1060,9 +1048,7 @@ def test_pbs_task_manager_missing_dependency():
 
     # Mock the local import inside _initialize_client to raise ImportError
     with patch("builtins.__import__", side_effect=mock_import):
-        with pytest.raises(
-            RuntimeError, match="dask-jobqueue is required for PBS support"
-        ):
+        with pytest.raises(RuntimeError, match="dask-jobqueue is required for PBS support"):
             manager._initialize_client()
 
 
@@ -1166,9 +1152,7 @@ def test_pbs_task_manager_dashboard_disabled():
 
     Test type: unit
     """
-    manager = PBSTaskManager(
-        queue="batch_queue", enable_dashboard=False, dashboard_port=9999
-    )
+    manager = PBSTaskManager(queue="batch_queue", enable_dashboard=False, dashboard_port=9999)
 
     assert manager.enable_dashboard is False
     assert manager.dashboard_port == 9999  # Should still store the parameter
@@ -1350,9 +1334,7 @@ def test_pbs_task_manager_context_manager_with_dashboard():
             assert manager.cluster is None  # Not initialized yet
     except Exception as e:
         # Should not raise any exceptions during context manager setup
-        pytest.fail(
-            f"Context manager with dashboard should not raise exceptions during setup: {e}"
-        )
+        pytest.fail(f"Context manager with dashboard should not raise exceptions during setup: {e}")
 
 
 def test_pbs_task_manager_cluster_storage():

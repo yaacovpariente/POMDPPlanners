@@ -332,9 +332,7 @@ class HyperParameterOptimizer:
 
         return tasks
 
-    def optimize(
-        self, configs: List[HyperParameterRunParams]
-    ) -> List[OptimizedPolicyResult]:
+    def optimize(self, configs: List[HyperParameterRunParams]) -> List[OptimizedPolicyResult]:
         """Optimize hyperparameters for multiple configurations.
 
         This method provides the main interface for hyperparameter optimization by accepting
@@ -383,9 +381,7 @@ class HyperParameterOptimizer:
             task_results, tasks = self._execute_optimization_tasks(configs)
 
             # Process results and log to MLflow
-            results = self._process_task_results_with_mlflow_logging(
-                configs, task_results, tasks
-            )
+            results = self._process_task_results_with_mlflow_logging(configs, task_results, tasks)
 
             # Log batch-level summary
             self._log_batch_level_summary(configs, results)
@@ -401,22 +397,16 @@ class HyperParameterOptimizer:
         if active_run is not None:
             mlflow.end_run()
 
-    def _log_batch_level_parameters(
-        self, configs: List[HyperParameterRunParams]
-    ) -> None:
+    def _log_batch_level_parameters(self, configs: List[HyperParameterRunParams]) -> None:
         # Log batch-level parameters
         mlflow.log_param("num_configurations", len(configs))
         mlflow.log_param("batch_method", "stub_interface_optimize")
 
         # Log summary of all configurations
         config_summary = {
-            "environments": [
-                config.environment.__class__.__name__ for config in configs
-            ],
+            "environments": [config.environment.__class__.__name__ for config in configs],
             "policies": [config.policy_cls.__name__ for config in configs],
-            "parameters_to_optimize": [
-                config.parameter_to_optimize for config in configs
-            ],
+            "parameters_to_optimize": [config.parameter_to_optimize for config in configs],
             "directions": [config.direction.value for config in configs],
         }
         mlflow.log_dict(config_summary, "batch_configuration_summary.json")
@@ -469,9 +459,7 @@ class HyperParameterOptimizer:
         successful_configs_with_index = []
         for i, task_result in enumerate(task_results):
             if task_result is not None and i < len(configs) and i < len(tasks):
-                successful_configs_with_index.append(
-                    (i, configs[i], tasks[i], task_result)
-                )
+                successful_configs_with_index.append((i, configs[i], tasks[i], task_result))
         return successful_configs_with_index
 
     def _log_single_configuration_results(
@@ -490,18 +478,14 @@ class HyperParameterOptimizer:
         ):
             try:
                 # Log configuration parameters
-                all_params = self._prepare_configuration_parameters(
-                    original_index, config
-                )
+                all_params = self._prepare_configuration_parameters(original_index, config)
                 mlflow.log_params(all_params)
 
                 # Process and log optimization results
                 self._log_optimization_results(task_result, task)
 
                 # Run and log final evaluation
-                self._run_and_log_final_evaluation(
-                    config, task_result, all_params, original_index
-                )
+                self._run_and_log_final_evaluation(config, task_result, all_params, original_index)
 
                 # Log success and return result
                 best_value = self._get_best_value_from_task(task)
@@ -545,13 +529,9 @@ class HyperParameterOptimizer:
         param_ranges_info = {}
         for param in config.hyper_parameters:
             if isinstance(param, CategoricalHyperParameter):
-                param_ranges_info[f"param_range_{param.name}"] = (
-                    f"choices: {param.choices}"
-                )
+                param_ranges_info[f"param_range_{param.name}"] = f"choices: {param.choices}"
             elif isinstance(param, NumericalHyperParameter):
-                param_ranges_info[f"param_range_{param.name}"] = (
-                    f"{param.low}-{param.high}"
-                )
+                param_ranges_info[f"param_range_{param.name}"] = f"{param.low}-{param.high}"
 
         # Log constant parameters (non-optimized policy parameters)
         constant_params = {
@@ -563,9 +543,7 @@ class HyperParameterOptimizer:
         # Combine all parameters
         return {**config_params, **env_params, **param_ranges_info, **constant_params}
 
-    def _extract_all_policy_parameters(
-        self, optimization_result: "OptimizedPolicyResult"
-    ) -> dict:
+    def _extract_all_policy_parameters(self, optimization_result: "OptimizedPolicyResult") -> dict:
         """Extract all parameters from the optimized policy for comprehensive MLflow logging.
 
         This method extracts all policy parameters including:
@@ -590,17 +568,11 @@ class HyperParameterOptimizer:
         # Log all policy attributes (instance variables)
         for attr_name, attr_value in policy.__dict__.items():
             # Skip private attributes and complex objects
-            if not attr_name.startswith("_") and isinstance(
-                attr_value, (int, float, str, bool)
-            ):
+            if not attr_name.startswith("_") and isinstance(attr_value, (int, float, str, bool)):
                 policy_params[f"policy_{attr_name}"] = attr_value
-            elif not attr_name.startswith("_") and isinstance(
-                attr_value, (list, tuple)
-            ):
+            elif not attr_name.startswith("_") and isinstance(attr_value, (list, tuple)):
                 # Log simple lists/tuples as strings
-                if all(
-                    isinstance(item, (int, float, str, bool)) for item in attr_value
-                ):
+                if all(isinstance(item, (int, float, str, bool)) for item in attr_value):
                     policy_params[f"policy_{attr_name}"] = str(attr_value)
 
         # Log environment information
@@ -610,9 +582,7 @@ class HyperParameterOptimizer:
 
         # Log environment attributes that are simple types
         for attr_name, attr_value in env.__dict__.items():
-            if not attr_name.startswith("_") and isinstance(
-                attr_value, (int, float, str, bool)
-            ):
+            if not attr_name.startswith("_") and isinstance(attr_value, (int, float, str, bool)):
                 policy_params[f"env_{attr_name}"] = attr_value
 
         return policy_params
@@ -625,10 +595,7 @@ class HyperParameterOptimizer:
         if optimization_result is not None:
             # Log optimization results (best hyperparameters)
             mlflow.log_params(
-                {
-                    f"best_{k}": v
-                    for k, v in optimization_result.chosen_hyper_parameters.items()
-                }
+                {f"best_{k}": v for k, v in optimization_result.chosen_hyper_parameters.items()}
             )
 
             # Log all policy parameters (including constant parameters and policy attributes)
@@ -639,14 +606,10 @@ class HyperParameterOptimizer:
             task_metadata = task.get_optimization_metadata()
             if task_metadata:
                 mlflow.log_metric("best_value", task_metadata["best_value"])
-                mlflow.log_metric(
-                    "optimization_time", task_metadata["optimization_time"]
-                )
+                mlflow.log_metric("optimization_time", task_metadata["optimization_time"])
                 mlflow.log_metric("n_trials_executed", task_metadata["n_trials"])
                 if task_metadata["best_trial_number"] is not None:
-                    mlflow.log_metric(
-                        "best_trial_number", task_metadata["best_trial_number"]
-                    )
+                    mlflow.log_metric("best_trial_number", task_metadata["best_trial_number"])
 
             mlflow.log_metric("optimization_success", 1.0)
         else:
@@ -687,19 +650,13 @@ class HyperParameterOptimizer:
         )
 
         # Extract final statistics from metrics
-        final_statistics = metrics[config.environment.name][
-            optimization_result.policy.name
-        ]
+        final_statistics = metrics[config.environment.name][optimization_result.policy.name]
 
         # Log final evaluation metrics with final_ prefix to distinguish from optimization metrics
         for metric in final_statistics:
             mlflow.log_metric(f"final_{metric.name}", metric.value)
-            mlflow.log_metric(
-                f"final_{metric.name}_lower_ci", metric.lower_confidence_bound
-            )
-            mlflow.log_metric(
-                f"final_{metric.name}_upper_ci", metric.upper_confidence_bound
-            )
+            mlflow.log_metric(f"final_{metric.name}_lower_ci", metric.lower_confidence_bound)
+            mlflow.log_metric(f"final_{metric.name}_upper_ci", metric.upper_confidence_bound)
 
         # Save detailed results as artifacts
         self._save_detailed_results_as_artifacts(
@@ -721,60 +678,42 @@ class HyperParameterOptimizer:
             "configuration_index": original_index + 1,
             "best_parameters": optimization_result.chosen_hyper_parameters,
             "best_value": task_metadata["best_value"] if task_metadata else "unknown",
-            "hyperparameter_ranges": [
-                param._asdict() for param in config.hyper_parameters
-            ],
+            "hyperparameter_ranges": [param._asdict() for param in config.hyper_parameters],
             "final_statistics": [metric._asdict() for metric in final_statistics],
             "configuration_params": all_params,
             "optimization_metadata": task_metadata,
         }
-        mlflow.log_dict(
-            results_data, f"optimization_results_config_{original_index+1}.json"
-        )
+        mlflow.log_dict(results_data, f"optimization_results_config_{original_index+1}.json")
 
         # Log the planner's chosen configuration as a separate artifact
         planner_config = {
             "planner_type": config.policy_cls.__name__,
             "chosen_hyper_parameters": optimization_result.chosen_hyper_parameters,
             "constant_parameters": (
-                config.constant_parameters
-                if hasattr(config, "constant_parameters")
-                else {}
+                config.constant_parameters if hasattr(config, "constant_parameters") else {}
             ),
             "environment_type": config.environment.__class__.__name__,
             "optimization_direction": config.direction.value,
             "parameter_to_optimize": config.parameter_to_optimize,
             "best_value": task_metadata["best_value"] if task_metadata else "unknown",
-            "all_policy_parameters": self._extract_all_policy_parameters(
-                optimization_result
-            ),
+            "all_policy_parameters": self._extract_all_policy_parameters(optimization_result),
             "policy_creation_params": {
                 "policy_name": getattr(optimization_result.policy, "name", "unnamed"),
                 "policy_class": optimization_result.policy.__class__.__name__,
-                "environment_name": getattr(
-                    optimization_result.environment, "name", "unnamed"
-                ),
+                "environment_name": getattr(optimization_result.environment, "name", "unnamed"),
                 "environment_class": optimization_result.environment.__class__.__name__,
             },
         }
-        mlflow.log_dict(
-            planner_config, f"planner_chosen_config_{original_index+1}.json"
-        )
+        mlflow.log_dict(planner_config, f"planner_chosen_config_{original_index+1}.json")
 
-    def _get_best_value_from_task(
-        self, task: "HyperParameterTuningSimulationTask"
-    ) -> str:
+    def _get_best_value_from_task(self, task: "HyperParameterTuningSimulationTask") -> str:
         task_metadata = task.get_optimization_metadata()
         return str(task_metadata["best_value"]) if task_metadata else "unknown"
 
-    def _log_configuration_failure(
-        self, original_index: int, exception: Exception
-    ) -> None:
+    def _log_configuration_failure(self, original_index: int, exception: Exception) -> None:
         mlflow.log_metric("optimization_success", 0.0)
         mlflow.log_param("error_message", str(exception))
-        logger.error(
-            f"Optimization failed for configuration {original_index+1}: {exception}"
-        )
+        logger.error(f"Optimization failed for configuration {original_index+1}: {exception}")
 
     def _log_batch_level_summary(
         self, configs: List[HyperParameterRunParams], results: List

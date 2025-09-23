@@ -133,8 +133,7 @@ class History:
         from dataclasses import fields
 
         return all(
-            getattr(self, field.name) == getattr(other, field.name)
-            for field in fields(self)
+            getattr(self, field.name) == getattr(other, field.name) for field in fields(self)
         )
 
     def to_dict(self) -> dict:

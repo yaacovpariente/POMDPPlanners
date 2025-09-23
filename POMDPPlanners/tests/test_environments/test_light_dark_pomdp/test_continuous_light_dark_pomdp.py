@@ -127,8 +127,7 @@ class TestContinuousLightDarkPOMDPEquality:
         """Test that ContinuousLightDarkPOMDPs with different covariance matrices are not equal."""
         other_env = ContinuousLightDarkPOMDPDiscreteActions(
             discount_factor=0.95,
-            state_transition_cov_matrix=2
-            * np.eye(2),  # Different state transition covariance
+            state_transition_cov_matrix=2 * np.eye(2),  # Different state transition covariance
             observation_cov_matrix=np.eye(2),
             obstacle_hit_probability=0.2,
             obstacle_reward=-10.0,
@@ -239,9 +238,7 @@ def test_initialization():
     assert np.array_equal(env.start_state, np.array([0, 5]))
 
     # Check default beacons
-    expected_beacons = np.array(
-        [[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]
-    )
+    expected_beacons = np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]])
     assert np.array_equal(env.beacons, expected_beacons)
 
     # Check default obstacles (now 2xN format like beacons)
@@ -274,9 +271,7 @@ def test_beacons_and_obstacles_array_structure():
     # Test obstacles structure
     assert isinstance(env.obstacles, np.ndarray), "obstacles should be a numpy array"
     assert env.obstacles.ndim == 2, "obstacles should be 2-dimensional"
-    assert (
-        env.obstacles.shape[1] == 2
-    ), "obstacles should have 2 columns (x and y coordinates)"
+    assert env.obstacles.shape[1] == 2, "obstacles should have 2 columns (x and y coordinates)"
     assert env.obstacles.shape[0] == 2, "obstacles should have 2 rows"
 
 
@@ -504,11 +499,7 @@ def test_compute_metrics():
     assert "goal_reaching_rate" in metrics_dict
     goal_rate = metrics_dict["goal_reaching_rate"]
     assert goal_rate.value == 0.5  # 1 out of 2 histories reach goal
-    assert (
-        goal_rate.lower_confidence_bound
-        <= goal_rate.value
-        <= goal_rate.upper_confidence_bound
-    )
+    assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
 
     # Test obstacle hit rate
     assert "obstacle_hit_rate" in metrics_dict
@@ -535,9 +526,7 @@ def test_continuous_light_dark_pomdp_initialization(base_continuous_light_dark_p
     assert env.obstacle_radius == 1.5
     assert np.array_equal(env.goal_state, np.array([10, 5]))
     assert np.array_equal(env.start_state, np.array([0, 5]))
-    expected_beacons = np.array(
-        [[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]]
-    )
+    expected_beacons = np.array([[0, 0, 0, 5, 5, 5, 10, 10, 10], [0, 5, 10, 0, 5, 10, 0, 5, 10]])
     assert np.array_equal(env.beacons, expected_beacons)
     expected_obstacles = np.array([[3, 5], [7, 5]])
     assert np.array_equal(env.obstacles, expected_obstacles)
@@ -686,11 +675,7 @@ def test_continuous_light_dark_pomdp_compute_metrics(base_continuous_light_dark_
     assert "goal_reaching_rate" in metrics_dict
     goal_rate = metrics_dict["goal_reaching_rate"]
     assert goal_rate.value == 0.5
-    assert (
-        goal_rate.lower_confidence_bound
-        <= goal_rate.value
-        <= goal_rate.upper_confidence_bound
-    )
+    assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
     assert "obstacle_hit_rate" in metrics_dict
     obstacle_rate = metrics_dict["obstacle_hit_rate"]
     assert obstacle_rate.value == 0.5
@@ -725,9 +710,7 @@ def test_decaying_hit_probability_reward_model():
         reward_model_type=RewardModelType.DECAYING_HIT_PROBABILITY,
         penalty_decay=0.5,
     )
-    assert isinstance(
-        env.reward_model, ContinuousLightDarkDecayingHitProbabilityRewardModel
-    )
+    assert isinstance(env.reward_model, ContinuousLightDarkDecayingHitProbabilityRewardModel)
 
 
 def test_dangerous_states_reward_model():
@@ -833,9 +816,7 @@ def test_single_obstacle_reward_behavior():
         outside_radius_rewards.append(reward)
 
     # Should get normal movement reward (no obstacle penalty)
-    expected_outside_radius_reward = -2.0 - np.linalg.norm(
-        np.array([7.0, 6.0]) - np.array([10, 5])
-    )
+    expected_outside_radius_reward = -2.0 - np.linalg.norm(np.array([7.0, 6.0]) - np.array([10, 5]))
     assert all(
         abs(r - expected_outside_radius_reward) < 0.1 for r in outside_radius_rewards
     ), f"Outside radius rewards should be around {expected_outside_radius_reward}, got {outside_radius_rewards[:5]}"
@@ -865,9 +846,7 @@ def test_single_obstacle_reward_behavior():
 class TestVisualizePath:
     """Test suite for visualize_path function."""
 
-    def test_visualize_path_creates_gif_file(
-        self, base_light_dark_environment, tmp_path
-    ):
+    def test_visualize_path_creates_gif_file(self, base_light_dark_environment, tmp_path):
         """Test that visualize_path creates a GIF file at the specified cache path.
 
         Purpose: Validates that visualize_path successfully creates a GIF animation file
@@ -924,9 +903,7 @@ class TestVisualizePath:
                 b"GIF89a",
             ], "File should have valid GIF magic bytes"
 
-    def test_visualize_path_with_invalid_cache_path_type(
-        self, base_light_dark_environment
-    ):
+    def test_visualize_path_with_invalid_cache_path_type(self, base_light_dark_environment):
         """Test that visualize_path raises TypeError for invalid cache_path type.
 
         Purpose: Validates proper error handling when cache_path is not a Path object
@@ -940,9 +917,7 @@ class TestVisualizePath:
         env = base_light_dark_environment
 
         path = [np.array([0, 5])]
-        belief_path = [
-            DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0]))
-        ]
+        belief_path = [DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0]))]
         actions = []
 
         # Test with string instead of Path
@@ -965,9 +940,7 @@ class TestVisualizePath:
         env = base_light_dark_environment
 
         path = [np.array([0, 5])]
-        belief_path = [
-            DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0]))
-        ]
+        belief_path = [DiscreteDistribution(values=[np.array([0, 5])], probs=np.array([1.0]))]
         actions = []
 
         # Test with .png extension
@@ -975,9 +948,7 @@ class TestVisualizePath:
         with pytest.raises(ValueError, match="cache_path must end with .gif"):
             env.visualize_path(path, belief_path, actions, cache_path)
 
-    def test_visualize_path_with_empty_path(
-        self, base_light_dark_environment, tmp_path
-    ):
+    def test_visualize_path_with_empty_path(self, base_light_dark_environment, tmp_path):
         """Test that visualize_path handles empty path gracefully.
 
         Purpose: Validates robustness when provided with empty input data
@@ -1094,9 +1065,7 @@ class TestVisualizePath:
         assert cache_path.exists()
         assert cache_path.stat().st_size > 0
 
-    def test_visualize_path_caching_behavior(
-        self, base_light_dark_environment, tmp_path
-    ):
+    def test_visualize_path_caching_behavior(self, base_light_dark_environment, tmp_path):
         """Test that visualize_path caching works correctly by overwriting existing files.
 
         Purpose: Validates that visualization caching works properly by overwriting files
@@ -1139,8 +1108,7 @@ class TestVisualizePath:
             np.array([4, 5]),
         ]
         belief_path2 = [
-            DiscreteDistribution(values=[np.array([i, 5])], probs=np.array([1.0]))
-            for i in range(5)
+            DiscreteDistribution(values=[np.array([i, 5])], probs=np.array([1.0])) for i in range(5)
         ]
         actions2 = ["right", "right", "right", "right"]
 
@@ -1156,9 +1124,7 @@ class TestVisualizePath:
             second_mtime > first_mtime or second_size != first_size
         ), "Cache file should be updated with new visualization"
 
-    def test_visualize_path_cache_directory_creation(
-        self, base_light_dark_environment, tmp_path
-    ):
+    def test_visualize_path_cache_directory_creation(self, base_light_dark_environment, tmp_path):
         """Test that visualize_path requires parent directories to exist.
 
         Purpose: Validates that visualization requires existing parent directories
@@ -1198,9 +1164,7 @@ class TestVisualizePath:
         ), "GIF file should be created when parent directories exist"
         assert nested_cache_path.stat().st_size > 0
 
-    def test_visualize_path_with_mismatched_lengths(
-        self, base_light_dark_environment, tmp_path
-    ):
+    def test_visualize_path_with_mismatched_lengths(self, base_light_dark_environment, tmp_path):
         """Test visualize_path behavior with mismatched path, belief_path, and actions lengths.
 
         Purpose: Validates robustness when input arrays have different lengths
@@ -1349,9 +1313,7 @@ def test_beacon_proximity_observation_covariance_changes():
     action = np.array([0, 0])  # Dummy action
 
     # Test state near beacon (0,0) - within radius
-    near_beacon_state = np.array(
-        [0.5, 0.5]
-    )  # Distance sqrt(0.5) < 1.0 from beacon (0,0)
+    near_beacon_state = np.array([0.5, 0.5])  # Distance sqrt(0.5) < 1.0 from beacon (0,0)
     obs_model_near = ContinuousLightDarkNormalNoiseObservationModel(
         next_state=near_beacon_state,
         action=action,
@@ -1373,12 +1335,8 @@ def test_beacon_proximity_observation_covariance_changes():
     )
 
     # Verify near_beacon flag is set correctly
-    assert (
-        obs_model_near.near_beacon == True
-    ), "Should detect proximity to beacon at (0,0)"
-    assert (
-        obs_model_far.near_beacon == False
-    ), "Should not detect proximity to any beacon"
+    assert obs_model_near.near_beacon == True, "Should detect proximity to beacon at (0,0)"
+    assert obs_model_far.near_beacon == False, "Should not detect proximity to any beacon"
 
     # Verify covariance matrix changes
     expected_near_cov = observation_cov_matrix * 0.5  # Reduced by half when near beacon
@@ -1403,9 +1361,7 @@ def test_beacon_proximity_observation_covariance_changes():
     )
 
     # At exactly beacon_radius distance, should be considered "near" (<=)
-    assert (
-        obs_model_boundary.near_beacon == True
-    ), "Should detect proximity at exact beacon radius"
+    assert obs_model_boundary.near_beacon == True, "Should detect proximity at exact beacon radius"
     assert np.array_equal(
         obs_model_boundary.observation_cov_matrix, expected_near_cov
     ), "Observation covariance should be reduced at exact beacon radius boundary"
@@ -1479,18 +1435,10 @@ def test_beacon_proximity_with_multiple_beacons():
     )
 
     # Verify proximity detection for each beacon
-    assert (
-        obs_model_1.near_beacon == True
-    ), "Should detect proximity to first beacon (0,0)"
-    assert (
-        obs_model_2.near_beacon == True
-    ), "Should detect proximity to middle beacon (5,5)"
-    assert (
-        obs_model_3.near_beacon == True
-    ), "Should detect proximity to last beacon (10,10)"
-    assert (
-        obs_model_4.near_beacon == False
-    ), "Should not detect proximity when far from all beacons"
+    assert obs_model_1.near_beacon == True, "Should detect proximity to first beacon (0,0)"
+    assert obs_model_2.near_beacon == True, "Should detect proximity to middle beacon (5,5)"
+    assert obs_model_3.near_beacon == True, "Should detect proximity to last beacon (10,10)"
+    assert obs_model_4.near_beacon == False, "Should not detect proximity when far from all beacons"
 
     # Verify covariance reduction for near-beacon cases
     expected_reduced_cov = observation_cov_matrix * 0.5
@@ -1545,9 +1493,7 @@ def test_observation_model_probability_function():
         observation_values[0], mean=next_state, cov=observation_cov_matrix
     )
 
-    assert isinstance(
-        probabilities, np.ndarray
-    ), "Probability should return numpy array"
+    assert isinstance(probabilities, np.ndarray), "Probability should return numpy array"
     assert len(probabilities) == 1, "Should return one probability for one observation"
     assert np.isclose(
         probabilities[0], expected_prob, rtol=1e-10
@@ -1566,9 +1512,7 @@ def test_observation_model_probability_function():
         observation_values, mean=next_state, cov=observation_cov_matrix
     )
 
-    assert (
-        len(probabilities) == 3
-    ), "Should return three probabilities for three observations"
+    assert len(probabilities) == 3, "Should return three probabilities for three observations"
     assert np.allclose(
         probabilities, expected_probs, rtol=1e-10
     ), f"Probabilities {probabilities} should match expected {expected_probs}"
@@ -1686,9 +1630,7 @@ def test_observation_model_probability_edge_cases():
     # so we expect the current implementation to have issues with empty input
     try:
         empty_probs = obs_model.probability([])
-        assert isinstance(
-            empty_probs, np.ndarray
-        ), "Should return numpy array for empty input"
+        assert isinstance(empty_probs, np.ndarray), "Should return numpy array for empty input"
         assert len(empty_probs) == 0, "Should return empty array for empty input"
     except ValueError:
         # This is expected behavior with current implementation and scipy
@@ -1697,9 +1639,7 @@ def test_observation_model_probability_edge_cases():
     # Test single observation (ensures single value is converted to array)
     single_obs = [np.array([5.0, 5.0])]
     single_prob = obs_model.probability(single_obs)
-    assert isinstance(
-        single_prob, np.ndarray
-    ), "Single probability should be numpy array"
+    assert isinstance(single_prob, np.ndarray), "Single probability should be numpy array"
     assert len(single_prob) == 1, "Single observation should return array of length 1"
     assert single_prob[0] > 0, "Probability should be positive"
 
@@ -1711,12 +1651,8 @@ def test_observation_model_probability_edge_cases():
         np.array([11.0, 0.0]),  # Bottom-right corner
     ]
     boundary_probs = obs_model.probability(boundary_observations)
-    assert (
-        len(boundary_probs) == 4
-    ), "Should return probability for each boundary observation"
-    assert all(
-        prob >= 0 for prob in boundary_probs
-    ), "All probabilities should be non-negative"
+    assert len(boundary_probs) == 4, "Should return probability for each boundary observation"
+    assert all(prob >= 0 for prob in boundary_probs), "All probabilities should be non-negative"
 
     # Test very small covariance (high precision)
     small_cov_model = ContinuousLightDarkNormalNoiseObservationModel(
@@ -1800,11 +1736,10 @@ def test_risk_averse_environment_config_start_state_validity():
 
     # Test the configuration that was causing the issue in visualization example
     env_configs = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95)
-    light_dark_env, initial_belief = (
-        env_configs.continuous_observations_discrete_actions_light_dark_pomdp_config(
-            n_particles=50
-        )
-    )
+    (
+        light_dark_env,
+        initial_belief,
+    ) = env_configs.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=50)
 
     # Check that start state is not terminal
     assert not light_dark_env.is_terminal(
@@ -1823,9 +1758,7 @@ def test_risk_averse_environment_config_start_state_validity():
 
     # The main test has passed - start state is not terminal and obstacles are far enough away
     # This is sufficient to catch the original issue where start state was within obstacle radius
-    print(
-        f"✓ RiskAverseEnvironmentConfigsAPI configuration is valid - start state not terminal"
-    )
+    print(f"✓ RiskAverseEnvironmentConfigsAPI configuration is valid - start state not terminal")
 
 
 def test_environment_configuration_obstacle_placement():

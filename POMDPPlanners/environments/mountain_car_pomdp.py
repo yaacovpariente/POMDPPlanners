@@ -175,9 +175,7 @@ class MountainCarObservation(ObservationModel):
             Observation probability: 139.345607
     """
 
-    def __init__(
-        self, next_state: Tuple[float, float], action: int, cov_matrix: np.ndarray
-    ):
+    def __init__(self, next_state: Tuple[float, float], action: int, cov_matrix: np.ndarray):
         super().__init__(next_state=next_state, action=action)
         self.cov_matrix = cov_matrix
         self.mean = np.array(next_state)
@@ -192,9 +190,7 @@ class MountainCarObservation(ObservationModel):
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
         # Vectorized probability for a batch of observations
         values_array = np.array(values)
-        return scipy.stats.multivariate_normal(self.mean, self.cov_matrix).pdf(
-            values_array
-        )
+        return scipy.stats.multivariate_normal(self.mean, self.cov_matrix).pdf(values_array)
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
@@ -264,9 +260,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         self.velocity_noise = 0.01
 
         # Observation noise matrix
-        self.cov_matrix = np.array(
-            [[self.position_noise**2, 0], [0, self.velocity_noise**2]]
-        )
+        self.cov_matrix = np.array([[self.position_noise**2, 0], [0, self.velocity_noise**2]])
 
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,  # Action space is [-1, 0, 1]
@@ -282,9 +276,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    def state_transition_model(
-        self, state: Tuple[float, float], action: int
-    ) -> Distribution:
+    def state_transition_model(self, state: Tuple[float, float], action: int) -> Distribution:
         return MountainCarTransition(
             state=state,
             action=action,
@@ -295,9 +287,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             max_position=self.max_position,
         )
 
-    def observation_model(
-        self, next_state: Tuple[float, float], action: int
-    ) -> Distribution:
+    def observation_model(self, next_state: Tuple[float, float], action: int) -> Distribution:
         return MountainCarObservation(
             next_state=next_state, action=action, cov_matrix=self.cov_matrix
         )

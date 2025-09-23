@@ -231,15 +231,11 @@ def test_full_coverage_reinvigoration():
 
     # Check that the last n_states particles are the expected states
     n_states = len(belief.actions) + 1  # +1 for the observation state
-    expected_states = [
-        observation + belief.action_to_vector[action] for action in belief.actions
-    ]
+    expected_states = [observation + belief.action_to_vector[action] for action in belief.actions]
     expected_states.append(observation)
 
     for i in range(n_states):
-        assert np.array_equal(
-            reinvigorated_belief.particles[-(i + 1)], expected_states[-(i + 1)]
-        )
+        assert np.array_equal(reinvigorated_belief.particles[-(i + 1)], expected_states[-(i + 1)])
 
 
 def test_full_coverage_invalid_initialization():
@@ -307,23 +303,17 @@ def test_full_coverage_resampling():
     reinvigorated_belief = belief.reinvigorate(action, observation, env, belief)
 
     # Check that resampling occurred (weights should be more uniform)
-    effective_sample_size = 1 / np.sum(
-        np.square(reinvigorated_belief.normalized_weights)
-    )
+    effective_sample_size = 1 / np.sum(np.square(reinvigorated_belief.normalized_weights))
     # After resampling, ESS should be improved but may still be below threshold
     assert effective_sample_size >= belief.ess_threshold
 
     # Check that the last n_states particles are still the expected states
     n_states = len(belief.actions) + 1
-    expected_states = [
-        observation + belief.action_to_vector[action] for action in belief.actions
-    ]
+    expected_states = [observation + belief.action_to_vector[action] for action in belief.actions]
     expected_states.append(observation)
 
     for i in range(n_states):
-        assert np.array_equal(
-            reinvigorated_belief.particles[-(i + 1)], expected_states[-(i + 1)]
-        )
+        assert np.array_equal(reinvigorated_belief.particles[-(i + 1)], expected_states[-(i + 1)])
 
 
 def test_continuous_full_coverage_initialization():
@@ -485,9 +475,7 @@ def test_continuous_full_coverage_resampling():
     reinvigorated_belief = belief.reinvigorate(action, observation, env, belief)
 
     # Check that resampling occurred (weights should be more uniform)
-    effective_sample_size = 1 / np.sum(
-        np.square(reinvigorated_belief.normalized_weights)
-    )
+    effective_sample_size = 1 / np.sum(np.square(reinvigorated_belief.normalized_weights))
     # After resampling, ESS should be improved but may still be below threshold
     assert effective_sample_size >= belief.ess_threshold
 
@@ -539,9 +527,7 @@ def test_continuous_full_coverage_gmm_sampling():
     reinvigorated_particles = np.array(reinvigorated_belief.particles[-n_reinvigorate:])
 
     # Check that particles are clustered around expected centers
-    expected_centers = [
-        observation + belief.action_to_vector[action] for action in belief.actions
-    ]
+    expected_centers = [observation + belief.action_to_vector[action] for action in belief.actions]
     expected_centers.append(observation)
     expected_centers = np.array(expected_centers)
 

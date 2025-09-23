@@ -671,10 +671,7 @@ def test_organize_simulation_results_matches_configurations(simulator):
     assert len(policy1_histories) == num_episodes
     for history in policy1_histories:
         assert history.policy_run_data["depth"] == policy1.depth
-        assert (
-            history.policy_run_data["exploration_constant"]
-            == policy1.exploration_constant
-        )
+        assert history.policy_run_data["exploration_constant"] == policy1.exploration_constant
 
     # Verify env2/policy2 histories
     assert env2.name in results
@@ -683,10 +680,7 @@ def test_organize_simulation_results_matches_configurations(simulator):
     assert len(policy2_histories) == num_episodes
     for history in policy2_histories:
         assert history.policy_run_data["depth"] == policy2.depth
-        assert (
-            history.policy_run_data["exploration_constant"]
-            == policy2.exploration_constant
-        )
+        assert history.policy_run_data["exploration_constant"] == policy2.exploration_constant
 
 
 def test_pomdp_simulator_mlflow_tracking_configures_experiment_directory(
@@ -847,8 +841,7 @@ def test_create_policy_configurations_df(simulator):
 
     # Test the method - need to convert to the expected tuple format
     env_belief_policy_tuples = [
-        (params.environment, params.belief, params.policies)
-        for params in env_run_params
+        (params.environment, params.belief, params.policies) for params in env_run_params
     ]
     config_df = simulator._create_policy_configurations_df(env_belief_policy_tuples)
 
@@ -1113,22 +1106,14 @@ def test_simulator_writes_files_to_output_directory(temp_cache_dir):
 
     # 2. Verify profiling results file is created (when profiling enabled)
     profiling_file = temp_cache_dir / "profiling_results.txt"
-    assert (
-        profiling_file.exists()
-    ), f"Profiling results file not found at {profiling_file}"
+    assert profiling_file.exists(), f"Profiling results file not found at {profiling_file}"
     assert profiling_file.is_file(), "Profiling results should be a file"
-    assert (
-        profiling_file.stat().st_size > 0
-    ), "Profiling results file should not be empty"
+    assert profiling_file.stat().st_size > 0, "Profiling results file should not be empty"
 
     # 3. Verify MLflow experiment artifacts are logged (check for experiment directories)
     # MLflow creates numbered experiment directories
-    experiment_dirs = [
-        d for d in mlruns_dir.iterdir() if d.is_dir() and d.name.isdigit()
-    ]
-    assert (
-        len(experiment_dirs) >= 1
-    ), f"No MLflow experiment directories found in {mlruns_dir}"
+    experiment_dirs = [d for d in mlruns_dir.iterdir() if d.is_dir() and d.name.isdigit()]
+    assert len(experiment_dirs) >= 1, f"No MLflow experiment directories found in {mlruns_dir}"
 
     # Find run directories within experiment directories
     run_dirs = []
@@ -1137,9 +1122,7 @@ def test_simulator_writes_files_to_output_directory(temp_cache_dir):
             [d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32]
         )  # MLflow run IDs are 32 chars
 
-    assert (
-        len(run_dirs) >= 1
-    ), f"No MLflow run directories found in experiment directories"
+    assert len(run_dirs) >= 1, f"No MLflow run directories found in experiment directories"
 
     # 4. Verify artifacts directory exists in at least one run
     artifacts_found = False
@@ -1153,9 +1136,7 @@ def test_simulator_writes_files_to_output_directory(temp_cache_dir):
             if policy_plots_dir.exists():
                 plot_files = list(policy_plots_dir.glob("*.png"))
                 if plot_files:
-                    assert (
-                        len(plot_files) > 0
-                    ), "Expected at least one policy comparison plot file"
+                    assert len(plot_files) > 0, "Expected at least one policy comparison plot file"
 
             # Check for environment-specific artifacts
             env_artifact_dir = artifacts_dir / environment.name
@@ -1176,21 +1157,13 @@ def test_simulator_writes_files_to_output_directory(temp_cache_dir):
 
     # 5. Verify simulation completed successfully and returned expected results
     assert isinstance(results, dict), "Results should be a dictionary"
-    assert (
-        environment.name in results
-    ), f"Results should contain environment {environment.name}"
-    assert (
-        policy.name in results[environment.name]
-    ), f"Results should contain policy {policy.name}"
-    assert (
-        len(results[environment.name][policy.name]) == 3
-    ), "Expected 3 episodes in results"
+    assert environment.name in results, f"Results should contain environment {environment.name}"
+    assert policy.name in results[environment.name], f"Results should contain policy {policy.name}"
+    assert len(results[environment.name][policy.name]) == 3, "Expected 3 episodes in results"
 
     assert isinstance(statistics_df, pd.DataFrame), "Statistics should be a DataFrame"
     assert not statistics_df.empty, "Statistics DataFrame should not be empty"
-    assert (
-        "environment" in statistics_df.columns
-    ), "Statistics should contain environment column"
+    assert "environment" in statistics_df.columns, "Statistics should contain environment column"
     assert "policy" in statistics_df.columns, "Statistics should contain policy column"
 
 
@@ -1250,9 +1223,7 @@ def test_simulator_mlflow_directory_structure_is_correct(temp_cache_dir):
 
     # 1. Check that exactly one mlruns directory exists at the top level
     mlruns_dirs = [
-        item
-        for item in temp_cache_dir.iterdir()
-        if item.is_dir() and item.name == "mlruns"
+        item for item in temp_cache_dir.iterdir() if item.is_dir() and item.name == "mlruns"
     ]
     assert (
         len(mlruns_dirs) == 1
@@ -1286,26 +1257,16 @@ def test_simulator_mlflow_directory_structure_is_correct(temp_cache_dir):
     ), f"Expected meta.yaml file not found in experiment directory: {experiment_dir}"
 
     # 5. Verify at least one run directory exists (32-character hex names)
-    run_dirs = [
-        item
-        for item in experiment_dir.iterdir()
-        if item.is_dir() and len(item.name) == 32
-    ]
+    run_dirs = [item for item in experiment_dir.iterdir() if item.is_dir() and len(item.name) == 32]
     assert (
         len(run_dirs) >= 1
     ), f"Expected at least 1 run directory, found {len(run_dirs)} in {experiment_dir}"
 
     # 6. Verify simulation completed successfully
     assert isinstance(results, dict), "Results should be a dictionary"
-    assert (
-        environment.name in results
-    ), f"Results should contain environment {environment.name}"
-    assert (
-        policy.name in results[environment.name]
-    ), f"Results should contain policy {policy.name}"
-    assert (
-        len(results[environment.name][policy.name]) == 2
-    ), "Expected 2 episodes in results"
+    assert environment.name in results, f"Results should contain environment {environment.name}"
+    assert policy.name in results[environment.name], f"Results should contain policy {policy.name}"
+    assert len(results[environment.name][policy.name]) == 2, "Expected 2 episodes in results"
 
     # 7. Verify statistics DataFrame is properly created
     assert isinstance(statistics_df, pd.DataFrame), "Statistics should be a DataFrame"
@@ -1344,9 +1305,7 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
     )
 
     # Create test policy directory to simulate the structure the simulator creates
-    test_policy_dir = (
-        temp_cache_dir / "policy_artifacts" / environment.name / "TestPolicy"
-    )
+    test_policy_dir = temp_cache_dir / "policy_artifacts" / environment.name / "TestPolicy"
     test_policy_dir.mkdir(parents=True, exist_ok=True)
 
     # Create realistic test history that mimics what the simulator produces
@@ -1470,9 +1429,7 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
     environment_compatible = False
     try:
         # Test the exact interface the simulator uses (List[StepData])
-        environment.cache_visualization(
-            history=test_history.history, cache_path=test_cache_path
-        )
+        environment.cache_visualization(history=test_history.history, cache_path=test_cache_path)
         environment_compatible = True
     except Exception as e:
         environment_error = str(e)
@@ -1554,24 +1511,16 @@ def test_simulator_skips_visualization_caching_when_disabled(temp_cache_dir):
 
     # 1. Verify simulation completed successfully
     assert isinstance(results, dict), "Results should be a dictionary"
-    assert (
-        environment.name in results
-    ), f"Results should contain environment {environment.name}"
-    assert (
-        policy.name in results[environment.name]
-    ), f"Results should contain policy {policy.name}"
+    assert environment.name in results, f"Results should contain environment {environment.name}"
+    assert policy.name in results[environment.name], f"Results should contain policy {policy.name}"
 
     # 2. Check that no visualization directories exist in artifacts
     mlruns_dir = temp_cache_dir / "mlruns"
     if mlruns_dir.exists():
-        experiment_dirs = [
-            d for d in mlruns_dir.iterdir() if d.is_dir() and d.name.isdigit()
-        ]
+        experiment_dirs = [d for d in mlruns_dir.iterdir() if d.is_dir() and d.name.isdigit()]
 
         for exp_dir in experiment_dirs:
-            run_dirs = [
-                d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32
-            ]
+            run_dirs = [d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32]
 
             for run_dir in run_dirs:
                 artifacts_dir = run_dir / "artifacts"
@@ -1726,9 +1675,7 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
 
     # 3. Verify only expected files exist (no extra files)
     actual_files = sorted([f.name for f in viz_dir.iterdir() if f.is_file()])
-    assert (
-        actual_files == expected_files
-    ), f"Expected files {expected_files}, got {actual_files}"
+    assert actual_files == expected_files, f"Expected files {expected_files}, got {actual_files}"
 
     # 4. Verify file contents are valid GIF format (basic check)
     for expected_file in expected_files:
@@ -1882,9 +1829,7 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
 
     # Create sample history
     sample_state = np.array([0.0, 0.0])
-    belief = WeightedParticleBelief(
-        particles=[sample_state], log_weights=np.array([0.5])
-    )
+    belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
 
     history_entry = StepData(
         state=sample_state,
@@ -1937,23 +1882,15 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
         assert mlruns_dir.exists(), f"MLflow runs directory not found at {mlruns_dir}"
 
         # Check for experiment directories
-        experiment_dirs = [
-            d for d in mlruns_dir.iterdir() if d.is_dir() and d.name.isdigit()
-        ]
-        assert (
-            len(experiment_dirs) >= 1
-        ), f"No MLflow experiment directories found in {mlruns_dir}"
+        experiment_dirs = [d for d in mlruns_dir.iterdir() if d.is_dir() and d.name.isdigit()]
+        assert len(experiment_dirs) >= 1, f"No MLflow experiment directories found in {mlruns_dir}"
 
         # Check for run directories
         run_dirs = []
         for exp_dir in experiment_dirs:
-            run_dirs.extend(
-                [d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32]
-            )
+            run_dirs.extend([d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32])
 
-        assert (
-            len(run_dirs) >= 1
-        ), f"No MLflow run directories found in experiment directories"
+        assert len(run_dirs) >= 1, f"No MLflow run directories found in experiment directories"
 
         # Verify at least one run has artifacts directory
         artifacts_found = False
@@ -2030,9 +1967,7 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
 
     def create_test_history(env_name):
         sample_state = np.array([0.0, 0.0])
-        belief = WeightedParticleBelief(
-            particles=[sample_state], log_weights=np.array([0.5])
-        )
+        belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
 
         history_entry = StepData(
             state=sample_state,
@@ -2096,23 +2031,15 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
     assert mlruns_dir.exists(), f"MLflow runs directory not found at {mlruns_dir}"
 
     # Check for experiment directories
-    experiment_dirs = [
-        d for d in mlruns_dir.iterdir() if d.is_dir() and d.name.isdigit()
-    ]
-    assert (
-        len(experiment_dirs) >= 1
-    ), f"No MLflow experiment directories found in {mlruns_dir}"
+    experiment_dirs = [d for d in mlruns_dir.iterdir() if d.is_dir() and d.name.isdigit()]
+    assert len(experiment_dirs) >= 1, f"No MLflow experiment directories found in {mlruns_dir}"
 
     # Check for run directories
     run_dirs = []
     for exp_dir in experiment_dirs:
-        run_dirs.extend(
-            [d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32]
-        )
+        run_dirs.extend([d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32])
 
-    assert (
-        len(run_dirs) >= 1
-    ), f"No MLflow run directories found in experiment directories"
+    assert len(run_dirs) >= 1, f"No MLflow run directories found in experiment directories"
 
     # Verify at least one run has artifacts directory
     artifacts_found = False
@@ -2167,9 +2094,7 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
     from POMDPPlanners.core.belief import WeightedParticleBelief
 
     sample_state = np.array([0.0, 0.0])
-    belief = WeightedParticleBelief(
-        particles=[sample_state], log_weights=np.array([0.5])
-    )
+    belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
 
     history_entry = StepData(
         state=sample_state,
@@ -2222,23 +2147,15 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
     assert mlruns_dir.exists(), f"MLflow runs directory not found at {mlruns_dir}"
 
     # Check for experiment directories
-    experiment_dirs = [
-        d for d in mlruns_dir.iterdir() if d.is_dir() and d.name.isdigit()
-    ]
-    assert (
-        len(experiment_dirs) >= 1
-    ), f"No MLflow experiment directories found in {mlruns_dir}"
+    experiment_dirs = [d for d in mlruns_dir.iterdir() if d.is_dir() and d.name.isdigit()]
+    assert len(experiment_dirs) >= 1, f"No MLflow experiment directories found in {mlruns_dir}"
 
     # Check for run directories
     run_dirs = []
     for exp_dir in experiment_dirs:
-        run_dirs.extend(
-            [d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32]
-        )
+        run_dirs.extend([d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32])
 
-    assert (
-        len(run_dirs) >= 1
-    ), f"No MLflow run directories found in experiment directories"
+    assert len(run_dirs) >= 1, f"No MLflow run directories found in experiment directories"
 
     # Verify at least one run has artifacts directory
     artifacts_found = False
@@ -2293,9 +2210,7 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
     from POMDPPlanners.core.belief import WeightedParticleBelief
 
     sample_state = np.array([0.0, 0.0])
-    belief = WeightedParticleBelief(
-        particles=[sample_state], log_weights=np.array([0.5])
-    )
+    belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
 
     history_entry = StepData(
         state=sample_state,
@@ -2351,9 +2266,7 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
 
     # Verify MLflow artifacts still exist
     mlruns_dir = temp_cache_dir / "mlruns"
-    assert (
-        mlruns_dir.exists()
-    ), f"MLflow runs directory should still exist at {mlruns_dir}"
+    assert mlruns_dir.exists(), f"MLflow runs directory should still exist at {mlruns_dir}"
 
 
 def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_dir):
@@ -2398,9 +2311,7 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
     from POMDPPlanners.core.belief import WeightedParticleBelief
 
     sample_state = np.array([0.0, 0.0])
-    belief = WeightedParticleBelief(
-        particles=[sample_state], log_weights=np.array([0.5])
-    )
+    belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
 
     history_entry = StepData(
         state=sample_state,
@@ -2455,9 +2366,7 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
     ), f"viz_artifacts directory should not be created when caching is disabled, but found at {viz_artifacts_dir}"
 
     # Verify function completed successfully (no exceptions raised)
-    assert (
-        True
-    ), "Function should complete successfully without creating visualization cache"
+    assert True, "Function should complete successfully without creating visualization cache"
 
 
 def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir):
@@ -2505,9 +2414,7 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
     from POMDPPlanners.core.belief import WeightedParticleBelief
 
     sample_state = np.array([0.0, 0.0])
-    belief = WeightedParticleBelief(
-        particles=[sample_state], log_weights=np.array([0.5])
-    )
+    belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
 
     history_entry = StepData(
         state=sample_state,
@@ -2565,9 +2472,7 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
 
             # Verify warning was logged (if the error handling works correctly)
             # Note: The exact warning message depends on the implementation
-            assert (
-                mock_warning.call_count >= 0
-            ), "Function should handle errors without crashing"
+            assert mock_warning.call_count >= 0, "Function should handle errors without crashing"
 
     # Verify function completed successfully despite errors
     assert True, "Function should complete successfully even with visualization errors"
@@ -2709,9 +2614,7 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
     logs_dir = temp_cache_dir / "env_policy" / "logs"
 
     # Verify log directory exists
-    assert (
-        logs_dir.exists()
-    ), f"Environment-policy logs directory should exist at {logs_dir}"
+    assert logs_dir.exists(), f"Environment-policy logs directory should exist at {logs_dir}"
 
     # Get all log files
     log_files = list(logs_dir.glob("*.log"))
@@ -2753,9 +2656,7 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
             content = f.read()
 
         # Each log file should contain episode logging with proper formatting
-        assert (
-            "[EPISODE_" in content
-        ), f"Log file {log_file.name} should contain episode logs"
+        assert "[EPISODE_" in content, f"Log file {log_file.name} should contain episode logs"
         assert (
             "Starting episode simulation" in content
         ), f"Log file {log_file.name} should contain episode start logs"

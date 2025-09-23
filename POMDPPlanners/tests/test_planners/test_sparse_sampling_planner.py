@@ -25,9 +25,7 @@ def initial_belief(tiger_pomdp):
     # Create a uniform belief over states using particles
     states = list(tiger_pomdp.states)
     particles = states * 10  # Create 10 particles for each state
-    log_weights = np.log(
-        np.ones(len(particles)) / len(particles)
-    )  # Uniform log weights
+    log_weights = np.log(np.ones(len(particles)) / len(particles))  # Uniform log weights
     return WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
 
@@ -205,15 +203,11 @@ def test_belief_node_statistics(planner, initial_belief):
     belief_node = BeliefNode(belief=initial_belief)
 
     # Create two action nodes as children with known q_values
-    action_node1 = ActionNode(
-        action="listen", parent=belief_node, children=tuple(), data=None
-    )
+    action_node1 = ActionNode(action="listen", parent=belief_node, children=tuple(), data=None)
     action_node1.q_value = 3.0
     action_node1.visit_count = 2
 
-    action_node2 = ActionNode(
-        action="open-left", parent=belief_node, children=tuple(), data=None
-    )
+    action_node2 = ActionNode(action="open-left", parent=belief_node, children=tuple(), data=None)
     action_node2.q_value = 5.0
     action_node2.visit_count = 3
 
@@ -239,9 +233,7 @@ def test_invalid_branching_factor():
     """
     env = TigerPOMDP(discount_factor=0.95)
     with pytest.raises(ValueError):
-        StandardSparseSamplingDiscreteActionsPlanner(
-            environment=env, branching_factor=0, depth=1
-        )
+        StandardSparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=0, depth=1)
 
 
 def test_invalid_depth():
@@ -257,9 +249,7 @@ def test_invalid_depth():
     """
     env = TigerPOMDP(discount_factor=0.95)
     with pytest.raises(ValueError):
-        StandardSparseSamplingDiscreteActionsPlanner(
-            environment=env, branching_factor=2, depth=0
-        )
+        StandardSparseSamplingDiscreteActionsPlanner(environment=env, branching_factor=2, depth=0)
 
 
 def test_sanity_pomdp_action_selection():

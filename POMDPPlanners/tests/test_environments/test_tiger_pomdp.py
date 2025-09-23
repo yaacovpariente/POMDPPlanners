@@ -230,22 +230,14 @@ def test_reward_range(tiger_pomdp):
 
     # Verify the actual rewards match the range
     min_reward = min(
-        tiger_pomdp.reward(
-            "tiger_left", "open_left"
-        ),  # Opening door with tiger: -100.0
-        tiger_pomdp.reward(
-            "tiger_right", "open_right"
-        ),  # Opening door with tiger: -100.0
+        tiger_pomdp.reward("tiger_left", "open_left"),  # Opening door with tiger: -100.0
+        tiger_pomdp.reward("tiger_right", "open_right"),  # Opening door with tiger: -100.0
         tiger_pomdp.reward("tiger_left", "listen"),  # Listening: -1.0
         tiger_pomdp.reward("tiger_right", "listen"),  # Listening: -1.0
     )
     max_reward = max(
-        tiger_pomdp.reward(
-            "tiger_left", "open_right"
-        ),  # Opening door with treasure: 10.0
-        tiger_pomdp.reward(
-            "tiger_right", "open_left"
-        ),  # Opening door with treasure: 10.0
+        tiger_pomdp.reward("tiger_left", "open_right"),  # Opening door with treasure: 10.0
+        tiger_pomdp.reward("tiger_right", "open_left"),  # Opening door with treasure: 10.0
         tiger_pomdp.reward("tiger_left", "listen"),  # Listening: -1.0
         tiger_pomdp.reward("tiger_right", "listen"),  # Listening: -1.0
     )
@@ -554,9 +546,7 @@ class TestTigerPOMDPMetrics:
                     )
                 )
             # Alternate between correct and incorrect actions
-            action = (
-                "open_right" if (i % 2 == 0) == (state == "tiger_left") else "open_left"
-            )
+            action = "open_right" if (i % 2 == 0) == (state == "tiger_left") else "open_left"
             steps.append(
                 StepData(
                     state=state,

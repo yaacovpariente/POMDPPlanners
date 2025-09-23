@@ -139,9 +139,7 @@ class ObservationModel(Distribution, ABC):
             NotImplementedError: This method is not implemented by default.
                 Subclasses should override if probability calculation is needed.
         """
-        raise NotImplementedError(
-            "The method is not implemented for this observation model."
-        )
+        raise NotImplementedError("The method is not implemented for this observation model.")
 
 
 class StateTransitionModel(Distribution, ABC):
@@ -199,9 +197,7 @@ class StateTransitionModel(Distribution, ABC):
             NotImplementedError: This method is not implemented by default.
                 Subclasses should override if probability calculation is needed.
         """
-        raise NotImplementedError(
-            "The method is not implemented for this state transition model."
-        )
+        raise NotImplementedError("The method is not implemented for this state transition model.")
 
 
 class Environment(ABC):
@@ -288,9 +284,7 @@ class Environment(ABC):
         min_reward, max_reward = reward_range
 
         # Check that both values are numeric (float or int)
-        if not isinstance(min_reward, (int, float)) or not isinstance(
-            max_reward, (int, float)
-        ):
+        if not isinstance(min_reward, (int, float)) or not isinstance(max_reward, (int, float)):
             raise TypeError("reward_range values must be numeric (int or float)")
 
         # Convert to float to ensure consistency
@@ -398,11 +392,7 @@ class Environment(ABC):
         config_dict = {}
         for key, value in self.__dict__.items():
             # Skip logger and private attributes
-            if (
-                key.startswith("_")
-                or callable(value)
-                or isinstance(value, logging.Logger)
-            ):
+            if key.startswith("_") or callable(value) or isinstance(value, logging.Logger):
                 continue
             serialized_value = serialize_value(value)
             if serialized_value is not None:  # Skip None values (like logger)
@@ -534,9 +524,7 @@ class Environment(ABC):
                 - reward: Immediate reward
         """
         next_state = self.state_transition_model(state=state, action=action).sample()[0]
-        next_observation = self.observation_model(
-            next_state=next_state, action=action
-        ).sample()[0]
+        next_observation = self.observation_model(next_state=next_state, action=action).sample()[0]
         reward = self.reward(state=state, action=action)
 
         return next_state, next_observation, reward

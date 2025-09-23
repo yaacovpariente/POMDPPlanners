@@ -697,9 +697,7 @@ class TestSanityPOMDPSampleNextStep:
 
         Test type: unit
         """
-        next_state, next_observation, reward = sanity_pomdp.sample_next_step(
-            state=0, action=0
-        )
+        next_state, next_observation, reward = sanity_pomdp.sample_next_step(state=0, action=0)
         assert next_state == 0  # Action 0 leads to state 0
         assert next_observation == 0  # State 0 gives observation 0
         assert reward == 1.0  # State 0 gives reward 1.0
@@ -715,9 +713,7 @@ class TestSanityPOMDPSampleNextStep:
 
         Test type: unit
         """
-        next_state, next_observation, reward = sanity_pomdp.sample_next_step(
-            state=0, action=1
-        )
+        next_state, next_observation, reward = sanity_pomdp.sample_next_step(state=0, action=1)
         assert next_state == 1  # Action 1 leads to state 1
         assert next_observation == 1  # State 1 gives observation 1
         assert reward == 0.0  # State 1 gives reward 0.0
@@ -733,14 +729,10 @@ class TestSanityPOMDPSampleNextStep:
 
         Test type: unit
         """
-        next_state, next_observation, reward = sanity_pomdp.sample_next_step(
-            state=1, action=0
-        )
+        next_state, next_observation, reward = sanity_pomdp.sample_next_step(state=1, action=0)
         assert next_state == 0  # Action 0 leads to state 0
         assert next_observation == 0  # State 0 gives observation 0
-        assert (
-            reward == 1.0
-        )  # State 1 gives reward 0.0 (reward is based on current state)
+        assert reward == 1.0  # State 1 gives reward 0.0 (reward is based on current state)
 
 
 class TestSanityPOMDPMetrics:
@@ -773,12 +765,8 @@ class TestSanityPOMDPMetrics:
         """
         # Create a simple history
         steps = [
-            StepData(
-                state=0, action=0, next_state=0, observation=0, reward=1.0, belief=None
-            ),
-            StepData(
-                state=0, action=1, next_state=1, observation=1, reward=0.0, belief=None
-            ),
+            StepData(state=0, action=0, next_state=0, observation=0, reward=1.0, belief=None),
+            StepData(state=0, action=1, next_state=1, observation=1, reward=0.0, belief=None),
         ]
         history = History(
             history=steps,

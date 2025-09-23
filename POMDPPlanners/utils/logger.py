@@ -189,9 +189,7 @@ class QueueLoggerManager:
                 except:
                     pass
 
-    def _get_or_create_task_handler(
-        self, task_id: str, config: dict
-    ) -> Optional[logging.Handler]:
+    def _get_or_create_task_handler(self, task_id: str, config: dict) -> Optional[logging.Handler]:
         """Get or create file handler for specific task (maintains individual files)."""
 
         if task_id not in self._task_handlers:
@@ -229,9 +227,7 @@ class QueueLoggerManager:
         else:
             # Update reference count and last used time
             handler = self._task_handlers[task_id]
-            self._handler_ref_count[handler] = (
-                self._handler_ref_count.get(handler, 0) + 1
-            )
+            self._handler_ref_count[handler] = self._handler_ref_count.get(handler, 0) + 1
             self._handler_last_used[handler] = time.time()
 
         return self._task_handlers.get(task_id)
@@ -583,8 +579,7 @@ def get_queue_logger_diagnostics() -> Dict[str, Any]:
 
         return {
             "queue_size": manager._log_queue.qsize(),
-            "writer_thread_alive": manager._writer_thread
-            and manager._writer_thread.is_alive(),
+            "writer_thread_alive": manager._writer_thread and manager._writer_thread.is_alive(),
             "registered_loggers": len(manager._loggers),
             "active_handlers": len(manager._task_handlers),
             "max_handlers": manager._max_handlers,

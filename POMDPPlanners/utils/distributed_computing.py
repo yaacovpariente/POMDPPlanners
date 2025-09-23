@@ -30,9 +30,7 @@ def run_parallel_locally(
     Returns:
         List of results from each function call
     """
-    logger.info(
-        f"Starting parallel execution with {len(kwargs_list)} tasks using {n_jobs} jobs"
-    )
+    logger.info(f"Starting parallel execution with {len(kwargs_list)} tasks using {n_jobs} jobs")
 
     # Set up caching if cache_dir is provided
     if cache_dir is not None:
@@ -43,9 +41,7 @@ def run_parallel_locally(
     # Run tasks in parallel using joblib with progress bar
     results = Parallel(n_jobs=n_jobs)(
         delayed(func)(**kwargs)
-        for kwargs in tqdm(
-            kwargs_list, total=len(kwargs_list), desc=description, unit=unit
-        )
+        for kwargs in tqdm(kwargs_list, total=len(kwargs_list), desc=description, unit=unit)
     )
 
     logger.info(f"All parallel tasks completed")

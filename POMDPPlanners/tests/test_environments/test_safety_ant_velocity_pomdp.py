@@ -506,9 +506,7 @@ def test_compute_metrics():
 
     # Verify metrics
     assert np.isclose(metrics_dict["safety_violation_rate"].value, expected_safety_rate)
-    assert np.isclose(
-        metrics_dict["critical_violation_rate"].value, expected_critical_rate
-    )
+    assert np.isclose(metrics_dict["critical_violation_rate"].value, expected_critical_rate)
 
     # Verify confidence intervals
     assert (
@@ -855,16 +853,12 @@ def test_sample_next_step_observation_never_empty():
                 next_state, observation, reward = env.sample_next_step(state, action)
 
                 # Check observation properties
-                assert isinstance(
-                    observation, np.ndarray
-                ), "Observation should be numpy array"
+                assert isinstance(observation, np.ndarray), "Observation should be numpy array"
                 assert observation.shape == (
                     4,
                 ), f"Expected observation shape (4,), got {observation.shape}"
                 assert len(observation) > 0, "Observation should not be empty"
-                assert np.all(
-                    np.isfinite(observation)
-                ), "All observation values should be finite"
+                assert np.all(np.isfinite(observation)), "All observation values should be finite"
 
                 # Verify observation can be used in probability calculation
                 obs_model = env.observation_model(next_state, action)
@@ -916,16 +910,10 @@ def test_observation_probability_list_interface():
     probs_multi = obs_model.probability([obs1, obs2, obs3])
 
     assert isinstance(probs_multi, np.ndarray), "Should return numpy array"
-    assert (
-        len(probs_multi) == 3
-    ), "Should return three probabilities for three observations"
+    assert len(probs_multi) == 3, "Should return three probabilities for three observations"
     assert np.all(np.isfinite(probs_multi)), "All probabilities should be finite"
     assert np.all(probs_multi >= 0.0), "All probabilities should be non-negative"
 
     # Closer observations should have higher probability
-    assert (
-        probs_multi[0] > probs_multi[2]
-    ), "Closer observation should have higher probability"
-    assert (
-        probs_multi[1] > probs_multi[2]
-    ), "Closer observation should have higher probability"
+    assert probs_multi[0] > probs_multi[2], "Closer observation should have higher probability"
+    assert probs_multi[1] > probs_multi[2], "Closer observation should have higher probability"

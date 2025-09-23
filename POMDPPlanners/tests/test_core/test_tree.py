@@ -28,9 +28,7 @@ random.seed(42)
 class TestEnvironment(Environment):
     def __init__(self):
         space_info = SpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE)
-        super().__init__(
-            discount_factor=0.95, name="TestEnvironment", space_info=space_info
-        )
+        super().__init__(discount_factor=0.95, name="TestEnvironment", space_info=space_info)
 
     def state_transition(self, state, action):
         return state
@@ -117,9 +115,7 @@ def test_action_node_initialization_creates_mcts_tree_node():
 
     # Create ActionNode with parent and data
     parent_node = ActionNode(parent_action, children=())
-    child_node = ActionNode(
-        test_action, parent=parent_node, data=test_data, children=()
-    )
+    child_node = ActionNode(test_action, parent=parent_node, data=test_data, children=())
 
     # ASSERT: Verify basic node initialization with correct defaults
     assert basic_node.action == test_action
@@ -276,19 +272,13 @@ def test_sample_child_node(test_belief):
     action_node = ActionNode("test_action", children=())
 
     # Create belief nodes with different visit counts
-    belief1 = BeliefNode(
-        test_belief, observation="obs1", parent=action_node, children=()
-    )
+    belief1 = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
     belief1.visit_count = 10
 
-    belief2 = BeliefNode(
-        test_belief, observation="obs2", parent=action_node, children=()
-    )
+    belief2 = BeliefNode(test_belief, observation="obs2", parent=action_node, children=())
     belief2.visit_count = 5
 
-    belief3 = BeliefNode(
-        test_belief, observation="obs3", parent=action_node, children=()
-    )
+    belief3 = BeliefNode(test_belief, observation="obs3", parent=action_node, children=())
     belief3.visit_count = 15
 
     # Test sampling with different visit counts
@@ -340,9 +330,7 @@ def test_sample_child_node_single_child(test_belief):
     Test type: unit
     """
     action_node = ActionNode("test_action", children=())
-    belief = BeliefNode(
-        test_belief, observation="obs1", parent=action_node, children=()
-    )
+    belief = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
     belief.visit_count = 5
 
     # Should always return the single child
@@ -383,15 +371,9 @@ def test_get_belief_node_child(test_belief, test_env):
     action_node = ActionNode("test_action", children=())
 
     # Create belief nodes with different observations
-    belief1 = BeliefNode(
-        test_belief, observation="obs1", parent=action_node, children=()
-    )
-    belief2 = BeliefNode(
-        test_belief, observation="obs2", parent=action_node, children=()
-    )
-    belief3 = BeliefNode(
-        test_belief, observation="obs3", parent=action_node, children=()
-    )
+    belief1 = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
+    belief2 = BeliefNode(test_belief, observation="obs2", parent=action_node, children=())
+    belief3 = BeliefNode(test_belief, observation="obs3", parent=action_node, children=())
 
     # Test getting existing observations
     result1 = action_node.get_belief_node_child("obs1", test_env)
@@ -440,12 +422,8 @@ def test_get_belief_node_child_duplicate_observations(test_belief, test_env):
     action_node = ActionNode("test_action", children=())
 
     # Create belief nodes with the same observation
-    belief1 = BeliefNode(
-        test_belief, observation="same_obs", parent=action_node, children=()
-    )
-    belief2 = BeliefNode(
-        test_belief, observation="same_obs", parent=action_node, children=()
-    )
+    belief1 = BeliefNode(test_belief, observation="same_obs", parent=action_node, children=())
+    belief2 = BeliefNode(test_belief, observation="same_obs", parent=action_node, children=())
 
     # Should return the first child with matching observation
     result = action_node.get_belief_node_child("same_obs", test_env)
@@ -466,12 +444,8 @@ def test_get_belief_node_child_none_observation(test_belief, test_env):
     action_node = ActionNode("test_action", children=())
 
     # Create belief nodes with None observation
-    belief_none = BeliefNode(
-        test_belief, observation=None, parent=action_node, children=()
-    )
-    belief_obs = BeliefNode(
-        test_belief, observation="obs1", parent=action_node, children=()
-    )
+    belief_none = BeliefNode(test_belief, observation=None, parent=action_node, children=())
+    belief_obs = BeliefNode(test_belief, observation="obs1", parent=action_node, children=())
 
     # Test getting None observation
     result = action_node.get_belief_node_child(None, test_env)

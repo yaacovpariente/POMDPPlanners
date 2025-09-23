@@ -240,15 +240,11 @@ class PushObservation(ObservationModel):
         observations = []
         for _ in range(n_samples):
             # Add noise to object position observation
-            noisy_object_pos = self.object_pos + np.random.normal(
-                0, self.observation_noise, size=2
-            )
+            noisy_object_pos = self.object_pos + np.random.normal(0, self.observation_noise, size=2)
             noisy_object_pos = np.clip(noisy_object_pos, 0, self.grid_size - 1)
 
             # Combine observations (robot position is known exactly, target position is known)
-            observation = np.concatenate(
-                [self.robot_pos, noisy_object_pos, self.target_pos]
-            )
+            observation = np.concatenate([self.robot_pos, noisy_object_pos, self.target_pos])
             observations.append(observation)
         return observations
 
@@ -263,9 +259,7 @@ class PushObservation(ObservationModel):
                 )
 
             if observation.shape != (6,):
-                raise ValueError(
-                    f"Expected observation shape (6,), got {observation.shape}"
-                )
+                raise ValueError(f"Expected observation shape (6,), got {observation.shape}")
 
             object_pos_diff = observation[2:4] - self.object_pos
             log_prob = -0.5 * np.sum(object_pos_diff**2) / (self.observation_noise**2)
@@ -354,9 +348,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         self.push_threshold = push_threshold
         self.friction_coefficient = friction_coefficient
         self.observation_noise = observation_noise
-        self.obstacles: List[Tuple[float, float]] = (
-            obstacles if obstacles is not None else []
-        )
+        self.obstacles: List[Tuple[float, float]] = obstacles if obstacles is not None else []
         self.obstacle_radius = obstacle_radius
         self.obstacle_penalty = obstacle_penalty
 
@@ -408,9 +400,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
 
         return False
 
-    def state_transition_model(
-        self, state: np.ndarray, action: str
-    ) -> StateTransitionModel:
+    def state_transition_model(self, state: np.ndarray, action: str) -> StateTransitionModel:
         return PushStateTransition(
             state=state,
             action=action,
@@ -421,9 +411,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
             obstacle_radius=self.obstacle_radius,
         )
 
-    def observation_model(
-        self, next_state: np.ndarray, action: str
-    ) -> ObservationModel:
+    def observation_model(self, next_state: np.ndarray, action: str) -> ObservationModel:
         return PushObservation(
             next_state=next_state,
             action=action,
@@ -500,15 +488,11 @@ class PushPOMDP(DiscreteActionsEnvironment):
                         # Ensure object is not too close to target initially and not in obstacles
                         if np.linalg.norm(
                             object_pos - self.target_pos
-                        ) >= 2.0 and not self.parent._is_colliding_with_obstacle(
-                            object_pos
-                        ):
+                        ) >= 2.0 and not self.parent._is_colliding_with_obstacle(object_pos):
                             break
                         attempts += 1
 
-                    initial_state = np.concatenate(
-                        [robot_pos, object_pos, self.target_pos]
-                    )
+                    initial_state = np.concatenate([robot_pos, object_pos, self.target_pos])
                     initial_states.append(initial_state)
                 return initial_states
 
@@ -522,9 +506,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
     def get_actions(self) -> List[str]:
         return self.actions
 
-    def is_equal_observation(
-        self, observation1: np.ndarray, observation2: np.ndarray
-    ) -> bool:
+    def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
@@ -620,9 +602,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
                 ax.scatter(obs_x, obs_y, s=1, c="red", label="Obstacles")
 
         # Initialize path traces
-        (robot_path_line,) = ax.plot(
-            [], [], "b-", alpha=0.4, linewidth=2, label="Robot Path"
-        )
+        (robot_path_line,) = ax.plot([], [], "b-", alpha=0.4, linewidth=2, label="Robot Path")
         (object_path_line,) = ax.plot(
             [],
             [],
@@ -888,20 +868,14 @@ class PushPOMDP(DiscreteActionsEnvironment):
             if total_steps > 0:
                 robot_collisions.append(history_robot_collisions)
                 object_collisions.append(history_object_collisions)
-                total_collisions.append(
-                    history_robot_collisions + history_object_collisions
-                )
+                total_collisions.append(history_robot_collisions + history_object_collisions)
 
         total_steps_all = sum(len(history.history) for history in histories)
-        avg_robot_collisions = (
-            sum(robot_collisions) / total_steps_all if total_steps_all > 0 else 0
-        )
+        avg_robot_collisions = sum(robot_collisions) / total_steps_all if total_steps_all > 0 else 0
         avg_object_collisions = (
             sum(object_collisions) / total_steps_all if total_steps_all > 0 else 0
         )
-        avg_total_collisions = (
-            sum(total_collisions) / total_steps_all if total_steps_all > 0 else 0
-        )
+        avg_total_collisions = sum(total_collisions) / total_steps_all if total_steps_all > 0 else 0
 
         robot_collision_rates = [
             c / len(history.history) for c, history in zip(robot_collisions, histories)
@@ -913,25 +887,13 @@ class PushPOMDP(DiscreteActionsEnvironment):
             c / len(history.history) for c, history in zip(total_collisions, histories)
         ]
 
-        robot_collisions_ci = confidence_interval(
-            data=robot_collision_rates, confidence=0.95
-        )
-        object_collisions_ci = confidence_interval(
-            data=object_collision_rates, confidence=0.95
-        )
-        total_collisions_ci = confidence_interval(
-            data=total_collision_rates, confidence=0.95
-        )
+        robot_collisions_ci = confidence_interval(data=robot_collision_rates, confidence=0.95)
+        object_collisions_ci = confidence_interval(data=object_collision_rates, confidence=0.95)
+        total_collisions_ci = confidence_interval(data=total_collision_rates, confidence=0.95)
 
-        total_robot_collisions_ci = confidence_interval(
-            data=robot_collisions, confidence=0.95
-        )
-        total_object_collisions_ci = confidence_interval(
-            data=object_collisions, confidence=0.95
-        )
-        total_all_collisions_ci = confidence_interval(
-            data=total_collisions, confidence=0.95
-        )
+        total_robot_collisions_ci = confidence_interval(data=robot_collisions, confidence=0.95)
+        total_object_collisions_ci = confidence_interval(data=object_collisions, confidence=0.95)
+        total_all_collisions_ci = confidence_interval(data=total_collisions, confidence=0.95)
 
         return [
             MetricValue(

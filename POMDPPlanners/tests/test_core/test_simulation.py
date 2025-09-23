@@ -25,9 +25,7 @@ def create_test_belief():
     particles = ["tiger_left", "tiger_right"]
     # Use equal weights (log(0.5) for each particle)
     log_weights = np.array([np.log(0.5), np.log(0.5)])
-    return WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    return WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
 
 def test_history_equality():
@@ -121,9 +119,7 @@ def test_history_equality():
         reach_terminal_state=True,
         policy_run_data=None,
     )
-    assert (
-        history1 != history4
-    ), "Histories with different discount factors should not be equal"
+    assert history1 != history4, "Histories with different discount factors should not be equal"
 
     # Test with different history length
     history5 = History(

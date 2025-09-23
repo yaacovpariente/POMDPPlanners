@@ -153,9 +153,7 @@ class TestVisualizePlannerEpisode:
                 temp_cache_dir / "TestPlanner_1.gif",
             ]
 
-            for i, call_args in enumerate(
-                tiger_environment.cache_visualization.call_args_list
-            ):
+            for i, call_args in enumerate(tiger_environment.cache_visualization.call_args_list):
                 history_arg = call_args[1]["history"]
                 cache_path_arg = call_args[1]["cache_path"]
 
@@ -530,9 +528,7 @@ class TestVisualizePlannerEpisode:
         environments = [
             TigerPOMDP(discount_factor=0.95, name="TigerPOMDP"),
             ContinuousLightDarkPOMDP(discount_factor=0.95, name="LightDarkPOMDP"),
-            CartPolePOMDP(
-                discount_factor=0.95, noise_cov=noise_cov, name="CartPolePOMDP"
-            ),
+            CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov, name="CartPolePOMDP"),
         ]
 
         # Mock cache_visualization for all environments to avoid file I/O
@@ -543,7 +539,6 @@ class TestVisualizePlannerEpisode:
             "POMDPPlanners.utils.planner_episode_visualization.run_episode",
             return_value=mock_episode_result,
         ):
-
             for env in environments:
                 visualize_planner_episode(
                     planner=test_planner,
@@ -722,7 +717,6 @@ class TestVisualizePlannerEpisode:
             with patch(
                 "POMDPPlanners.utils.planner_episode_visualization.Parallel"
             ) as mock_parallel:
-
                 visualize_planner_episode(
                     planner=test_planner,
                     environment=tiger_environment,
@@ -983,9 +977,7 @@ class TestVisualizePlannerEpisode:
         env.cache_visualization = Mock()
 
         # Mock Parallel to verify it's called but avoid actual parallel execution
-        with patch(
-            "POMDPPlanners.utils.planner_episode_visualization.Parallel"
-        ) as mock_parallel:
+        with patch("POMDPPlanners.utils.planner_episode_visualization.Parallel") as mock_parallel:
             mock_parallel.return_value = Mock(return_value=None)
 
             # Execute with parallel processing

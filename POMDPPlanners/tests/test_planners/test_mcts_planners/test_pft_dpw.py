@@ -150,18 +150,14 @@ def test_simulate_path(planner, initial_belief, environment):
 
     # Verify return value is within expected range
     # For LightDarkPOMDP, rewards are typically between -10 (obstacle hit) and 10 (goal reached)
-    assert (
-        return_value >= (-10 - environment.grid_size * np.sqrt(2)) * 5
-    )  # Minimum possible reward
+    assert return_value >= (-10 - environment.grid_size * np.sqrt(2)) * 5  # Minimum possible reward
     assert return_value <= 10  # Maximum possible reward
 
 
 # Config ID Tests
 
 
-def test_pft_dpw_config_id_consistency_identical_parameters(
-    environment, action_sampler
-):
+def test_pft_dpw_config_id_consistency_identical_parameters(environment, action_sampler):
     """Test that config_id is consistent for identical PFT_DPW parameters.
 
     Purpose: Validates that PFT_DPW with identical parameters produces identical config_id

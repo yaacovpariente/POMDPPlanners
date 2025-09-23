@@ -322,9 +322,7 @@ class TaskManagerExternalDB(TaskManager):
             self.logger.info(f"Completed {len(new_results)} tasks")
 
             if len(new_results) != len(tasks_to_run):
-                raise ValueError(
-                    "new_results and tasks_to_run must have the same length"
-                )
+                raise ValueError("new_results and tasks_to_run must have the same length")
 
             # Store new results in their original positions
             for idx, result in zip(task_indices, new_results):
@@ -334,9 +332,7 @@ class TaskManagerExternalDB(TaskManager):
                 results[idx] = result
                 # Cache the new result
                 task_id = tasks[idx].get_config_id()
-                self.logger.debug(
-                    f"Storing task {idx} in cache with config_id: {task_id}"
-                )
+                self.logger.debug(f"Storing task {idx} in cache with config_id: {task_id}")
                 self.cache_db.set(task_id, result)
 
         # Filter out failed tasks and their identifiers

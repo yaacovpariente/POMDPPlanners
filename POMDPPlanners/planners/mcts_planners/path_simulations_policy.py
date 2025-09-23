@@ -79,23 +79,17 @@ class PathSimulationPolicy(Policy):
         self.action_sampler = action_sampler
 
         if n_simulations is not None and time_out_in_seconds is not None:
-            raise ValueError(
-                "Cannot specify both n_simulations and time_out_in_seconds"
-            )
+            raise ValueError("Cannot specify both n_simulations and time_out_in_seconds")
 
         if (
             self.action_sampler is None
             and self.environment.space_info.action_space == SpaceType.CONTINUOUS
         ):
-            raise ValueError(
-                "Action sampler must be provided for continuous action spaces"
-            )
+            raise ValueError("Action sampler must be provided for continuous action spaces")
 
     def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
         if is_terminal_belief(belief=belief, env=self.environment):
-            return [self._sample_random_action(belief=belief)], PolicyRunData(
-                info_variables=[]
-            )
+            return [self._sample_random_action(belief=belief)], PolicyRunData(info_variables=[])
 
         tree = self._learn_tree(belief=belief)
         tree_metrics = compute_tree_metrics(tree=tree)
@@ -121,15 +115,11 @@ class PathSimulationPolicy(Policy):
         elif self.time_out_in_seconds is not None:
             self._construct_tree_using_timeout(belief_node=tree)
         else:
-            raise ValueError(
-                "Either n_simulations or time_out_in_seconds must be provided"
-            )
+            raise ValueError("Either n_simulations or time_out_in_seconds must be provided")
 
         return tree
 
-    def _construct_tree_using_n_simulations(
-        self, belief_node: BeliefNode
-    ) -> BeliefNode:
+    def _construct_tree_using_n_simulations(self, belief_node: BeliefNode) -> BeliefNode:
         if self.n_simulations is None:
             raise ValueError("n_simulations must not be None")
 

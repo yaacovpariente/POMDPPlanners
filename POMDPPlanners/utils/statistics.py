@@ -361,8 +361,7 @@ def cvar_probabilistic_lower_bound_thomas(
     indices = np.arange(n)  # 0 to n-1
     weights = np.maximum(
         0,
-        np.minimum(1, (indices / n) + np.sqrt(np.log(1 / delta) / (2 * n)))
-        - (1 - alpha),
+        np.minimum(1, (indices / n) + np.sqrt(np.log(1 / delta) / (2 * n))) - (1 - alpha),
     )
 
     # Calculate differences vectorized
@@ -407,9 +406,7 @@ def cvar_probabilistic_upper_bound_thomas(
 
     # Calculate weights vectorized
     indices = np.arange(1, n + 1)  # 1 to n
-    weights = np.maximum(
-        0, (indices / n) - np.sqrt(np.log(1 / delta) / (2 * n)) - (1 - alpha)
-    )
+    weights = np.maximum(0, (indices / n) - np.sqrt(np.log(1 / delta) / (2 * n)) - (1 - alpha))
 
     # Calculate differences vectorized
     diffs = sorted_vec[1:] - sorted_vec[:-1]
@@ -522,9 +519,7 @@ def cvar_bound_const_eps(
         ) - eps / alpha * cvar_estimator(y_samp, eps)
     else:
         y_samp_mean = np.mean(y_samp)
-        lower_bound = (
-            (alpha + eps - 1) * y_inf + y_samp_mean - eps * cvar_estimator(y_samp, eps)
-        )
+        lower_bound = (alpha + eps - 1) * y_inf + y_samp_mean - eps * cvar_estimator(y_samp, eps)
         lower_bound /= alpha
 
     # Calculate upper bound
@@ -538,9 +533,7 @@ def cvar_bound_const_eps(
     return lower_bound, upper_bound
 
 
-def cvar_estimator_from_dist(
-    values: np.ndarray, weights: np.ndarray, alpha: float
-) -> float:
+def cvar_estimator_from_dist(values: np.ndarray, weights: np.ndarray, alpha: float) -> float:
     """
     Calculate the Conditional Value at Risk (CVaR) from a discrete distribution.
 

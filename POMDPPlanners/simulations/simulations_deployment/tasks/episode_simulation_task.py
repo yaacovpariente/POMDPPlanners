@@ -218,14 +218,10 @@ class EpisodeSimulationTask(SimulationTask):
                 self.logger.debug(
                     f"[EPISODE_{self.episode_id:03d}] Cache directory: {self.cache_dir}"
                 )
-            self.logger.debug(
-                f"[EPISODE_{self.episode_id:03d}] Cache key: {self._cache_key}"
-            )
+            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Cache key: {self._cache_key}")
 
         # Log random state setup
-        self.logger.debug(
-            f"[EPISODE_{self.episode_id:03d}] Setting random seed to {self.seed}"
-        )
+        self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Setting random seed to {self.seed}")
         state = np.random.get_state()
 
         random.seed(self.seed)
@@ -233,9 +229,7 @@ class EpisodeSimulationTask(SimulationTask):
 
         try:
             # Run simulation with seed parameter
-            self.logger.debug(
-                f"[EPISODE_{self.episode_id:03d}] Starting episode simulation..."
-            )
+            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Starting episode simulation...")
             result = run_episode(
                 environment=self.environment,
                 policy=self.policy,
@@ -253,9 +247,7 @@ class EpisodeSimulationTask(SimulationTask):
                 if hasattr(result, "history") and result.history:
                     actual_steps = len(result.history)
                     total_reward = sum(
-                        step.reward
-                        for step in result.history
-                        if step.reward is not None
+                        step.reward for step in result.history if step.reward is not None
                     )
 
                 if hasattr(result, "reach_terminal_state"):
@@ -275,17 +267,11 @@ class EpisodeSimulationTask(SimulationTask):
                         f"[EPISODE_{self.episode_id:03d}] Result type: {type(result)}"
                     )
             else:
-                self.logger.warning(
-                    f"[EPISODE_{self.episode_id:03d}] Episode returned None result"
-                )
+                self.logger.warning(f"[EPISODE_{self.episode_id:03d}] Episode returned None result")
 
         except Exception as e:
-            self.logger.error(
-                f"[EPISODE_{self.episode_id:03d}] Error running episode: {e}"
-            )
-            self.logger.exception(
-                f"[EPISODE_{self.episode_id:03d}] Full exception details:"
-            )
+            self.logger.error(f"[EPISODE_{self.episode_id:03d}] Error running episode: {e}")
+            self.logger.exception(f"[EPISODE_{self.episode_id:03d}] Full exception details:")
             result = None
         finally:
             # Restore random state

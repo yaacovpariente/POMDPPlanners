@@ -226,12 +226,8 @@ def compute_statistics_environment_policy_pair(
             MetricValue(
                 name="average_state_sampling_time",
                 value=np.mean(average_state_sampling_time),
-                lower_confidence_bound=average_state_sampling_time_confidence_interval[
-                    0
-                ],
-                upper_confidence_bound=average_state_sampling_time_confidence_interval[
-                    1
-                ],
+                lower_confidence_bound=average_state_sampling_time_confidence_interval[0],
+                upper_confidence_bound=average_state_sampling_time_confidence_interval[1],
             ),
             MetricValue(
                 name="average_action_time",
@@ -248,12 +244,8 @@ def compute_statistics_environment_policy_pair(
             MetricValue(
                 name="average_belief_update_time",
                 value=np.mean(average_belief_update_time),
-                lower_confidence_bound=average_belief_update_time_confidence_interval[
-                    0
-                ],
-                upper_confidence_bound=average_belief_update_time_confidence_interval[
-                    1
-                ],
+                lower_confidence_bound=average_belief_update_time_confidence_interval[0],
+                upper_confidence_bound=average_belief_update_time_confidence_interval[1],
             ),
             MetricValue(
                 name="average_reward_time",
@@ -270,12 +262,8 @@ def compute_statistics_environment_policy_pair(
             MetricValue(
                 name="average_reach_terminal_state",
                 value=np.mean(average_reach_terminal_state),
-                lower_confidence_bound=average_reach_terminal_state_confidence_interval[
-                    0
-                ],
-                upper_confidence_bound=average_reach_terminal_state_confidence_interval[
-                    1
-                ],
+                lower_confidence_bound=average_reach_terminal_state_confidence_interval[0],
+                upper_confidence_bound=average_reach_terminal_state_confidence_interval[1],
             ),
         ]
     )
@@ -305,8 +293,7 @@ def compute_statistics_environments_policies_comparison(
     if not all(isinstance(env_histories, dict) for env_histories in histories.values()):
         raise TypeError("All values in histories must be dicts")
     if not all(
-        isinstance(policy_histories, list)
-        and all(isinstance(h, History) for h in policy_histories)
+        isinstance(policy_histories, list) and all(isinstance(h, History) for h in policy_histories)
         for env_histories in histories.values()
         for policy_histories in env_histories.values()
     ):
@@ -435,9 +422,7 @@ def metrics_dict_to_dataframe(
         raise TypeError("metrics_dict must be a dict")
     if len(metrics_dict) == 0:
         raise ValueError("metrics_dict must not be empty")
-    if not all(
-        isinstance(policy_metrics, dict) for policy_metrics in metrics_dict.values()
-    ):
+    if not all(isinstance(policy_metrics, dict) for policy_metrics in metrics_dict.values()):
         raise TypeError("All values in metrics_dict must be dicts")
     if not all(
         isinstance(metric, MetricValue)

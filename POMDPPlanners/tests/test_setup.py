@@ -45,9 +45,7 @@ def test_required_packages():
     # Get the requirements from requirements.txt
     requirements_file = Path(__file__).parent.parent.parent / "requirements.txt"
     with open(requirements_file) as f:
-        requirements = [
-            line.strip() for line in f if line.strip() and not line.startswith("#")
-        ]
+        requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
     # Convert requirements to pkg_resources.Requirement objects
     required_packages = [pkg_resources.Requirement.parse(req) for req in requirements]

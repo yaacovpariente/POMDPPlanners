@@ -175,9 +175,7 @@ class UnweightedParticleBelief(Belief):
             if len(new_particles) < self.reinvigoration_fraction * self.num_particles:
                 num_new = int(self.reinvigoration_fraction * self.num_particles)
                 reinvigorated = [
-                    self.reinvigorate(
-                        action=action, observation=observation, pomdp=pomdp
-                    )
+                    self.reinvigorate(action=action, observation=observation, pomdp=pomdp)
                     for _ in range(num_new)
                 ]
                 new_particles += reinvigorated
@@ -204,9 +202,7 @@ class UnweightedParticleBelief(Belief):
         return random.choice(self.particles)
 
     @abstractmethod
-    def _reinvigoration_pertubation(
-        self, action: Any, observation: Any, pomdp: Environment
-    ) -> Any:
+    def _reinvigoration_pertubation(self, action: Any, observation: Any, pomdp: Environment) -> Any:
         """This method should be implemented specifically for each environment."""
         pass
 
@@ -284,17 +280,13 @@ class WeightedParticleBelief(Belief):
         if not np.any(log_weights != 0):
             raise ValueError("At least one log_weight must be nonzero")
         if not np.all(np.isfinite(log_weights)):
-            raise ValueError(
-                "log_weights must be finite numbers (not Inf, -Inf, or NaN)"
-            )
+            raise ValueError("log_weights must be finite numbers (not Inf, -Inf, or NaN)")
 
         self.particles = particles
         self.log_weights = log_weights
         # First subtract max for numerical stability, then normalize to sum to 1
         self.normalized_weights = np.exp(self.log_weights - np.max(self.log_weights))
-        self.normalized_weights = self.normalized_weights / np.sum(
-            self.normalized_weights
-        )
+        self.normalized_weights = self.normalized_weights / np.sum(self.normalized_weights)
         self.resampling = resampling
         self.ess_factor = ess_factor
         self.ess_threshold = len(particles) * ess_factor
@@ -393,9 +385,7 @@ class WeightedParticleBelief(Belief):
         config_dict = dict(sorted(config_dict.items()))
         return config_to_id(config_dict)
 
-    def _resample(
-        self, particles: list, log_weights: np.ndarray
-    ) -> Tuple[list, np.ndarray]:
+    def _resample(self, particles: list, log_weights: np.ndarray) -> Tuple[list, np.ndarray]:
         """Resample particles based on their weights if effective sample size is below threshold.
 
         Args:
@@ -418,9 +408,7 @@ class WeightedParticleBelief(Belief):
                 k=len(particles),
             )
             resampled_particles = [particles[i] for i in sampled_indexes]
-            new_log_weights = np.log(
-                np.ones(len(resampled_particles)) / len(resampled_particles)
-            )
+            new_log_weights = np.log(np.ones(len(resampled_particles)) / len(resampled_particles))
             return resampled_particles, new_log_weights
         return particles, log_weights
 
@@ -433,9 +421,9 @@ class WeightedParticleBelief(Belief):
         ]
         probs = np.array(
             [
-                pomdp.observation_model(
-                    next_state=next_particle, action=action
-                ).probability([observation])[0]
+                pomdp.observation_model(next_state=next_particle, action=action).probability(
+                    [observation]
+                )[0]
                 for next_particle in next_particles
             ]
         )
@@ -452,9 +440,7 @@ class WeightedParticleBelief(Belief):
         )
 
         if self.resampling:
-            next_particles, next_log_weights = self._resample(
-                next_particles, next_log_weights
-            )
+            next_particles, next_log_weights = self._resample(next_particles, next_log_weights)
 
         return WeightedParticleBelief(
             particles=next_particles,
@@ -485,9 +471,7 @@ class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
 
         self.reinvigoration_fraction = reinvigoration_fraction
 
-    def update(
-        self, action, observation, pomdp: Environment
-    ) -> "WeightedParticleBelief":
+    def update(self, action, observation, pomdp: Environment) -> "WeightedParticleBelief":
         belief = super().update(action=action, observation=observation, pomdp=pomdp)
 
         belief = self.reinvigorate(
@@ -738,9 +722,7 @@ class WeightedParticleBeliefStateUpdate(Belief):
             print(f"Sampled state: {sampled_state}")
     """
 
-    def __init__(
-        self, particles: Optional[list] = None, weights: Optional[list] = None
-    ):
+    def __init__(self, particles: Optional[list] = None, weights: Optional[list] = None):
         """Initialize weighted particle belief.
 
         Creates a belief state with given particles and weights. Empty lists
@@ -818,9 +800,7 @@ class WeightedParticleBeliefStateUpdate(Belief):
             next_state=state, action=action
         ).probability([observation])[0]
         new_weights = self.weights + [observation_probability]
-        new_belief = WeightedParticleBeliefStateUpdate(
-            particles=new_particles, weights=new_weights
-        )
+        new_belief = WeightedParticleBeliefStateUpdate(particles=new_particles, weights=new_weights)
 
         return new_belief
 
@@ -1401,9 +1381,7 @@ class UnweightedParticleBeliefStateUpdate(Belief):
         return config_to_id(config_dict)
 
 
-def sample_next_belief(
-    belief: Belief, action: Any, pomdp: "Environment"
-) -> Tuple[Belief, Any]:
+def sample_next_belief(belief: Belief, action: Any, pomdp: "Environment") -> Tuple[Belief, Any]:
     """Simulate one step of belief evolution.
 
     This function samples a state from the current belief, simulates the
@@ -1421,18 +1399,14 @@ def sample_next_belief(
     """
     state = belief.sample()
     next_state = pomdp.state_transition_model(state=state, action=action).sample()[0]
-    observation = pomdp.observation_model(
-        next_state=next_state, action=action
-    ).sample()[0]
+    observation = pomdp.observation_model(next_state=next_state, action=action).sample()[0]
 
     next_belief = belief.update(action=action, observation=observation, pomdp=pomdp)
 
     return next_belief, observation
 
 
-def get_initial_belief(
-    pomdp: Environment, n_particles: int, resampling: bool = True
-) -> Belief:
+def get_initial_belief(pomdp: Environment, n_particles: int, resampling: bool = True) -> Belief:
     """Create initial belief from environment's initial state distribution.
 
     Args:

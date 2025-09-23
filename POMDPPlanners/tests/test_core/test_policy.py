@@ -83,9 +83,7 @@ class MockPolicy(Policy):
         log_path: Path = None,
         debug: bool = False,
     ):
-        super().__init__(
-            environment, discount_factor, name, log_path=log_path, debug=debug
-        )
+        super().__init__(environment, discount_factor, name, log_path=log_path, debug=debug)
         self.custom_param = custom_param
 
     def action(self, belief: Belief):
@@ -107,9 +105,7 @@ class DifferentPolicy(Policy):
         log_path: Path = None,
         debug: bool = False,
     ):
-        super().__init__(
-            environment, discount_factor, name, log_path=log_path, debug=debug
-        )
+        super().__init__(environment, discount_factor, name, log_path=log_path, debug=debug)
 
     def action(self, belief: Belief):
         pass

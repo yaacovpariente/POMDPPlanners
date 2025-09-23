@@ -114,9 +114,7 @@ class CartPoleStateTransition(StateTransitionModel):
 
         # For the interested reader:
         # https://coneural.org/florian/papers/05_cart_pole.pdf
-        temp = (
-            force + self.polemass_length * theta_dot**2 * sintheta
-        ) / self.total_mass
+        temp = (force + self.polemass_length * theta_dot**2 * sintheta) / self.total_mass
         thetaacc = (self.gravity * sintheta - costheta * temp) / (
             self.length * (4.0 / 3.0 - self.masspole * costheta**2 / self.total_mass)
         )
@@ -345,9 +343,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    def state_transition_model(
-        self, state: np.ndarray, action: int
-    ) -> StateTransitionModel:
+    def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
         return CartPoleStateTransition(
             state=state,
             action=action,
@@ -361,12 +357,8 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
             masspole=self.masspole,
         )
 
-    def observation_model(
-        self, next_state: np.ndarray, action: int
-    ) -> ObservationModel:
-        return CartPoleObservation(
-            next_state=next_state, action=action, noise_cov=self.noise_cov
-        )
+    def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
+        return CartPoleObservation(next_state=next_state, action=action, noise_cov=self.noise_cov)
 
     def reward(self, state: np.ndarray, action: int) -> float:
         x, x_dot, theta, theta_dot = state
@@ -401,7 +393,5 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
     def get_actions(self) -> List[int]:
         return [0, 1]
 
-    def is_equal_observation(
-        self, observation1: np.ndarray, observation2: np.ndarray
-    ) -> bool:
+    def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)

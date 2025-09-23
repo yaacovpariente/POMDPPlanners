@@ -72,9 +72,7 @@ class DiscreteLDObservationModel(ObservationModel):
         return self.distribution.probability(values)
 
 
-class DiscreteLightDarkPOMDP(
-    BaseLightDarkPOMDPDiscreteActions, DiscreteActionsEnvironment
-):
+class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsEnvironment):
     def __init__(
         self,
         discount_factor: float,
@@ -128,9 +126,7 @@ class DiscreteLightDarkPOMDP(
         values = [state + self.action_to_vector[action] for action in self.actions]
 
         # Distribute error probability equally among other actions
-        probs = np.ones(len(values)) * (
-            self.transition_error_prob / (len(self.actions) - 1)
-        )
+        probs = np.ones(len(values)) * (self.transition_error_prob / (len(self.actions) - 1))
         probs[action_index] = 1 - self.transition_error_prob
         s = sum(probs)
         probs[0] += 1 - s
@@ -154,9 +150,7 @@ class DiscreteLightDarkPOMDP(
         next_state = state + self.action_to_vector[action]
 
         is_goal_state = np.all(next_state == self.goal_state)
-        is_obstacle_hit = np.any(
-            np.all(next_state.reshape(-1, 1) == self.obstacles, axis=0)
-        )
+        is_obstacle_hit = np.any(np.all(next_state.reshape(-1, 1) == self.obstacles, axis=0))
         is_out_of_grid = np.any(next_state < 0) or np.any(next_state > self.grid_size)
 
         # Start with base reward (fuel cost)

@@ -274,9 +274,7 @@ def evaluate_same_purpose(test1: TestInfo, test2: TestInfo) -> bool:
         "sample",
         "update",
     ]
-    if any(
-        term in purpose1_lower and term in purpose2_lower for term in specific_terms
-    ):
+    if any(term in purpose1_lower and term in purpose2_lower for term in specific_terms):
         # Further analyze if they test the same specific aspect
         if purpose1_lower.replace(" ", "") == purpose2_lower.replace(" ", ""):
             return True
@@ -357,8 +355,7 @@ def find_pattern_duplicates(all_tests: List[TestInfo]) -> Dict[str, List[TestInf
 
             # Initialization patterns
             if any(
-                word in function_lower
-                for word in ["init", "initialization", "create", "construct"]
+                word in function_lower for word in ["init", "initialization", "create", "construct"]
             ):
                 file_patterns[f"initialization_in_{Path(file_path).name}"].append(test)
 
@@ -388,15 +385,11 @@ def find_pattern_duplicates(all_tests: List[TestInfo]) -> Dict[str, List[TestInf
                 word in function_lower + purpose_lower
                 for word in ["state", "update", "modify", "change"]
             ):
-                file_patterns[f"state_management_in_{Path(file_path).name}"].append(
-                    test
-                )
+                file_patterns[f"state_management_in_{Path(file_path).name}"].append(test)
 
         # Only include patterns with multiple tests within the same file
         for pattern_name, pattern_tests in file_patterns.items():
-            if (
-                len(pattern_tests) >= 2
-            ):  # Lower threshold since we're looking within single files
+            if len(pattern_tests) >= 2:  # Lower threshold since we're looking within single files
                 patterns[pattern_name] = pattern_tests
 
     return patterns
@@ -474,7 +467,9 @@ These tests have been identified as testing the same specific functionality with
         if len(tests) < 2:  # Show patterns with 2+ tests within same file
             continue
 
-        report_content += f"### {pattern_name.replace('_', ' ').title()} Pattern: {len(tests)} tests\n\n"
+        report_content += (
+            f"### {pattern_name.replace('_', ' ').title()} Pattern: {len(tests)} tests\n\n"
+        )
 
         # Group by file
         file_groups = defaultdict(list)

@@ -17,9 +17,7 @@ def create_test_belief():
     """Helper function to create a valid belief state for testing."""
     particles = ["tiger_left", "tiger_right"]
     log_weights = np.array([np.log(0.5), np.log(0.5)])
-    return WeightedParticleBelief(
-        particles=particles, log_weights=log_weights, resampling=False
-    )
+    return WeightedParticleBelief(particles=particles, log_weights=log_weights, resampling=False)
 
 
 @pytest.fixture

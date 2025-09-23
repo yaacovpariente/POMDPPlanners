@@ -42,9 +42,7 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
     def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
         next_state = state + action
 
-        is_goal_state = (
-            np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius
-        )
+        is_goal_state = np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius
 
         is_in_obstacle_range = np.any(
             np.linalg.norm(next_state.reshape(-1, 1) - self.obstacles, axis=0)
@@ -65,11 +63,7 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
         return reward
 
     def _obstacle_reward(self, state: np.ndarray) -> float:
-        return (
-            self.obstacle_reward
-            if np.random.rand() < self.obstacle_hit_probability
-            else 0.0
-        )
+        return self.obstacle_reward if np.random.rand() < self.obstacle_hit_probability else 0.0
 
 
 class ContinuousLDDangerousStatesRewardModel(ContinuousLightDarkRewardModel):
@@ -130,9 +124,7 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
     def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
         next_state = state + action
 
-        is_goal_state = (
-            np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius
-        )
+        is_goal_state = np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius
 
         is_out_of_grid = np.any(next_state < 0) or np.any(next_state > self.grid_size)
 

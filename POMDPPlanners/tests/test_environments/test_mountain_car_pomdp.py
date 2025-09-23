@@ -96,13 +96,11 @@ def test_observation_model(base_mountain_car_environment):
     assert obs.shape == (2,)
 
     # Test multiple observations
-    observations = base_mountain_car_environment.observation_model(
-        state, action
-    ).sample(n_samples=100)
-    assert len(observations) == 100
-    assert all(
-        isinstance(obs, np.ndarray) and obs.shape == (2,) for obs in observations
+    observations = base_mountain_car_environment.observation_model(state, action).sample(
+        n_samples=100
     )
+    assert len(observations) == 100
+    assert all(isinstance(obs, np.ndarray) and obs.shape == (2,) for obs in observations)
 
 
 def test_initial_state_distribution(base_mountain_car_environment):
@@ -155,9 +153,7 @@ def test_sample_next_step(base_mountain_car_environment):
     # Test sample_next_step method
     state = np.array([0.0, 0.0])
     action = 0
-    next_state, observation, reward = base_mountain_car_environment.sample_next_step(
-        state, action
-    )
+    next_state, observation, reward = base_mountain_car_environment.sample_next_step(state, action)
 
     assert isinstance(next_state, np.ndarray)
     assert next_state.shape == (2,)
@@ -167,9 +163,7 @@ def test_sample_next_step(base_mountain_car_environment):
 
     # Test with different action
     action = 1
-    next_state, observation, reward = base_mountain_car_environment.sample_next_step(
-        state, action
-    )
+    next_state, observation, reward = base_mountain_car_environment.sample_next_step(state, action)
 
     assert isinstance(next_state, np.ndarray)
     assert next_state.shape == (2,)
@@ -179,9 +173,7 @@ def test_sample_next_step(base_mountain_car_environment):
 
     # Test with negative action
     action = -1
-    next_state, observation, reward = base_mountain_car_environment.sample_next_step(
-        state, action
-    )
+    next_state, observation, reward = base_mountain_car_environment.sample_next_step(state, action)
 
     assert isinstance(next_state, np.ndarray)
     assert next_state.shape == (2,)
@@ -355,9 +347,7 @@ class TestMountainCarPOMDPEquality:
     Test type: unit
     """
 
-    def test_same_discount_factor(
-        self, base_mountain_car_environment: MountainCarPOMDP
-    ):
+    def test_same_discount_factor(self, base_mountain_car_environment: MountainCarPOMDP):
         """Test that MountainCarPOMDPs with same discount factor are equal.
 
         Purpose: Validates that environment equality comparison works correctly for identical configurations
@@ -372,9 +362,7 @@ class TestMountainCarPOMDPEquality:
         assert base_mountain_car_environment == other_env
         assert other_env == base_mountain_car_environment  # Test symmetry
 
-    def test_different_discount_factor(
-        self, base_mountain_car_environment: MountainCarPOMDP
-    ):
+    def test_different_discount_factor(self, base_mountain_car_environment: MountainCarPOMDP):
         """Test that MountainCarPOMDPs with different discount factors are not equal.
 
         Purpose: Validates that environment equality comparison correctly identifies different configurations
@@ -389,9 +377,7 @@ class TestMountainCarPOMDPEquality:
         assert base_mountain_car_environment != other_env
         assert other_env != base_mountain_car_environment  # Test symmetry
 
-    def test_different_parameters(
-        self, base_mountain_car_environment: MountainCarPOMDP
-    ):
+    def test_different_parameters(self, base_mountain_car_environment: MountainCarPOMDP):
         """Test that MountainCarPOMDPs with different parameters are not equal.
 
         Purpose: Validates that environment equality comparison detects parameter differences
@@ -418,9 +404,7 @@ class TestMountainCarPOMDPEquality:
         other_env.goal_position = 0.6  # Different from 0.5
         assert base_mountain_car_environment != other_env
 
-    def test_different_noise_parameters(
-        self, base_mountain_car_environment: MountainCarPOMDP
-    ):
+    def test_different_noise_parameters(self, base_mountain_car_environment: MountainCarPOMDP):
         """Test that MountainCarPOMDPs with different noise parameters are not equal.
 
         Purpose: Validates that environment equality comparison detects noise parameter differences
@@ -441,9 +425,7 @@ class TestMountainCarPOMDPEquality:
 
         # Test covariance matrix changes
         other_env = MountainCarPOMDP(discount_factor=0.95)
-        other_env.cov_matrix = np.array(
-            [[0.2**2, 0], [0, 0.02**2]]
-        )  # Different from original
+        other_env.cov_matrix = np.array([[0.2**2, 0], [0, 0.02**2]])  # Different from original
         assert base_mountain_car_environment != other_env
 
     def test_different_actions(self, base_mountain_car_environment: MountainCarPOMDP):
@@ -461,9 +443,7 @@ class TestMountainCarPOMDPEquality:
         other_env.actions = [-1, 0, 1, 2]  # Different from [-1, 0, 1]
         assert base_mountain_car_environment != other_env
 
-    def test_comparison_with_non_environment(
-        self, base_mountain_car_environment: MountainCarPOMDP
-    ):
+    def test_comparison_with_non_environment(self, base_mountain_car_environment: MountainCarPOMDP):
         """Test comparison with non-Environment objects.
 
         Purpose: Validates that environment equality comparison handles non-environment objects correctly
@@ -527,9 +507,7 @@ class TestMountainCarPOMDPConfigId:
     Test type: configuration
     """
 
-    def test_config_id_consistency(
-        self, base_mountain_car_environment: MountainCarPOMDP
-    ):
+    def test_config_id_consistency(self, base_mountain_car_environment: MountainCarPOMDP):
         """Test that config_id is consistent for identical environments.
 
         Purpose: Validates that config_id generates consistent identifiers for identical configurations
@@ -559,9 +537,7 @@ class TestMountainCarPOMDPConfigId:
         other_env = MountainCarPOMDP(discount_factor=0.8)
         assert base_mountain_car_environment.config_id != other_env.config_id
 
-    def test_config_id_different_parameters(
-        self, base_mountain_car_environment: MountainCarPOMDP
-    ):
+    def test_config_id_different_parameters(self, base_mountain_car_environment: MountainCarPOMDP):
         """Test that config_id changes with different parameters.
 
         Purpose: Validates that config_id generates different identifiers for different parameter configurations
@@ -616,9 +592,7 @@ class TestMountainCarPOMDPConfigId:
         assert len(config_id) == 64  # SHA-256 hash length
         assert all(c in "0123456789abcdef" for c in config_id)  # Valid hex characters
 
-    def test_config_id_deterministic(
-        self, base_mountain_car_environment: MountainCarPOMDP
-    ):
+    def test_config_id_deterministic(self, base_mountain_car_environment: MountainCarPOMDP):
         """Test that config_id is deterministic (same input always produces same output).
 
         Purpose: Validates that config_id generates deterministic identifiers for identical configurations
