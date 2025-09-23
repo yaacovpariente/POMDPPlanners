@@ -333,7 +333,9 @@ class TestSimulationsAPI:
 
         # Check that task_manager_config is a PBSConfig with correct parameters
         task_manager_config = call_args[1]["task_manager_config"]
-        from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import PBSConfig
+        from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+            PBSConfig,
+        )
 
         assert isinstance(task_manager_config, PBSConfig)
         assert task_manager_config.queue == "normal"

@@ -12,7 +12,9 @@ from POMDPPlanners.core.simulation import (
     History,
     NumericalHyperParameter,
 )
-from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParameterOptimizationDirection
+from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParameterOptimizationDirection,
+)
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.sparse_sampling_planner import (
@@ -809,7 +811,9 @@ def test_run_function_return_type_explicitly(environment, hyper_parameters):
     result = task.run()
 
     # Explicit type checking
-    from POMDPPlanners.core.simulation.hyperparameter_tuning import OptimizedPolicyResult
+    from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+        OptimizedPolicyResult,
+    )
 
     assert isinstance(result, OptimizedPolicyResult)
     assert isinstance(result.environment, Environment)

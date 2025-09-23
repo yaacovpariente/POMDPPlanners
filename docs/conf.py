@@ -35,6 +35,7 @@ extensions = [
     "sphinx.ext.napoleon",  # For Google/NumPy style docstrings
     "sphinx.ext.intersphinx",
     "sphinx_autodoc_typehints",  # Better type hint formatting
+    "nbsphinx",  # Jupyter notebook integration
 ]
 
 # Napoleon settings for Google-style docstrings
@@ -50,6 +51,22 @@ templates_path = ["_templates"]
 # directories to ignore when looking for source files.
 # This pattern also affects html_static_path and html_extra_path.
 exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/tests/**", "**/test_*.py"]
+
+# -- Options for nbsphinx ---------------------------------------------------
+
+# Execute notebooks during build (set to 'never' for faster builds)
+nbsphinx_execute = "never"
+
+# Timeout for notebook execution (in seconds)
+nbsphinx_execute_timeout = 300
+
+# Kernel to use for notebook execution
+nbsphinx_kernel_name = "python3"
+
+# Custom CSS for notebooks
+nbsphinx_custom_formats = {
+    ".ipynb": ["jupyter", "notebook"],
+}
 
 # -- Options for HTML output -------------------------------------------------
 

@@ -11,7 +11,10 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     ContinuousLightDarkPOMDP,
 )
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
-from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
+from POMDPPlanners.planners.planners_utils.dpw import (
+    ActionSampler,
+    action_progressive_widening,
+)
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 
 np.random.seed(42)

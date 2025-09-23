@@ -10,7 +10,10 @@ from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp_dpw import POMCP_DPW
-from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
+from POMDPPlanners.planners.planners_utils.dpw import (
+    ActionSampler,
+    action_progressive_widening,
+)
 from POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils import (
     validate_tree_structure_with_progressive_widening,
 )
@@ -351,7 +354,9 @@ def test_explored_action_node_ucb_selection(planner, belief):
 
 def test_rollout(planner):
     # Test the random_rollout_action_sampler function that POMCP_DPW uses
-    from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
+    from POMDPPlanners.planners.planners_utils.rollout import (
+        random_rollout_action_sampler,
+    )
 
     state = "tiger_left"
     depth = 0
@@ -367,7 +372,9 @@ def test_rollout(planner):
 
 def test_rollout_terminal_state(planner):
     # Test the random_rollout_action_sampler function with terminal state
-    from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
+    from POMDPPlanners.planners.planners_utils.rollout import (
+        random_rollout_action_sampler,
+    )
 
     # Create a mock terminal state
     original_is_terminal = planner.environment.is_terminal
@@ -390,7 +397,9 @@ def test_rollout_terminal_state(planner):
 
 def test_rollout_max_depth(planner):
     # Test the random_rollout_action_sampler function with max depth
-    from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
+    from POMDPPlanners.planners.planners_utils.rollout import (
+        random_rollout_action_sampler,
+    )
 
     state = "tiger_left"
     depth = planner.depth + 1  # This is 4 (planner.depth = 3)

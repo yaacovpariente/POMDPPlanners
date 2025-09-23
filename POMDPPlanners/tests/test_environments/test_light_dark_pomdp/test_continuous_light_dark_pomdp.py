@@ -1732,7 +1732,9 @@ def test_risk_averse_environment_config_start_state_validity():
 
     Test type: integration
     """
-    from POMDPPlanners.configs.environment_configs import RiskAverseEnvironmentConfigsAPI
+    from POMDPPlanners.configs.environment_configs import (
+        RiskAverseEnvironmentConfigsAPI,
+    )
 
     # Test the configuration that was causing the issue in visualization example
     env_configs = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95)

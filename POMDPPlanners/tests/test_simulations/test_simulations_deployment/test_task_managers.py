@@ -495,7 +495,9 @@ def test_dask_task_manager_failed_tasks_not_cached(environment, policy):
 
 
 # Tests for SequentialTaskManager
-from POMDPPlanners.simulations.simulations_deployment.task_managers import SequentialTaskManager
+from POMDPPlanners.simulations.simulations_deployment.task_managers import (
+    SequentialTaskManager,
+)
 
 
 def test_sequential_task_manager_initialization(cache_db):

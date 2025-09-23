@@ -14,7 +14,9 @@ from POMDPPlanners.core.tree import (
     get_optimal_action_reward_setting,
     sample_belief_node_child,
 )
-from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
+from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
+    PathSimulationPolicy,
+)
 
 
 class SparsePFT(PathSimulationPolicy):

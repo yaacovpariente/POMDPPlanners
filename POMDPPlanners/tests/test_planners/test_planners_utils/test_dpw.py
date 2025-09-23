@@ -769,7 +769,10 @@ def test_action_progressive_widening_basic_usage_example():
 
     from POMDPPlanners.core.belief import WeightedParticleBelief
     from POMDPPlanners.core.tree import BeliefNode
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
+    from POMDPPlanners.planners.planners_utils.dpw import (
+        ActionSampler,
+        action_progressive_widening,
+    )
 
     # Create action sampler (from docstring)
     class SimpleActionSampler(ActionSampler):
@@ -815,7 +818,10 @@ def test_action_progressive_widening_alpha_comparison_example():
 
     from POMDPPlanners.core.belief import WeightedParticleBelief
     from POMDPPlanners.core.tree import BeliefNode
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
+    from POMDPPlanners.planners.planners_utils.dpw import (
+        ActionSampler,
+        action_progressive_widening,
+    )
 
     class SimpleActionSampler(ActionSampler):
         def sample(self, belief_node=None):
@@ -872,7 +878,10 @@ def test_action_progressive_widening_loop_simulation_example():
 
     from POMDPPlanners.core.belief import WeightedParticleBelief
     from POMDPPlanners.core.tree import ActionNode, BeliefNode
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
+    from POMDPPlanners.planners.planners_utils.dpw import (
+        ActionSampler,
+        action_progressive_widening,
+    )
 
     # Setup (from docstring)
     class DiscreteActionSampler(ActionSampler):

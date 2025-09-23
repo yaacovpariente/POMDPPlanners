@@ -22,7 +22,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
-from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceInfo, SpaceType
+from POMDPPlanners.core.environment import (
+    DiscreteActionsEnvironment,
+    SpaceInfo,
+    SpaceType,
+)
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics import confidence_interval
 
