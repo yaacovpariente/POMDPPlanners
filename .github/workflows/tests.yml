@@ -37,8 +37,7 @@ jobs:
 
     - name: Run linting inside Docker
       run: |
-        docker run --rm pomdpplanners-test:latest flake8 POMDPPlanners --count --select=E9,F63,F7,F82 --show-source --statistics
-        docker run --rm pomdpplanners-test:latest flake8 POMDPPlanners --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        docker run --rm pomdpplanners-test:latest pylint POMDPPlanners/ --exit-zero
 
     - name: Run code formatting check inside Docker
       run: |
@@ -46,7 +45,7 @@ jobs:
 
     - name: Run type checking inside Docker
       run: |
-        docker run --rm pomdpplanners-test:latest pylint POMDPPlanners/ --exit-zero
+        docker run --rm pomdpplanners-test:latest mypy POMDPPlanners/ --ignore-missing-imports
 
     - name: Run unit tests inside Docker
       run: |
