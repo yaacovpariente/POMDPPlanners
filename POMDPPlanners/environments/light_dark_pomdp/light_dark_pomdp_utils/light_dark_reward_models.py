@@ -143,7 +143,7 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
     def _obstacle_reward(self, state: np.ndarray) -> float:
         # Calculate distance to nearest obstacle
         distances = np.linalg.norm(state.reshape(-1, 1) - self.obstacles, axis=0)
-        d = np.min(distances)
+        d: float = np.min(distances)
 
         # Calculate probability based on distance and decay factor
         p = np.exp(-d / self.penalty_decay)

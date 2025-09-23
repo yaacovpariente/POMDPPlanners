@@ -8,7 +8,6 @@ disable=C0111,  # missing-docstring
            C0103,  # invalid-name
            C0303,  # trailing-whitespace
            C0301,  # line-too-long
-           C0330,  # bad-continuation
            W0311,  # bad-indentation
            R0903,  # too-few-public-methods
            R0913,  # too-many-arguments
@@ -17,7 +16,6 @@ disable=C0111,  # missing-docstring
 
 [REPORTS]
 output-format=text
-files-output=no
 reports=no
 evaluation=10.0 - ((float(5 * error + warning + refactor + convention) / statement) * 10)
 
@@ -43,7 +41,6 @@ docstring-min-length=-1
 max-line-length=100
 ignore-long-lines=^\s*(# )?<?https?://\S+>?$
 single-line-if-stmt=no
-no-space-check=trailing-comma,dict-separator
 max-module-lines=1000
 indent-string='    '
 

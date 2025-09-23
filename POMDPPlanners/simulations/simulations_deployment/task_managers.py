@@ -31,9 +31,9 @@ class DaskTaskManager(TaskManager):
 
     def __init__(
         self,
-        n_workers: int = None,
+        n_workers: Optional[int] = None,
         scheduler_address: Optional[str] = None,
-        cache_size: int = 2e9,  # 2GB default cache size
+        cache_size: int = int(2e9),  # 2GB default cache size
         clear_cache_on_start: bool = False,
     ):
         """Initialize the task manager.
@@ -417,7 +417,7 @@ class PBSTaskManager(DaskTaskManager):
         processes: int = 1,
         walltime: str = "01:00:00",
         job_extra: Optional[List[str]] = None,
-        cache_size: int = 2e9,
+        cache_size: int = int(2e9),
         clear_cache_on_start: bool = False,
         enable_dashboard: bool = True,
         dashboard_address: str = "0.0.0.0",

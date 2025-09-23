@@ -345,7 +345,7 @@ class LaserTagObservation(ObservationModel):
         action: int,
         measurement_noise: float = 1.0,
         floor_shape: Tuple[int, int] = (7, 11),
-        walls: Set[Tuple[int, int]] = None,
+        walls: Optional[Set[Tuple[int, int]]] = None,
     ):
         """Initialize the observation model.
 
@@ -550,7 +550,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         tag_penalty: float = 10.0,
         step_cost: float = 1.0,
         measurement_noise: float = 1.0,
-        dangerous_areas: Optional[List[Tuple[int, int]]] = {(5, 3), (7, 1), (2, 5)},
+        dangerous_areas: Optional[Set[Tuple[int, int]]] = {(5, 3), (7, 1), (2, 5)},
         dangerous_area_radius: float = 1.0,
         dangerous_area_penalty: float = 5.0,
         output_dir: Optional[Path] = None,
@@ -603,7 +603,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self.step_cost = step_cost
         self.measurement_noise = measurement_noise
         self.dangerous_areas: List[Tuple[int, int]] = (
-            dangerous_areas if dangerous_areas is not None else []
+            list(dangerous_areas) if dangerous_areas is not None else []
         )
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty

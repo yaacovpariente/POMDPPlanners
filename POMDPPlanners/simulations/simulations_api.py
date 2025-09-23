@@ -138,7 +138,7 @@ class SimulationsAPI:
                     print(f"  {policy_name}: {avg_return:.3f} [{ci_lower:.3f}, {ci_upper:.3f}]")
     """
 
-    def __init__(self, cache_dir_path: Path = None, debug: bool = False):
+    def __init__(self, cache_dir_path: Optional[Path] = None, debug: bool = False):
         """Initialize the SimulationsAPI.
 
         Args:
@@ -156,7 +156,7 @@ class SimulationsAPI:
         experiment_name: str = "POMDP_Planning_Comparison",
         debug: bool = False,
         n_jobs: int = -1,
-        cache_dir_path: Path = None,
+        cache_dir_path: Optional[Path] = None,
         clear_cache_on_start: bool = False,
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
@@ -284,9 +284,9 @@ class SimulationsAPI:
         confidence_interval_level: float,
         experiment_name: str = "POMDP_Planning_Comparison",
         debug: bool = False,
-        scheduler_address: str = None,
+        scheduler_address: Optional[str] = None,
         n_jobs: int = -1,
-        cache_dir_path: Path = None,
+        cache_dir_path: Optional[Path] = None,
         clear_cache_on_start: bool = False,
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
@@ -421,7 +421,7 @@ class SimulationsAPI:
         confidence_interval_level: float,
         experiment_name: str = "POMDP_Planning_Comparison",
         n_jobs: int = -1,
-        cache_dir_path: Path = None,
+        cache_dir_path: Optional[Path] = None,
         clear_cache_on_start: bool = False,
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
@@ -600,8 +600,8 @@ class SimulationsAPI:
         memory: str = "4GB",
         processes: int = 1,
         walltime: str = "01:00:00",
-        job_extra: List[str] = None,
-        cache_dir_path: Path = None,
+        job_extra: Optional[List[str]] = None,
+        cache_dir_path: Optional[Path] = None,
         clear_cache_on_start: bool = False,
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
@@ -751,7 +751,7 @@ class SimulationsAPI:
         environment_run_params: List[HyperParameterRunParams],
         experiment_name: str = "POMDP_Hyperparameter_Optimization",
         n_jobs: int = -1,
-        cache_dir_path: Path = None,
+        cache_dir_path: Optional[Path] = None,
         clear_cache_on_start: bool = False,
         debug: bool = False,
         confidence_interval_level: float = 0.95,
