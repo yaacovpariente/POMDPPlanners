@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import numpy as np
 
@@ -25,8 +25,8 @@ def create_belief(
     """
     belief_params = belief_config.params.copy()
     n_particles = belief_params.pop("n_particles")
-    particles = environment.initial_state_dist().sample(n_samples=n_particles)
-    log_weights = np.log(np.ones(n_particles) / n_particles)
+    particles: List[Any] = environment.initial_state_dist().sample(n_samples=n_particles)
+    log_weights: np.ndarray = np.log(np.ones(n_particles) / n_particles)
     # Inject particles and log_weights into params
     belief_params["particles"] = particles
     belief_params["log_weights"] = log_weights
@@ -39,8 +39,8 @@ def get_initial_belief(
     environment: Environment, n_particles: int, resampling: bool = True
 ) -> Belief:
     """Create initial belief from environment's initial state distribution."""
-    particles = environment.initial_state_dist().sample(n_samples=n_particles)
-    log_weights = np.log(np.ones(n_particles) / n_particles)
+    particles: List[Any] = environment.initial_state_dist().sample(n_samples=n_particles)
+    log_weights: np.ndarray = np.log(np.ones(n_particles) / n_particles)
 
     return WeightedParticleBelief(
         particles=particles, log_weights=log_weights, resampling=resampling
@@ -237,7 +237,9 @@ class WeightedParticleBeliefSanityPOMDP(WeightedParticleBeliefReinvigoration):
 
         self.reinvigoration_fraction = reinvigoration_fraction
 
-    def reinvigorate(self, action: Any, observation: Any, pomdp: Environment) -> Belief:
+    def reinvigorate(
+        self, action: Any, observation: Any, pomdp: Environment, belief: Belief
+    ) -> Belief:
         """Reinvigorate particles by sampling from initial state distribution."""
         n_reinvigorate = int(self.reinvigoration_fraction * len(self.particles))
         reinvigorated_states = pomdp.initial_state_dist().sample(n_samples=n_reinvigorate)

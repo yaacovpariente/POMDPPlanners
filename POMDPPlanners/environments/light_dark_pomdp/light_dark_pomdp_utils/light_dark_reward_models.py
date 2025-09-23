@@ -43,16 +43,18 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
     def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
         next_state = state + action
 
-        is_goal_state = np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius
+        is_goal_state = bool(np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius)
 
-        is_in_obstacle_range = np.any(
-            np.linalg.norm(next_state.reshape(-1, 1) - self.obstacles, axis=0)
-            <= self.obstacle_radius
+        is_in_obstacle_range = bool(
+            (
+                np.linalg.norm(next_state.reshape(-1, 1) - self.obstacles, axis=0)
+                <= self.obstacle_radius
+            ).any()
         )
 
-        is_out_of_grid = np.any(next_state < 0) or np.any(next_state > self.grid_size)
+        is_out_of_grid = bool(np.any(next_state < 0) or np.any(next_state > self.grid_size))
 
-        reward = -self.fuel_cost - np.linalg.norm(next_state - self.goal_state)
+        reward = float(-self.fuel_cost - np.linalg.norm(next_state - self.goal_state))
 
         if is_goal_state:
             reward += self.goal_reward
@@ -125,11 +127,11 @@ class ContinuousLightDarkDecayingHitProbabilityRewardModel(BaseLightDarkRewardMo
     def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
         next_state = state + action
 
-        is_goal_state = np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius
+        is_goal_state = bool(np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius)
 
-        is_out_of_grid = np.any(next_state < 0) or np.any(next_state > self.grid_size)
+        is_out_of_grid = bool(np.any(next_state < 0) or np.any(next_state > self.grid_size))
 
-        reward = -self.fuel_cost - np.linalg.norm(next_state - self.goal_state)
+        reward = float(-self.fuel_cost - np.linalg.norm(next_state - self.goal_state))
 
         if is_goal_state:
             reward += self.goal_reward
