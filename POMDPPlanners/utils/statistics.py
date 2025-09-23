@@ -146,7 +146,7 @@ def cvar_estimator(vec: np.ndarray, alpha: float) -> float:
     # Calculate final result vectorized
     s = sorted_vec[-1] - np.sum(weights * diffs) / alpha
 
-    return s
+    return float(s)
 
 
 def confidence_interval(data, confidence=0.95):
@@ -292,12 +292,12 @@ def confidence_interval(data, confidence=0.95):
         return (data[0], data[0])
 
     mean = np.mean(data)
-    sem = stats.sem(data)  # Standard error of the mean
+    sem = float(stats.sem(data))  # Standard error of the mean
     df = len(data) - 1  # Degrees of freedom
 
     # Confidence interval
     ci = stats.t.interval(confidence, df, loc=mean, scale=sem)
-    return ci
+    return (float(ci[0]), float(ci[1]))
 
 
 def cvar_confidence_interval(data, alpha=0.95, delta=0.05):
@@ -480,8 +480,8 @@ def get_min_and_max_cost(
     gamma_powers = gamma**powers
 
     # Calculate min and max costs using vectorized operations
-    min_cost = np.sum(min_immediate_cost * gamma_powers)
-    max_cost = np.sum(max_immediate_cost * gamma_powers)
+    min_cost: float = float(np.sum(min_immediate_cost * gamma_powers))
+    max_cost: float = float(np.sum(max_immediate_cost * gamma_powers))
 
     return min_cost, max_cost
 
@@ -514,21 +514,27 @@ def cvar_bound_const_eps(
 
     # Calculate lower bound
     if eps + alpha < 1:
-        lower_bound = (alpha + eps) / alpha * cvar_estimator(
-            y_samp, alpha + eps
-        ) - eps / alpha * cvar_estimator(y_samp, eps)
+        lower_bound = float(
+            (alpha + eps) / alpha * cvar_estimator(y_samp, alpha + eps)
+            - eps / alpha * cvar_estimator(y_samp, eps)
+        )
     else:
         y_samp_mean = np.mean(y_samp)
-        lower_bound = (alpha + eps - 1) * y_inf + y_samp_mean - eps * cvar_estimator(y_samp, eps)
-        lower_bound /= alpha
+        lower_bound = (
+            (alpha + eps - 1) * y_inf
+            + float(y_samp_mean)
+            - eps * float(cvar_estimator(y_samp, eps))
+        )
+        lower_bound = float(lower_bound / alpha)
 
     # Calculate upper bound
     if eps < alpha:
-        upper_bound = (alpha - eps) / alpha * cvar_estimator(
-            y_samp, alpha - eps
+        upper_bound = (alpha - eps) / alpha * float(
+            cvar_estimator(y_samp, alpha - eps)
         ) + eps / alpha * y_sup
+        upper_bound = float(upper_bound)
     else:
-        upper_bound = y_sup
+        upper_bound = float(y_sup)
 
     return lower_bound, upper_bound
 
@@ -556,7 +562,7 @@ def cvar_estimator_from_dist(values: np.ndarray, weights: np.ndarray, alpha: flo
         raise ValueError("Weights must sum to 1")
 
     if len(values) == 1:
-        return values[0]
+        return float(values[0])
 
     # Sort values and weights
     sort_idx = np.argsort(values)
@@ -577,10 +583,10 @@ def cvar_estimator_from_dist(values: np.ndarray, weights: np.ndarray, alpha: flo
     else:
         var_idx = var_idx[0]
 
-    value_at_risk = sorted_values[var_idx]
+    value_at_risk = float(sorted_values[var_idx])
 
     # Calculate correction value
-    value_at_risk_tail_cdf_prob = np.sum(sorted_weights[var_idx:])
+    value_at_risk_tail_cdf_prob: float = float(np.sum(sorted_weights[var_idx:]))
     correction_val = (value_at_risk_tail_cdf_prob - alpha) * value_at_risk
 
     # Calculate CVaR

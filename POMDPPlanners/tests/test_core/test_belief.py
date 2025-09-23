@@ -734,7 +734,9 @@ def test_reinvigoration_sanity_pomdp():
     belief = create_belief(env, config)
     assert isinstance(belief, WeightedParticleBeliefSanityPOMDP)
     # Call reinvigorate with dummy action and observation
-    reinvigorated = belief.reinvigorate(action="up", observation=np.array([0, 0]), pomdp=env)
+    reinvigorated = belief.reinvigorate(
+        action="up", observation=np.array([0, 0]), pomdp=env, belief=belief
+    )
     assert isinstance(reinvigorated, WeightedParticleBelief)
 
 

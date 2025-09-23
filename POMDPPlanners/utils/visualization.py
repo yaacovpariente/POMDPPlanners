@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -309,19 +309,21 @@ def plot_policies_comparison_on_environment(
             lower_bounds = []
             upper_bounds = []
             for policy_name, metrics in policy_metrics_dict.items():
-                metric = next((m for m in metrics if m.name == metric_name), None)
-                if metric is None:
+                metric_val: Optional[MetricValue] = next(
+                    (m for m in metrics if m.name == metric_name), None
+                )
+                if metric_val is None:
                     continue
                 if (
-                    np.isnan(metric.value)
-                    or np.isnan(metric.lower_confidence_bound)
-                    or np.isnan(metric.upper_confidence_bound)
+                    np.isnan(metric_val.value)
+                    or np.isnan(metric_val.lower_confidence_bound)
+                    or np.isnan(metric_val.upper_confidence_bound)
                 ):
                     continue
                 policy_names.append(policy_name)
-                metric_values.append(metric.value)
-                lower_bounds.append(metric.lower_confidence_bound)
-                upper_bounds.append(metric.upper_confidence_bound)
+                metric_values.append(metric_val.value)
+                lower_bounds.append(metric_val.lower_confidence_bound)
+                upper_bounds.append(metric_val.upper_confidence_bound)
             if not policy_names:
                 continue
 
@@ -605,7 +607,7 @@ def plot_policy_returns(
     dir_path: Path,
     n_samples: int = 1000,
     n_jobs: int = -1,
-    logger: logging.Logger = None,
+    logger: Optional[logging.Logger] = None,
 ) -> None:
     """
     Simulate and plot returns for multiple agent paths.
@@ -694,7 +696,7 @@ def plot_policy_returns(
                 print(f"Warning: Environment reward function failed: {e}")
 
     def simulate_sequence(agent_path: AgentPath):
-        total_reward = 0
+        total_reward: float = 0.0
 
         for i in range(len(agent_path.action_sequence)):
             # Create a weighted particle belief centered on the current state
@@ -797,8 +799,8 @@ def plot_policy_returns(
 
         # Check for reasonable bounds to prevent extreme bin calculations
         if len(valid_returns) > 0:
-            min_val = np.min(valid_returns)
-            max_val = np.max(valid_returns)
+            min_val: float = float(np.min(valid_returns))
+            max_val: float = float(np.max(valid_returns))
 
             # If the range is extremely large or small, skip plotting
             if max_val - min_val > 1e6 or (max_val - min_val < 1e-10 and max_val - min_val > 0):

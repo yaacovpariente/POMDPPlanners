@@ -18,7 +18,7 @@ Functions:
 
 import random
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Tuple
+from typing import Any, Optional, Tuple, Iterable, Dict, Hashable, List, Union
 
 import numpy as np
 
@@ -168,7 +168,7 @@ class UnweightedParticleBelief(Belief):
         action: Any,
         observation: Any,
         pomdp: Environment,
-        is_reinvigorate: bool = False,
+        state: Optional[Any] = None,
     ) -> "UnweightedParticleBelief":
         """Update belief with action-observation pair."""
         new_particles = []
@@ -182,20 +182,20 @@ class UnweightedParticleBelief(Belief):
                 new_particles.append(next_s)
 
         # Reinvigorate if degeneracy detected (too few new particles)
-        if is_reinvigorate:
-            if len(new_particles) < self.reinvigoration_fraction * self.num_particles:
-                num_new = int(self.reinvigoration_fraction * self.num_particles)
-                reinvigorated = [
-                    self.reinvigorate(action=action, observation=observation, pomdp=pomdp)
-                    for _ in range(num_new)
-                ]
-                new_particles += reinvigorated
+        if len(new_particles) < self.reinvigoration_fraction * self.num_particles:
+            num_new = int(self.reinvigoration_fraction * self.num_particles)
+            reinvigorated = [
+                self.reinvigorate(action=action, observation=observation, pomdp=pomdp)
+                for _ in range(max(0, num_new))
+            ]
+            new_particles += reinvigorated
 
         # Replenish to full count
         while len(new_particles) < self.num_particles:
             new_particles.append(random.choice(new_particles))
 
         self.particles = new_particles
+        return self
 
     def reinvigorate(self, action: Any, observation: Any, pomdp: Environment):
         """Simulate a new particle that matches the action-observation pair."""
@@ -294,10 +294,10 @@ class WeightedParticleBelief(Belief):
         if not np.all(np.isfinite(log_weights)):
             raise ValueError("log_weights must be finite numbers (not Inf, -Inf, or NaN)")
 
-        self.particles = particles
-        self.log_weights = log_weights
+        self.particles: list = particles
+        self.log_weights: np.ndarray = log_weights
         # First subtract max for numerical stability, then normalize to sum to 1
-        self.normalized_weights = np.exp(self.log_weights - np.max(self.log_weights))
+        self.normalized_weights: np.ndarray = np.exp(self.log_weights - np.max(self.log_weights))
         self.normalized_weights = self.normalized_weights / np.sum(self.normalized_weights)
         self.resampling = resampling
         self.ess_factor = ess_factor
@@ -326,15 +326,15 @@ class WeightedParticleBelief(Belief):
             with its probability being the sum of all its occurrences in the original belief.
         """
         # Create a dictionary to store unique particles and their combined weights
-        unique_particles = {}
+        unique_particles: Dict[Hashable, float] = {}
 
         # Iterate through particles and their weights
         for particle, weight in zip(self.particles, self.normalized_weights):
             # Convert particle to tuple if it's a numpy array for hashability
             if isinstance(particle, np.ndarray):
-                particle_key = tuple(particle.tolist())
+                particle_key: Hashable = tuple(particle.tolist())
             else:
-                particle_key = particle
+                particle_key = particle  # assume hashable
 
             # Add or update the weight for this particle
             if particle_key in unique_particles:
@@ -343,20 +343,20 @@ class WeightedParticleBelief(Belief):
                 unique_particles[particle_key] = weight
 
         # Convert back to original particle types and create arrays
-        particles = []
-        weights = []
+        particles: List[Any] = []
+        weights: List[float] = []
         for particle_key, weight in unique_particles.items():
             if isinstance(particle_key, tuple):
                 particles.append(np.array(particle_key))
             else:
                 particles.append(particle_key)
-            weights.append(weight)
+            weights.append(float(weight))
 
         # Convert to numpy array and normalize to ensure sum is exactly 1
-        weights = np.array(weights)
-        weights = weights / np.sum(weights)  # Normalize to sum to 1
+        weights_arr = np.array(weights, dtype=float)
+        weights_arr = weights_arr / np.sum(weights_arr)  # Normalize to sum to 1
 
-        return DiscreteDistribution(values=particles, probs=weights)
+        return DiscreteDistribution(values=particles, probs=weights_arr)
 
     @property
     def config_id(self) -> str:
@@ -424,7 +424,7 @@ class WeightedParticleBelief(Belief):
 
     def _update_weights(
         self, action: Any, observation: Any, pomdp: Environment
-    ) -> Tuple[np.ndarray, np.ndarray]:
+    ) -> Tuple[List[Any], np.ndarray]:
         next_particles = [
             pomdp.state_transition_model(state=particle, action=action).sample()[0]
             for particle in self.particles
@@ -490,15 +490,25 @@ class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
 
         self.reinvigoration_fraction = reinvigoration_fraction
 
-    def update(self, action, observation, pomdp: Environment) -> "WeightedParticleBelief":
+    def update(
+        self,
+        action: Any,
+        observation: Any,
+        pomdp: Environment,
+        state: Optional[Any] = None,
+    ) -> "WeightedParticleBelief":
         """Update belief with reinvigoration."""
-        belief = super().update(action=action, observation=observation, pomdp=pomdp)
-
-        belief = self.reinvigorate(
-            action=action, observation=observation, pomdp=pomdp, belief=belief
+        belief_after_weights = super().update(
+            action=action, observation=observation, pomdp=pomdp, state=state
         )
 
-        return belief
+        belief_reinvigorated = self.reinvigorate(
+            action=action, observation=observation, pomdp=pomdp, belief=belief_after_weights
+        )
+
+        # Ensure return type is WeightedParticleBelief
+        assert isinstance(belief_reinvigorated, WeightedParticleBelief)
+        return belief_reinvigorated
 
     @abstractmethod
     def reinvigorate(
@@ -762,13 +772,14 @@ class WeightedParticleBeliefStateUpdate(Belief):
         """
         if particles is None:
             particles = []
+        if weights is None:
             weights = []
 
         if len(particles) != len(weights):
             raise ValueError("particles and weights must have the same length")
 
-        self.particles = particles
-        self.weights = weights
+        self.particles: list = list(particles)
+        self.weights: list = list(weights)
         self.weights_sum = sum(weights) if weights else 0
 
     def update(
@@ -815,11 +826,14 @@ class WeightedParticleBeliefStateUpdate(Belief):
                 assert len(belief.particles) == 2
                 assert len(new_belief.particles) == 3
         """
+        if state is None:
+            raise ValueError("state cannot be None")
+
         new_particles = self.particles + [state]
         observation_probability = pomdp.observation_model(
             next_state=state, action=action
         ).probability([observation])[0]
-        new_weights = self.weights + [observation_probability]
+        new_weights = self.weights + [float(observation_probability)]
         new_belief = WeightedParticleBeliefStateUpdate(particles=new_particles, weights=new_weights)
 
         return new_belief
@@ -858,12 +872,15 @@ class WeightedParticleBeliefStateUpdate(Belief):
                 assert len(belief.particles) == 3
                 assert belief.weights_sum > 0
         """
+        if state is None:
+            raise ValueError("state cannot be None")
+
         self.particles.append(state)
         observation_probability = pomdp.observation_model(
             next_state=state, action=action
         ).probability([observation])[0]
-        self.weights.append(observation_probability)
-        self.weights_sum += observation_probability
+        self.weights.append(float(observation_probability))
+        self.weights_sum = float(self.weights_sum) + float(observation_probability)
 
     def sample(self) -> Any:
         """Sample a state from the current belief distribution.
@@ -878,7 +895,7 @@ class WeightedParticleBeliefStateUpdate(Belief):
             raise ValueError("Cannot sample from empty or unnormalized belief")
 
         # Normalize weights for sampling
-        normalized_weights = [w / self.weights_sum for w in self.weights]
+        normalized_weights = [w / float(self.weights_sum) for w in self.weights]
 
         # Sample based on normalized weights
         return random.choices(self.particles, weights=normalized_weights, k=1)[0]
@@ -1452,6 +1469,8 @@ def get_initial_belief(pomdp: Environment, n_particles: int, resampling: bool = 
     )
 
 
-def is_terminal_belief(belief: Belief, env: Environment) -> bool:
+def is_terminal_belief(
+    belief: Union[WeightedParticleBelief, WeightedParticleBeliefStateUpdate], env: Environment
+) -> bool:
     """Check if the belief is terminal."""
     return all(env.is_terminal(particle) for particle in belief.particles)
