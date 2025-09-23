@@ -450,7 +450,8 @@ class PushPOMDP(DiscreteActionsEnvironment):
         target_pos = state[4:6]
 
         # Episode ends when object is close to target
-        return np.linalg.norm(object_pos - target_pos) < 0.5
+        # Ensure builtins.bool return (mypy compatibility)
+        return bool(np.linalg.norm(object_pos - target_pos) < 0.5)
 
     def initial_state_dist(self) -> Distribution:
         class InitialState(Distribution):

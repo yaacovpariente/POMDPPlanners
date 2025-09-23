@@ -35,7 +35,7 @@ class TaskManagerFactory:
     def create_dask(
         n_workers: Optional[int] = None,
         scheduler_address: Optional[str] = None,
-        cache_size: int = 2e9,  # 2GB default
+        cache_size: int = int(2e9),  # 2GB default
         clear_cache_on_start: bool = False,
     ) -> DaskTaskManager:
         """Create a DaskTaskManager for distributed computing.
@@ -59,7 +59,7 @@ class TaskManagerFactory:
     @staticmethod
     def create_joblib(
         cache_dir: str = "./cache",
-        cache_size: int = 2e9,  # 2GB default
+        cache_size: int = int(2e9),  # 2GB default
         n_jobs: int = -1,  # Use all available cores
         eviction_policy: str = "least-recently-used",
         clear_cache_on_start: bool = False,
@@ -99,7 +99,7 @@ class TaskManagerFactory:
         processes: int = 1,
         walltime: str = "01:00:00",
         job_extra: Optional[list] = None,
-        cache_size: int = 2e9,
+        cache_size: int = int(2e9),
         clear_cache_on_start: bool = False,
     ) -> PBSTaskManager:
         """Create a PBSTaskManager for PBS cluster computing.

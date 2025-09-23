@@ -53,4 +53,5 @@ class ContinuousLightDarkNormalNoiseObservationModel(ObservationModel):
     def _near_beacon(self, next_state: np.ndarray) -> bool:
         next_state = next_state.reshape(2, 1)
         distances = np.linalg.norm(next_state - self.beacons, axis=0)
-        return np.any(distances <= self.beacon_radius)
+        # Cast to builtins.bool for mypy compatibility (np.bool_ -> bool)
+        return bool(np.any(distances <= self.beacon_radius))

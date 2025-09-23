@@ -209,7 +209,7 @@ class QueueLoggerManager:
             log_file = logs_dir / f"{task_name}_{timestamp}.log"
 
             # Create handler in writer thread (not worker processes)
-            handler = logging.FileHandler(log_file)
+            handler: logging.Handler = logging.FileHandler(log_file)
             handler.setLevel(logging.DEBUG if config.get("debug") else logging.INFO)
 
             formatter = logging.Formatter(

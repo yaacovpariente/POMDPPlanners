@@ -48,7 +48,7 @@ class DaskTaskManager(TaskManager):
         self.n_workers = n_workers
         self.cache_size = cache_size
         self.clear_cache_on_start = clear_cache_on_start
-        self.client = None
+        self.client: Optional[Client] = None
         self.cache = None
         self.cache_registered = False  # Track if cache was registered
         self._initialize_client()
@@ -87,10 +87,11 @@ class DaskTaskManager(TaskManager):
             self._initialize_client()
 
         # Submit all tasks
-        futures = []
+        futures: List[Future] = []
+        assert self.client is not None
         for task in tasks:
             future = self.client.submit(
-                task.run, key=task._cache_key  # Use task's cache key for Dask caching
+                task.run, key=task.get_config_id()  # Use task's public config ID as key
             )
             futures.append(future)
 

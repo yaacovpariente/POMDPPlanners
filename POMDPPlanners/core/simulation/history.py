@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, List, NamedTuple
+from typing import TYPE_CHECKING, Any, List, NamedTuple, Optional
 
 import numpy as np
 
@@ -76,7 +76,7 @@ class History:
     average_reward_time: float
     actual_num_steps: int
     reach_terminal_state: bool
-    policy_run_data: "PolicyRunData"
+    policy_run_data: Optional["PolicyRunData"]
 
     def __eq__(self, other: object) -> bool:
         """Compare two History objects for equality.

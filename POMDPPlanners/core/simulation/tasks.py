@@ -297,9 +297,9 @@ class TaskManagerExternalDB(TaskManager):
         """
         self.logger.info(f"Starting to process {len(tasks)} tasks")
         # Lists to store results and track which tasks need to be run
-        results = [None] * len(tasks)
-        tasks_to_run = []
-        task_indices = []  # Keep track of original indices for uncached tasks
+        results: List[Any] = [None] * len(tasks)
+        tasks_to_run: List[SimulationTask] = []
+        task_indices: List[int] = []  # Keep track of original indices for uncached tasks
 
         # First pass: check cache and collect tasks that need to be run
         cached_tasks = 0

@@ -10,6 +10,7 @@ This module tests the policy implementations, focusing on:
 import logging
 import random
 from pathlib import Path
+from typing import Optional
 
 import numpy as np
 import pytest
@@ -82,7 +83,7 @@ class MockPolicy(Policy):
         discount_factor: float,
         name: str,
         custom_param: str = "default",
-        log_path: Path = None,
+        log_path: Optional[Path] = None,
         debug: bool = False,
     ):
         super().__init__(environment, discount_factor, name, log_path=log_path, debug=debug)
@@ -104,7 +105,7 @@ class DifferentPolicy(Policy):
         environment: Environment,
         discount_factor: float,
         name: str,
-        log_path: Path = None,
+        log_path: Optional[Path] = None,
         debug: bool = False,
     ):
         super().__init__(environment, discount_factor, name, log_path=log_path, debug=debug)

@@ -106,6 +106,8 @@ class PathSimulationPolicy(Policy):
         if self.environment.space_info.action_space == SpaceType.DISCRETE:
             return np.random.choice(self.environment.get_actions())
         elif self.environment.space_info.action_space == SpaceType.CONTINUOUS:
+            if self.action_sampler is None:
+                raise ValueError("action_sampler must not be None for continuous action spaces")
             return self.action_sampler.sample(belief_node=BeliefNode(belief=belief))
 
     def _learn_tree(self, belief: Belief) -> BeliefNode:
