@@ -81,26 +81,21 @@ Basic Usage
    :maxdepth: 2
    :caption: Examples & Tutorials
 
-   examples/basic_usage
-   examples/planners_comparison
-   examples/hyperparameter_tuning
+   examples/basic_usage.ipynb
+   examples/hyperparameter_tuning.ipynb
+   examples/planners_comparison.ipynb
 
 .. toctree::
    :maxdepth: 2
    :caption: Core Components
 
-   core/environments
-   core/planners
-   core/beliefs
-   core/simulations
+   core
 
 .. toctree::
    :maxdepth: 1
    :caption: API Reference
 
-   api/core
-   api/environments
-   api/planners
+   api/modules
 
 🏗️ Architecture Overview
 -------------------------
