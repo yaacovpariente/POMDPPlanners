@@ -360,13 +360,13 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         if speed > self.safe_velocity_threshold:
             reward += self.safety_violation_penalty
 
-        return reward
+        return float(reward)
 
     def is_terminal(self, state: np.ndarray) -> bool:
         # Episode ends if velocity exceeds safe threshold by too much
         velocity = state[2:4]
         speed = np.linalg.norm(velocity)
-        return speed > self.safe_velocity_threshold * 1.5  # 50% margin
+        return bool(speed > self.safe_velocity_threshold * 1.5)  # 50% margin
 
     def initial_state_dist(self) -> Distribution:
         class InitialState(Distribution):
@@ -744,7 +744,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
 
         # Save animation
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        ani.save(cache_path, writer="pillow", fps=0.8)
+        ani.save(cache_path, writer="pillow", fps=0.8)  # type: ignore[arg-type]
         plt.close(fig)  # Free memory
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
@@ -826,7 +826,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         ]
 
     def sample_next_step(
-        self, state: np.ndarray, action: np.ndarray
+        self, state: np.ndarray, action: int
     ) -> Tuple[np.ndarray, np.ndarray, float]:
         next_state = self.state_transition_model(state=state, action=action).sample()[0]
         next_observation = self.observation_model(next_state=next_state, action=action).sample()[0]

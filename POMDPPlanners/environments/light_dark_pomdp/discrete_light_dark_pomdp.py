@@ -48,7 +48,7 @@ class DiscreteLDObservationModel(ObservationModel):
         }
 
         distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
-        min_distance = np.min(distances)
+        min_distance: float = float(np.min(distances))
         if min_distance < self.beacon_radius:
             beacon_error_factor = 0.2
         else:
@@ -162,7 +162,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         elif is_out_of_grid:
             reward += self.obstacle_reward
 
-        return reward
+        return float(reward)
 
     def is_terminal(self, state: np.ndarray) -> bool:
         if state.shape != (2,):
@@ -174,7 +174,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
         is_terminal = is_goal_state or is_obstacle_hit or is_out_of_grid
 
-        return is_terminal
+        return bool(is_terminal)
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         # Calculate time to reach goal for each history
