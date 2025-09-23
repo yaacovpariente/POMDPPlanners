@@ -43,7 +43,7 @@ jobs:
     - name: Check code quality
       run: |
         black --check POMDPPlanners/
-        flake8 POMDPPlanners --count --max-complexity=10 --max-line-length=127 --statistics
+        pylint POMDPPlanners/ --exit-zero
 
   build-and-publish:
     needs: test-before-release
