@@ -1,0 +1,152 @@
+version: '3.8'
+
+services:
+  # Mock the CI/CD test environment
+  cicd-tests:
+    build:
+      context: .
+      target: test
+    volumes:
+      - .:/app
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - CI=true
+      - GITHUB_ACTIONS=true
+      - MPLBACKEND=Agg
+    command: |
+      bash -c "
+        echo '🐳 Running CI/CD tests in Docker container...'
+        
+        # Run linting
+        echo '📝 Running pylint...'
+        pylint POMDPPlanners/ --exit-zero
+        
+        # Run formatting check
+        echo '🎨 Running black check...'
+        black --check POMDPPlanners/
+        
+        # Run type checking
+        echo '🔍 Running mypy...'
+        mypy POMDPPlanners/ --ignore-missing-imports
+        
+        # Run unit tests
+        echo '🧪 Running pytest...'
+        pytest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing
+        
+        # Run doctests
+        echo '📚 Running doctests...'
+        pytest --doctest-modules POMDPPlanners/ -v
+        
+        # Run visualization examples
+        echo '📊 Running visualization examples...'
+        python legacy/light_dark_pomdp_visualization_example.py || echo 'Visualization test failed (continuing...)'
+        python legacy/pomcpow_rock_sample_visualization_demo.py || echo 'Visualization test failed (continuing...)'
+        python legacy/push_pomdp_visualization_example.py || echo 'Visualization test failed (continuing...)'
+        
+        # Build documentation
+        echo '📖 Building documentation...'
+        cd docs && sphinx-build -b html . _build/html && cd .. || echo 'Documentation build failed (continuing...)'
+        
+        echo '✅ All CI/CD tests completed!'
+      "
+
+  # Mock multi-Python version tests
+  python38-tests:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.8-slim
+        WORKDIR /app
+        COPY . .
+        RUN pip install -r requirements.txt -r requirements-dev.txt
+        RUN pip install -e .
+    environment:
+      - CI=true
+      - GITHUB_ACTIONS=true
+    command: |
+      bash -c "
+        echo '🐍 Running Python 3.8 tests...'
+        pytest POMDPPlanners/tests/ -v
+        black --check POMDPPlanners/
+        pylint POMDPPlanners/ --exit-zero
+      "
+
+  python39-tests:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.9-slim
+        WORKDIR /app
+        COPY . .
+        RUN pip install -r requirements.txt -r requirements-dev.txt
+        RUN pip install -e .
+    environment:
+      - CI=true
+      - GITHUB_ACTIONS=true
+    command: |
+      bash -c "
+        echo '🐍 Running Python 3.9 tests...'
+        pytest POMDPPlanners/tests/ -v
+        black --check POMDPPlanners/
+        pylint POMDPPlanners/ --exit-zero
+      "
+
+  python310-tests:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.10-slim
+        WORKDIR /app
+        COPY . .
+        RUN pip install -r requirements.txt -r requirements-dev.txt
+        RUN pip install -e .
+    environment:
+      - CI=true
+      - GITHUB_ACTIONS=true
+    command: |
+      bash -c "
+        echo '🐍 Running Python 3.10 tests...'
+        pytest POMDPPlanners/tests/ -v
+        black --check POMDPPlanners/
+        pylint POMDPPlanners/ --exit-zero
+      "
+
+  python311-tests:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.11-slim
+        WORKDIR /app
+        COPY . .
+        RUN pip install -r requirements.txt -r requirements-dev.txt
+        RUN pip install -e .
+    environment:
+      - CI=true
+      - GITHUB_ACTIONS=true
+    command: |
+      bash -c "
+        echo '🐍 Running Python 3.11 tests...'
+        pytest POMDPPlanners/tests/ -v
+        black --check POMDPPlanners/
+        pylint POMDPPlanners/ --exit-zero
+      "
+
+  python312-tests:
+    build:
+      context: .
+      dockerfile_inline: |
+        FROM python:3.12-slim
+        WORKDIR /app
+        COPY . .
+        RUN pip install -r requirements.txt -r requirements-dev.txt
+        RUN pip install -e .
+    environment:
+      - CI=true
+      - GITHUB_ACTIONS=true
+    command: |
+      bash -c "
+        echo '🐍 Running Python 3.12 tests...'
+        pytest POMDPPlanners/tests/ -v
+        black --check POMDPPlanners/
+        pylint POMDPPlanners/ --exit-zero
+      "
