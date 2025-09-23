@@ -169,12 +169,14 @@ class DiscreteActionSequencesPlanner(Policy):
         returns = []
 
         for action_sequence in action_sequences:
-            returns.append(self.estimate_return(action_sequence=action_sequence, belief=belief))
+            returns.append(
+                self.estimate_return(action_sequence=list(action_sequence), belief=belief)
+            )
 
         return list(action_sequences[np.argmax(returns)])
 
     def estimate_return(self, action_sequence: List[Any], belief: Belief) -> float:
-        return_estimator = 0
+        return_estimator: float = 0.0
         for _ in range(self.n_return_samples):
             state = belief.sample()
             return_sample = 0

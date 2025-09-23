@@ -176,23 +176,6 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
     def get_space_info(cls) -> PolicySpaceInfo:
         return PolicySpaceInfo(action_space=SpaceType.DISCRETE, observation_space=SpaceType.MIXED)
 
-    def random_rollout(self, belief_node: BeliefNode, depth: int) -> float:
-        if depth == 0:
-            return 0.0
-
-        state = belief_node.belief.sample()
-        action = np.random.choice(self.environment.get_actions())
-        next_state = self.environment.state_transition_model(state, action).sample()[0]
-        next_observation = self.environment.observation_model(
-            next_state=next_state, action=action
-        ).sample()[0]
-
-        state = belief_node.belief.sample()
-        next_state = self.environment.state_transition_model(state, action).sample()[0]
-        next_observation = self.environment.observation_model(
-            next_state=next_state, action=action
-        ).sample()[0]
-
 
 class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActionsPlanner):
     """Standard implementation of sparse sampling for POMDP planning.
