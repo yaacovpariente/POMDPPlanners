@@ -15,6 +15,7 @@ Functions:
     sample_next_belief: Simulate one step of belief evolution
     get_initial_belief: Create initial belief from environment's initial distribution
 """
+
 import random
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Tuple
