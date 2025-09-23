@@ -18,11 +18,14 @@ def get_cache_key(
     initial_belief: Belief,
     general_config: dict = {},
 ) -> str:
-    return (
-        environment.config_id,
-        policy.config_id,
-        initial_belief.config_id,
-        str(sorted(general_config.items())),
+    # String key for diskcache; include env/policy/belief IDs and sorted config
+    return "|".join(
+        [
+            environment.config_id,
+            policy.config_id,
+            initial_belief.config_id,
+            str(sorted(general_config.items())),
+        ]
     )
 
 

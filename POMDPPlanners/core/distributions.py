@@ -88,7 +88,7 @@ class DiscreteDistribution(Distribution):
         True
     """
 
-    def __init__(self, values: list, probs: np.array):
+    def __init__(self, values: list, probs: np.ndarray):
         """Initialize the discrete distribution.
 
         Args:
@@ -127,7 +127,7 @@ class DiscreteDistribution(Distribution):
 
 
 class Numpy2DDistribution(Distribution):
-    def __init__(self, values: np.ndarray, probs: np.array):
+    def __init__(self, values: np.ndarray, probs: np.ndarray):
         if values.shape[0] != 2:
             raise ValueError("values must have shape (2, N)")
         if values.shape[1] != len(probs):

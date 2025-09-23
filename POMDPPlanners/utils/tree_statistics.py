@@ -9,11 +9,13 @@ from POMDPPlanners.core.tree import ActionNode, BeliefNode
 
 def get_v_values_sample(action_node: ActionNode) -> np.ndarray:
     if not action_node.is_leaf:
-        v_values_sample = [child.v_value for child in action_node.children]
-        children_visit_counts = np.array([child.visit_count for child in action_node.children])
+        v_values_sample = np.array([child.v_value for child in action_node.children], dtype=float)
+        children_visit_counts = np.array(
+            [child.visit_count for child in action_node.children], dtype=int
+        )
         v_values_sample = np.repeat(v_values_sample, children_visit_counts)
     else:
-        v_values_sample = []
+        v_values_sample = np.array([], dtype=float)
 
     return v_values_sample
 
@@ -201,7 +203,7 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
     n_actions_from_root = len(visit_counts)
     root_visit_count = tree.visit_count
     # Calculate entropy of visit counts
-    total_visits = np.sum(visit_counts)
+    total_visits: int = int(np.sum(visit_counts))
     if total_visits > 0:
         probabilities = visit_counts / total_visits
         entropy_value = entropy(probabilities, base=2)

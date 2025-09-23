@@ -38,6 +38,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         num_steps: int,
         direction: HyperParameterOptimizationDirection,
         parameter_to_optimize: str,
+        experiment_name: str = "hyperparameter_optimization",
         n_trials: int = 50,
         cache_dir: Optional[Path] = None,
         debug: bool = False,
@@ -79,7 +80,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.simulator = POMDPSimulator(
             task_manager_config=task_manager_config,
             cache_dir_path=None,
-            experiment_name=None,
+            experiment_name=experiment_name,
             debug=debug,  # Keep episode-level logging minimal for optimization
             use_queue_logger=use_queue_logger,
         )

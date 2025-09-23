@@ -137,7 +137,7 @@ class BaseSimulator(ABC):
         self.debug = debug
         self.enable_profiling = enable_profiling
         self.profiling_output_limit = profiling_output_limit
-        self.profiler = None
+        self.profiler: Optional[cProfile.Profile] = None
         self.use_queue_logger = use_queue_logger
 
         self.logger = get_logger(
@@ -247,6 +247,8 @@ class BaseSimulator(ABC):
         if not self.profiler:
             return
 
+        import pstats
+
         s = io.StringIO()
         ps = pstats.Stats(self.profiler, stream=s).sort_stats("cumulative")
         ps.print_stats(self.profiling_output_limit)  # Show all functions, no restriction
@@ -258,6 +260,8 @@ class BaseSimulator(ABC):
         if self.cache_dir_path:
             profiling_file = self.cache_dir_path / "profiling_results.txt"
             with open(profiling_file, "w") as f:
+                import pstats
+
                 ps = pstats.Stats(self.profiler, stream=f).sort_stats("cumulative")
                 ps.print_stats(self.profiling_output_limit)  # Show all functions, no restriction
             self.logger.info(f"Detailed profiling results saved to: {profiling_file}")
@@ -380,14 +384,16 @@ class BaseSimulator(ABC):
         n_jobs: int,
     ) -> Tuple[Dict[str, Dict[str, list]], Dict[str, Dict[str, List[MetricValue]]]]:
         """Execute simulations in parallel and compute performance metrics."""
-        results = self.simulate_multiple_environments_and_policies_parallel(
+        results: Dict[
+            str, Dict[str, list]
+        ] = self.simulate_multiple_environments_and_policies_parallel(
             environment_run_params=environment_run_params,
             alpha=alpha,
             confidence_interval_level=confidence_interval_level,
             n_jobs=n_jobs,
         )
 
-        metrics = self._compute_metrics(
+        metrics: Dict[str, Dict[str, List[MetricValue]]] = self._compute_metrics(
             results=results,
             environment_run_params=environment_run_params,
             alpha=alpha,

@@ -1,4 +1,4 @@
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 
 import ray
 from joblib import Memory, Parallel, delayed
@@ -15,7 +15,7 @@ def run_parallel_locally(
     n_jobs: int = 1,
     description: str = "Running parallel tasks",
     unit: str = "task",
-    cache_dir: str = None,
+    cache_dir: Optional[str] = None,
 ) -> List[Any]:
     """Run a function in parallel with different keyword argument sets using joblib.
 
@@ -55,9 +55,9 @@ def run_distributed(
     num_gpus: int = 0,
     description: str = "Running distributed tasks",
     unit: str = "task",
-    address: str = None,
+    address: Optional[str] = None,
     namespace: str = "POMDPPlanners",
-    runtime_env: dict = None,
+    runtime_env: Optional[dict] = None,
 ) -> List[Any]:
     """Run a function in parallel across multiple machines using Ray.
 

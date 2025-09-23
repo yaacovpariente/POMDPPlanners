@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 from diskcache import Cache
@@ -15,7 +15,7 @@ class DiskCacheDB(DataBaseInterface):
     def __init__(
         self,
         cache_dir: str = "./cache",
-        size_limit: int = 2e9,  # 2GB default size limit
+        size_limit: int = int(2e9),  # 2GB default size limit
         eviction_policy: str = "least-recently-used",
         debug: bool = False,
     ):
@@ -35,7 +35,7 @@ class DiskCacheDB(DataBaseInterface):
             eviction_policy=eviction_policy,
         )
 
-        self.logger = get_logger(name=f"disk_cache_db", debug=debug, output_dir=cache_dir)
+        self.logger = get_logger(name=f"disk_cache_db", debug=debug, output_dir=Path(cache_dir))
 
     def get(self, key: str) -> Any:
         """Retrieve a value from the cache.
