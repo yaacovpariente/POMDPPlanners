@@ -15,7 +15,6 @@ Functions:
     sample_next_belief: Simulate one step of belief evolution
     get_initial_belief: Create initial belief from environment's initial distribution
 """
-
 import random
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Tuple
@@ -74,7 +73,7 @@ class Belief(ABC):
         """Generate a deterministic identifier based on belief configuration."""
 
         def serialize_value(value):
-            """Helper function to serialize values in a deterministic way."""
+            """Serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
                 return value.tolist()
             elif isinstance(value, (str, int, float, bool)):
@@ -85,8 +84,7 @@ class Belief(ABC):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
             elif hasattr(value, "__dict__"):
                 return serialize_value(value.__dict__)
-            else:
-                return str(value)
+            return str(value)
 
         config_dict = {}
         for key, value in self.__dict__.items():
@@ -148,7 +146,18 @@ class Belief(ABC):
 
 
 class UnweightedParticleBelief(Belief):
+    """Unweighted particle belief implementation.
+
+    This class implements a particle filter with uniform particles.
+    """
+
     def __init__(self, particles: list, reinvigoration_fraction=0.2):
+        """Initialize unweighted particle belief.
+
+        Args:
+            particles: List of particles representing the belief state
+            reinvigoration_fraction: Fraction of particles to reinvigorate
+        """
         self.num_particles = len(particles)
         self.reinvigoration_fraction = reinvigoration_fraction
         self.particles = particles
@@ -160,6 +169,7 @@ class UnweightedParticleBelief(Belief):
         pomdp: Environment,
         is_reinvigorate: bool = False,
     ) -> "UnweightedParticleBelief":
+        """Update belief with action-observation pair."""
         new_particles = []
 
         for _ in range(self.num_particles):
@@ -199,11 +209,12 @@ class UnweightedParticleBelief(Belief):
                 return next_s
 
     def sample(self):
+        """Sample a particle from the belief."""
         return random.choice(self.particles)
 
     @abstractmethod
     def _reinvigoration_pertubation(self, action: Any, observation: Any, pomdp: Environment) -> Any:
-        """This method should be implemented specifically for each environment."""
+        """Implement perturbation for reinvigoration in specific environment."""
         pass
 
 
@@ -313,7 +324,6 @@ class WeightedParticleBelief(Belief):
             DiscreteDistribution: A distribution where each particle appears only once,
             with its probability being the sum of all its occurrences in the original belief.
         """
-
         # Create a dictionary to store unique particles and their combined weights
         unique_particles = {}
 
@@ -352,7 +362,7 @@ class WeightedParticleBelief(Belief):
         """Generate a deterministic identifier based on belief configuration."""
 
         def serialize_value(value):
-            """Helper function to serialize values in a deterministic way."""
+            """Serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
                 return value.tolist()
             elif isinstance(value, (str, int, float, bool)):
@@ -363,8 +373,7 @@ class WeightedParticleBelief(Belief):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
             elif hasattr(value, "__dict__"):
                 return serialize_value(value.__dict__)
-            else:
-                return str(value)
+            return str(value)
 
         # Create a list of particle-weight pairs to maintain order
         particle_weight_pairs = []
@@ -433,8 +442,13 @@ class WeightedParticleBelief(Belief):
         return next_particles, next_log_weights
 
     def update(
-        self, action, observation, pomdp: Environment, state: Optional[Any] = None
+        self,
+        action,
+        observation,
+        pomdp: Environment,
+        state: Optional[Any] = None,
     ) -> "WeightedParticleBelief":
+        """Update belief with action-observation pair."""
         next_particles, next_log_weights = self._update_weights(
             action=action, observation=observation, pomdp=pomdp
         )
@@ -449,11 +463,14 @@ class WeightedParticleBelief(Belief):
         )
 
     def sample(self):
+        """Sample a particle from the belief."""
         idx = np.random.choice(len(self.particles), p=self.normalized_weights)
         return self.particles[idx]
 
 
 class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
+    """Weighted particle belief with reinvigoration capability."""
+
     def __init__(
         self,
         particles: list,
@@ -462,6 +479,7 @@ class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
         ess_factor: float = 0.5,
         reinvigoration_fraction: float = 0.2,
     ):
+        """Initialize weighted particle belief with reinvigoration."""
         super().__init__(
             particles=particles,
             log_weights=log_weights,
@@ -472,6 +490,7 @@ class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
         self.reinvigoration_fraction = reinvigoration_fraction
 
     def update(self, action, observation, pomdp: Environment) -> "WeightedParticleBelief":
+        """Update belief with reinvigoration."""
         belief = super().update(action=action, observation=observation, pomdp=pomdp)
 
         belief = self.reinvigorate(
@@ -484,7 +503,7 @@ class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
     def reinvigorate(
         self, action: Any, observation: Any, pomdp: Environment, belief: Belief
     ) -> Belief:
-        """This function should be implemented for a specific POMDP environment."""
+        """Implement reinvigoration for specific POMDP environment."""
         pass
 
 
@@ -759,38 +778,38 @@ class WeightedParticleBeliefStateUpdate(Belief):
         state: Optional[Any] = None,
     ) -> "WeightedParticleBeliefStateUpdate":
         """Create new belief by adding a state particle with observation weight.
-        
+
         This method creates a new belief instance without modifying the current one.
         The new particle's weight is computed as the observation likelihood given
         the state and action using the environment's observation model.
-        
+
         Args:
             action: Action that was executed to reach the state
             observation: Observation received after executing the action
             pomdp: Environment providing the observation model for weight computation
             state: State particle to add to the belief. If None, no particle is added.
-            
+
         Returns:
             New WeightedParticleBeliefStateUpdate instance with the additional particle
             and updated weights.
-            
+
         Example:
             Creating a new belief with an additional particle::\
-            
+
                 # Original belief with 2 particles
                 belief = WeightedParticleBeliefStateUpdate(
-                    particles=["state1", "state2"], 
+                    particles=["state1", "state2"],
                     weights=[0.7, 0.3]
                 )
-                
+
                 # Create new belief with additional particle
                 new_belief = belief.update(
                     action="action1",
-                    observation="obs1", 
+                    observation="obs1",
                     pomdp=environment,
                     state="state3"
                 )
-                
+
                 # Original belief unchanged, new belief has 3 particles
                 assert len(belief.particles) == 2
                 assert len(new_belief.particles) == 3
@@ -812,28 +831,28 @@ class WeightedParticleBeliefStateUpdate(Belief):
         state: Optional[Any] = None,
     ) -> None:
         """Add a state particle with observation weight to current belief.
-        
+
         This method modifies the current belief in-place by appending a new particle
         and its corresponding observation likelihood weight. The weight is computed
         using the environment's observation model and efficiently updates the
         running weight sum.
-        
+
         Args:
             action: Action that was executed to reach the state
-            observation: Observation received after executing the action  
+            observation: Observation received after executing the action
             pomdp: Environment providing the observation model for weight computation
             state: State particle to add to the belief. If None, no particle is added.
-            
+
         Example:
             Incrementally building a belief::\
-            
+
                 belief = WeightedParticleBeliefStateUpdate([], [])
-                
+
                 # Add particles one by one
                 belief.inplace_update("listen", "hear_left", env, "tiger_left")
-                belief.inplace_update("listen", "hear_right", env, "tiger_right") 
+                belief.inplace_update("listen", "hear_right", env, "tiger_right")
                 belief.inplace_update("listen", "hear_left", env, "tiger_left")
-                
+
                 # Belief now contains 3 particles with observation-based weights
                 assert len(belief.particles) == 3
                 assert belief.weights_sum > 0
@@ -872,7 +891,7 @@ class WeightedParticleBeliefStateUpdate(Belief):
         """
 
         def serialize_value(value):
-            """Helper function to serialize values in a deterministic way."""
+            """Serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
                 return value.tolist()
             elif isinstance(value, (str, int, float, bool)):
@@ -883,8 +902,7 @@ class WeightedParticleBeliefStateUpdate(Belief):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
             elif hasattr(value, "__dict__"):
                 return serialize_value(value.__dict__)
-            else:
-                return str(value)
+            return str(value)
 
         # Create a list of particle-weight pairs to maintain order
         particle_weight_pairs = []
@@ -906,7 +924,7 @@ class WeightedParticleBeliefStateUpdate(Belief):
 
 
 class UnweightedParticleBeliefStateUpdate(Belief):
-    """Uniform particle belief for incremental state accumulation.
+    r"""Uniform particle belief for incremental state accumulation.
 
     This class implements a lightweight belief representation that maintains
     a collection of state particles with uniform probability distribution.
@@ -1209,25 +1227,25 @@ class UnweightedParticleBeliefStateUpdate(Belief):
 
     def __init__(self, particles: list = []):
         """Initialize unweighted particle belief.
-        
+
         Creates a belief state with uniform probability distribution over
         the provided particles. Each particle has equal weight 1/N where
         N is the number of particles.
-        
+
         Args:
             particles: List of state particles with uniform weights.
                 Defaults to empty list for incremental construction.
-                
+
         Example:
             Creating beliefs with different initialization strategies::\
-            
+
                 # Empty belief for incremental construction
                 empty_belief = UnweightedParticleBeliefStateUpdate([])
-                
+
                 # Pre-populated belief with uniform distribution
                 states = ["state1", "state2", "state1", "state3"]
                 belief = UnweightedParticleBeliefStateUpdate(states)
-                
+
                 # Each state has probability proportional to its count
                 # state1: 2/4 = 0.5, state2: 1/4 = 0.25, state3: 1/4 = 0.25
         """
@@ -1242,33 +1260,33 @@ class UnweightedParticleBeliefStateUpdate(Belief):
         state: Optional[Any] = None,
     ) -> "UnweightedParticleBeliefStateUpdate":
         """Create new belief by adding a state particle with uniform weight.
-        
+
         This method creates a new belief instance without modifying the current one.
         Unlike weighted beliefs, all particles (including the new one) have equal
         probability in the resulting belief distribution.
-        
+
         Args:
             action: Action that was executed to reach the state (not used for weighting)
             observation: Observation received after executing the action (not used for weighting)
             pomdp: Environment instance (not used for uniform weighting)
             state: State particle to add to the belief. If None, no particle is added.
-            
+
         Returns:
             New UnweightedParticleBeliefStateUpdate instance with the additional particle.
-            
+
         Example:
             Creating new beliefs immutably::\
-            
+
                 # Original belief with 3 particles
                 belief = UnweightedParticleBeliefStateUpdate(["state1", "state2", "state1"])
-                
+
                 # Create new belief with additional particle
                 new_belief = belief.update("action", "obs", environment, "state3")
-                
+
                 # Original belief unchanged, new belief has 4 particles
                 assert len(belief.particles) == 3
                 assert len(new_belief.particles) == 4
-                
+
                 # All particles have equal probability in new belief
                 # state1: 2/4 = 0.5, state2: 1/4 = 0.25, state3: 1/4 = 0.25
         """
@@ -1277,25 +1295,25 @@ class UnweightedParticleBeliefStateUpdate(Belief):
 
     def sample(self) -> Any:
         """Sample a state uniformly from the current belief distribution.
-        
+
         Returns:
             A state sampled uniformly from the particle set
-            
+
         Raises:
             IndexError: If belief is empty (no particles to sample from)
-            
+
         Example:
             Uniform sampling from particle belief::\
-            
-                # Create belief with repeated particles  
+
+                # Create belief with repeated particles
                 particles = ["A", "B", "A", "A", "C"]
                 belief = UnweightedParticleBeliefStateUpdate(particles)
-                
+
                 # Sample multiple times to see distribution
                 samples = [belief.sample() for _ in range(1000)]
                 from collections import Counter
                 counts = Counter(samples)
-                
+
                 # Should approximate: A: 60%, B: 20%, C: 20%
                 for state, count in counts.items():
                     print(f"{state}: {count/1000:.2f}")
@@ -1310,27 +1328,27 @@ class UnweightedParticleBeliefStateUpdate(Belief):
         state: Optional[Any] = None,
     ) -> None:
         """Add a state particle with uniform weight to current belief.
-        
+
         This method modifies the current belief in-place by appending a new particle.
         Unlike weighted beliefs, no observation likelihood computation is performed;
         the new particle simply joins the uniform distribution.
-        
+
         Args:
             action: Action that was executed to reach the state (not used for weighting)
             observation: Observation received after executing the action (not used for weighting)
             pomdp: Environment instance (not used for uniform weighting)
             state: State particle to add to the belief. If None, no particle is added.
-            
+
         Example:
             Incrementally building uniform beliefs::\
-            
+
                 belief = UnweightedParticleBeliefStateUpdate([])
-                
+
                 # Add particles one by one - all have equal weight
                 belief.inplace_update("action1", "obs1", env, "state_A")
-                belief.inplace_update("action2", "obs2", env, "state_B") 
+                belief.inplace_update("action2", "obs2", env, "state_B")
                 belief.inplace_update("action3", "obs3", env, "state_A")
-                
+
                 # Belief now has 3 particles: ["state_A", "state_B", "state_A"]
                 # Sampling probabilities: state_A = 2/3, state_B = 1/3
                 assert len(belief.particles) == 3
@@ -1348,7 +1366,7 @@ class UnweightedParticleBeliefStateUpdate(Belief):
         """
 
         def serialize_value(value):
-            """Helper function to serialize values in a deterministic way."""
+            """Serialize values in a deterministic way."""
             if isinstance(value, np.ndarray):
                 return value.tolist()
             elif isinstance(value, (str, int, float, bool)):
@@ -1359,8 +1377,7 @@ class UnweightedParticleBeliefStateUpdate(Belief):
                 return {str(k): serialize_value(v) for k, v in sorted(value.items())}
             elif hasattr(value, "__dict__"):
                 return serialize_value(value.__dict__)
-            else:
-                return str(value)
+            return str(value)
 
         # Convert particles to serializable format and sort them
         serialized_particles = []
