@@ -1307,7 +1307,7 @@ class TestUsageExamples:
                     planner_configs=[planner_config],
                     cache_dir=temp_dir,
                     **fast_config,
-                    verbose=False
+                    verbose=False,
                 )
 
             # Verify the function was called (parameters were valid)

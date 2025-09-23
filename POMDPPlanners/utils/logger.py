@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from logging.handlers import QueueHandler
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Deque
 
 
 class QueueLoggerManager:
@@ -32,13 +32,15 @@ class QueueLoggerManager:
         cleanup_interval: int = 60,
         handler_timeout: int = 300,
     ):
-        self._log_queue = queue.Queue(maxsize=10000)  # Bounded queue
-        self._writer_thread = None
-        self._task_handlers = {}  # task_id -> file handler
-        self._handler_ref_count = {}  # handler -> reference count
-        self._handler_last_used = {}  # handler -> timestamp
-        self._loggers = {}  # logger_name -> config
-        self._cleanup_timer = None
+        self._log_queue: "queue.Queue[Optional[logging.LogRecord]]" = queue.Queue(
+            maxsize=10000
+        )  # Bounded queue
+        self._writer_thread: Optional[threading.Thread] = None
+        self._task_handlers: Dict[str, logging.Handler] = {}  # task_id -> file handler
+        self._handler_ref_count: Dict[logging.Handler, int] = {}  # handler -> reference count
+        self._handler_last_used: Dict[logging.Handler, float] = {}  # handler -> timestamp
+        self._loggers: Dict[str, Dict[str, Any]] = {}  # logger_name -> config
+        self._cleanup_timer: Optional[threading.Timer] = None
         self._shutdown_event = threading.Event()
         self._max_handlers = max_handlers
         self._cleanup_interval = cleanup_interval
