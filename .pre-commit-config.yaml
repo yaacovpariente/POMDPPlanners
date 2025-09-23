@@ -1,7 +1,16 @@
 repos:
--   repo: https://github.com/psf/black
+  - repo: https://github.com/psf/black
     rev: 23.12.1
     hooks:
-    -   id: black
+      - id: black
         language_version: python3.12
-        args: [--line-length=100] 
+        args: [--line-length=100]
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy (staged)
+        entry: ./.venv/bin/mypy
+        language: system
+        types: [python]
+        pass_filenames: true
+        args: [--config-file, mypy-staged.ini, --show-error-codes]
