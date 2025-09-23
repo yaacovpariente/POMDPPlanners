@@ -1,12 +1,12 @@
-from typing import Any, List, Tuple, Optional
 from itertools import product
 from pathlib import Path
+from typing import Any, List, Optional, Tuple
 
 import numpy as np
 
-from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, PolicyRunData
-from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceType
 from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceType
+from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 
 
 class DiscreteActionSequencesPlanner(Policy):

@@ -7,11 +7,13 @@ This module tests the MountainCar POMDP environment, focusing on:
 - Terminal conditions
 """
 
-import pytest
-import numpy as np
 import random
-from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+
+import numpy as np
+import pytest
+
 from POMDPPlanners.core.simulation import StepData
+from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 
 # Set seeds for reproducible tests
 np.random.seed(42)

@@ -4,17 +4,18 @@ This module contains comprehensive tests for the task manager configuration
 classes and their factory methods.
 """
 
-import pytest
-from unittest.mock import Mock, patch
 from pathlib import Path
+from unittest.mock import Mock, patch
 
-from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
-    TaskManagerConfig,
-    DaskConfig,
-    PBSConfig,
-    JoblibConfig,
-)
+import pytest
+
 from POMDPPlanners.core.simulation import TaskManager
+from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+    DaskConfig,
+    JoblibConfig,
+    PBSConfig,
+    TaskManagerConfig,
+)
 
 
 class TestTaskManagerConfig:

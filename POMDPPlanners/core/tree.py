@@ -1,10 +1,10 @@
 from typing import Any, Union
-import numpy as np
-from anytree import NodeMixin
-from anytree import RenderTree
 
-from POMDPPlanners.core.environment import Environment
+import numpy as np
+from anytree import NodeMixin, RenderTree
+
 from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.environment import Environment
 
 
 class BaseNode(NodeMixin):

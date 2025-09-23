@@ -1,13 +1,13 @@
-import logging
-from datetime import datetime
-from pathlib import Path
-from typing import Optional, Dict, Any
-import queue
-import threading
 import atexit
+import logging
+import queue
 import signal
+import threading
 import time
+from datetime import datetime
 from logging.handlers import QueueHandler
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 
 class QueueLoggerManager:

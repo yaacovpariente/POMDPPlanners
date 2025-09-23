@@ -7,9 +7,10 @@ This module tests the belief implementations, focusing on:
 - Belief types
 """
 
-import pytest
-import numpy as np
 import random
+
+import numpy as np
+import pytest
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -17,20 +18,20 @@ random.seed(42)
 
 from POMDPPlanners.core.belief import (
     Belief,
-    WeightedParticleBelief,
     UnweightedParticleBelief,
-    WeightedParticleBeliefStateUpdate,
     UnweightedParticleBeliefStateUpdate,
+    WeightedParticleBelief,
+    WeightedParticleBeliefStateUpdate,
     is_terminal_belief,
 )
 from POMDPPlanners.core.config_types import BeliefConfig
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP, LaserTagState
+from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.utils.weighted_particle_beliefs import (
+    WeightedParticleBeliefContinuousLightDarkFullCoverage,
     WeightedParticleBeliefDiscreteLightDark,
     WeightedParticleBeliefDiscreteLightDarkFullCoverage,
-    WeightedParticleBeliefContinuousLightDarkFullCoverage,
     WeightedParticleBeliefSanityPOMDP,
 )
 
@@ -2391,8 +2392,8 @@ def test_unweighted_particle_belief_state_update_sample_with_extreme_cases():
 
 def test_weighted_particle_belief_basic_incremental_construction_usage_example():
     """Test the basic incremental belief construction usage example from WeightedParticleBeliefStateUpdate docstring."""
-    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
     from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
+    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
     # Create environment and empty belief (from docstring)
     env = TigerPOMDP(discount_factor=0.95)
@@ -2422,8 +2423,9 @@ def test_weighted_particle_belief_basic_incremental_construction_usage_example()
 def test_weighted_particle_belief_immutable_updates_usage_example():
     """Test the immutable belief updates for tree search usage example from WeightedParticleBeliefStateUpdate docstring."""
     import numpy as np
-    from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+
     from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
+    from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 
     # Create continuous state environment (from docstring)
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
@@ -2464,8 +2466,8 @@ def test_weighted_particle_belief_immutable_updates_usage_example():
 
 def test_weighted_particle_belief_update_strategies_comparison_usage_example():
     """Test the comparing belief update strategies usage example from WeightedParticleBeliefStateUpdate docstring."""
-    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
     from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 
     env = SanityPOMDP(discount_factor=0.95)
 
@@ -2502,9 +2504,9 @@ def test_weighted_particle_belief_update_strategies_comparison_usage_example():
 
 def test_weighted_particle_belief_mcts_integration_usage_example():
     """Test the Monte Carlo Tree Search integration usage example from WeightedParticleBeliefStateUpdate docstring."""
-    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
     from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
-    from POMDPPlanners.core.tree import BeliefNode, ActionNode
+    from POMDPPlanners.core.tree import ActionNode, BeliefNode
+    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
     env = TigerPOMDP(discount_factor=0.95)
 
@@ -2549,9 +2551,10 @@ def test_weighted_particle_belief_mcts_integration_usage_example():
 
 def test_weighted_particle_belief_weighted_sampling_usage_example():
     """Test the weighted sampling and state estimation usage example from WeightedParticleBeliefStateUpdate docstring."""
-    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-    from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
     import collections
+
+    from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
+    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
     env = TigerPOMDP(discount_factor=0.95)
     belief = WeightedParticleBeliefStateUpdate([], [])
@@ -2588,8 +2591,8 @@ def test_weighted_particle_belief_weighted_sampling_usage_example():
 
 def test_weighted_particle_belief_config_id_caching_usage_example():
     """Test the configuration ID and caching usage example from WeightedParticleBeliefStateUpdate docstring."""
-    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
     from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 
     env = SanityPOMDP(discount_factor=0.95)
 
@@ -2614,8 +2617,9 @@ def test_weighted_particle_belief_config_id_caching_usage_example():
 def test_weighted_particle_belief_custom_particle_types_usage_example():
     """Test the custom particle types usage example from WeightedParticleBeliefStateUpdate docstring."""
     import numpy as np
-    from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+
     from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
+    from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 
     # Works with any particle type - numpy arrays, custom objects, etc. (from docstring)
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
@@ -2657,8 +2661,8 @@ def test_weighted_particle_belief_custom_particle_types_usage_example():
 
 def test_unweighted_particle_belief_state_update_basic_uniform_belief_construction_usage_example():
     """Test the basic uniform belief construction usage example from UnweightedParticleBeliefStateUpdate docstring."""
-    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
     from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
+    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
     # Create environment and empty uniform belief
     env = TigerPOMDP(discount_factor=0.95)
@@ -2679,9 +2683,9 @@ def test_unweighted_particle_belief_state_update_basic_uniform_belief_constructi
 
 def test_unweighted_particle_belief_state_update_mcts_with_uniform_beliefs_usage_example():
     """Test the Monte Carlo Tree Search with uniform beliefs usage example from UnweightedParticleBeliefStateUpdate docstring."""
-    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
     from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-    from POMDPPlanners.core.tree import BeliefNode, ActionNode
+    from POMDPPlanners.core.tree import ActionNode, BeliefNode
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 
     env = SanityPOMDP(discount_factor=0.95)
 
@@ -2715,12 +2719,13 @@ def test_unweighted_particle_belief_state_update_mcts_with_uniform_beliefs_usage
 
 def test_unweighted_particle_belief_state_update_comparing_weighted_vs_unweighted_usage_example():
     """Test the comparing weighted vs unweighted belief updates usage example from UnweightedParticleBeliefStateUpdate docstring."""
-    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-    from POMDPPlanners.core.belief import (
-        WeightedParticleBeliefStateUpdate,
-        UnweightedParticleBeliefStateUpdate,
-    )
     import collections
+
+    from POMDPPlanners.core.belief import (
+        UnweightedParticleBeliefStateUpdate,
+        WeightedParticleBeliefStateUpdate,
+    )
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 
     env = SanityPOMDP(discount_factor=0.95)
 
@@ -2755,9 +2760,10 @@ def test_unweighted_particle_belief_state_update_comparing_weighted_vs_unweighte
 
 def test_unweighted_particle_belief_state_update_discrete_observation_filtering_usage_example():
     """Test the discrete observation filtering usage example from UnweightedParticleBeliefStateUpdate docstring."""
-    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-    from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
     import collections
+
+    from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
+    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
     env = TigerPOMDP(discount_factor=0.95)
     belief = UnweightedParticleBeliefStateUpdate([])
@@ -2795,8 +2801,9 @@ def test_unweighted_particle_belief_state_update_discrete_observation_filtering_
 def test_unweighted_particle_belief_state_update_immutable_belief_trees_usage_example():
     """Test the immutable belief trees for planning usage example from UnweightedParticleBeliefStateUpdate docstring."""
     import numpy as np
-    from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+
     from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
+    from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 
     # Create continuous state environment
     noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
@@ -2837,11 +2844,11 @@ def test_unweighted_particle_belief_state_update_immutable_belief_trees_usage_ex
 
 def test_unweighted_particle_belief_state_update_memory_efficient_accumulation_usage_example():
     """Test the memory-efficient particle accumulation usage example from UnweightedParticleBeliefStateUpdate docstring."""
-    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
     from POMDPPlanners.core.belief import (
-        WeightedParticleBeliefStateUpdate,
         UnweightedParticleBeliefStateUpdate,
+        WeightedParticleBeliefStateUpdate,
     )
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 
     env = SanityPOMDP(discount_factor=0.95)
 
@@ -2864,8 +2871,8 @@ def test_unweighted_particle_belief_state_update_memory_efficient_accumulation_u
 
 def test_unweighted_particle_belief_state_update_configuration_caching_usage_example():
     """Test the configuration caching and equality usage example from UnweightedParticleBeliefStateUpdate docstring."""
-    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
     from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
+    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 
     env = SanityPOMDP(discount_factor=0.95)
 
@@ -2890,10 +2897,11 @@ def test_unweighted_particle_belief_state_update_configuration_caching_usage_exa
 
 def test_unweighted_particle_belief_state_update_large_scale_accumulation_usage_example():
     """Test the large-scale particle accumulation usage example from UnweightedParticleBeliefStateUpdate docstring."""
-    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-    from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-    import time
     import collections
+    import time
+
+    from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
+    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
     env = TigerPOMDP(discount_factor=0.95)
     belief = UnweightedParticleBeliefStateUpdate([])

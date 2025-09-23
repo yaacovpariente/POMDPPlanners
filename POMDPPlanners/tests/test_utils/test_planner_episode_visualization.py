@@ -1,20 +1,21 @@
-import pytest
-import numpy as np
-import tempfile
-import shutil
-from pathlib import Path
-from unittest.mock import Mock, patch, call
 import random
+import shutil
+import tempfile
+from pathlib import Path
+from unittest.mock import Mock, call, patch
 
-from POMDPPlanners.utils.planner_episode_visualization import visualize_planner_episode
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+import numpy as np
+import pytest
+
+from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
-from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
-from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.utils.planner_episode_visualization import visualize_planner_episode
 
 np.random.seed(42)
 random.seed(42)

@@ -1,10 +1,10 @@
-import pytest
 import random
+
 import numpy as np
+import pytest
 from scipy.stats import norm
 
 from POMDPPlanners.utils.statistics import cvar_estimator
-
 
 np.random.seed(42)
 random.seed(42)

@@ -7,17 +7,14 @@ This module tests the tree data structures, focusing on:
 - Tree statistics
 """
 
-import pytest
-import numpy as np
 import random
 
-from POMDPPlanners.core.tree import (
-    ActionNode,
-    BeliefNode,
-    get_optimal_action_cost_setting,
-)
+import numpy as np
+import pytest
+
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
+from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action_cost_setting
 
 # Set seeds for reproducible tests
 np.random.seed(42)

@@ -1,6 +1,7 @@
 """Tests for confidence interval testing utilities."""
 
 import pytest
+
 from POMDPPlanners.core.simulation.metrics import MetricValue
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,

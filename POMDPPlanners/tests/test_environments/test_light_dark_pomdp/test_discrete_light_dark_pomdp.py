@@ -7,22 +7,23 @@ This module tests the Discrete Light Dark POMDP environment, focusing on:
 - Terminal conditions
 """
 
-import pytest
-import numpy as np
 import random
+
+import numpy as np
+import pytest
 
 # Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 
+from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.distributions import DiscreteDistribution
+from POMDPPlanners.core.environment import ObservationModel
+from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
+from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
 )
-from POMDPPlanners.core.distributions import DiscreteDistribution
-from POMDPPlanners.core.environment import ObservationModel
-from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.core.belief import WeightedParticleBelief
-from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
 
 
 @pytest.fixture
@@ -1101,9 +1102,9 @@ def test_compute_metrics():
     env = DiscreteLightDarkPOMDP(discount_factor=0.95)
 
     # Create test histories
-    from POMDPPlanners.core.simulation import History, StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
+    from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
+    from POMDPPlanners.core.simulation import History, StepData
 
     # Create a simple belief for testing
     def create_test_belief(state):

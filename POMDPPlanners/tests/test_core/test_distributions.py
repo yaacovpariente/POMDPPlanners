@@ -7,9 +7,10 @@ This module tests the distribution implementations, focusing on:
 - Distribution types
 """
 
-import pytest
-import numpy as np
 import random
+
+import numpy as np
+import pytest
 
 # Set seeds for reproducible tests
 np.random.seed(42)

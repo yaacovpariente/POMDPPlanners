@@ -1,12 +1,12 @@
 """Tests to verify package installation and basic functionality."""
 
 import importlib
-import pkg_resources
+import random
 import sys
 from pathlib import Path
 
-import random
 import numpy as np
+import pkg_resources
 
 np.random.seed(42)
 random.seed(42)

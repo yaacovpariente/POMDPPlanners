@@ -1,13 +1,14 @@
-import pytest
-import numpy as np
-from anytree import PostOrderIter
 import random
 
-from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
-from POMDPPlanners.core.tree import BeliefNode, ActionNode
+import numpy as np
+import pytest
+from anytree import PostOrderIter
+
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
 
 np.random.seed(42)
 random.seed(42)

@@ -7,16 +7,18 @@ This module tests the weighted particle belief implementations, focusing on:
 - Belief types
 """
 
-import pytest
-import numpy as np
 import random
-from POMDPPlanners.utils.weighted_particle_beliefs import (
-    WeightedParticleBeliefDiscreteLightDark,
-    WeightedParticleBeliefDiscreteLightDarkFullCoverage,
-    WeightedParticleBeliefContinuousLightDarkFullCoverage,
-)
+
+import numpy as np
+import pytest
+
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDPDiscreteActions,
+)
+from POMDPPlanners.utils.weighted_particle_beliefs import (
+    WeightedParticleBeliefContinuousLightDarkFullCoverage,
+    WeightedParticleBeliefDiscreteLightDark,
+    WeightedParticleBeliefDiscreteLightDarkFullCoverage,
 )
 
 # Set seeds for reproducible tests

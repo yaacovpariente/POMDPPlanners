@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import Any, NamedTuple, Union, Type, List, Literal, TYPE_CHECKING, Dict
-from pathlib import Path
 from enum import Enum
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, NamedTuple, Type, Union
 
 if TYPE_CHECKING:
+    from POMDPPlanners.core.belief import Belief
     from POMDPPlanners.core.environment import Environment
     from POMDPPlanners.core.policy import Policy
-    from POMDPPlanners.core.belief import Belief
 
 
 class CategoricalHyperParameter(NamedTuple):

@@ -7,13 +7,14 @@ This module tests the simulation functionality, focusing on:
 - Metrics computation
 """
 
-import pytest
-from typing import Any, List, Dict, Tuple, Optional
-import numpy as np
 import random
+from typing import Any, Dict, List, Optional, Tuple
 
-from POMDPPlanners.core.simulation import History, StepData, TaskManagerExternalDB
+import numpy as np
+import pytest
+
 from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.simulation import History, StepData, TaskManagerExternalDB
 
 # Set seeds for reproducible tests
 np.random.seed(42)

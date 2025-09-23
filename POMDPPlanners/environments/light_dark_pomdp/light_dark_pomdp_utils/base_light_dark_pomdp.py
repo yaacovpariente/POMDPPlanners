@@ -1,19 +1,19 @@
-from typing import List, Any, Optional, Tuple, Union
-from pathlib import Path
-import json
 import hashlib
+import json
 from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Any, List, Optional, Tuple, Union
 
-import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+import numpy as np
 
-from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
-from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
-from POMDPPlanners.core.simulation import History, StepData, MetricValue
-from POMDPPlanners.utils.statistics import confidence_interval
 from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
+from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
+from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.config_to_id import config_to_id
+from POMDPPlanners.utils.statistics import confidence_interval
 
 
 class BaseLightDarkPOMDP(Environment, ABC):

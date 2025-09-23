@@ -1,16 +1,16 @@
-from typing import List, Dict
+from typing import Dict, List
 
 import numpy as np
 import pandas as pd
 
+from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.utils.statistics import (
-    cvar_estimator,
     confidence_interval,
     cvar_confidence_interval,
+    cvar_estimator,
     quantile_confidence_interval,
 )
-from POMDPPlanners.core.environment import Environment
 
 
 def compute_statistics_environment_policy_pair(

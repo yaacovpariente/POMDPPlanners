@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional, List
+from typing import List, Optional
 
 from POMDPPlanners.core.simulation import TaskManager
 from POMDPPlanners.simulations.simulations_deployment import TaskManagerFactory

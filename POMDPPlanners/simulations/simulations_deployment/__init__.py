@@ -1,4 +1,14 @@
 from enum import Enum
+from typing import Optional, Union
+
+from POMDPPlanners.core.simulation import DataBaseInterface, TaskManager
+from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
+from POMDPPlanners.simulations.simulations_deployment.task_managers import (
+    DaskTaskManager,
+    JoblibTaskManager,
+    PBSTaskManager,
+    TaskManagerType,
+)
 
 
 class DeploymentType(Enum):
@@ -8,16 +18,6 @@ class DeploymentType(Enum):
     REMOTE_RAY = "remote_ray"
     DASK_DISTRIBUTED = "dask_distributed"
 
-
-from POMDPPlanners.simulations.simulations_deployment.task_managers import (
-    TaskManagerType,
-    DaskTaskManager,
-    JoblibTaskManager,
-    PBSTaskManager,
-)
-from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
-from typing import Optional, Union
-from POMDPPlanners.core.simulation import TaskManager, DataBaseInterface
 
 __all__ = ["DeploymentType", "TaskManagerType", "TaskManagerFactory"]
 

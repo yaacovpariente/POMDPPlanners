@@ -16,14 +16,14 @@ Functions:
     get_initial_belief: Create initial belief from environment's initial distribution
 """
 
-from abc import ABC, abstractmethod
-from typing import Tuple, Any, Optional
 import random
+from abc import ABC, abstractmethod
+from typing import Any, Optional, Tuple
 
 import numpy as np
 
-from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.distributions import DiscreteDistribution
+from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 

@@ -7,9 +7,10 @@ This module tests the reward models from light_dark_reward_models.py, focusing o
 - Decaying hit probability reward model
 """
 
-import pytest
-import numpy as np
 import random
+
+import numpy as np
+import pytest
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -17,9 +18,9 @@ random.seed(42)
 
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
     BaseLightDarkRewardModel,
-    ContinuousLightDarkRewardModel,
     ContinuousLDDangerousStatesRewardModel,
     ContinuousLightDarkDecayingHitProbabilityRewardModel,
+    ContinuousLightDarkRewardModel,
 )
 
 

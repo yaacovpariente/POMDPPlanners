@@ -1,33 +1,34 @@
 import os
-import pytest
-from unittest.mock import patch, MagicMock
-from pathlib import Path
-from typing import List, Dict
+import random
 import tempfile
 import time
-import random
+from pathlib import Path
+from typing import Dict, List
+from unittest.mock import MagicMock, patch
 
-import pandas as pd
 import numpy as np
+import pandas as pd
+import pytest
 
+from POMDPPlanners.core.belief import Belief, get_initial_belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.core.belief import Belief, get_initial_belief
-from POMDPPlanners.core.simulation import EnvironmentRunParams, History
 from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
+    EnvironmentRunParams,
+    History,
     NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParameterOptimizationDirection,
     HyperParameterRunParams,
     OptimizedPolicyResult,
-    HyperParameterOptimizationDirection,
 )
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
 from POMDPPlanners.simulations.simulations_api import SimulationsAPI
 from POMDPPlanners.simulations.simulator import POMDPSimulator
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
-from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 
 np.random.seed(42)
 random.seed(42)
@@ -332,9 +333,7 @@ class TestSimulationsAPI:
 
         # Check that task_manager_config is a PBSConfig with correct parameters
         task_manager_config = call_args[1]["task_manager_config"]
-        from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
-            PBSConfig,
-        )
+        from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import PBSConfig
 
         assert isinstance(task_manager_config, PBSConfig)
         assert task_manager_config.queue == "normal"

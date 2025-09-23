@@ -7,20 +7,22 @@ This module tests the policy implementations, focusing on:
 - Policy evaluation
 """
 
-import pytest
-import numpy as np
+import logging
 import random
 from pathlib import Path
-import logging
-from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
+
+import numpy as np
+import pytest
+
+from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import (
     Environment,
-    StateTransitionModel,
     ObservationModel,
     SpaceInfo,
     SpaceType,
+    StateTransitionModel,
 )
-from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
 from POMDPPlanners.utils.logger import get_logger, reset_logger_state
 
 # Set seeds for reproducible tests

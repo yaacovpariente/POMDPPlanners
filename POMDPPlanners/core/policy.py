@@ -11,21 +11,20 @@ Classes:
     PolicyRunData: Container for policy execution information
 """
 
+import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, List, Tuple, TYPE_CHECKING, Union, Optional
-from typing import NamedTuple
 from pathlib import Path
-import logging
+from typing import TYPE_CHECKING, Any, List, NamedTuple, Optional, Tuple, Union
 
 import numpy as np
+
 from POMDPPlanners.utils.config_to_id import config_to_id
 from POMDPPlanners.utils.logger import get_logger
 
 if TYPE_CHECKING:
-    from POMDPPlanners.core.environment import Environment
     from POMDPPlanners.core.belief import Belief
-    from POMDPPlanners.core.environment import SpaceType
+    from POMDPPlanners.core.environment import Environment, SpaceType
 
 
 @dataclass

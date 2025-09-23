@@ -6,20 +6,17 @@ This module tests the Push POMDP environment, focusing on:
 - Reward verification between obstacle and non-obstacle states
 """
 
-import pytest
-import numpy as np
-from pathlib import Path
 import random
+from pathlib import Path
+
+import numpy as np
+import pytest
 
 # Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 
-from POMDPPlanners.environments.push_pomdp import (
-    PushPOMDP,
-    PushStateTransition,
-    PushObservation,
-)
+from POMDPPlanners.environments.push_pomdp import PushObservation, PushPOMDP, PushStateTransition
 
 
 class TestPushPOMDP:

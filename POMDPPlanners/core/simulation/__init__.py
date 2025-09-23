@@ -1,13 +1,13 @@
 # Import all classes to maintain backward compatibility
 from POMDPPlanners.core.simulation.history import (
-    StepData,
     History,
+    StepData,
     history_to_discounted_return_value,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     CategoricalHyperParameter,
-    NumericalHyperParameter,
     HyperParameterFeature,
+    NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.metrics import MetricValue
 from POMDPPlanners.core.simulation.simulation_configs import (
@@ -15,8 +15,8 @@ from POMDPPlanners.core.simulation.simulation_configs import (
     HyperParameterRunParams,
 )
 from POMDPPlanners.core.simulation.tasks import (
-    SimulationTask,
     DataBaseInterface,
+    SimulationTask,
     TaskManager,
     TaskManagerExternalDB,
 )

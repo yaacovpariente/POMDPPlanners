@@ -4,32 +4,30 @@ This module contains comprehensive tests for the PlannersHyperparamConfigs imple
 including tests for all planner configuration methods and their hyperparameter ranges.
 """
 
-import pytest
-import numpy as np
 from unittest.mock import Mock
 
+import numpy as np
+import pytest
+
 from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
-from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
-    HyperParamPlannerConfig,
-    get_fast_optimization_defaults,
-)
-from POMDPPlanners.core.simulation import (
-    NumericalHyperParameter,
-    CategoricalHyperParameter,
-)
+from POMDPPlanners.core.simulation import CategoricalHyperParameter, NumericalHyperParameter
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
-from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
-from POMDPPlanners.planners.sparse_sampling_planner import (
-    StandardSparseSamplingDiscreteActionsPlanner,
-)
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.mcts_planners.pomcp_dpw import POMCP_DPW
+from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
 from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import (
     DiscreteActionSequencesPlanner,
 )
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.planners.sparse_sampling_planner import (
+    StandardSparseSamplingDiscreteActionsPlanner,
+)
+from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
+    HyperParamPlannerConfig,
+    get_fast_optimization_defaults,
+)
 
 
 class TestPlannersHyperparamConfigs:

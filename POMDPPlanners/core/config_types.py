@@ -10,13 +10,13 @@ Classes:
     ExperimentConfig: Complete experiment specification with all components
 """
 
-from typing import Any, List, Dict, TYPE_CHECKING
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, Dict, List
 
 if TYPE_CHECKING:
+    from POMDPPlanners.core.belief import Belief
     from POMDPPlanners.core.environment import Environment
     from POMDPPlanners.core.policy import Policy
-    from POMDPPlanners.core.belief import Belief
 
 
 @dataclass

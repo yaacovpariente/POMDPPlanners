@@ -2,13 +2,13 @@ from typing import Any, Dict
 
 import numpy as np
 
-from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.belief import (
-    WeightedParticleBeliefReinvigoration,
     Belief,
     WeightedParticleBelief,
+    WeightedParticleBeliefReinvigoration,
 )
 from POMDPPlanners.core.config_types import BeliefConfig
+from POMDPPlanners.core.environment import Environment
 
 
 def create_belief(

@@ -7,21 +7,22 @@ This module tests the PacMan POMDP environment, focusing on:
 - Terminal conditions
 """
 
-import pytest
-import numpy as np
 import random
 from pathlib import Path
 from typing import List, Tuple
 
+import numpy as np
+import pytest
+
+from POMDPPlanners.core.environment import SpaceInfo, SpaceType
+from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.pacman_pomdp import (
-    PacManState,
-    PacManStateTransitionModel,
     PacManObservationModel,
     PacManPOMDP,
+    PacManState,
+    PacManStateTransitionModel,
     create_simple_maze_pacman,
 )
-from POMDPPlanners.core.environment import SpaceType, SpaceInfo
-from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
@@ -1164,8 +1165,9 @@ class TestPacManPOMDPMetrics:
 
         Test type: unit
         """
-        from POMDPPlanners.core.belief import WeightedParticleBelief
         import numpy as np
+
+        from POMDPPlanners.core.belief import WeightedParticleBelief
 
         # Create dummy belief for step data
         dummy_belief = WeightedParticleBelief(
@@ -1291,8 +1293,9 @@ class TestPacManPOMDPMetrics:
 
         Test type: unit
         """
-        from POMDPPlanners.core.belief import WeightedParticleBelief
         import numpy as np
+
+        from POMDPPlanners.core.belief import WeightedParticleBelief
 
         # Create dummy belief for step data
         dummy_belief = WeightedParticleBelief(
@@ -1596,9 +1599,7 @@ class TestMultiGhostFeatures:
         state = PacManState(pacman_pos=(1, 1), ghost_positions=((2, 3), (4, 1)), pellets=((0, 1),))
 
         # Create observation model explicitly
-        from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (
-            PacManObservationModel,
-        )
+        from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManObservationModel
 
         obs_model = PacManObservationModel(state, action=0, pomdp=pomdp)
         obs = obs_model.sample(n_samples=1)[0]  # Sample one observation
@@ -1746,9 +1747,7 @@ class TestMultiGhostFeatures:
         )
 
         # Create state transition model explicitly
-        from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (
-            PacManStateTransitionModel,
-        )
+        from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManStateTransitionModel
 
         state_model = PacManStateTransitionModel(initial_state, action=1, pomdp=pomdp)
         next_state = state_model.sample(n_samples=1)[0]  # Sample one next state

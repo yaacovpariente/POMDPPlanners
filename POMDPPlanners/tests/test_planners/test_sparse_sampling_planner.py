@@ -1,15 +1,17 @@
-import pytest
-import numpy as np
 import random
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+
+import numpy as np
+import pytest
+from anytree import PostOrderIter
+
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.core.policy import PolicyRunData
+from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
 )
-from POMDPPlanners.core.tree import ActionNode, BeliefNode
-from POMDPPlanners.core.policy import PolicyRunData
-from anytree import PostOrderIter
 
 np.random.seed(42)
 random.seed(42)

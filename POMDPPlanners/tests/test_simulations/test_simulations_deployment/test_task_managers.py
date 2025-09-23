@@ -1,10 +1,16 @@
-import pytest
-import numpy as np
-import tempfile
 import shutil
-from pathlib import Path
+import tempfile
 import time
+from pathlib import Path
 
+import numpy as np
+import pytest
+
+from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.simulation import History
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
+from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
 from POMDPPlanners.simulations.simulations_deployment.task_managers import (
     DaskTaskManager,
     JoblibTaskManager,
@@ -12,11 +18,6 @@ from POMDPPlanners.simulations.simulations_deployment.task_managers import (
     TaskManagerType,
 )
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
-from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
-from POMDPPlanners.core.simulation import History
-from POMDPPlanners.core.belief import WeightedParticleBelief
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
 
 
 def create_test_belief():
@@ -494,9 +495,7 @@ def test_dask_task_manager_failed_tasks_not_cached(environment, policy):
 
 
 # Tests for SequentialTaskManager
-from POMDPPlanners.simulations.simulations_deployment.task_managers import (
-    SequentialTaskManager,
-)
+from POMDPPlanners.simulations.simulations_deployment.task_managers import SequentialTaskManager
 
 
 def test_sequential_task_manager_initialization(cache_db):
@@ -1035,7 +1034,7 @@ def test_pbs_task_manager_missing_dependency():
 
     Test type: unit
     """
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import MagicMock, patch
 
     manager = PBSTaskManager(queue="default")
 

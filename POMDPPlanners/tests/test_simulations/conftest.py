@@ -1,8 +1,9 @@
-import pytest
-import mlflow
 import os
 import random
+
+import mlflow
 import numpy as np
+import pytest
 
 np.random.seed(42)
 random.seed(42)

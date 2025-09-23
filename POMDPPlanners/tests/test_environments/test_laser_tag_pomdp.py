@@ -7,30 +7,31 @@ This module tests the LaserTag POMDP environment, focusing on:
 - Terminal conditions
 """
 
-import pytest
-import numpy as np
 import random
 from pathlib import Path
+
+import numpy as np
+import pytest
 
 # Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 
+from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.distributions import DiscreteDistribution
+from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.laser_tag_pomdp import (
+    LaserTagObservation,
     LaserTagPOMDP,
     LaserTagState,
     LaserTagStateTransition,
-    LaserTagObservation,
 )
-from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.core.distributions import DiscreteDistribution
-from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
-from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.utils.logger import get_logger
-from POMDPPlanners.core.policy import Policy
 
 
 class RandomPolicy(Policy):

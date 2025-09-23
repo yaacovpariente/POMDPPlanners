@@ -1,28 +1,26 @@
-from typing import List, Any, Tuple
-from pathlib import Path
-import json
 import hashlib
+import json
+from pathlib import Path
+from typing import Any, List, Tuple
 
-import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+import numpy as np
 
+from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     ObservationModel,
     SpaceInfo,
     SpaceType,
 )
-from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
-from POMDPPlanners.core.simulation import History
-from POMDPPlanners.core.simulation import MetricValue
-from POMDPPlanners.utils.statistics import confidence_interval
-from POMDPPlanners.core.belief import Belief
-
+from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
     BaseLightDarkPOMDP,
     BaseLightDarkPOMDPDiscreteActions,
 )
+from POMDPPlanners.utils.statistics import confidence_interval
 
 
 class DiscreteLDObservationModel(ObservationModel):

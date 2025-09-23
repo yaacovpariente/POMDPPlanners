@@ -1,9 +1,11 @@
-import pytest
-import numpy as np
 import random
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+
+import numpy as np
+import pytest
+
+from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )

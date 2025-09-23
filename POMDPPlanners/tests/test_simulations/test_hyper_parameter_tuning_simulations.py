@@ -4,33 +4,31 @@ This module tests the HyperParameterOptimizer class and its functionality for
 optimizing POMDP policy hyperparameters using Optuna and MLFlow.
 """
 
-import pytest
-import tempfile
+import random
 import shutil
+import tempfile
 from pathlib import Path
+
 import mlflow
 import numpy as np
-import random
+import pytest
 
-from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
-    HyperParameterOptimizer,
-)
+from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.simulation import (
-    NumericalHyperParameter,
     CategoricalHyperParameter,
     MetricValue,
+    NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParameterOptimizationDirection,
     HyperParameterRunParams,
     OptimizedPolicyResult,
-    HyperParameterOptimizationDirection,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
 )
-from POMDPPlanners.core.belief import get_initial_belief
-
+from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import HyperParameterOptimizer
 
 np.random.seed(42)
 random.seed(42)
@@ -278,9 +276,7 @@ class TestHyperParameterOptimizerTaskCreation:
         # but the structure should be correct
         if task_results:
             # If there are results, they should be OptimizedPolicyResult instances
-            from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-                OptimizedPolicyResult,
-            )
+            from POMDPPlanners.core.simulation.hyperparameter_tuning import OptimizedPolicyResult
 
             for result in task_results:
                 assert isinstance(result, OptimizedPolicyResult)

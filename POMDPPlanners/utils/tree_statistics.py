@@ -3,8 +3,8 @@ from typing import List
 import numpy as np
 from scipy.stats import entropy
 
-from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.core.policy import PolicyInfoVariable
+from POMDPPlanners.core.tree import ActionNode, BeliefNode
 
 
 def get_v_values_sample(action_node: ActionNode) -> np.ndarray:

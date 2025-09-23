@@ -71,32 +71,28 @@ Example:
             logger.info(f"Planner {i+1}: {result.policy.name} - Best hyperparameters: {result.chosen_hyper_parameters}")
 """
 
-from typing import List, Dict, Any, Optional, Tuple, Union, Type
-from pathlib import Path
-import pandas as pd
 import logging
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
-from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
-    HyperParameterOptimizer,
-)
+import pandas as pd
+
+from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.environment import Environment, SpaceType
+from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import (
-    NumericalHyperParameter,
     CategoricalHyperParameter,
     EnvironmentRunParams,
+    NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-    HyperParameterRunParams,
     HyperParameterOptimizationDirection,
+    HyperParameterRunParams,
     OptimizedPolicyResult,
 )
-from POMDPPlanners.core.environment import Environment, SpaceType
-from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import HyperParameterOptimizer
+from POMDPPlanners.simulations.simulations_deployment.task_managers import TaskManagerType
 from POMDPPlanners.simulations.simulator import POMDPSimulator
-from POMDPPlanners.simulations.simulations_deployment.task_managers import (
-    TaskManagerType,
-)
-
 
 # Set up logger for this module
 # The logger will output messages based on the logging level configured by the user
