@@ -24,22 +24,23 @@ Classes:
     SafeAntVelocityPOMDP: Main safety-critical velocity control environment
 """
 
-from typing import List, Any, Tuple, Optional
-import numpy as np
 from pathlib import Path
+from typing import Any, List, Optional, Tuple
 
+import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+import numpy as np
+
+from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
-    ObservationModel,
-    StateTransitionModel,
     DiscreteActionsEnvironment,
+    ObservationModel,
     SpaceInfo,
     SpaceType,
+    StateTransitionModel,
 )
-from POMDPPlanners.core.distributions import Distribution
-from POMDPPlanners.core.simulation import History, StepData, MetricValue
+from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics import confidence_interval
-import matplotlib.pyplot as plt
-import matplotlib.animation as animation
 
 
 class SafeAntVelocityStateTransition(StateTransitionModel):

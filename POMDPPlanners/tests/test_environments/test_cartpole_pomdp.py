@@ -7,14 +7,16 @@ This module tests the CartPole POMDP environment, focusing on:
 - Terminal conditions
 """
 
-import pytest
-import numpy as np
 import random
+
+import numpy as np
+import pytest
+
 from POMDPPlanners.environments.cartpole_pomdp import (
+    CartPoleInitialStateDistribution,
+    CartPoleObservation,
     CartPolePOMDP,
     CartPoleStateTransition,
-    CartPoleObservation,
-    CartPoleInitialStateDistribution,
 )
 
 # Set seeds for reproducible tests

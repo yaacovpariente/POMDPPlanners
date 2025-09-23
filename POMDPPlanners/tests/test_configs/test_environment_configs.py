@@ -5,19 +5,20 @@ This test module validates that all environment configurations in the experiment
 directory can be instantiated and provide valid POMDP environments and beliefs.
 """
 
-import sys
 import os
-import pytest
-import numpy as np
 import random
+import sys
 from pathlib import Path
+
+import numpy as np
+import pytest
 
 from POMDPPlanners.configs.environment_configs import (
     EnvironmentConfigsAPI,
     RiskAverseEnvironmentConfigsAPI,
 )
-from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.environment import Environment
 
 # Set random seeds for reproducible tests
 np.random.seed(42)

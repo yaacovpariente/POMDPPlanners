@@ -17,21 +17,21 @@ Classes:
     CartPolePOMDP: Main CartPole environment with POMDP formulation
 """
 
-from typing import List, Any, Optional
-from pathlib import Path
-
 import math
+from pathlib import Path
+from typing import Any, List, Optional
 
 import numpy as np
 import scipy.stats as stats
+
+from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
-    ObservationModel,
-    StateTransitionModel,
     DiscreteActionsEnvironment,
+    ObservationModel,
     SpaceInfo,
     SpaceType,
+    StateTransitionModel,
 )
-from POMDPPlanners.core.distributions import Distribution
 
 
 class CartPoleStateTransition(StateTransitionModel):

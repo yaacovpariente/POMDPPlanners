@@ -21,24 +21,26 @@ Classes:
     MountainCarPOMDP: Main Mountain Car environment with POMDP formulation
 """
 
-from typing import List, Any, Tuple, Optional
 from pathlib import Path
-import numpy as np
+from typing import Any, List, Optional, Tuple
+
 import matplotlib
 
 matplotlib.use("Agg")  # Use non-interactive backend
 import matplotlib.pyplot as plt
+import numpy as np
+import scipy.stats
 from matplotlib.animation import FuncAnimation
+
+from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
-    StateTransitionModel,
     ObservationModel,
     SpaceInfo,
     SpaceType,
+    StateTransitionModel,
+    StepData,
 )
-from POMDPPlanners.core.distributions import Distribution
-from POMDPPlanners.core.environment import StepData
-import scipy.stats
 
 
 class MountainCarTransition(StateTransitionModel):

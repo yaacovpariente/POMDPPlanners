@@ -25,16 +25,13 @@ Classes:
     SanityPOMDP: Main environment class for sanity testing
 """
 
-from typing import Any, List, Optional
 from pathlib import Path
+from typing import Any, List, Optional
+
 import numpy as np
 
-from POMDPPlanners.core.environment import (
-    DiscreteActionsEnvironment,
-    SpaceInfo,
-    SpaceType,
-)
 from POMDPPlanners.core.distributions import Distribution
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceInfo, SpaceType
 
 
 class SanityStateTransitionModel(Distribution):

@@ -1,13 +1,12 @@
-from typing import TYPE_CHECKING, Optional
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
+from typing import TYPE_CHECKING, Optional
 
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-    HyperParameterFeature,
     CategoricalHyperParameter,
+    HyperParameterFeature,
     NumericalHyperParameter,
 )
-
 
 if TYPE_CHECKING:
     from POMDPPlanners.core.belief import Belief

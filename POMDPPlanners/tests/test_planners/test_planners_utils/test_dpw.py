@@ -7,22 +7,23 @@ This module tests the DPW planner utilities, focusing on:
 - Planning algorithms
 """
 
-import pytest
-import numpy as np
 import random
 from typing import Any
+
+import numpy as np
+import pytest
 
 # Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 
+from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.planners.planners_utils.dpw import (
     ActionSampler,
     action_progressive_widening,
     ucb1_exploration,
 )
-from POMDPPlanners.core.tree import BeliefNode, ActionNode
-from POMDPPlanners.core.belief import WeightedParticleBelief
 
 
 class TestActionSampler(ActionSampler):
@@ -491,8 +492,9 @@ def test_continuous_control_sampler_usage_example():
 
     Test type: example
     """
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
     import numpy as np
+
+    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
     class ContinuousControlSampler(ActionSampler):
         def __init__(self, action_bounds=(-1.0, 1.0), action_dim=2):
@@ -525,8 +527,9 @@ def test_weighted_discrete_action_sampler_usage_example():
 
     Test type: example
     """
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
     import numpy as np
+
+    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
     class WeightedDiscreteActionSampler(ActionSampler):
         def __init__(self, actions, probabilities=None):
@@ -567,10 +570,11 @@ def test_adaptive_action_sampler_usage_example():
 
     Test type: example
     """
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-    from POMDPPlanners.core.tree import BeliefNode, ActionNode
-    from POMDPPlanners.core.belief import WeightedParticleBelief
     import numpy as np
+
+    from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.tree import ActionNode, BeliefNode
+    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
     class AdaptiveActionSampler(ActionSampler):
         def __init__(self, base_actions, exploration_noise=0.1):
@@ -633,8 +637,9 @@ def test_multi_modal_action_sampler_usage_example():
 
     Test type: example
     """
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
     import numpy as np
+
+    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
     class MultiModalActionSampler(ActionSampler):
         def __init__(self, discrete_actions, continuous_bounds, mode_prob=0.5):
@@ -692,10 +697,11 @@ def test_goal_directed_action_sampler_usage_example():
 
     Test type: example
     """
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-    from POMDPPlanners.core.tree import BeliefNode
-    from POMDPPlanners.core.belief import WeightedParticleBelief
     import numpy as np
+
+    from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.tree import BeliefNode
+    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 
     class GoalDirectedActionSampler(ActionSampler):
         def __init__(self, goal_position, action_magnitude=1.0, goal_bias=0.7):
@@ -760,12 +766,10 @@ def test_action_progressive_widening_basic_usage_example():
     Test type: example
     """
     import numpy as np
-    from POMDPPlanners.planners.planners_utils.dpw import (
-        ActionSampler,
-        action_progressive_widening,
-    )
-    from POMDPPlanners.core.tree import BeliefNode
+
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.tree import BeliefNode
+    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
 
     # Create action sampler (from docstring)
     class SimpleActionSampler(ActionSampler):
@@ -808,12 +812,10 @@ def test_action_progressive_widening_alpha_comparison_example():
     Test type: example
     """
     import numpy as np
-    from POMDPPlanners.planners.planners_utils.dpw import (
-        ActionSampler,
-        action_progressive_widening,
-    )
-    from POMDPPlanners.core.tree import BeliefNode
+
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.tree import BeliefNode
+    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
 
     class SimpleActionSampler(ActionSampler):
         def sample(self, belief_node=None):
@@ -867,12 +869,10 @@ def test_action_progressive_widening_loop_simulation_example():
     Test type: example
     """
     import numpy as np
-    from POMDPPlanners.planners.planners_utils.dpw import (
-        ActionSampler,
-        action_progressive_widening,
-    )
-    from POMDPPlanners.core.tree import BeliefNode, ActionNode
+
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.tree import ActionNode, BeliefNode
+    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler, action_progressive_widening
 
     # Setup (from docstring)
     class DiscreteActionSampler(ActionSampler):
@@ -930,9 +930,10 @@ def test_ucb1_exploration_basic_usage_example():
     Test type: example
     """
     import numpy as np
-    from POMDPPlanners.planners.planners_utils.dpw import ucb1_exploration
-    from POMDPPlanners.core.tree import BeliefNode, ActionNode
+
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.tree import ActionNode, BeliefNode
+    from POMDPPlanners.planners.planners_utils.dpw import ucb1_exploration
 
     # Create belief node with action children (from docstring)
     particles = [[0.0], [1.0]]
@@ -981,9 +982,10 @@ def test_ucb1_exploration_constants_comparison_example():
     Test type: example
     """
     import numpy as np
-    from POMDPPlanners.planners.planners_utils.dpw import ucb1_exploration
-    from POMDPPlanners.core.tree import BeliefNode, ActionNode
+
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.tree import ActionNode, BeliefNode
+    from POMDPPlanners.planners.planners_utils.dpw import ucb1_exploration
 
     # Setup belief node with actions
     particles = [[0.0], [1.0]]
@@ -1033,9 +1035,10 @@ def test_ucb1_exploration_manual_calculation_example():
     Test type: example
     """
     import numpy as np
-    from POMDPPlanners.planners.planners_utils.dpw import ucb1_exploration
-    from POMDPPlanners.core.tree import BeliefNode, ActionNode
+
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.tree import ActionNode, BeliefNode
+    from POMDPPlanners.planners.planners_utils.dpw import ucb1_exploration
 
     # Setup belief node
     particles = [[0.0], [1.0]]

@@ -1,16 +1,17 @@
-import pytest
-import numpy as np
 import random
 from typing import List
-from POMDPPlanners.core.simulation import History, StepData, MetricValue
-from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
+
+import numpy as np
+import pytest
+
+from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
+from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.simulations.simulation_statistics import (
     compute_statistics_environment_policy_pair,
     compute_statistics_environments_policies_comparison,
 )
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.core.belief import WeightedParticleBelief
-
 
 np.random.seed(42)
 random.seed(42)

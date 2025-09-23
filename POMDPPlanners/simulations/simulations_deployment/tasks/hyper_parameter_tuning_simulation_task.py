@@ -1,26 +1,27 @@
-from typing import Union, Optional, Type, List, Dict, Any
-from pathlib import Path
 import logging
 import random
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Type, Union
+
 import numpy as np
 
-from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
+    History,
     NumericalHyperParameter,
     SimulationTask,
-    History,
 )
-from POMDPPlanners.core.simulation.simulation_configs import EnvironmentRunParams
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
     HyperParameterRunParams,
     OptimizedPolicyResult,
 )
-from POMDPPlanners.utils.logger import get_logger
+from POMDPPlanners.core.simulation.simulation_configs import EnvironmentRunParams
 from POMDPPlanners.utils.config_to_id import config_to_id
+from POMDPPlanners.utils.logger import get_logger
 
 HyperParameterFeature = Union[CategoricalHyperParameter, NumericalHyperParameter]
 
@@ -67,10 +68,10 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.seed = seed
         self.use_queue_logger = use_queue_logger
         # Import locally to avoid circular imports
-        from POMDPPlanners.simulations.simulator import POMDPSimulator
         from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
             JoblibConfig,
         )
+        from POMDPPlanners.simulations.simulator import POMDPSimulator
 
         # Create task manager config for joblib
         task_manager_config = JoblibConfig(n_jobs=n_jobs)

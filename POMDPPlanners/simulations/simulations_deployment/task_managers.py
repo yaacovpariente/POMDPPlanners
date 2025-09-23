@@ -1,21 +1,20 @@
-from typing import Optional, List, Dict, Tuple, Any
 import os
-from pathlib import Path
 from enum import Enum
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple
+
+from dask.cache import Cache
+from dask.distributed import Client, Future, LocalCluster
+from dask_jobqueue import PBSCluster
+from joblib import Memory, Parallel, delayed
 from tqdm import tqdm
 
-from dask.distributed import Future
-from dask.distributed import Client, LocalCluster
-from dask.cache import Cache
-from joblib import Parallel, delayed, Memory
-from dask_jobqueue import PBSCluster
-
 from POMDPPlanners.core.simulation import (
-    TaskManager,
-    TaskManagerExternalDB,
+    DataBaseInterface,
     History,
     SimulationTask,
-    DataBaseInterface,
+    TaskManager,
+    TaskManagerExternalDB,
 )
 
 
@@ -320,8 +319,9 @@ class JoblibTaskManager(TaskManagerExternalDB):
 
     def _log_system_info(self):
         """Log system information for debugging and monitoring."""
-        import psutil
         import os
+
+        import psutil
 
         try:
             cpu_count = psutil.cpu_count()

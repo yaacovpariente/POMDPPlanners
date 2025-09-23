@@ -1,14 +1,15 @@
-import pytest
-import numpy as np
 import random
 
-from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import (
-    DiscreteActionSequencesPlanner,
-)
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+import numpy as np
+import pytest
+
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.policy import PolicyRunData
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import (
+    DiscreteActionSequencesPlanner,
+)
 
 np.random.seed(42)
 random.seed(42)

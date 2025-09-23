@@ -22,22 +22,22 @@ Classes:
     LaserTagPOMDP: Main environment class implementing the LaserTag problem
 """
 
-from typing import List, Any, Optional, Tuple, Set, Dict
-from pathlib import Path
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Set, Tuple
 
-import numpy as np
-import matplotlib.pyplot as plt
 import matplotlib.animation as animation
+import matplotlib.pyplot as plt
+import numpy as np
 
+from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     ObservationModel,
-    StateTransitionModel,
     SpaceInfo,
     SpaceType,
+    StateTransitionModel,
 )
-from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics import confidence_interval
 

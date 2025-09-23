@@ -7,18 +7,20 @@ This module tests the Sanity POMDP environment, focusing on:
 - Terminal conditions
 """
 
-import pytest
-import numpy as np
 import random
+
+import numpy as np
+import pytest
+
+from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
+from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.sanity_pomdp import (
+    SanityInitialObservationDist,
+    SanityInitialStateDist,
+    SanityObservationModel,
     SanityPOMDP,
     SanityStateTransitionModel,
-    SanityObservationModel,
-    SanityInitialStateDist,
-    SanityInitialObservationDist,
 )
-from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
 
 # Set seeds for reproducible tests
 np.random.seed(42)

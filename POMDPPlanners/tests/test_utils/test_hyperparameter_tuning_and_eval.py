@@ -7,18 +7,19 @@ This module tests the hyperparameter tuning and evaluation utilities, focusing o
 - Performance metrics
 """
 
-import pytest
-import numpy as np
 import random
+import shutil
+import tempfile
+from pathlib import Path
+from unittest.mock import Mock, patch
+
+import numpy as np
+import pytest
 
 # Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 
-import tempfile
-import shutil
-from pathlib import Path
-from unittest.mock import Mock, patch
 import pandas as pd
 
 # Define InvalidPolicy at module level to avoid pickling issues
@@ -56,29 +57,25 @@ class InvalidPolicy(Policy):
         )
 
 
-from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
-    optimize_and_evaluate_planners,
-    HyperParamPlannerConfig,
-    optimize_planner_hyperparameters,
-    evaluate_optimized_planner,
-    evaluate_multiple_optimized_planners,
-    create_numerical_hyperparameter_ranges,
-    create_categorical_hyperparameter_choices,
-    get_fast_optimization_defaults,
-    get_thorough_optimization_defaults,
-)
-from POMDPPlanners.core.simulation import (
-    NumericalHyperParameter,
-    CategoricalHyperParameter,
-)
+from POMDPPlanners.core.belief import get_initial_belief
+from POMDPPlanners.core.simulation import CategoricalHyperParameter, NumericalHyperParameter
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
     OptimizedPolicyResult,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.core.belief import get_initial_belief
-
+from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
+    HyperParamPlannerConfig,
+    create_categorical_hyperparameter_choices,
+    create_numerical_hyperparameter_ranges,
+    evaluate_multiple_optimized_planners,
+    evaluate_optimized_planner,
+    get_fast_optimization_defaults,
+    get_thorough_optimization_defaults,
+    optimize_and_evaluate_planners,
+    optimize_planner_hyperparameters,
+)
 
 np.random.seed(42)
 random.seed(42)
@@ -1328,9 +1325,9 @@ class TestHyperParamRunnerUseCases:
 
         Test type: integration
         """
+        from POMDPPlanners.core.belief import get_initial_belief
         from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-        from POMDPPlanners.core.belief import get_initial_belief
 
         # Mock heavy computation parts for speed
         with patch(
@@ -1446,9 +1443,9 @@ class TestHyperParamRunnerUseCases:
 
         Test type: unit
         """
+        from POMDPPlanners.core.belief import get_initial_belief
         from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-        from POMDPPlanners.core.belief import get_initial_belief
 
         env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
         initial_belief = get_initial_belief(env, n_particles=10)
@@ -1529,8 +1526,8 @@ class TestHyperParamRunnerUseCases:
 
         Test type: unit
         """
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         from POMDPPlanners.core.belief import get_initial_belief
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
         env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
         initial_belief = get_initial_belief(env, n_particles=10)
@@ -1760,9 +1757,9 @@ class TestHyperParamRunnerUseCases:
 
         Test type: unit
         """
+        from POMDPPlanners.core.belief import get_initial_belief
         from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-        from POMDPPlanners.core.belief import get_initial_belief
 
         env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
         initial_belief = get_initial_belief(env, n_particles=10)
@@ -1821,8 +1818,8 @@ class TestHyperParamRunnerUseCases:
 
         Test type: unit
         """
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         from POMDPPlanners.core.belief import get_initial_belief
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
         env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
         initial_belief = get_initial_belief(env, n_particles=10)
@@ -1917,9 +1914,9 @@ class TestHyperParamRunnerUseCases:
 
         Test type: integration
         """
+        from POMDPPlanners.core.belief import get_initial_belief
         from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-        from POMDPPlanners.core.belief import get_initial_belief
 
         # Test with real classes but mocked computation
         with patch(

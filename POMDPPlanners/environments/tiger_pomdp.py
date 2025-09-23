@@ -18,19 +18,19 @@ Classes:
     TigerPOMDP: Main environment class implementing the Tiger problem
 """
 
-from typing import List, Any, Optional
 from pathlib import Path
+from typing import Any, List, Optional
 
 import numpy as np
 
+from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     ObservationModel,
-    StateTransitionModel,
     SpaceInfo,
     SpaceType,
+    StateTransitionModel,
 )
-from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.simulation import History, MetricValue
 
 STATES = ["tiger_left", "tiger_right"]
@@ -312,8 +312,8 @@ class TigerPOMDP(DiscreteActionsEnvironment):
             history: The history of states, actions, and observations
             cache_path: Path where to save the visualization
         """
-        import matplotlib.pyplot as plt
         import matplotlib.animation as animation
+        import matplotlib.pyplot as plt
 
         if not isinstance(cache_path, Path):
             raise TypeError("cache_path must be a Path object")

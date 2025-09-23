@@ -2,9 +2,9 @@ from pathlib import Path
 
 from joblib import Parallel, delayed
 
+from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.utils.logger import get_logger
 

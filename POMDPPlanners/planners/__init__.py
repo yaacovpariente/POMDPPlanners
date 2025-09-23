@@ -1,19 +1,18 @@
 """Policy factory module for creating POMDP policies."""
 
-from typing import Dict, Any, Type
-from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
-    PathSimulationPolicy,
-)
-from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.planners.sparse_sampling_planner import (
-    StandardSparseSamplingDiscreteActionsPlanner,
-)
-from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
-from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+from typing import Any, Dict, Type
+
+from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.mcts_planners.pomcp_dpw import POMCP_DPW
+from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
 from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import (
     DiscreteActionSequencesPlanner,
+)
+from POMDPPlanners.planners.sparse_sampling_planner import (
+    StandardSparseSamplingDiscreteActionsPlanner,
 )
 
 __all__ = [

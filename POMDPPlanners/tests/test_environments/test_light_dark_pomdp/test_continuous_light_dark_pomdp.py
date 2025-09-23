@@ -7,23 +7,24 @@ This module tests the Continuous Light Dark POMDP environment, focusing on:
 - Terminal conditions
 """
 
-import pytest
-import numpy as np
 import random
+
+import numpy as np
+import pytest
 
 # Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
 
-from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
-    ContinuousLightDarkPOMDPDiscreteActions,
-    ContinuousLightDarkPOMDP,
-)
+from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import ObservationModel, SpaceInfo, SpaceType
+from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.core.belief import WeightedParticleBelief
-from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDP,
+    ContinuousLightDarkPOMDPDiscreteActions,
+)
 
 
 @pytest.fixture
@@ -418,8 +419,8 @@ def test_compute_metrics():
     )
 
     # Create test histories
-    from POMDPPlanners.core.simulation import History, StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.simulation import History, StepData
 
     # Create a simple belief for testing
     def create_test_belief(state):
@@ -603,9 +604,9 @@ def test_continuous_light_dark_pomdp_is_terminal(base_continuous_light_dark_pomd
 
 def test_continuous_light_dark_pomdp_compute_metrics(base_continuous_light_dark_pomdp):
     env = base_continuous_light_dark_pomdp
-    from POMDPPlanners.core.simulation import History, StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
+    from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
+    from POMDPPlanners.core.simulation import History, StepData
 
     def create_test_belief(state):
         return WeightedParticleBelief(
@@ -1461,10 +1462,11 @@ def test_observation_model_probability_function():
 
     Test type: unit
     """
+    from scipy.stats import multivariate_normal
+
     from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
         ContinuousLightDarkNormalNoiseObservationModel,
     )
-    from scipy.stats import multivariate_normal
 
     # Set up test parameters
     next_state = np.array([5.0, 3.0])
@@ -1730,9 +1732,7 @@ def test_risk_averse_environment_config_start_state_validity():
 
     Test type: integration
     """
-    from POMDPPlanners.configs.environment_configs import (
-        RiskAverseEnvironmentConfigsAPI,
-    )
+    from POMDPPlanners.configs.environment_configs import RiskAverseEnvironmentConfigsAPI
 
     # Test the configuration that was causing the issue in visualization example
     env_configs = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95)

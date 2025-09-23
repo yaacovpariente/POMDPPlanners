@@ -1,27 +1,25 @@
-from typing import List, Dict, Any
+import logging
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, Dict, List
+
+import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib
+import plotly.graph_objects as go
 import seaborn as sns
 from joblib import Parallel, delayed
-import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-import logging
 
 matplotlib.use("Agg")  # Use non-interactive backend
 import mlflow
 
+from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
+from POMDPPlanners.core.cost import belief_expectation_cost
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.core.simulation import (
-    MetricValue,
-    History,
-    history_to_discounted_return_value,
-)
-from POMDPPlanners.core.tree import BeliefNode, ActionNode
-from POMDPPlanners.core.belief import WeightedParticleBelief, Belief
-from POMDPPlanners.core.cost import belief_expectation_cost
+from POMDPPlanners.core.simulation import History, MetricValue, history_to_discounted_return_value
+from POMDPPlanners.core.tree import ActionNode, BeliefNode
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -585,9 +583,6 @@ def plot_tree_graphs(root_node: BeliefNode):
     print(f"Number of leaf nodes: {len([node for node in all_nodes if not node.children])}")
     print(f"Value range: [{min(node_values):.3f}, {max(node_values):.3f}]")
     print(f"Visit count range: [{min(node_visits)}, {max(node_visits)}]")
-
-
-from dataclasses import dataclass
 
 
 @dataclass

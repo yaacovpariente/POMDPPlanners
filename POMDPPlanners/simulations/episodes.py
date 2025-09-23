@@ -1,15 +1,12 @@
 import copy
+from logging import Logger
 from time import time
 from typing import Optional
-from logging import Logger
 
+from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.simulation import (
-    History,
-    StepData,
-)
+from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.utils.logger import get_logger
 
 

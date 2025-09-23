@@ -1,5 +1,6 @@
-from typing import Any, NamedTuple, TYPE_CHECKING, List
 from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any, List, NamedTuple
+
 import numpy as np
 
 if TYPE_CHECKING:
@@ -257,7 +258,7 @@ class History:
         # Handle policy_run_data deserialization
         policy_run_data = data.get("policy_run_data", None)
         if isinstance(policy_run_data, dict):
-            from POMDPPlanners.core.policy import PolicyRunData, PolicyInfoVariable
+            from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
 
             info_variables = [
                 PolicyInfoVariable(name=iv["name"], value=iv["value"])

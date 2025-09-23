@@ -10,7 +10,8 @@ Classes:
 """
 
 from abc import ABC, abstractmethod
-from typing import List, Any
+from typing import Any, List
+
 import numpy as np
 
 

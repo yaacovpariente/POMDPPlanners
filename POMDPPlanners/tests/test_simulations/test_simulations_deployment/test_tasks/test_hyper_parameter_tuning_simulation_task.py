@@ -1,27 +1,26 @@
-import pytest
-import numpy as np
 import tempfile
 from pathlib import Path
 
-from POMDPPlanners.simulations.simulations_deployment.tasks import (
-    HyperParameterTuningSimulationTask,
-)
+import numpy as np
+import pytest
+
+from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import (
+    CategoricalHyperParameter,
     History,
     NumericalHyperParameter,
-    CategoricalHyperParameter,
 )
-from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParameterOptimizationDirection
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
 )
-from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-    HyperParameterOptimizationDirection,
+from POMDPPlanners.simulations.simulations_deployment.tasks import (
+    HyperParameterTuningSimulationTask,
 )
-from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.policy import Policy
 
 
 def create_test_belief(environment):
@@ -810,9 +809,7 @@ def test_run_function_return_type_explicitly(environment, hyper_parameters):
     result = task.run()
 
     # Explicit type checking
-    from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-        OptimizedPolicyResult,
-    )
+    from POMDPPlanners.core.simulation.hyperparameter_tuning import OptimizedPolicyResult
 
     assert isinstance(result, OptimizedPolicyResult)
     assert isinstance(result.environment, Environment)

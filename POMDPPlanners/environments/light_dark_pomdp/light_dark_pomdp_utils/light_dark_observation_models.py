@@ -1,6 +1,8 @@
+from typing import Any, List
+
 import numpy as np
-from typing import List, Any
 from scipy.stats import multivariate_normal
+
 from POMDPPlanners.core.environment import ObservationModel
 
 

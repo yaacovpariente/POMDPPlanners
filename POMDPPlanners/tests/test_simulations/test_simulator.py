@@ -7,29 +7,28 @@ This module tests the simulator functionality, focusing on:
 - Metrics computation
 """
 
-import pytest
-import numpy as np
 import random
-from pathlib import Path
-import tempfile
 import shutil
-import pandas as pd
+import tempfile
+from pathlib import Path
 
+import numpy as np
+import pandas as pd
+import pytest
 from distributed import Client as DaskClient
 
-from POMDPPlanners.simulations.simulator import POMDPSimulator
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.core.belief import get_initial_belief
+from POMDPPlanners.core.simulation import EnvironmentRunParams, History
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDPDiscreteActions,
 )
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.simulation import History, EnvironmentRunParams
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
-    JoblibConfig,
     DaskConfig,
+    JoblibConfig,
 )
-
+from POMDPPlanners.simulations.simulator import POMDPSimulator
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -960,9 +959,7 @@ def test_create_simulation_tasks(simulator):
     assert len(task_identifiers) == 2
 
     # Each task should be an EpisodeSimulationTask
-    from POMDPPlanners.simulations.simulations_deployment.tasks import (
-        EpisodeSimulationTask,
-    )
+    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 
     assert isinstance(tasks, list)
     assert len(tasks) == 2
@@ -1309,8 +1306,8 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
     test_policy_dir.mkdir(parents=True, exist_ok=True)
 
     # Create realistic test history that mimics what the simulator produces
-    from POMDPPlanners.core.simulation import StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.simulation import StepData
 
     # Create history data with realistic light-dark movements
     history_data = []
@@ -1576,8 +1573,8 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
     test_policy_dir.mkdir(parents=True, exist_ok=True)
 
     # Create sample histories with minimal valid data for visualization
-    from POMDPPlanners.core.simulation import StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.simulation import StepData
 
     # Create sample history entries with all required fields
     sample_states = [np.array([0.0, 0.0]), np.array([1.0, 0.0]), np.array([2.0, 0.0])]
@@ -1726,8 +1723,8 @@ def test_simulator_visualization_error_handling_with_continuous_light_dark(
     test_policy_dir.mkdir(parents=True, exist_ok=True)
 
     # Create minimal test history
-    from POMDPPlanners.core.simulation import StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.simulation import StepData
 
     sample_state = np.array([0.0, 0.0])
     belief = WeightedParticleBelief(
@@ -1824,8 +1821,8 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
     )
 
     # Create test results structure
-    from POMDPPlanners.core.simulation import StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.simulation import StepData
 
     # Create sample history
     sample_state = np.array([0.0, 0.0])
@@ -1962,8 +1959,8 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
     )
 
     # Create test histories
-    from POMDPPlanners.core.simulation import StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.simulation import StepData
 
     def create_test_history(env_name):
         sample_state = np.array([0.0, 0.0])
@@ -2090,8 +2087,8 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
     )
 
     # Create test results
-    from POMDPPlanners.core.simulation import StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.simulation import StepData
 
     sample_state = np.array([0.0, 0.0])
     belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
@@ -2206,8 +2203,8 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
     )
 
     # Create test results
-    from POMDPPlanners.core.simulation import StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.simulation import StepData
 
     sample_state = np.array([0.0, 0.0])
     belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
@@ -2307,8 +2304,8 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
     )
 
     # Create test results
-    from POMDPPlanners.core.simulation import StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.simulation import StepData
 
     sample_state = np.array([0.0, 0.0])
     belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
@@ -2410,8 +2407,8 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
     )
 
     # Create test results
-    from POMDPPlanners.core.simulation import StepData
     from POMDPPlanners.core.belief import WeightedParticleBelief
+    from POMDPPlanners.core.simulation import StepData
 
     sample_state = np.array([0.0, 0.0])
     belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
