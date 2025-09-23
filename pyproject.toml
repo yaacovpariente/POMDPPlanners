@@ -1,0 +1,19 @@
+[tool.black]
+line-length = 100
+target-version = ["py39", "py310", "py311", "py312"]
+include = '\\.(py|pyi)$'
+exclude = '''
+(
+  /(
+      \.git
+    | \.mypy_cache
+    | \.pytest_cache
+    | \.venv
+    | build
+    | dist
+    | docs/_build
+  )/
+)
+'''
+
+
