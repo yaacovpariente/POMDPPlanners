@@ -18,7 +18,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Set, Tuple
+from typing import Any, List, Optional, Set, Tuple, Union
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
@@ -50,7 +50,7 @@ class PacManState:
     pacman_pos: Tuple[int, int]
     ghost_positions: Tuple[Tuple[int, int], ...]  # Multiple ghost positions
     pellets: Tuple[Tuple[int, int], ...]  # Tuple for immutability
-    score: int = 0
+    score: Union[int, float] = 0
     terminal: bool = False
 
     @property
@@ -123,7 +123,7 @@ class PacManStateTransitionModel(Distribution):
 
         if pacman_pos in pellets:
             pellets.remove(pacman_pos)
-            score += self.pomdp.pellet_reward
+            score = score + self.pomdp.pellet_reward
 
         # Check for winning condition (all pellets collected)
         terminal = len(pellets) == 0
@@ -522,7 +522,7 @@ class PacManObservationModel(Distribution):
             probs.append(prob)
 
         probs = np.array(probs)
-        total = np.sum(probs)
+        total: float = float(np.sum(probs))
         if total > 0:
             probs = probs / total
 
@@ -666,7 +666,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         # Set default pellets if none provided
         if initial_pellets is None:
             # Place pellets away from corners to avoid conflicts with initial positions
-            self.initial_pellets = [
+            self.initial_pellets: List[Tuple[int, int]] = [
                 (1, 1),
                 (1, maze_size[1] - 2),
                 (maze_size[0] - 2, 1),
@@ -891,7 +891,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):
                 # and count collision encounters
                 episode_distances = []
                 episode_collisions = 0
-                per_ghost_distances = [[] for _ in range(len(self.initial_ghost_positions))]
+                per_ghost_distances: List[List[float]] = [
+                    [] for _ in range(len(self.initial_ghost_positions))
+                ]
 
                 for step_data in history.history:
                     if isinstance(step_data.state, PacManState):
@@ -992,26 +994,29 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         # Multi-ghost specific metrics
         if self.num_ghosts > 1:
             # Add per-ghost distance metrics
-            per_ghost_avg_distances = []
+            per_ghost_avg_distances: List[List[float]] = []
             for history in histories:
                 if history.history:
-                    ghost_distances_per_episode = [[] for _ in range(self.num_ghosts)]
+                    ghost_distances_per_episode: List[List[float]] = [
+                        [] for _ in range(self.num_ghosts)
+                    ]
 
                     for step_data in history.history:
                         if isinstance(step_data.state, PacManState):
                             pacman_pos = step_data.state.pacman_pos
                             for i, ghost_pos in enumerate(step_data.state.ghost_positions):
                                 if i < len(ghost_distances_per_episode):
-                                    distance = abs(pacman_pos[0] - ghost_pos[0]) + abs(
-                                        pacman_pos[1] - ghost_pos[1]
+                                    ghost_distance: float = float(
+                                        abs(pacman_pos[0] - ghost_pos[0])
+                                        + abs(pacman_pos[1] - ghost_pos[1])
                                     )
-                                    ghost_distances_per_episode[i].append(distance)
+                                    ghost_distances_per_episode[i].append(ghost_distance)
 
                     # Calculate average distance per ghost for this episode
-                    episode_ghost_avgs = []
-                    for ghost_distances in ghost_distances_per_episode:
-                        if ghost_distances:
-                            episode_ghost_avgs.append(np.mean(ghost_distances))
+                    episode_ghost_avgs: List[float] = []
+                    for ghost_dist_list in ghost_distances_per_episode:
+                        if ghost_dist_list:
+                            episode_ghost_avgs.append(float(np.mean(ghost_dist_list)))
                         else:
                             episode_ghost_avgs.append(0.0)
 
@@ -1020,14 +1025,14 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             # Create metrics for each ghost
             if per_ghost_avg_distances:
                 for ghost_id in range(self.num_ghosts):
-                    ghost_distances = [
+                    ghost_distance_values: List[float] = [
                         episode_avgs[ghost_id]
                         for episode_avgs in per_ghost_avg_distances
                         if ghost_id < len(episode_avgs)
                     ]
-                    if ghost_distances:
-                        avg_distance = np.mean(ghost_distances)
-                        ci_low, ci_high = confidence_interval(ghost_distances)
+                    if ghost_distance_values:
+                        avg_distance = np.mean(ghost_distance_values)
+                        ci_low, ci_high = confidence_interval(ghost_distance_values)
                         metrics.append(
                             MetricValue(
                                 name=f"avg_pacman_ghost_{ghost_id}_distance",

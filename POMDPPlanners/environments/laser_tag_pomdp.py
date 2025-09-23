@@ -414,7 +414,7 @@ class LaserTagObservation(ObservationModel):
         Returns:
             List of 8-tuple observations representing laser measurements in 8 directions
         """
-        samples = []
+        samples: List[Tuple[float, ...]] = []
 
         if self.next_state.terminal:
             # Terminal state - return special terminal observation

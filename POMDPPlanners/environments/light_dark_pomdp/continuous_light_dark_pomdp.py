@@ -51,6 +51,7 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_da
     ContinuousLightDarkNormalNoiseObservationModel,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
+    BaseLightDarkRewardModel,
     ContinuousLDDangerousStatesRewardModel,
     ContinuousLightDarkDecayingHitProbabilityRewardModel,
     ContinuousLightDarkRewardModel,
@@ -267,6 +268,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self.is_obstacle_hit_terminal = is_obstacle_hit_terminal
 
         # Initialize reward model based on type
+        self.reward_model: BaseLightDarkRewardModel
         if reward_model_type == RewardModelType.STANDARD:
             self.reward_model = ContinuousLightDarkRewardModel(
                 goal_state=self.goal_state,
@@ -365,7 +367,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         if self.is_obstacle_hit_terminal:
             # Calculate distance to each obstacle (obstacles are 2xN format)
             distances = np.linalg.norm(state.reshape(-1, 1) - self.obstacles, axis=0)
-            is_obstacle_hit = np.any(distances <= self.obstacle_radius)
+            is_obstacle_hit = bool(np.any(distances <= self.obstacle_radius))
         else:
             is_obstacle_hit = False
 
@@ -373,7 +375,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
 
         is_terminal = is_goal_state or is_obstacle_hit or is_out_of_grid
 
-        return is_terminal
+        return bool(is_terminal)
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         goal_reached = []
