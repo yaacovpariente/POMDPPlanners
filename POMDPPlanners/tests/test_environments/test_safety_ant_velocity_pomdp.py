@@ -667,7 +667,7 @@ def test_state_transition_model(pomdp):
     assert next_state.shape == (4,)
 
 
-def test_observation_model(pomdp):
+def test_observation_model_with_pomdp(pomdp):
     """Test observation model creation and sampling.
 
     Purpose: Validates that environment correctly creates observation models that generate noisy observations
@@ -687,7 +687,7 @@ def test_observation_model(pomdp):
     assert obs.shape == (4,)
 
 
-def test_initial_state_distribution(pomdp):
+def test_initial_state_distribution_with_pomdp(pomdp):
     """Test initial state distribution creation and sampling.
 
     Purpose: Validates that environment correctly creates initial state distribution

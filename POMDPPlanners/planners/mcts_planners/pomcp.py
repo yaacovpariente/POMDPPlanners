@@ -104,8 +104,8 @@ class POMCP(PathSimulationPolicy):
         depth: int,
         exploration_constant: float,
         name: str,
-        time_out_in_seconds: int = None,
-        n_simulations: int = None,
+        time_out_in_seconds: Optional[int] = None,
+        n_simulations: Optional[int] = None,
         min_samples_per_node: int = 10,
         log_path: Optional[Path] = None,
         debug: bool = False,
@@ -133,7 +133,7 @@ class POMCP(PathSimulationPolicy):
 
     def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
         state = belief_node.belief.sample()
-        self._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
+        return self._simulate_state_path(state=state, belief_node=belief_node, depth=depth)
 
     def _simulate_state_path(self, state: Any, belief_node: BeliefNode, depth: int) -> float:
         if depth > self.depth:

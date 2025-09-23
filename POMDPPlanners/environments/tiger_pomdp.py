@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 import numpy as np
+from matplotlib import animation
+import matplotlib.pyplot as plt
 
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
@@ -86,7 +88,7 @@ class TigerStateTransition(StateTransitionModel):
         samples = []
         for _ in range(n_samples):
             # State only changes when opening a door
-            if self.action == "open_left" or self.action == "open_right":
+            if self.action in ("open_left", "open_right"):
                 # After opening a door, tiger is randomly placed behind either door
                 samples.append(np.random.choice(STATES))
             else:
@@ -96,7 +98,7 @@ class TigerStateTransition(StateTransitionModel):
     def probability(self, values: List[Any]) -> np.ndarray:
         result = np.zeros(len(values))
         for i, next_state in enumerate(values):
-            if self.action == "open_left" or self.action == "open_right":
+            if self.action in ("open_left", "open_right"):
                 result[i] = 0.5
             else:
                 result[i] = 1.0 if next_state == self.state else 0.0
@@ -252,7 +254,7 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         Raises:
             ValueError: If discount_factor is not in valid range [0, 1]
         """
-        if not (0.0 <= discount_factor <= 1.0):
+        if not 0.0 <= discount_factor <= 1.0:
             raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
 
         space_info = SpaceInfo(
@@ -281,16 +283,14 @@ class TigerPOMDP(DiscreteActionsEnvironment):
     def reward(self, state: str, action: str) -> float:
         if action == "listen":
             return -1.0  # Cost of listening
-        elif action == "open_left":
+        if action == "open_left":
             if state == "tiger_left":
                 return -100.0  # Opening door with tiger
-            else:
-                return 10.0  # Opening door with treasure
-        else:  # open_right
-            if state == "tiger_right":
-                return -100.0  # Opening door with tiger
-            else:
-                return 10.0  # Opening door with treasure
+            return 10.0  # Opening door with treasure
+        # open_right
+        if state == "tiger_right":
+            return -100.0  # Opening door with tiger
+        return 10.0  # Opening door with treasure
 
     def is_terminal(self, state: str) -> bool:
         # Game ends when a door is opened
@@ -312,8 +312,6 @@ class TigerPOMDP(DiscreteActionsEnvironment):
             history: The history of states, actions, and observations
             cache_path: Path where to save the visualization
         """
-        import matplotlib.animation as animation
-        import matplotlib.pyplot as plt
 
         if not isinstance(cache_path, Path):
             raise TypeError("cache_path must be a Path object")

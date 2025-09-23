@@ -95,7 +95,7 @@ class PushStateTransition(StateTransitionModel):
         grid_size: int,
         push_threshold: float,
         friction_coefficient: float,
-        obstacles: List[Tuple[float, float]] = None,
+        obstacles: Optional[List[Tuple[float, float]]] = None,
         obstacle_radius: float = 0.5,
     ):
         super().__init__(state, action)
@@ -587,7 +587,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         )
 
         # Plot obstacles as permanent features
-        obstacle_scatters = []
+        obstacle_scatters: List[Any] = []
         for i, (obs_x, obs_y) in enumerate(self.obstacles):
             obstacle_circle = plt.Circle(
                 (obs_x, obs_y),
@@ -843,7 +843,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
 
         # Save animation
         cache_path.parent.mkdir(parents=True, exist_ok=True)
-        ani.save(cache_path, writer="pillow", fps=0.8)
+        ani.save(cache_path, writer="pillow", fps=0.8)  # type: ignore[arg-type]
         plt.close(fig)  # Free memory
 
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:

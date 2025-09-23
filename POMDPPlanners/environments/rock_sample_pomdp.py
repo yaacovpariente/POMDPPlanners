@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
-import matplotlib.animation as animation
+from matplotlib import animation
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -231,7 +231,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
     def __init__(
         self,
         map_size: Tuple[int, int] = (5, 5),
-        rock_positions: List[Tuple[int, int]] = None,
+        rock_positions: Optional[List[Tuple[int, int]]] = None,
         init_pos: Tuple[int, int] = (0, 0),
         sensor_efficiency: float = 10.0,
         bad_rock_penalty: float = -10.0,
@@ -560,7 +560,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             "",
             xy=(0, 0),
             xytext=(0, 0),
-            arrowprops=dict(arrowstyle="->", color="red", lw=2),
+            arrowprops={"arrowstyle": "->", "color": "red", "lw": 2},
             zorder=6,
         )
 
@@ -570,7 +570,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             0.98,
             "",
             transform=ax.transAxes,
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+            bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.8},
             verticalalignment="top",
         )
 
@@ -584,13 +584,13 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             fontweight="bold",
             horizontalalignment="left",
             verticalalignment="bottom",
-            bbox=dict(
-                boxstyle="round,pad=0.5",
-                facecolor="gold",
-                edgecolor="red",
-                linewidth=3,
-                alpha=0.9,
-            ),
+            bbox={
+                "boxstyle": "round,pad=0.5",
+                "facecolor": "gold",
+                "edgecolor": "red",
+                "linewidth": 3,
+                "alpha": 0.9,
+            },
             color="red",
             visible=False,
         )
@@ -675,26 +675,26 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
                     if sample_success:
                         sample_text.set_text("★ VALUABLE! ★")
                         sample_text.set_bbox(
-                            dict(
-                                boxstyle="round,pad=0.5",
-                                facecolor="lightgreen",
-                                edgecolor="green",
-                                linewidth=3,
-                                alpha=0.9,
-                            )
+                            {
+                                "boxstyle": "round,pad=0.5",
+                                "facecolor": "lightgreen",
+                                "edgecolor": "green",
+                                "linewidth": 3,
+                                "alpha": 0.9,
+                            }
                         )
                         sample_text.set_color("darkgreen")
                         sample_text.set_visible(True)
                     else:
                         sample_text.set_text("✗ WORTHLESS! ✗")
                         sample_text.set_bbox(
-                            dict(
-                                boxstyle="round,pad=0.5",
-                                facecolor="lightcoral",
-                                edgecolor="red",
-                                linewidth=3,
-                                alpha=0.9,
-                            )
+                            {
+                                "boxstyle": "round,pad=0.5",
+                                "facecolor": "lightcoral",
+                                "edgecolor": "red",
+                                "linewidth": 3,
+                                "alpha": 0.9,
+                            }
                         )
                         sample_text.set_color("darkred")
                         sample_text.set_visible(True)

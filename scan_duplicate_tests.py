@@ -115,7 +115,7 @@ class TestInfo:
 
 def parse_test_summary_file(summary_file: Path) -> List[TestInfo]:
     """Parse a test summary markdown file and extract test information."""
-    tests = []
+    tests: List[TestInfo] = []
 
     try:
         with open(summary_file, "r", encoding="utf-8") as f:

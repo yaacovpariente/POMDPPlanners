@@ -27,7 +27,7 @@ Classes:
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
-import matplotlib.animation as animation
+from matplotlib import animation
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -489,7 +489,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             "",
             xy=(0, 0),
             xytext=(0, 0),
-            arrowprops=dict(arrowstyle="->", color="green", lw=3, alpha=0.8),
+            arrowprops={"arrowstyle": "->", "color": "green", "lw": 3, "alpha": 0.8},
             zorder=6,
             visible=False,
         )
@@ -499,7 +499,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             "",
             xy=(0, 0),
             xytext=(0, 0),
-            arrowprops=dict(arrowstyle="->", color="purple", lw=3, alpha=0.8),
+            arrowprops={"arrowstyle": "->", "color": "purple", "lw": 3, "alpha": 0.8},
             zorder=6,
             visible=False,
         )
@@ -550,7 +550,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             "",
             transform=ax_main.transAxes,
             fontsize=12,
-            bbox=dict(boxstyle="round,pad=0.5", facecolor="lightblue", alpha=0.8),
+            bbox={"boxstyle": "round,pad=0.5", "facecolor": "lightblue", "alpha": 0.8},
             verticalalignment="top",
             horizontalalignment="left",
         )
@@ -561,7 +561,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             "",
             transform=ax_main.transAxes,
             fontsize=11,
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="lightyellow", alpha=0.8),
+            bbox={"boxstyle": "round,pad=0.3", "facecolor": "lightyellow", "alpha": 0.8},
             verticalalignment="top",
             horizontalalignment="left",
         )
@@ -572,7 +572,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             "",
             transform=ax_main.transAxes,
             fontsize=11,
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgreen", alpha=0.8),
+            bbox={"boxstyle": "round,pad=0.3", "facecolor": "lightgreen", "alpha": 0.8},
             verticalalignment="top",
             horizontalalignment="left",
         )
@@ -586,7 +586,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             fontsize=14,
             fontweight="bold",
             color="white",
-            bbox=dict(boxstyle="round,pad=0.5", facecolor="green", alpha=0.9),
+            bbox={"boxstyle": "round,pad=0.5", "facecolor": "green", "alpha": 0.9},
             horizontalalignment="center",
             verticalalignment="top",
             visible=False,
