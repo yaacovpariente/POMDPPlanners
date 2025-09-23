@@ -306,7 +306,9 @@ def test_episode_simulation_task_value_error_logging(caplog, environment, policy
 
     Test type: unit
     """
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+    from POMDPPlanners.simulations.simulations_deployment.tasks import (
+        EpisodeSimulationTask,
+    )
 
     belief = create_test_belief()
 
@@ -350,7 +352,9 @@ def test_episode_simulation_task_runtime_error_logging(caplog, environment, poli
 
     Test type: unit
     """
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+    from POMDPPlanners.simulations.simulations_deployment.tasks import (
+        EpisodeSimulationTask,
+    )
 
     belief = create_test_belief()
 
@@ -394,7 +398,9 @@ def test_episode_simulation_task_type_error_logging(caplog, environment, policy)
 
     Test type: unit
     """
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+    from POMDPPlanners.simulations.simulations_deployment.tasks import (
+        EpisodeSimulationTask,
+    )
 
     belief = create_test_belief()
 
@@ -436,7 +442,9 @@ def test_episode_simulation_task_custom_exception_logging(caplog, environment, p
 
     Test type: unit
     """
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+    from POMDPPlanners.simulations.simulations_deployment.tasks import (
+        EpisodeSimulationTask,
+    )
 
     # Create a custom exception class
     class CustomTestException(Exception):
@@ -486,7 +494,9 @@ def test_episode_simulation_task_logging_includes_traceback(caplog, environment,
 
     Test type: unit
     """
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+    from POMDPPlanners.simulations.simulations_deployment.tasks import (
+        EpisodeSimulationTask,
+    )
 
     belief = create_test_belief()
 

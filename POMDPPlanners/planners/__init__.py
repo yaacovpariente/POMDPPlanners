@@ -2,7 +2,9 @@
 
 from typing import Any, Dict, Type
 
-from POMDPPlanners.planners.mcts_planners.path_simulations_policy import PathSimulationPolicy
+from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
+    PathSimulationPolicy,
+)
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.mcts_planners.pomcp_dpw import POMCP_DPW

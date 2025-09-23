@@ -959,7 +959,9 @@ def test_create_simulation_tasks(simulator):
     assert len(task_identifiers) == 2
 
     # Each task should be an EpisodeSimulationTask
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+    from POMDPPlanners.simulations.simulations_deployment.tasks import (
+        EpisodeSimulationTask,
+    )
 
     assert isinstance(tasks, list)
     assert len(tasks) == 2

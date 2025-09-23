@@ -10,7 +10,10 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
-from POMDPPlanners.core.simulation import CategoricalHyperParameter, NumericalHyperParameter
+from POMDPPlanners.core.simulation import (
+    CategoricalHyperParameter,
+    NumericalHyperParameter,
+)
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP

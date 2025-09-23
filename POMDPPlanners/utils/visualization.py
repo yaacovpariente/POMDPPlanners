@@ -18,7 +18,11 @@ from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
 from POMDPPlanners.core.cost import belief_expectation_cost
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
-from POMDPPlanners.core.simulation import History, MetricValue, history_to_discounted_return_value
+from POMDPPlanners.core.simulation import (
+    History,
+    MetricValue,
+    history_to_discounted_return_value,
+)
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 
 # Set up logger

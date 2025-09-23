@@ -1599,7 +1599,9 @@ class TestMultiGhostFeatures:
         state = PacManState(pacman_pos=(1, 1), ghost_positions=((2, 3), (4, 1)), pellets=((0, 1),))
 
         # Create observation model explicitly
-        from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManObservationModel
+        from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (
+            PacManObservationModel,
+        )
 
         obs_model = PacManObservationModel(state, action=0, pomdp=pomdp)
         obs = obs_model.sample(n_samples=1)[0]  # Sample one observation
@@ -1747,7 +1749,9 @@ class TestMultiGhostFeatures:
         )
 
         # Create state transition model explicitly
-        from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import PacManStateTransitionModel
+        from POMDPPlanners.environments.pacman_pomdp.pacman_pomdp import (
+            PacManStateTransitionModel,
+        )
 
         state_model = PacManStateTransitionModel(initial_state, action=1, pomdp=pomdp)
         next_state = state_model.sample(n_samples=1)[0]  # Sample one next state

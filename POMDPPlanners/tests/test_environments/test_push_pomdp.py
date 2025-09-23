@@ -16,7 +16,11 @@ import pytest
 np.random.seed(42)
 random.seed(42)
 
-from POMDPPlanners.environments.push_pomdp import PushObservation, PushPOMDP, PushStateTransition
+from POMDPPlanners.environments.push_pomdp import (
+    PushObservation,
+    PushPOMDP,
+    PushStateTransition,
+)
 
 
 class TestPushPOMDP:

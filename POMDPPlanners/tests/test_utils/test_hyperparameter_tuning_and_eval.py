@@ -58,7 +58,10 @@ class InvalidPolicy(Policy):
 
 
 from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.simulation import CategoricalHyperParameter, NumericalHyperParameter
+from POMDPPlanners.core.simulation import (
+    CategoricalHyperParameter,
+    NumericalHyperParameter,
+)
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
     OptimizedPolicyResult,

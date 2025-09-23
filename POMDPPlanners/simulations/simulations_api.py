@@ -19,7 +19,9 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     OptimizedPolicyResult,
 )
-from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import HyperParameterOptimizer
+from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
+    HyperParameterOptimizer,
+)
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     DaskConfig,
     JoblibConfig,

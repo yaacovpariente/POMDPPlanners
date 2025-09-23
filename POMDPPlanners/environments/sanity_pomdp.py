@@ -31,7 +31,11 @@ from typing import Any, List, Optional
 import numpy as np
 
 from POMDPPlanners.core.distributions import Distribution
-from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceInfo, SpaceType
+from POMDPPlanners.core.environment import (
+    DiscreteActionsEnvironment,
+    SpaceInfo,
+    SpaceType,
+)
 
 
 class SanityStateTransitionModel(Distribution):

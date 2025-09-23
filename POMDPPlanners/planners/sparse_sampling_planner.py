@@ -26,7 +26,11 @@ from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.cost import belief_expectation_cost
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
-from POMDPPlanners.core.tree import ActionNode, BeliefNode, get_optimal_action_cost_setting
+from POMDPPlanners.core.tree import (
+    ActionNode,
+    BeliefNode,
+    get_optimal_action_cost_setting,
+)
 
 
 class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
