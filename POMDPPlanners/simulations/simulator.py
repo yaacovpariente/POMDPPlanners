@@ -592,7 +592,7 @@ class BaseSimulator(ABC):
         self.logger.info("Organizing results by environment and policy")
 
         # Initialize results structure
-        results = {}
+        results: Dict[str, Dict[str, list]] = {}
         for env, _, policies in environment_belief_policy_tuples:
             results[env.name] = {policy.name: [] for policy in policies}
 
@@ -975,7 +975,7 @@ class POMDPSimulator(BaseSimulator):
         Returns:
             Dictionary mapping environment names to dictionaries mapping policy names to lists of MetricValue objects
         """
-        metrics_dict = {}
+        metrics_dict: Dict[str, Dict[str, List[MetricValue]]] = {}
         envs_dict = {
             params.environment.name: params.environment for params in environment_run_params
         }

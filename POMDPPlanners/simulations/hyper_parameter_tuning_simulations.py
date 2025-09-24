@@ -248,7 +248,6 @@ class HyperParameterOptimizer:
         self.experiment_name = experiment_name
         self.n_jobs = n_jobs
         self.confidence_interval_level = confidence_interval_level
-        self.mlflow_tracking_uri = mlflow_tracking_uri
         self.alpha = alpha
         self.use_queue_logger = use_queue_logger
         # Set up MLFlow tracking
@@ -261,15 +260,15 @@ class HyperParameterOptimizer:
 
         # Create the mlruns directory and set up MLflow
         self.mlruns_path.mkdir(parents=True, exist_ok=True)
-        self.mlflow_tracking_uri = f"file://{self.mlruns_path.absolute()}"
+        self.mlflow_tracking_uri: str = f"file://{self.mlruns_path.absolute()}"
         mlflow.set_tracking_uri(self.mlflow_tracking_uri)
         mlflow.set_experiment(experiment_name)
 
         # Initialize cache database and task manager
-        cache_db = DiskCacheDB(cache_dir=self.cache_dir_path / "task_manager_cache")
+        cache_db = DiskCacheDB(cache_dir=str(self.cache_dir_path / "task_manager_cache"))
         self.task_manager = SequentialTaskManager(
             cache_db=cache_db,
-            cache_dir=self.cache_dir_path / "task_manager_cache",
+            cache_dir=str(self.cache_dir_path / "task_manager_cache"),
             clear_cache_on_start=False,
             verbose=0,
             logger_debug=False,
