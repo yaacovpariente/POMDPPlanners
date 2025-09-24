@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 import numpy as np
 
@@ -50,7 +50,7 @@ def get_initial_belief(
 class WeightedParticleBeliefDiscreteLightDark(WeightedParticleBeliefReinvigoration):
     def __init__(
         self,
-        particles: list,
+        particles: List[Any],
         log_weights: np.ndarray,
         resampling: bool = False,
         ess_factor: float = 0.5,
@@ -101,7 +101,7 @@ class WeightedParticleBeliefDiscreteLightDark(WeightedParticleBeliefReinvigorati
 class WeightedParticleBeliefDiscreteLightDarkFullCoverage(WeightedParticleBeliefReinvigoration):
     def __init__(
         self,
-        particles: list,
+        particles: List[Any],
         log_weights: np.ndarray,
         ess_factor: float = 0.5,
         reinvigoration_fraction: float = 0.05,
@@ -132,7 +132,7 @@ class WeightedParticleBeliefDiscreteLightDarkFullCoverage(WeightedParticleBelief
         belief: WeightedParticleBeliefReinvigoration,
     ) -> WeightedParticleBeliefReinvigoration:
         self.particles, self.log_weights = self._resample(
-            particles=self.particles, log_weights=self.log_weights
+            particles=self.particles, log_weights=self.log_weights  # type: ignore[has-type]
         )
 
         # Recalculate normalized weights after resampling
@@ -151,7 +151,7 @@ class WeightedParticleBeliefDiscreteLightDarkFullCoverage(WeightedParticleBelief
 class WeightedParticleBeliefContinuousLightDarkFullCoverage(WeightedParticleBeliefReinvigoration):
     def __init__(
         self,
-        particles: list,
+        particles: List[Any],
         log_weights: np.ndarray,
         ess_factor: float = 0.5,
         reinvigoration_fraction: float = 0.05,
@@ -184,7 +184,7 @@ class WeightedParticleBeliefContinuousLightDarkFullCoverage(WeightedParticleBeli
         belief: WeightedParticleBeliefReinvigoration,
     ) -> WeightedParticleBeliefReinvigoration:
         self.particles, self.log_weights = self._resample(
-            particles=self.particles, log_weights=self.log_weights
+            particles=self.particles, log_weights=self.log_weights  # type: ignore[has-type]
         )
 
         # Recalculate normalized weights after resampling
@@ -222,7 +222,7 @@ class WeightedParticleBeliefContinuousLightDarkFullCoverage(WeightedParticleBeli
 class WeightedParticleBeliefSanityPOMDP(WeightedParticleBeliefReinvigoration):
     def __init__(
         self,
-        particles: list,
+        particles: List[Any],
         log_weights: np.ndarray,
         resampling: bool = False,
         ess_factor: float = 0.5,
