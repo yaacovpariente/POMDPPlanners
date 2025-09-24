@@ -291,7 +291,7 @@ class EpisodeSimulationTask(SimulationTask):
 
         return result
 
-    def __eq__(self, other: "EpisodeSimulationTask") -> bool:
+    def __eq__(self, other: object) -> bool:
         """Check if two tasks are equal."""
         if not isinstance(other, EpisodeSimulationTask):
             return False

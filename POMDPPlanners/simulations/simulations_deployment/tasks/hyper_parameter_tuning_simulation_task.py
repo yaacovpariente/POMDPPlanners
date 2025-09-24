@@ -152,7 +152,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             return self._build_optimization_results(study, optimization_time)
 
         except Exception as e:
-            return self._handle_optimization_failure(e, start_time)
+            self._handle_optimization_failure(e, start_time)
         finally:
             # Restore random state
             self.logger.debug("Restoring random state")
@@ -575,7 +575,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             "use_queue_logger": self.use_queue_logger,
         }
 
-    def __eq__(self, other: "HyperParameterTuningSimulationTask") -> bool:
+    def __eq__(self, other: object) -> bool:
         """Check if two tasks are equal."""
         if not isinstance(other, HyperParameterTuningSimulationTask):
             return False

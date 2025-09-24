@@ -62,10 +62,6 @@ class PBSConfig(TaskManagerConfig):
             job_extra=self.job_extra,
             cache_size=self.cache_size,
             clear_cache_on_start=self.clear_cache_on_start,
-            enable_dashboard=self.enable_dashboard,
-            dashboard_address=self.dashboard_address,
-            dashboard_port=self.dashboard_port,
-            dashboard_prefix=self.dashboard_prefix,
         )
 
 
