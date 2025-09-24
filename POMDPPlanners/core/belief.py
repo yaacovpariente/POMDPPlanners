@@ -264,7 +264,7 @@ class WeightedParticleBelief(Belief):
 
     def __init__(
         self,
-        particles: list,
+        particles: List[Any],
         log_weights: np.ndarray,
         resampling: bool = False,
         ess_factor: float = 0.5,
@@ -294,7 +294,7 @@ class WeightedParticleBelief(Belief):
         if not np.all(np.isfinite(log_weights)):
             raise ValueError("log_weights must be finite numbers (not Inf, -Inf, or NaN)")
 
-        self.particles: list = particles
+        self.particles: List[Any] = particles
         self.log_weights: np.ndarray = log_weights
         # First subtract max for numerical stability, then normalize to sum to 1
         self.normalized_weights: np.ndarray = np.exp(self.log_weights - np.max(self.log_weights))
@@ -395,7 +395,9 @@ class WeightedParticleBelief(Belief):
         config_dict = dict(sorted(config_dict.items()))
         return config_to_id(config_dict)
 
-    def _resample(self, particles: list, log_weights: np.ndarray) -> Tuple[list, np.ndarray]:
+    def _resample(
+        self, particles: List[Any], log_weights: np.ndarray
+    ) -> Tuple[List[Any], np.ndarray]:
         """Resample particles based on their weights if effective sample size is below threshold.
 
         Args:
@@ -474,7 +476,7 @@ class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
 
     def __init__(
         self,
-        particles: list,
+        particles: List[Any],
         log_weights: np.ndarray,
         resampling: bool = True,
         ess_factor: float = 0.5,
