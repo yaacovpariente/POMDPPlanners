@@ -67,7 +67,7 @@ class MockEnvironment(Environment):
 
 class MockBelief(Belief):
     def __init__(self, environment: Environment):
-        super().__init__(environment)
+        self.environment = environment
 
     def update(self, action, observation):
         pass

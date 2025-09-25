@@ -1,3 +1,5 @@
+from typing import List
+
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
@@ -15,7 +17,10 @@ from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
 )
-from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
+from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
+    HyperParamPlannerConfig,
+    HyperParameterFeature,
+)
 
 
 class PlannersHyperparamConfigs:
@@ -30,10 +35,10 @@ class PlannersHyperparamConfigs:
         time_out_in_seconds: float = 3.0,
     ) -> HyperParamPlannerConfig:
         max_depth_for_tuning = 10
-        hyper_parameters = [
+        hyper_parameters: List[HyperParameterFeature] = [
             NumericalHyperParameter(
                 0.0,
-                (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning,
+                self._get_exploration_constant_max(env, max_depth_for_tuning),
                 "exploration_constant",
             ),  # UCB1 exploration
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
@@ -70,7 +75,7 @@ class PlannersHyperparamConfigs:
         hyper_parameters = [
             NumericalHyperParameter(
                 0.0,
-                (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning,
+                self._get_exploration_constant_max(env, max_depth_for_tuning),
                 "exploration_constant",
             ),  # UCB1 exploration
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
@@ -100,9 +105,7 @@ class PlannersHyperparamConfigs:
         self, env: Environment, name: str, time_out_in_seconds: float = 3
     ) -> HyperParamPlannerConfig:
         max_depth_for_tuning = 10
-        exploration_constant_max = (
-            env.reward_range[1] - env.reward_range[0]
-        ) * max_depth_for_tuning
+        exploration_constant_max = self._get_exploration_constant_max(env, max_depth_for_tuning)
         hyper_parameters = [
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
             NumericalHyperParameter(
@@ -158,7 +161,7 @@ class PlannersHyperparamConfigs:
         hyper_parameters = [
             NumericalHyperParameter(
                 0.0,
-                (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning,
+                self._get_exploration_constant_max(env, max_depth_for_tuning),
                 "exploration_constant",
             ),  # UCB1 exploration
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
@@ -189,7 +192,7 @@ class PlannersHyperparamConfigs:
         hyper_parameters = [
             NumericalHyperParameter(
                 0.0,
-                (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning,
+                self._get_exploration_constant_max(env, max_depth_for_tuning),
                 "exploration_constant",
             ),  # UCB1 exploration
             NumericalHyperParameter(2, max_depth_for_tuning, "depth"),  # Search depth
@@ -239,3 +242,9 @@ class PlannersHyperparamConfigs:
             hyper_parameters=hyper_parameters,
             constant_parameters=constant_parameters,
         )
+
+    def _get_exploration_constant_max(self, env: Environment, max_depth_for_tuning: int) -> float:
+        if env.reward_range is not None:
+            return (env.reward_range[1] - env.reward_range[0]) * max_depth_for_tuning
+
+        return 1.0 * max_depth_for_tuning

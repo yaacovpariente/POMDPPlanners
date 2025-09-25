@@ -684,9 +684,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
                 (
                     "green"
                     if s <= self.safe_velocity_threshold
-                    else "orange"
-                    if s <= self.safe_velocity_threshold * 1.5
-                    else "red"
+                    else "orange" if s <= self.safe_velocity_threshold * 1.5 else "red"
                 )
                 for s in speeds
             ]

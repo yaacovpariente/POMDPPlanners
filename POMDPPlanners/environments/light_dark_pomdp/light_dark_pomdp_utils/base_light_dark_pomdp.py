@@ -10,7 +10,13 @@ import numpy as np
 
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
-from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
+from POMDPPlanners.core.environment import (
+    Environment,
+    ObservationModel,
+    SpaceInfo,
+    SpaceType,
+    StateTransitionModel,
+)
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.config_to_id import config_to_id
 from POMDPPlanners.utils.statistics import confidence_interval
@@ -193,11 +199,11 @@ class BaseLightDarkPOMDP(Environment, ABC):
                 raise ValueError("obstacles coordinates must be within grid")
 
     @abstractmethod
-    def state_transition_model(self, state: np.ndarray, action: Any) -> Distribution:
+    def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
         pass
 
     @abstractmethod
-    def observation_model(self, next_state: np.ndarray, action: Any) -> Distribution:
+    def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
         pass
 
     @abstractmethod
@@ -233,6 +239,11 @@ class BaseLightDarkPOMDP(Environment, ABC):
         # Control belief particles color
         belief_particles_color = "#FFFF00"  # Yellow color
 
+        from matplotlib.figure import Figure
+        from matplotlib.axes import Axes
+
+        fig: Figure
+        ax: Axes
         fig, ax = plt.subplots(figsize=(10, 8))
         ax.set_xlim(-1, self.grid_size + 1)
         ax.set_ylim(-1, self.grid_size + 1)
@@ -444,7 +455,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
 
         # Extract data with validation
         agent_path = []
-        agent_belief_path = []
+        agent_belief_path: List[DiscreteDistribution] = []
         actions = []
 
         for step in history:

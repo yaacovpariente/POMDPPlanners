@@ -42,6 +42,7 @@ from POMDPPlanners.core.environment import (
     ObservationModel,
     SpaceInfo,
     SpaceType,
+    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
@@ -65,7 +66,7 @@ class RewardModelType(Enum):
     DANGEROUS_STATES = "dangerous_states"
 
 
-class StateTransitionModel(Distribution):
+class ContinuousLightDarkStateTransitionModel(StateTransitionModel):
     """State transition model for Continuous Light-Dark POMDP.
 
     This model implements continuous movement in 2D space with Gaussian noise.
@@ -109,8 +110,7 @@ class StateTransitionModel(Distribution):
         action: np.ndarray,
         state_transition_cov_matrix: np.ndarray,
     ):
-        self.state = state
-        self.action = action
+        super().__init__(state=state, action=action)
         self.state_transition_cov_matrix = state_transition_cov_matrix
         self.mean = state + action
 
@@ -328,19 +328,19 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         if obstacle_radius <= 0:
             raise ValueError("obstacle_radius must be greater than 0")
 
-    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> Distribution:
+    def state_transition_model(self, state: np.ndarray, action: np.ndarray) -> StateTransitionModel:
         if state.shape != (2,):
             raise ValueError("state must be a 2D vector")
         if action.shape != (2,):
             raise ValueError("action must be a 2D vector")
 
-        return StateTransitionModel(
+        return ContinuousLightDarkStateTransitionModel(  # type: ignore[return-value]
             state=state,
             action=action,
             state_transition_cov_matrix=self.state_transition_cov_matrix,
         )
 
-    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> Distribution:
+    def observation_model(self, next_state: np.ndarray, action: np.ndarray) -> ObservationModel:
         if next_state.shape != (2,):
             raise ValueError("next_state must be a 2D vector")
         if action.shape != (2,):
@@ -401,9 +401,9 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             obstacle_hits.append(1 if obstacle_hit_in_history else 0)
             obstacle_hit_counter.append(obstacle_hit_counter_in_history)
 
-        avg_goal_reached = np.mean(goal_reached)
-        avg_obstacle_hits = np.mean(obstacle_hits)
-        avg_obstacle_hit_counter = np.mean(obstacle_hit_counter)
+        avg_goal_reached = float(np.mean(goal_reached))
+        avg_obstacle_hits = float(np.mean(obstacle_hits))
+        avg_obstacle_hit_counter = float(np.mean(obstacle_hit_counter))
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
         obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)
         obstacle_hit_counter_ci = confidence_interval(data=obstacle_hit_counter, confidence=0.95)
@@ -549,11 +549,11 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
     def get_actions(self) -> List[Any]:
         return self.actions
 
-    def state_transition_model(self, state: np.ndarray, action: Any) -> Distribution:
+    def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
         action_vector = self.action_to_vector[action]
         return super().state_transition_model(state, action_vector)
 
-    def observation_model(self, next_state: np.ndarray, action: Any) -> Distribution:
+    def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
         action_vector = self.action_to_vector[action]
         return super().observation_model(next_state, action_vector)
 

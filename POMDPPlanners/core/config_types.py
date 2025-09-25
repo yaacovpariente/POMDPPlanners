@@ -11,7 +11,7 @@ Classes:
 """
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List
+from typing import TYPE_CHECKING, Any, Dict, Sequence
 
 if TYPE_CHECKING:
     from POMDPPlanners.core.belief import Belief
@@ -123,7 +123,7 @@ class ExperimentConfig:
     """
 
     environment: "Environment"
-    policies: List["Policy"]
+    policies: Sequence["Policy"]
     belief: "Belief"
     num_episodes: int
     num_steps: int

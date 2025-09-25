@@ -826,10 +826,10 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # Calculate aggregate statistics
         successful_tags = sum(success_indicators)
         success_rate = successful_tags / total_episodes
-        avg_episode_length = np.mean(episode_lengths)
-        avg_failed_tags = np.mean(failed_tags_per_episode)
-        avg_obstacle_collisions = np.mean(obstacle_collisions_per_episode)
-        avg_dangerous_area_steps = np.mean(dangerous_area_steps_per_episode)
+        avg_episode_length = float(np.mean(episode_lengths))
+        avg_failed_tags = float(np.mean(failed_tags_per_episode))
+        avg_obstacle_collisions = float(np.mean(obstacle_collisions_per_episode))
+        avg_dangerous_area_steps = float(np.mean(dangerous_area_steps_per_episode))
 
         # Calculate confidence intervals (handle single episode case)
         if total_episodes >= 2:
@@ -940,6 +940,11 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 beliefs.append(None)
 
         # Set up the figure and axis with extra space for legend
+        from matplotlib.figure import Figure
+        from matplotlib.axes import Axes
+
+        fig: Figure
+        ax: Axes
         fig, ax = plt.subplots(figsize=(14, 8))
         rows, cols = self.floor_shape
         ax.set_xlim(-0.5, rows - 0.5)

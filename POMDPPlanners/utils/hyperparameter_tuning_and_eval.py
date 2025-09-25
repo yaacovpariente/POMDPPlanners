@@ -73,7 +73,7 @@ Example:
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import pandas as pd
 
@@ -135,7 +135,7 @@ class HyperParamPlannerConfig:
     def __init__(
         self,
         policy_cls: type,
-        hyper_parameters: List[HyperParameterFeature],
+        hyper_parameters: Sequence[HyperParameterFeature],
         constant_parameters: Dict[str, Any],
     ):
         self.policy_cls = policy_cls

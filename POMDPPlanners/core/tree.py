@@ -1,4 +1,4 @@
-from typing import Any, List, Union
+from typing import Any, List, Optional, Union
 
 import numpy as np
 from anytree import NodeMixin, RenderTree
@@ -15,8 +15,8 @@ class BaseNode(NodeMixin):
         self.visit_count = 0
         self.lower_confidence_bound = 0.0
         self.upper_confidence_bound = 0.0
-        self.immediate_cost = None
-        self.immediate_reward = None
+        self.immediate_cost: Optional[float] = None
+        self.immediate_reward: Optional[float] = None
         self.sample: List[Any] = []
 
 

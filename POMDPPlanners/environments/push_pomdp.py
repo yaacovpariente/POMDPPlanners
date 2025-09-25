@@ -443,7 +443,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         if self._is_colliding_with_obstacle(object_pos):
             reward += self.obstacle_penalty
 
-        return reward
+        return float(reward)
 
     def is_terminal(self, state: np.ndarray) -> bool:
         object_pos = state[2:4]
@@ -543,6 +543,11 @@ class PushPOMDP(DiscreteActionsEnvironment):
         rewards = [step.reward for step in history]
 
         # Set up the plot
+        from matplotlib.figure import Figure
+        from matplotlib.axes import Axes
+
+        fig: Figure
+        ax: Axes
         fig, ax = plt.subplots(figsize=(12, 10))
         ax.set_xlim(-0.5, self.grid_size + 0.5)
         ax.set_ylim(-0.5, self.grid_size + 0.5)

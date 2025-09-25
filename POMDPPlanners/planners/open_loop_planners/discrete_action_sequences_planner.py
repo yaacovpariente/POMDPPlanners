@@ -155,6 +155,8 @@ class DiscreteActionSequencesPlanner(Policy):
         self.depth = depth
         self.n_return_samples = n_return_samples
         self.discount_factor = discount_factor
+        # Override type annotation for mypy
+        self.environment: DiscreteActionsEnvironment = environment
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
@@ -179,7 +181,7 @@ class DiscreteActionSequencesPlanner(Policy):
         return_estimator: float = 0.0
         for _ in range(self.n_return_samples):
             state = belief.sample()
-            return_sample = 0
+            return_sample = 0.0
 
             for i, action in enumerate(action_sequence):
                 state, observation, reward = self.environment.sample_next_step(state, action)

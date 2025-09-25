@@ -1443,7 +1443,9 @@ def sample_next_belief(belief: Belief, action: Any, pomdp: "Environment") -> Tup
     return next_belief, observation
 
 
-def get_initial_belief(pomdp: Environment, n_particles: int, resampling: bool = True) -> Belief:
+def get_initial_belief(
+    pomdp: Environment, n_particles: int, resampling: bool = True
+) -> WeightedParticleBelief:
     """Create initial belief from environment's initial state distribution.
 
     Args:

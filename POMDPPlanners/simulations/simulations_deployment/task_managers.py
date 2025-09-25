@@ -205,7 +205,11 @@ class JoblibTaskManager(TaskManagerExternalDB):
             verbose: Verbosity level for joblib
             logger_debug: Whether to enable debug logging
         """
-        super().__init__(cache_db=cache_db, cache_dir=cache_dir, logger_debug=logger_debug)
+        super().__init__(
+            cache_db=cache_db,
+            cache_dir=Path(cache_dir) if cache_dir else None,
+            logger_debug=logger_debug,
+        )
         self.n_jobs = n_jobs
         self.verbose = verbose
 
@@ -478,9 +482,9 @@ class PBSTaskManager(DaskTaskManager):
         # Prepare scheduler options for dashboard configuration
         scheduler_options = {}
         if self.enable_dashboard:
-            scheduler_options[
-                "dashboard_address"
-            ] = f"{self.dashboard_address}:{self.dashboard_port}"
+            scheduler_options["dashboard_address"] = (
+                f"{self.dashboard_address}:{self.dashboard_port}"
+            )
             if self.dashboard_prefix:
                 scheduler_options["dashboard_prefix"] = self.dashboard_prefix
 

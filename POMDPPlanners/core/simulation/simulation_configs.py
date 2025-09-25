@@ -1,11 +1,9 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Optional, Sequence
 
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-    CategoricalHyperParameter,
     HyperParameterFeature,
-    NumericalHyperParameter,
 )
 
 if TYPE_CHECKING:
@@ -18,7 +16,7 @@ if TYPE_CHECKING:
 class EnvironmentRunParams:
     environment: "Environment"
     belief: "Belief"
-    policies: list["Policy"]
+    policies: Sequence["Policy"]
     num_episodes: int
     num_steps: int
 
@@ -27,7 +25,7 @@ class EnvironmentRunParams:
 class HyperParameterRunParams:
     environment: "Environment"
     belief: "Belief"
-    policies: list["Policy"]
+    policies: Sequence["Policy"]
     num_episodes: int
     num_steps: int
     hyper_parameters: list[HyperParameterFeature]

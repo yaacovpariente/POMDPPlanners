@@ -73,13 +73,13 @@ class WeightedParticleBeliefDiscreteLightDark(WeightedParticleBeliefReinvigorati
 
         self.actions = ["up", "down", "right", "left"]
 
-    def reinvigorate(
+    def reinvigorate(  # type: ignore[override]
         self,
         action: Any,
         observation: Any,
         pomdp: Environment,
-        belief: WeightedParticleBeliefReinvigoration,
-    ) -> WeightedParticleBeliefReinvigoration:
+        belief: "WeightedParticleBeliefReinvigoration",
+    ) -> "WeightedParticleBeliefReinvigoration":
         effective_sample_size = 1 / np.sum(np.square(self.normalized_weights))
 
         if effective_sample_size < self.ess_threshold:
@@ -124,15 +124,15 @@ class WeightedParticleBeliefDiscreteLightDarkFullCoverage(WeightedParticleBelief
 
         self.actions = ["up", "down", "right", "left"]
 
-    def reinvigorate(
+    def reinvigorate(  # type: ignore[override]
         self,
         action: Any,
         observation: Any,
         pomdp: Environment,
-        belief: WeightedParticleBeliefReinvigoration,
-    ) -> WeightedParticleBeliefReinvigoration:
+        belief: "WeightedParticleBeliefReinvigoration",
+    ) -> "WeightedParticleBeliefReinvigoration":
         self.particles, self.log_weights = self._resample(
-            particles=self.particles, log_weights=self.log_weights  # type: ignore[has-type]
+            particles=self.particles, log_weights=self.log_weights
         )
 
         # Recalculate normalized weights after resampling
@@ -176,15 +176,15 @@ class WeightedParticleBeliefContinuousLightDarkFullCoverage(WeightedParticleBeli
 
         self.actions = ["up", "down", "right", "left"]
 
-    def reinvigorate(
+    def reinvigorate(  # type: ignore[override]
         self,
         action: Any,
         observation: Any,
         pomdp: Environment,
-        belief: WeightedParticleBeliefReinvigoration,
-    ) -> WeightedParticleBeliefReinvigoration:
+        belief: "WeightedParticleBeliefReinvigoration",
+    ) -> "WeightedParticleBeliefReinvigoration":
         self.particles, self.log_weights = self._resample(
-            particles=self.particles, log_weights=self.log_weights  # type: ignore[has-type]
+            particles=self.particles, log_weights=self.log_weights
         )
 
         # Recalculate normalized weights after resampling
@@ -212,7 +212,7 @@ class WeightedParticleBeliefContinuousLightDarkFullCoverage(WeightedParticleBeli
             )
 
             # Clip to ensure within grid bounds
-            reinvigorated_states = np.clip(reinvigorated_states, 0, pomdp.grid_size)
+            reinvigorated_states = np.clip(reinvigorated_states, 0, pomdp.grid_size)  # type: ignore[attr-defined]
 
             self.particles[-n_reinvigorate:] = reinvigorated_states.tolist()
 
