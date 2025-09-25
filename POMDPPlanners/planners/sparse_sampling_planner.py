@@ -112,7 +112,7 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
             self._set_last_belief_node(belief_node)
             return
 
-        for action in self.environment.get_actions():
+        for action in self.environment.get_actions():  # type: ignore[attr-defined]
             child = ActionNode(action=action, parent=belief_node, children=tuple(), data=None)
 
             state = belief_node.belief.sample()
@@ -169,7 +169,7 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         pass
 
     def _set_last_belief_node(self, node: BeliefNode):
-        for action in self.environment.get_actions():
+        for action in self.environment.get_actions():  # type: ignore[attr-defined]
             child = ActionNode(action=action, parent=node, children=tuple(), data=None)
 
     @classmethod
@@ -237,8 +237,8 @@ class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActions
                 belief=node.parent.belief, action=node.action, env=self.environment
             )
         children_q_values = [child.v_value for child in node.children]
-        node.q_value = node.immediate_cost + self.environment.discount_factor * np.mean(
-            children_q_values
+        node.q_value = node.immediate_cost + self.environment.discount_factor * float(
+            np.mean(children_q_values)
         )
 
     def _update_belief_node_v_value(self, node: BeliefNode):

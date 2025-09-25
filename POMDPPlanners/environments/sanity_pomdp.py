@@ -33,12 +33,14 @@ import numpy as np
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
+    ObservationModel,
     SpaceInfo,
     SpaceType,
+    StateTransitionModel,
 )
 
 
-class SanityStateTransitionModel(Distribution):
+class SanityStateTransitionModel(StateTransitionModel):
     """Deterministic state transition model for Sanity POMDP.
 
     This model implements completely deterministic state transitions where:
@@ -81,9 +83,7 @@ class SanityStateTransitionModel(Distribution):
             state: Current state (0 for good, 1 for bad)
             action: Action to execute (0 for go to good, 1 for go to bad)
         """
-        super().__init__()
-        self.state = state
-        self.action = action
+        super().__init__(state, action)
 
     def sample(self, n_samples: int = 1) -> List[int]:
         # Action 0 always leads to state 0 (good state)
@@ -100,7 +100,7 @@ class SanityStateTransitionModel(Distribution):
         return result
 
 
-class SanityObservationModel(Distribution):
+class SanityObservationModel(ObservationModel):
     """Perfect observation model for Sanity POMDP.
 
     This model provides perfect observability where the observation
@@ -141,9 +141,7 @@ class SanityObservationModel(Distribution):
             next_state: State after taking the action
             action: Action that was executed (not used for observation)
         """
-        super().__init__()
-        self.next_state = next_state
-        self.action = action
+        super().__init__(next_state, action)
 
     def sample(self, n_samples: int = 1) -> List[int]:
         # Observation always matches the state

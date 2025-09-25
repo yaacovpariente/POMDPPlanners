@@ -274,10 +274,10 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         self.actions = ACTIONS
         self.observations = OBSERVATIONS
 
-    def state_transition_model(self, state: str, action: str) -> Distribution:
+    def state_transition_model(self, state: str, action: str) -> StateTransitionModel:
         return TigerStateTransition(state=state, action=action)
 
-    def observation_model(self, next_state: str, action: str) -> Distribution:
+    def observation_model(self, next_state: str, action: str) -> ObservationModel:
         return TigerObservation(next_state=next_state, action=action)
 
     def reward(self, state: str, action: str) -> float:
@@ -319,6 +319,11 @@ class TigerPOMDP(DiscreteActionsEnvironment):
             raise ValueError("cache_path must end with .gif")
 
         # Create figure and axis
+        from matplotlib.figure import Figure
+        from matplotlib.axes import Axes
+
+        fig: Figure
+        ax: Axes
         fig, ax = plt.subplots(figsize=(8, 4))
         ax.set_xlim(-0.5, 1.5)
         ax.set_ylim(-0.5, 1.5)

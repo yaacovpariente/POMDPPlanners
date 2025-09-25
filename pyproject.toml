@@ -17,6 +17,32 @@ exclude = '''
 '''
 
 
+[tool.pyright]
+exclude = [
+    "temp_sim_cache/**",
+    "test_hyper_param_cache/**",
+    ".venv/**",
+    "build/**",
+    "dist/**",
+    "docs/**",
+    "docs/_build/**",
+    "experiments/**",
+    "legacy/**"
+]
+ignore = [
+    "temp_sim_cache",
+    "test_hyper_param_cache"
+]
+# OOP-friendly settings
+pythonVersion = "3.9"
+typeCheckingMode = "basic"  # or "strict" for more thorough checking
+useLibraryCodeForTypes = true
+strictListInference = true
+strictDictionaryInference = true
+strictSetInference = true
+strictParameterNoneValue = true
+enableTypeIgnoreComments = true
+
 [tool.mypy]
 python_version = "3.9"
 show_error_codes = true

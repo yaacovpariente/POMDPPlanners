@@ -211,18 +211,6 @@ class SparsePFT(PathSimulationPolicy):
         debug: bool = False,
         use_queue_logger: bool = False,
     ):
-        super().__init__(
-            environment=environment,
-            discount_factor=discount_factor,
-            name=name,
-            n_simulations=n_simulations,
-            time_out_in_seconds=time_out_in_seconds,
-            action_sampler=None,
-            log_path=log_path,
-            debug=debug,
-            use_queue_logger=use_queue_logger,
-        )
-
         if not isinstance(environment, DiscreteActionsEnvironment):
             raise TypeError("environment must be a DiscreteActionsEnvironment instance")
         if not isinstance(discount_factor, float):
@@ -239,6 +227,18 @@ class SparsePFT(PathSimulationPolicy):
             raise TypeError("belief_child_num must be an int")
         if not (1 >= discount_factor >= 0):
             raise ValueError("discount_factor must be between 0 and 1")
+
+        super().__init__(
+            environment=environment,
+            discount_factor=discount_factor,
+            name=name,
+            n_simulations=n_simulations,
+            time_out_in_seconds=time_out_in_seconds,
+            action_sampler=None,
+            log_path=log_path,
+            debug=debug,
+            use_queue_logger=use_queue_logger,
+        )
 
         self.gamma = gamma
         self.depth = depth

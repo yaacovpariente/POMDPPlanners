@@ -24,8 +24,10 @@ import numpy as np
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
+    ObservationModel,
     SpaceInfo,
     SpaceType,
+    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics import confidence_interval
@@ -51,7 +53,7 @@ class RockSampleState:
             raise ValueError("rocks must be a tuple of booleans")
 
 
-class RockSampleStateTransitionModel(Distribution):
+class RockSampleStateTransitionModel(StateTransitionModel):
     """State transition model for RockSample POMDP."""
 
     def __init__(self, state: RockSampleState, action: int, pomdp: "RockSamplePOMDP"):
@@ -109,7 +111,7 @@ class RockSampleStateTransitionModel(Distribution):
         return RockSampleState(new_pos, tuple(rocks))
 
 
-class RockSampleObservationModel(Distribution):
+class RockSampleObservationModel(ObservationModel):
     """Observation model for RockSample POMDP."""
 
     def __init__(self, next_state: RockSampleState, action: int, pomdp: "RockSamplePOMDP"):
@@ -456,7 +458,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             rocks_sampled.append(sampled_count)
 
         if rocks_sampled:
-            mean_rocks = np.mean(rocks_sampled)
+            mean_rocks = float(np.mean(rocks_sampled))
             ci_low, ci_high = confidence_interval(rocks_sampled)
             metrics.append(
                 MetricValue(
@@ -474,7 +476,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         ]
 
         if exits:
-            exit_rate = np.mean(exits)
+            exit_rate = float(np.mean(exits))
             ci_low, ci_high = confidence_interval(exits)
             metrics.append(
                 MetricValue(
@@ -495,7 +497,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             dangerous_area_steps.append(steps_in_danger)
 
         if dangerous_area_steps:
-            avg_dangerous_steps = np.mean(dangerous_area_steps)
+            avg_dangerous_steps = float(np.mean(dangerous_area_steps))
             ci_low, ci_high = confidence_interval(dangerous_area_steps)
 
             metrics.append(
@@ -516,6 +518,11 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         if not str(cache_path).endswith(".gif"):
             raise ValueError("cache_path must end with .gif")
 
+        from matplotlib.figure import Figure
+        from matplotlib.axes import Axes
+
+        fig: Figure
+        ax: Axes
         fig, ax = plt.subplots(figsize=(10, 8))
         ax.set_xlim(-0.5, self.map_size[1] - 0.5)
         ax.set_ylim(self.map_size[0] - 0.5, -0.5)  # Flip y-axis for standard grid display

@@ -1,4 +1,5 @@
 """CartPole POMDP environment instance."""
+
 import random
 import numpy as np
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP

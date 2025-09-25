@@ -1,4 +1,4 @@
-from typing import Dict, List
+from typing import Dict, List, Union
 
 import numpy as np
 import pandas as pd
@@ -152,7 +152,7 @@ def compute_statistics_environment_policy_pair(
 
     average_return = sum(return_samples) / len(return_samples)
 
-    return_cvar = cvar_estimator(return_samples, alpha)
+    return_cvar = cvar_estimator(np.array(return_samples), alpha)
     return_value_at_risk = np.percentile(return_samples, (1 - alpha) * 100)
 
     cvar_return_confidence_interval = cvar_confidence_interval(
@@ -194,9 +194,9 @@ def compute_statistics_environment_policy_pair(
         policy_info_metrics.append(
             MetricValue(
                 name=f"policy_info_{name}",
-                value=mean_value,
-                lower_confidence_bound=ci[0],
-                upper_confidence_bound=ci[1],
+                value=float(mean_value),
+                lower_confidence_bound=float(ci[0]),
+                upper_confidence_bound=float(ci[1]),
             )
         )
 
@@ -213,55 +213,55 @@ def compute_statistics_environment_policy_pair(
             ),
             MetricValue(
                 name="return_cvar",
-                value=return_cvar,
+                value=float(return_cvar),
                 lower_confidence_bound=cvar_return_confidence_interval[0],
                 upper_confidence_bound=cvar_return_confidence_interval[1],
             ),
             MetricValue(
                 name="return_value_at_risk",
-                value=return_value_at_risk,
+                value=float(return_value_at_risk),
                 lower_confidence_bound=return_value_at_risk_confidence_interval[0],
                 upper_confidence_bound=return_value_at_risk_confidence_interval[1],
             ),
             MetricValue(
                 name="average_state_sampling_time",
-                value=np.mean(average_state_sampling_time),
+                value=float(np.mean(average_state_sampling_time)),
                 lower_confidence_bound=average_state_sampling_time_confidence_interval[0],
                 upper_confidence_bound=average_state_sampling_time_confidence_interval[1],
             ),
             MetricValue(
                 name="average_action_time",
-                value=np.mean(average_action_time),
+                value=float(np.mean(average_action_time)),
                 lower_confidence_bound=average_action_time_confidence_interval[0],
                 upper_confidence_bound=average_action_time_confidence_interval[1],
             ),
             MetricValue(
                 name="average_observation_time",
-                value=np.mean(average_observation_time),
+                value=float(np.mean(average_observation_time)),
                 lower_confidence_bound=average_observation_time_confidence_interval[0],
                 upper_confidence_bound=average_observation_time_confidence_interval[1],
             ),
             MetricValue(
                 name="average_belief_update_time",
-                value=np.mean(average_belief_update_time),
+                value=float(np.mean(average_belief_update_time)),
                 lower_confidence_bound=average_belief_update_time_confidence_interval[0],
                 upper_confidence_bound=average_belief_update_time_confidence_interval[1],
             ),
             MetricValue(
                 name="average_reward_time",
-                value=np.mean(average_reward_time),
+                value=float(np.mean(average_reward_time)),
                 lower_confidence_bound=average_reward_time_confidence_interval[0],
                 upper_confidence_bound=average_reward_time_confidence_interval[1],
             ),
             MetricValue(
                 name="average_actual_num_steps",
-                value=np.mean(average_actual_num_steps),
+                value=float(np.mean(average_actual_num_steps)),
                 lower_confidence_bound=average_actual_num_steps_confidence_interval[0],
                 upper_confidence_bound=average_actual_num_steps_confidence_interval[1],
             ),
             MetricValue(
                 name="average_reach_terminal_state",
-                value=np.mean(average_reach_terminal_state),
+                value=float(np.mean(average_reach_terminal_state)),
                 lower_confidence_bound=average_reach_terminal_state_confidence_interval[0],
                 upper_confidence_bound=average_reach_terminal_state_confidence_interval[1],
             ),
@@ -314,7 +314,10 @@ def compute_statistics_environments_policies_comparison(
             )
 
             # Create row data with environment and policy names
-            row_data = {"environment": env_name, "policy": policy_name}
+            row_data: Dict[str, Union[str, float]] = {
+                "environment": env_name,
+                "policy": policy_name,
+            }
 
             # Add all metrics to row data
             for metric in statistics:
@@ -439,7 +442,10 @@ def metrics_dict_to_dataframe(
     for env_name, policy_metrics_dict in metrics_dict.items():
         for policy_name, metrics in policy_metrics_dict.items():
             # Create row data with environment and policy names
-            row_data = {"environment": env_name, "policy": policy_name}
+            row_data: Dict[str, Union[str, float]] = {
+                "environment": env_name,
+                "policy": policy_name,
+            }
 
             # Add all metrics to row data
             for metric in metrics:

@@ -33,10 +33,10 @@ import numpy as np
 
 # Python 3.9 compatibility - KW_ONLY was introduced in Python 3.10
 try:
-    from dataclasses import KW_ONLY  # type: ignore[attr-defined]
+    from dataclasses import KW_ONLY
 except ImportError:
     # For Python 3.9 compatibility, define KW_ONLY as None
-    KW_ONLY = None
+    KW_ONLY = None  # type: ignore[misc]
 
 from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
 from POMDPPlanners.core.environment import Environment, SpaceType

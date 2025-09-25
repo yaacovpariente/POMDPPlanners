@@ -97,7 +97,7 @@ class ConcretePathSimulationPolicy(PathSimulationPolicy):
 
         # Create action nodes if they don't exist
         if belief_node.is_leaf:
-            for action in self.environment.get_actions():
+            for action in self.environment.get_actions():  # type: ignore[attr-defined]
                 action_node = ActionNode(action=action, parent=belief_node, children=tuple())
                 # Set Q-values so that action 1 has the highest value
                 if action == 1:

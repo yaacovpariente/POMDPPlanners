@@ -384,13 +384,13 @@ class BaseSimulator(ABC):
         n_jobs: int,
     ) -> Tuple[Dict[str, Dict[str, list]], Dict[str, Dict[str, List[MetricValue]]]]:
         """Execute simulations in parallel and compute performance metrics."""
-        results: Dict[
-            str, Dict[str, list]
-        ] = self.simulate_multiple_environments_and_policies_parallel(
-            environment_run_params=environment_run_params,
-            alpha=alpha,
-            confidence_interval_level=confidence_interval_level,
-            n_jobs=n_jobs,
+        results: Dict[str, Dict[str, list]] = (
+            self.simulate_multiple_environments_and_policies_parallel(
+                environment_run_params=environment_run_params,
+                alpha=alpha,
+                confidence_interval_level=confidence_interval_level,
+                n_jobs=n_jobs,
+            )
         )
 
         metrics: Dict[str, Dict[str, List[MetricValue]]] = self._compute_metrics(

@@ -31,7 +31,9 @@ class EnvironmentConfigsAPI:
     def tiger_pomdp_config(
         self, n_particles: int = 20
     ) -> Tuple[Environment, WeightedParticleBelief]:
-        pomdp = TigerPOMDP(discount_factor=self.discount_factor, name="TigerPOMDP")
+        pomdp = TigerPOMDP(
+            discount_factor=self.discount_factor, name="TigerPOMDP", debug=self.debug
+        )
         belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
 
         return pomdp, belief
@@ -73,10 +75,10 @@ class EnvironmentConfigsAPI:
         OBSERVATION_COV_MATRIX = np.array(
             [[0.075, 0.01], [0.01, 0.075]]
         )  # Anisotropic observation noise
-        BEACONS = [(1, 1), (1, 4), (4, 4), (4, 1)]  # Grid pattern as list of tuples
+        BEACONS = [(1.0, 1.0), (1.0, 4.0), (4.0, 4.0), (4.0, 1.0)]  # Grid pattern as list of tuples
         GOAL_STATE = np.array([4, 4])  # Goal at (4,4)
         START_STATE = np.array([1, 1])  # Start at (1,1)
-        OBSTACLES = [(3, 1), (3, 2), (4, 1)]  # Two obstacles as list of tuples
+        OBSTACLES = [(3.0, 1.0), (3.0, 2.0), (4.0, 1.0)]  # Two obstacles as list of tuples
         OBSTACLE_HIT_PROBABILITY = 0.2  # 20% chance of hitting obstacle
         OBSTACLE_REWARD = -10.0  # Penalty for hitting obstacle
         GOAL_REWARD = 10.0  # Reward for reaching goal
@@ -127,10 +129,10 @@ class EnvironmentConfigsAPI:
         OBSERVATION_COV_MATRIX = np.array(
             [[0.075, 0.01], [0.01, 0.075]]
         )  # Anisotropic observation noise
-        BEACONS = [(1, 1), (1, 4), (4, 4), (4, 1)]  # Grid pattern as list of tuples
+        BEACONS = [(1.0, 1.0), (1.0, 4.0), (4.0, 4.0), (4.0, 1.0)]  # Grid pattern as list of tuples
         GOAL_STATE = np.array([4, 4])  # Goal at (4,4)
         START_STATE = np.array([1, 1])  # Start at (1,1)
-        OBSTACLES = [(3, 1), (3, 2), (4, 1)]  # Two obstacles as list of tuples
+        OBSTACLES = [(3.0, 1.0), (3.0, 2.0), (4.0, 1.0)]  # Two obstacles as list of tuples
         OBSTACLE_HIT_PROBABILITY = 0.2  # 20% chance of hitting obstacle
         OBSTACLE_REWARD = -10.0  # Penalty for hitting obstacle
         GOAL_REWARD = 10.0  # Reward for reaching goal
@@ -222,13 +224,13 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
         OBSERVATION_COV_MATRIX = np.array(
             [[0.075, 0.01], [0.01, 0.075]]
         )  # Anisotropic observation noise
-        BEACONS = [(1, 1), (4, 4), (4, 1), (1, 4)]  # Grid pattern as list of tuples
+        BEACONS = [(1.0, 1.0), (4.0, 4.0), (4.0, 1.0), (1.0, 4.0)]  # Grid pattern as list of tuples
         GOAL_STATE = np.array([4, 4])  # Goal at (4,4)
         START_STATE = np.array([1, 1])  # Start at (1,1)
         OBSTACLES = [
-            (3, 1),
-            (3, 2),
-            (4, 1),
+            (3.0, 1.0),
+            (3.0, 2.0),
+            (4.0, 1.0),
         ]  # Two obstacles as list of tuples - moved away from start
         OBSTACLE_HIT_PROBABILITY = 0.2  # 20% chance of hitting obstacle
         OBSTACLE_REWARD = -10.0  # Penalty for hitting obstacle
@@ -280,13 +282,13 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
         OBSERVATION_COV_MATRIX = np.array(
             [[0.075, 0.01], [0.01, 0.075]]
         )  # Anisotropic observation noise
-        BEACONS = [(1, 1), (4, 4), (4, 1), (1, 4)]  # Grid pattern as list of tuples
+        BEACONS = [(1.0, 1.0), (4.0, 4.0), (4.0, 1.0), (1.0, 4.0)]  # Grid pattern as list of tuples
         GOAL_STATE = np.array([4, 4])  # Goal at (4,4)
         START_STATE = np.array([1, 1])  # Start at (1,1)
         OBSTACLES = [
-            (3, 1),
-            (3, 2),
-            (4, 1),
+            (3.0, 1.0),
+            (3.0, 2.0),
+            (4.0, 1.0),
         ]  # Two obstacles as list of tuples - moved away from start
         OBSTACLE_HIT_PROBABILITY = 0.2  # 20% chance of hitting obstacle
         OBSTACLE_REWARD = -10.0  # Penalty for hitting obstacle

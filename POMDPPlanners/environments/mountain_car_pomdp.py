@@ -278,7 +278,9 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    def state_transition_model(self, state: Tuple[float, float], action: int) -> Distribution:
+    def state_transition_model(
+        self, state: Tuple[float, float], action: int
+    ) -> StateTransitionModel:
         return MountainCarTransition(
             state=state,
             action=action,
@@ -289,7 +291,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
             max_position=self.max_position,
         )
 
-    def observation_model(self, next_state: Tuple[float, float], action: int) -> Distribution:
+    def observation_model(self, next_state: Tuple[float, float], action: int) -> ObservationModel:
         return MountainCarObservation(
             next_state=next_state, action=action, cov_matrix=self.cov_matrix
         )

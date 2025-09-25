@@ -308,11 +308,14 @@ class TestOptimizeAndEvaluatePlanners:
 
         Test type: unit
         """
-        with patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
-        ) as mock_opt, patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
-        ) as mock_eval:
+        with (
+            patch(
+                "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
+            ) as mock_opt,
+            patch(
+                "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
+            ) as mock_eval,
+        ):
             # Setup mocks
             mock_policy = Mock()
             mock_policy.name = "MinimizedPOMCP"
@@ -1148,11 +1151,14 @@ class TestUsageExamples:
         Test type: example
         """
         # Mock the heavy computation parts to avoid long execution times
-        with patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
-        ) as mock_opt, patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
-        ) as mock_eval:
+        with (
+            patch(
+                "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
+            ) as mock_opt,
+            patch(
+                "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
+            ) as mock_eval,
+        ):
             # Setup mocks to return valid results
             env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
             mock_policy = Mock()
@@ -1280,11 +1286,14 @@ class TestUsageExamples:
         assert len(fast_config) > 0
 
         # Verify can be used as keyword arguments (typical usage pattern)
-        with patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
-        ) as mock_opt, patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_optimized_planner"
-        ) as mock_eval:
+        with (
+            patch(
+                "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
+            ) as mock_opt,
+            patch(
+                "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_optimized_planner"
+            ) as mock_eval,
+        ):
             mock_opt.return_value = None  # Will trigger ValueError, but that's expected
             mock_eval.return_value = ({}, pd.DataFrame())
 
@@ -1333,11 +1342,14 @@ class TestHyperParamRunnerUseCases:
         from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 
         # Mock heavy computation parts for speed
-        with patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
-        ) as mock_opt, patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
-        ) as mock_eval:
+        with (
+            patch(
+                "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
+            ) as mock_opt,
+            patch(
+                "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
+            ) as mock_eval,
+        ):
             # Set up environment
             env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
             initial_belief = get_initial_belief(env, n_particles=10)
@@ -1922,11 +1934,14 @@ class TestHyperParamRunnerUseCases:
         from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 
         # Test with real classes but mocked computation
-        with patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
-        ) as mock_opt, patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
-        ) as mock_eval:
+        with (
+            patch(
+                "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters"
+            ) as mock_opt,
+            patch(
+                "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
+            ) as mock_eval,
+        ):
             # Create real environment and belief
             env = TigerPOMDP(discount_factor=0.95, name="RealTiger")
             initial_belief = get_initial_belief(env, n_particles=10)

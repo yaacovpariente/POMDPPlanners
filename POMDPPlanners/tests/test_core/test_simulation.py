@@ -15,6 +15,7 @@ import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import History, StepData, TaskManagerExternalDB
+from POMDPPlanners.core.simulation.tasks import SimulationTask
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -217,7 +218,7 @@ class MockDatabase:
 
 
 class TestTaskManagerExternalDB(TaskManagerExternalDB):
-    def _run_tasks(self, tasks: List[MockSimulationTask]) -> List[Any]:
+    def _run_tasks(self, tasks: List[SimulationTask]) -> List[Any]:
         return [task.run() for task in tasks]
 
 

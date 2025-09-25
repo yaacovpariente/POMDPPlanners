@@ -15,7 +15,7 @@ def run_episode(
     policy: Policy,
     initial_belief: Belief,
     num_steps: int,
-    logger: Logger,
+    logger: Optional[Logger],
 ) -> History:
     """Run a single episode without caching and collect detailed performance metrics.
 
@@ -122,8 +122,6 @@ def run_episode(
     if logger is None:
         logger = get_logger(
             name=f"episode.{environment.name}.{policy.name}",
-            debug=logger.debug,
-            output_dir=logger.output_dir,
         )
 
     logger.debug(f"Starting episode with {num_steps} steps")

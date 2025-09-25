@@ -18,7 +18,7 @@ import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
@@ -28,8 +28,10 @@ from PIL import Image, ImageDraw
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
+    ObservationModel,
     SpaceInfo,
     SpaceType,
+    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics import confidence_interval
@@ -76,7 +78,7 @@ class PacManState:
             raise ValueError("pellets must be a tuple of position tuples")
 
 
-class PacManStateTransitionModel(Distribution):
+class PacManStateTransitionModel(StateTransitionModel):
     """State transition model for PacMan POMDP."""
 
     def __init__(self, state: PacManState, action: int, pomdp: "PacManPOMDP"):
@@ -376,7 +378,7 @@ class PacManStateTransitionModel(Distribution):
         )
 
 
-class PacManObservationModel(Distribution):
+class PacManObservationModel(ObservationModel):
     """Observation model for PacMan POMDP."""
 
     def __init__(self, next_state: PacManState, action: int, pomdp: "PacManPOMDP"):
@@ -689,6 +691,9 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             3: (-1, 0),  # west - left (negative col)
         }
 
+        # Initialize ghost patrol directions for patrol strategy
+        self._ghost_patrol_directions: Dict[int, int] = {}
+
     @property
     def initial_ghost_pos(self) -> Tuple[int, int]:
         """Backward compatibility: returns first ghost position."""
@@ -920,7 +925,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
                             episode_collisions += 1
 
                 if episode_distances:
-                    avg_distance = np.mean(episode_distances)
+                    avg_distance = float(np.mean(episode_distances))
                     pacman_ghost_distances.append(avg_distance)
 
                 collision_encounters.append(episode_collisions)
@@ -930,7 +935,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
                 collision_encounters.append(0)
 
         if wins:
-            win_rate = np.mean(wins)
+            win_rate = float(np.mean(wins))
             ci_low, ci_high = confidence_interval(wins)
             metrics.append(
                 MetricValue(
@@ -942,7 +947,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             )
 
         if pellets_collected:
-            avg_pellets = np.mean(pellets_collected)
+            avg_pellets = float(np.mean(pellets_collected))
             ci_low, ci_high = confidence_interval(pellets_collected)
             metrics.append(
                 MetricValue(
@@ -954,7 +959,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             )
 
         if episode_lengths:
-            avg_length = np.mean(episode_lengths)
+            avg_length = float(np.mean(episode_lengths))
             ci_low, ci_high = confidence_interval(episode_lengths)
             metrics.append(
                 MetricValue(
@@ -967,7 +972,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
 
         # Average distance between PacMan and closest ghost metric
         if pacman_ghost_distances:
-            avg_distance = np.mean(pacman_ghost_distances)
+            avg_distance = float(np.mean(pacman_ghost_distances))
             ci_low, ci_high = confidence_interval(pacman_ghost_distances)
             metrics.append(
                 MetricValue(
@@ -980,7 +985,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
 
         # Collision encounters metric
         if collision_encounters:
-            avg_collisions = np.mean(collision_encounters)
+            avg_collisions = float(np.mean(collision_encounters))
             ci_low, ci_high = confidence_interval(collision_encounters)
             metrics.append(
                 MetricValue(
@@ -1031,7 +1036,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
                         if ghost_id < len(episode_avgs)
                     ]
                     if ghost_distance_values:
-                        avg_distance = np.mean(ghost_distance_values)
+                        avg_distance = float(np.mean(ghost_distance_values))
                         ci_low, ci_high = confidence_interval(ghost_distance_values)
                         metrics.append(
                             MetricValue(

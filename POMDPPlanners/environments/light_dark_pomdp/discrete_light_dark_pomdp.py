@@ -14,6 +14,7 @@ from POMDPPlanners.core.environment import (
     ObservationModel,
     SpaceInfo,
     SpaceType,
+    StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
@@ -119,7 +120,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             grid_size=grid_size,
         )
 
-    def state_transition_model(self, state: np.ndarray, action: Any) -> Distribution:
+    def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
         action_index = self.actions.index(action)
         values = [state + self.action_to_vector[action] for action in self.actions]
 
@@ -129,9 +130,9 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         s = sum(probs)
         probs[0] += 1 - s
 
-        return DiscreteDistribution(values, probs)
+        return DiscreteDistribution(values, probs)  # type: ignore[return-value]
 
-    def observation_model(self, next_state: np.ndarray, action: Any) -> Distribution:
+    def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
         return DiscreteLDObservationModel(
             next_state=next_state,
             action=action,
@@ -195,8 +196,8 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             goal_reached.append(1 if goal_reached_in_history else 0)
             obstacle_hits.append(1 if obstacle_hit_in_history else 0)
 
-        avg_goal_reached = np.mean(goal_reached)
-        avg_obstacle_hits = np.mean(obstacle_hits)
+        avg_goal_reached = float(np.mean(goal_reached))
+        avg_obstacle_hits = float(np.mean(obstacle_hits))
 
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
         obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)

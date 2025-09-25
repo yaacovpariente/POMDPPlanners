@@ -362,7 +362,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             best_policy_params[param_name] = param_value
 
         # Create the optimized policy instance
-        optimized_policy = self.policy_cls(**best_policy_params)
+        optimized_policy = self.policy_cls(**best_policy_params)  # type: ignore[arg-type]
 
         # Log optimization completion details
         self.logger.info(f"Best parameters: {study.best_params}")

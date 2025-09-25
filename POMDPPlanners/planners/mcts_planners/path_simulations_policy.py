@@ -5,7 +5,12 @@ from typing import Any, List, Optional, Tuple
 
 import numpy as np
 
-from POMDPPlanners.core.belief import Belief, is_terminal_belief
+from POMDPPlanners.core.belief import (
+    Belief,
+    is_terminal_belief,
+    WeightedParticleBelief,
+    WeightedParticleBeliefStateUpdate,
+)
 from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData
 from POMDPPlanners.core.tree import BeliefNode, get_optimal_action_reward_setting
@@ -89,7 +94,7 @@ class PathSimulationPolicy(Policy):
             raise ValueError("Action sampler must be provided for continuous action spaces")
 
     def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
-        if is_terminal_belief(belief=belief, env=self.environment):
+        if self._is_terminal_belief(belief=belief):
             return [self._sample_random_action(belief=belief)], PolicyRunData(info_variables=[])
 
         tree = self._learn_tree(belief=belief)
@@ -104,7 +109,7 @@ class PathSimulationPolicy(Policy):
 
     def _sample_random_action(self, belief: Belief) -> Any:
         if self.environment.space_info.action_space == SpaceType.DISCRETE:
-            return np.random.choice(self.environment.get_actions())
+            return np.random.choice(self.environment.get_actions())  # type: ignore[attr-defined]
         elif self.environment.space_info.action_space == SpaceType.CONTINUOUS:
             if self.action_sampler is None:
                 raise ValueError("action_sampler must not be None for continuous action spaces")
@@ -136,6 +141,12 @@ class PathSimulationPolicy(Policy):
         start_time = time.time()
         while time.time() - start_time < self.time_out_in_seconds:
             self._simulate_path(belief_node=belief_node, depth=0)
+
+    def _is_terminal_belief(self, belief: Belief) -> bool:
+        if isinstance(belief, (WeightedParticleBelief, WeightedParticleBeliefStateUpdate)):
+            return is_terminal_belief(belief=belief, env=self.environment)
+
+        raise ValueError("Unsupported belief type")
 
     @abstractmethod
     def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
