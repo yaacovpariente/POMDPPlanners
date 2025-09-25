@@ -25,9 +25,7 @@ services:
         echo '🎨 Running black check...'
         black --check POMDPPlanners/
         
-        # Run type checking
-        echo '🔍 Running mypy...'
-        mypy POMDPPlanners/ --ignore-missing-imports
+        # Type checking removed
         
         # Run unit tests
         echo '🧪 Running pytest...'

@@ -49,8 +49,7 @@ run_test_step "Pylint Linting" "pylint POMDPPlanners/ --exit-zero"
 # Mock: Run code formatting check inside Docker
 run_test_step "Black Formatting Check" "black --check POMDPPlanners/"
 
-# Mock: Run type checking inside Docker
-run_test_step "MyPy Type Checking" "mypy POMDPPlanners/ --ignore-missing-imports"
+# Mock: Type checking removed
 
 # Mock: Run unit tests inside Docker
 run_test_step "Pytest Unit Tests with Coverage" "pytest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing"

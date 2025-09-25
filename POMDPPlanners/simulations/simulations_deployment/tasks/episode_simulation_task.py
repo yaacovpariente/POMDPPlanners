@@ -247,7 +247,7 @@ class EpisodeSimulationTask(SimulationTask):
                 if hasattr(result, "history") and result.history:
                     actual_steps = len(result.history)
                     total_reward = sum(
-                        step.reward for step in result.history if step.reward is not None
+                        float(step.reward) for step in result.history if step.reward is not None
                     )
 
                 if hasattr(result, "reach_terminal_state"):
