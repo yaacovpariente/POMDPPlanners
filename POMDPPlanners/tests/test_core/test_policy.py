@@ -11,6 +11,7 @@ import logging
 import random
 from pathlib import Path
 from typing import Optional
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -23,7 +24,7 @@ from POMDPPlanners.core.environment import (
     SpaceType,
     StateTransitionModel,
 )
-from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, PolicyRunData
 from POMDPPlanners.utils.logger import get_logger, reset_logger_state
 
 # Set seeds for reproducible tests
@@ -44,36 +45,44 @@ class MockEnvironment(Environment):
         )  # Use individual logger for tests
 
     def state_transition_model(self, state, action):
-        pass
+        from POMDPPlanners.core.environment import StateTransitionModel
+
+        return Mock(spec=StateTransitionModel)
 
     def observation_model(self, next_state, action):
-        pass
+        from POMDPPlanners.core.environment import ObservationModel
+
+        return Mock(spec=ObservationModel)
 
     def reward(self, state, action):
-        pass
+        return 0.0
 
     def is_terminal(self, state):
-        pass
+        return False
 
     def initial_state_dist(self):
-        pass
+        from POMDPPlanners.core.distributions import Distribution
+
+        return Mock(spec=Distribution)
 
     def initial_observation_dist(self):
-        pass
+        from POMDPPlanners.core.distributions import Distribution
+
+        return Mock(spec=Distribution)
 
     def is_equal_observation(self, observation1, observation2):
-        pass
+        return True
 
 
 class MockBelief(Belief):
     def __init__(self, environment: Environment):
         self.environment = environment
 
-    def update(self, action, observation):
-        pass
+    def update(self, action, observation, pomdp, state=None):
+        return self
 
     def sample(self):
-        pass
+        return "mock_state"
 
 
 class MockPolicy(Policy):
@@ -90,7 +99,7 @@ class MockPolicy(Policy):
         self.custom_param = custom_param
 
     def action(self, belief: Belief):
-        pass
+        return (["mock_action"], PolicyRunData(info_variables=[]))
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
@@ -111,7 +120,7 @@ class DifferentPolicy(Policy):
         super().__init__(environment, discount_factor, name, log_path=log_path, debug=debug)
 
     def action(self, belief: Belief):
-        pass
+        return (["different_action"], PolicyRunData(info_variables=[]))
 
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:

@@ -128,7 +128,17 @@ def belief(environment, n_particles):
     return get_initial_belief(pomdp=environment, n_particles=n_particles, resampling=True)
 
 
-def test_pomcp_dpw_initialization_n_simulations_creates_configured_planner():
+def test_pomcp_dpw_initialization_n_simulations_creates_configured_planner(
+    environment,
+    discount_factor,
+    depth,
+    exploration_constant,
+    k_o,
+    k_a,
+    alpha_o,
+    alpha_a,
+    action_sampler,
+):
     """
     Purpose: Validates POMCP_DPW planner initializes correctly with simulation count configuration
 
@@ -172,7 +182,17 @@ def test_pomcp_dpw_initialization_n_simulations_creates_configured_planner():
     assert planner.name == expected_name
 
 
-def test_pomcp_dpw_initialization_timeout_creates_time_limited_planner():
+def test_pomcp_dpw_initialization_timeout_creates_time_limited_planner(
+    environment,
+    discount_factor,
+    depth,
+    exploration_constant,
+    k_o,
+    k_a,
+    alpha_o,
+    alpha_a,
+    action_sampler,
+):
     """
     Purpose: Ensures POMCP_DPW planner initializes correctly with time-based termination
 
@@ -211,7 +231,17 @@ def test_pomcp_dpw_initialization_timeout_creates_time_limited_planner():
     assert planner.name == expected_name
 
 
-def test_pomcp_dpw_initialization_both_termination_criteria_raises_error():
+def test_pomcp_dpw_initialization_both_termination_criteria_raises_error(
+    environment,
+    discount_factor,
+    depth,
+    exploration_constant,
+    k_o,
+    k_a,
+    alpha_o,
+    alpha_a,
+    action_sampler,
+):
     """
     Purpose: Validates proper error handling when both termination criteria are provided
 

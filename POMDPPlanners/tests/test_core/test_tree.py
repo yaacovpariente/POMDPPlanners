@@ -34,12 +34,13 @@ class TestEnvironment(Environment):
     def state_transition(self, state, action):
         return state
 
-    def observation_model(self, state, action):
-        class DummyModel:
-            def probability(self, obs):
-                return 1.0
+    def observation_model(self, next_state, action):
+        from unittest.mock import Mock
+        from POMDPPlanners.core.environment import ObservationModel
 
-        return DummyModel()
+        mock_model = Mock(spec=ObservationModel)
+        mock_model.probability.return_value = 1.0
+        return mock_model
 
     def is_equal_observation(self, observation1, observation2):
         """Check if two observations are equal."""
@@ -49,7 +50,7 @@ class TestEnvironment(Environment):
         """Check if state is terminal."""
         return False
 
-    def reward(self, state, action, next_state):
+    def reward(self, state, action):
         """Return reward for state transition."""
         return 0.0
 
@@ -57,19 +58,22 @@ class TestEnvironment(Environment):
         """Return initial state distribution."""
         from POMDPPlanners.core.distributions import DiscreteDistribution
 
-        return DiscreteDistribution({0: 1.0})
+        return DiscreteDistribution(values=[0], probs=np.array([1.0]))
 
     def initial_observation_dist(self):
         """Return initial observation distribution."""
         from POMDPPlanners.core.distributions import DiscreteDistribution
 
-        return DiscreteDistribution({"obs": 1.0})
+        return DiscreteDistribution(values=["obs"], probs=np.array([1.0]))
 
     def state_transition_model(self, state, action):
         """Return state transition model."""
-        from POMDPPlanners.core.distributions import DiscreteDistribution
+        from unittest.mock import Mock
+        from POMDPPlanners.core.environment import StateTransitionModel
 
-        return DiscreteDistribution({state: 1.0})
+        mock_model = Mock(spec=StateTransitionModel)
+        mock_model.probability.return_value = 1.0
+        return mock_model
 
 
 @pytest.fixture
