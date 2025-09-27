@@ -145,7 +145,7 @@ class POMCP(PathSimulationPolicy):
             return 0
 
         if belief_node.is_leaf:
-            for action in self.environment.get_actions():
+            for action in self.environment.get_actions():  # type: ignore
                 action_node = ActionNode(action=action, parent=belief_node, children=tuple())
 
             belief_node.visit_count += 1
@@ -209,7 +209,7 @@ class POMCP(PathSimulationPolicy):
         if depth > self.depth or self.environment.is_terminal(state=state):
             return 0
 
-        action = random.choice(self.environment.get_actions())
+        action = random.choice(self.environment.get_actions())  # type: ignore
         next_state, next_observation, reward = self.environment.sample_next_step(
             state=state, action=action
         )
