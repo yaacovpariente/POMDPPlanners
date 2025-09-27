@@ -3,7 +3,7 @@ from typing import Tuple
 import numpy as np
 
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
-from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.environment import Environment, DiscreteActionsEnvironment
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
@@ -190,7 +190,7 @@ class EnvironmentConfigsAPI:
 
     def pacman_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
         pomdp = PacManPOMDP(discount_factor=self.discount_factor, name="PacManPOMDP")
         belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
         return pomdp, belief

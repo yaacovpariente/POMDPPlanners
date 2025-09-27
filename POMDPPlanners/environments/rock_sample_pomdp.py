@@ -542,7 +542,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         danger_patches = []
         for i, danger_center in enumerate(self.dangerous_areas):
             row, col = danger_center
-            circle = plt.Circle(
+            circle = plt.Circle(  # type: ignore
                 (col, row),
                 self.dangerous_area_radius,
                 facecolor="red",

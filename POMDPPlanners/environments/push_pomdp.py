@@ -595,7 +595,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         # Plot obstacles as permanent features
         obstacle_scatters: List[Any] = []
         for i, (obs_x, obs_y) in enumerate(self.obstacles):
-            obstacle_circle = plt.Circle(
+            obstacle_circle = plt.Circle(  # type: ignore
                 (obs_x, obs_y),
                 self.obstacle_radius,
                 facecolor="red",
@@ -801,7 +801,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
             )
 
             current_reward = rewards[frame] if frame < len(rewards) else 0.0
-            total_reward = sum(rewards[: frame + 1])
+            total_reward = sum(rewards[: frame + 1])  # type: ignore
             reward_text.set_text(
                 f"Step Reward: {current_reward:.1f}\nTotal Reward: {total_reward:.1f}"
             )

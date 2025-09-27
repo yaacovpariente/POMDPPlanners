@@ -129,7 +129,7 @@ class ContinuousLightDarkStateTransitionModel(StateTransitionModel):
 
         # Use scipy's built-in multivariate normal PDF
         return multivariate_normal.pdf(
-            values_array, mean=self.mean, cov=self.state_transition_cov_matrix
+            values_array, mean=self.mean, cov=self.state_transition_cov_matrix  # type: ignore
         )
 
 

@@ -445,7 +445,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
 
         # Speed plot
         ax_speed.set_xlim(0, len(states))
-        max_speed = max(np.linalg.norm(state[2:4]) for state in states) if states else 0
+        max_speed = max(np.linalg.norm(state[2:4]) for state in states) if states else 0  # type: ignore
         ax_speed.set_ylim(0, max(max_speed * 1.1, self.safe_velocity_threshold * 2))
         ax_speed.grid(True, alpha=0.3, linestyle="-", linewidth=0.5)
         ax_speed.set_xlabel("Time Step", fontsize=12)
@@ -505,7 +505,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         )
 
         # Safety zone circles (concentric circles around current position)
-        safety_circle = plt.Circle(
+        safety_circle = plt.Circle(  # type: ignore
             (0, 0),
             0,
             fill=False,
@@ -515,7 +515,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             linestyle="--",
             visible=False,
         )
-        critical_circle = plt.Circle(
+        critical_circle = plt.Circle(  # type: ignore
             (0, 0),
             0,
             fill=False,
@@ -667,12 +667,12 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             )
 
             safety_circle.center = position
-            safety_circle.set_radius(max(0.1, safety_radius))
+            safety_circle.set_radius(max(0.1, float(safety_radius)))
             safety_circle.set_visible(True)
 
             critical_circle.center = position
-            critical_circle.set_radius(max(0.1, critical_radius))
-            critical_circle.set_visible(speed > self.safe_velocity_threshold)
+            critical_circle.set_radius(max(0.1, float(critical_radius)))
+            critical_circle.set_visible(bool(speed > self.safe_velocity_threshold))
 
             # Update speed plot
             speeds = [np.linalg.norm(s[2:4]) for s in states[: frame + 1]]
@@ -701,7 +701,7 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
             )
 
             current_reward = rewards[frame] if frame < len(rewards) else 0.0
-            total_reward = sum(rewards[: frame + 1])
+            total_reward = sum(rewards[: frame + 1])  # type: ignore
             reward_text.set_text(
                 f"Step Reward: {current_reward:.1f}\nTotal Reward: {total_reward:.1f}"
             )

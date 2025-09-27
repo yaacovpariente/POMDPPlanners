@@ -43,7 +43,7 @@ class ContinuousLightDarkNormalNoiseObservationModel(ObservationModel):
         # Convert list to numpy array for vectorized computation
         values_array = np.array(values)
         res = multivariate_normal.pdf(
-            values_array, mean=self.next_state, cov=self.observation_cov_matrix
+            values_array, mean=self.next_state, cov=self.observation_cov_matrix  # type: ignore
         )
         if not isinstance(res, np.ndarray):
             res = np.array([res])
