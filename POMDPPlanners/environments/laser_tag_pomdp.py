@@ -964,7 +964,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         wall_patches = []
         for i, wall in enumerate(self.walls):
             row, col = wall
-            square = plt.Rectangle(
+            square = plt.Rectangle(  # type: ignore
                 (row - 0.4, col - 0.4),
                 0.8,
                 0.8,
@@ -981,7 +981,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         danger_patches = []
         for i, danger_center in enumerate(self.dangerous_areas):
             row, col = danger_center
-            circle = plt.Circle(
+            circle = plt.Circle(  # type: ignore
                 (row, col),
                 self.dangerous_area_radius,
                 facecolor="red",

@@ -192,7 +192,7 @@ class MountainCarObservation(ObservationModel):
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
         # Vectorized probability for a batch of observations
         values_array = np.array(values)
-        return scipy.stats.multivariate_normal(self.mean, self.cov_matrix).pdf(values_array)
+        return scipy.stats.multivariate_normal(self.mean, self.cov_matrix).pdf(values_array)  # type: ignore
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):

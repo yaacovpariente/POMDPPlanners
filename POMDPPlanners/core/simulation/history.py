@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, List, NamedTuple, Optional
+from typing import TYPE_CHECKING, Any, List, NamedTuple, Optional, Union
 
 import numpy as np
 
@@ -13,7 +13,7 @@ class StepData(NamedTuple):
     action: Any
     next_state: Any
     observation: Any
-    reward: float
+    reward: Union[float, None]
     belief: "Belief"
 
 

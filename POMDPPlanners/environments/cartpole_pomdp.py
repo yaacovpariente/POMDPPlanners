@@ -22,6 +22,8 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 import numpy as np
+from numpy.typing import NDArray
+
 import scipy.stats as stats
 
 from POMDPPlanners.core.distributions import Distribution
@@ -186,7 +188,7 @@ class CartPoleObservation(ObservationModel):
         True
     """
 
-    def __init__(self, next_state: np.ndarray, action: int, noise_cov: np.ndarray):
+    def __init__(self, next_state: np.ndarray, action: int, noise_cov: NDArray[np.floating[Any]]):
         super().__init__(next_state=next_state, action=action)
         self.noise_cov = noise_cov
 
@@ -200,8 +202,8 @@ class CartPoleObservation(ObservationModel):
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
         # Convert list of arrays to 2D numpy array for vectorized computation
         values_array = np.array(values)
-        mvn = stats.multivariate_normal(mean=self.next_state, cov=self.noise_cov)
-        return mvn.pdf(values_array)
+        mvn = stats.multivariate_normal(mean=self.next_state, cov=self.noise_cov)  # type: ignore
+        return np.array(mvn.pdf(values_array)).reshape(-1, 1)
 
 
 class CartPoleInitialStateDistribution(Distribution):
@@ -297,7 +299,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
     def __init__(
         self,
         discount_factor: float,
-        noise_cov: np.ndarray,
+        noise_cov: NDArray[np.floating[Any]],
         name: str = "CartPolePOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,

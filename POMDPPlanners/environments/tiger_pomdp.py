@@ -331,8 +331,8 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         ax.set_yticks([])
 
         # Draw doors
-        left_door = plt.Rectangle((0, 0), 0.2, 1, facecolor="brown")
-        right_door = plt.Rectangle((1, 0), 0.2, 1, facecolor="brown")
+        left_door = plt.Rectangle((0, 0), 0.2, 1, facecolor="brown")  # type: ignore
+        right_door = plt.Rectangle((1, 0), 0.2, 1, facecolor="brown")  # type: ignore
         ax.add_patch(left_door)
         ax.add_patch(right_door)
 
