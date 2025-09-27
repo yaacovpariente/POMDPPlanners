@@ -105,6 +105,11 @@ class Belief(ABC):
             return NotImplemented
         return self.config_id == other.config_id
 
+    def inplace_update(
+        self, action: Any, observation: Any, pomdp: Environment, state: Optional[Any] = None
+    ) -> None:
+        raise NotImplementedError("Subclasses must implement this method")
+
     @abstractmethod
     def update(
         self,
@@ -1473,8 +1478,28 @@ def get_initial_belief(
     )
 
 
-def is_terminal_belief(
-    belief: Union[WeightedParticleBelief, WeightedParticleBeliefStateUpdate], env: Environment
+def is_terminal_particle_belief(
+    belief: Union[
+        WeightedParticleBelief,
+        WeightedParticleBeliefStateUpdate,
+        UnweightedParticleBeliefStateUpdate,
+    ],
+    env: Environment,
 ) -> bool:
     """Check if the belief is terminal."""
     return all(env.is_terminal(particle) for particle in belief.particles)
+
+
+def is_terminal_belief(belief: Belief, env: Environment) -> bool:
+    """Check if the belief is terminal."""
+    if isinstance(
+        belief,
+        (
+            WeightedParticleBelief,
+            WeightedParticleBeliefStateUpdate,
+            UnweightedParticleBeliefStateUpdate,
+        ),
+    ):
+        return is_terminal_particle_belief(belief=belief, env=env)
+    else:
+        raise NotImplementedError("is_terminal_belief is not implemented for this belief type")
