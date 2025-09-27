@@ -40,10 +40,20 @@ class MockEnvironment(Environment):
         )
 
     def state_transition_model(self, state, action):
-        return [state]  # Simple identity transition
+        from unittest.mock import Mock
+        from POMDPPlanners.core.environment import StateTransitionModel
+
+        mock_model = Mock(spec=StateTransitionModel)
+        mock_model.probability.return_value = 1.0
+        return mock_model
 
     def observation_model(self, next_state, action):
-        return [0]  # Simple observation
+        from unittest.mock import Mock
+        from POMDPPlanners.core.environment import ObservationModel
+
+        mock_model = Mock(spec=ObservationModel)
+        mock_model.probability.return_value = 1.0
+        return mock_model
 
     def reward(self, state, action):
         return 1.0
@@ -617,7 +627,7 @@ class TestPathSimulationPolicyAbstractContract:
         with pytest.raises(
             TypeError, match="Can't instantiate abstract class PathSimulationPolicy"
         ):
-            PathSimulationPolicy(
+            PathSimulationPolicy(  # type: ignore[abstract]
                 environment=discrete_environment,
                 discount_factor=0.95,
                 name="test_policy",

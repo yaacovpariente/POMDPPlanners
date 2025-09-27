@@ -8,14 +8,14 @@ This module tests the simulation functionality, focusing on:
 """
 
 import random
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import History, StepData, TaskManagerExternalDB
-from POMDPPlanners.core.simulation.tasks import SimulationTask
+from POMDPPlanners.core.simulation.tasks import SimulationTask, DataBaseInterface
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -186,7 +186,7 @@ def test_history_serialization():
     assert reconstructed_history == history
 
 
-class MockSimulationTask:
+class MockSimulationTask(SimulationTask):
     def __init__(self, config_id: str, should_succeed: bool = True):
         self._config_id = config_id
         self._should_succeed = should_succeed
@@ -200,7 +200,7 @@ class MockSimulationTask:
         return self._config_id
 
 
-class MockDatabase:
+class MockDatabase(DataBaseInterface):
     def __init__(self):
         self._cache: Dict[str, Any] = {}
 
@@ -247,7 +247,9 @@ def test_task_manager_external_db():
     task_identifiers = ["id1", "id2", "id3", "id4"]
 
     # Test running tasks
-    results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
+    results, successful_ids = task_manager.run_tasks(
+        cast(List[SimulationTask], tasks), task_identifiers
+    )
 
     # Verify results
     assert len(results) == 3  # Only successful tasks
@@ -265,7 +267,9 @@ def test_task_manager_external_db():
     assert mock_db.is_key_in_cache("task4")
 
     # Test running same tasks again (should use cache)
-    results2, successful_ids2 = task_manager.run_tasks(tasks, task_identifiers)
+    results2, successful_ids2 = task_manager.run_tasks(
+        cast(List[SimulationTask], tasks), task_identifiers
+    )
     assert results2 == results
     assert successful_ids2 == successful_ids
 
@@ -292,7 +296,9 @@ def test_task_manager_external_db_all_failed():
     task_identifiers = ["id1", "id2"]
 
     # Test running tasks
-    results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
+    results, successful_ids = task_manager.run_tasks(
+        cast(List[SimulationTask], tasks), task_identifiers
+    )
 
     # Verify results
     assert len(results) == 0
@@ -325,7 +331,9 @@ def test_task_manager_external_db_all_cached():
     mock_db.set("task2", {"result": "success"})
 
     # Test running tasks
-    results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
+    results, successful_ids = task_manager.run_tasks(
+        cast(List[SimulationTask], tasks), task_identifiers
+    )
 
     # Verify results
     assert len(results) == 2

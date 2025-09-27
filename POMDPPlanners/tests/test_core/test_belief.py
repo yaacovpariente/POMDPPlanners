@@ -106,7 +106,7 @@ def test_belief_config_id_identical_values_produces_same_hash():
         def __init__(self, value):
             self.value = value
 
-        def update(self, action, observation, pomdp):
+        def update(self, action, observation, pomdp, state=None):
             return self
 
         def sample(self):
@@ -141,7 +141,7 @@ def test_belief_config_id_different_values_produces_different_hash():
         def __init__(self, value):
             self.value = value
 
-        def update(self, action, observation, pomdp):
+        def update(self, action, observation, pomdp, state=None):
             return self
 
         def sample(self):
@@ -177,7 +177,7 @@ def test_belief_config_id_numpy_arrays_handles_identical_content():
         def __init__(self, value):
             self.value = value
 
-        def update(self, action, observation, pomdp):
+        def update(self, action, observation, pomdp, state=None):
             return self
 
         def sample(self):
@@ -213,22 +213,13 @@ def test_belief_objects_usable_as_dictionary_keys_and_set_members():
         def __init__(self, value):
             self.value = value
 
-        def update(self, action, observation, pomdp):
+        def update(self, action, observation, pomdp, state=None):
             return self
 
         def sample(self):
             return self.value
 
     # ARRANGE: Create identical belief instances for hashability testing
-    class TestBelief(Belief):
-        def __init__(self, value):
-            self.value = value
-
-        def update(self, action, observation, pomdp):
-            return self
-
-        def sample(self):
-            return self.value
 
     test_value = 42
     belief1 = TestBelief(value=test_value)
@@ -253,7 +244,7 @@ def test_belief_equality():
         def __init__(self, value):
             self.value = value
 
-        def update(self, action, observation, pomdp):
+        def update(self, action, observation, pomdp, state=None):
             return self
 
         def sample(self):
@@ -279,7 +270,7 @@ def test_belief_equality_with_different_types():
         def __init__(self, value):
             self.value = value
 
-        def update(self, action, observation, pomdp):
+        def update(self, action, observation, pomdp, state=None):
             return self
 
         def sample(self):

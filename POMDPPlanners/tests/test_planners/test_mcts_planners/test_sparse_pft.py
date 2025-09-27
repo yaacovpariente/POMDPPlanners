@@ -191,6 +191,7 @@ def test_sample_next_existing_belief(planner):
     )
     assert isinstance(next_belief_node, BeliefNode)
     assert next_belief_node in action_node.children
+    assert next_belief_node.immediate_cost is not None
     assert immediate_reward == -next_belief_node.immediate_cost
 
 
