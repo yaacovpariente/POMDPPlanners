@@ -1,13 +1,11 @@
 import cProfile
 import hashlib
 import io
-import logging
 import shutil
 import tempfile
-import uuid
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import mlflow
 import pandas as pd
@@ -17,22 +15,16 @@ from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import (
-    DataBaseInterface,
     EnvironmentRunParams,
     History,
     MetricValue,
     SimulationTask,
-    TaskManager,
 )
 from POMDPPlanners.simulations.simulation_statistics import (
     compute_statistics_environment_policy_pair,
-    compute_statistics_environments_policies_comparison,
     metrics_dict_to_dataframe,
 )
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
-    DaskConfig,
-    JoblibConfig,
-    PBSConfig,
     TaskManagerConfig,
 )
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
@@ -193,8 +185,7 @@ class BaseSimulator(ABC):
             pass
 
         # Clean up task manager
-        if hasattr(self, "task_manager"):
-            self.task_manager.__exit__(exc_type, exc_val, exc_tb)
+        self.task_manager.__exit__(exc_type, exc_val, exc_tb)
 
         # Clean up logger resources to prevent hanging
         try:
@@ -508,7 +499,7 @@ class BaseSimulator(ABC):
         # Get current MLflow context for parallel workers
         current_tracking_uri = mlflow.get_tracking_uri()
         current_experiment_name = self.experiment_name
-        current_run_id = mlflow.active_run().info.run_id
+        current_run_id = mlflow.active_run().info.run_id  # type: ignore
 
         # Create a persistent cache directory for visualization artifacts
         if self.cache_dir_path:
@@ -547,7 +538,7 @@ class BaseSimulator(ABC):
 
     def _create_policy_configurations_df(
         self,
-        environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
+        environment_belief_policy_tuples: List[Tuple[Environment, Belief, Sequence[Policy]]],
     ) -> pd.DataFrame:
         """Create a DataFrame containing policy configurations for all environment-policy pairs."""
         policy_configs = []
@@ -574,7 +565,7 @@ class BaseSimulator(ABC):
     def _organize_simulation_results(
         self,
         results_list: list,
-        environment_belief_policy_tuples: List[Tuple[Environment, Belief, List[Policy]]],
+        environment_belief_policy_tuples: List[Tuple[Environment, Belief, Sequence[Policy]]],
         num_episodes: int,
         task_identifiers: List[Tuple[str, str]],
     ) -> Dict[str, Dict[str, list]]:
@@ -768,7 +759,7 @@ class BaseSimulator(ABC):
         env_name: str,
         environment: Environment,
         policy_results_dict: Dict[str, list],
-        policies: List[Policy],
+        policies: Sequence[Policy],
         results_dir: Path,
         cache_visualizations: bool,
     ):
@@ -1001,7 +992,7 @@ class POMDPSimulator(BaseSimulator):
         env_name: str,
         environment: Environment,
         policy_results_dict: Dict[str, list],
-        policies: List[Policy],
+        policies: Sequence[Policy],
         results_dir: Path,
         cache_visualizations: bool,
     ) -> None:
@@ -1020,7 +1011,7 @@ class POMDPSimulator(BaseSimulator):
         env_name: str,
         environment: Environment,
         policy_histories_dict: Dict[str, List[History]],
-        policies: List[Policy],
+        policies: Sequence[Policy],
         results_dir: Path,
         cache_visualizations: bool,
     ) -> None:

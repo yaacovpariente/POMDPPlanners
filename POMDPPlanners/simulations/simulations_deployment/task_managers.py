@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from dask.cache import Cache
 from dask.distributed import Client, Future, LocalCluster
-from dask_jobqueue import PBSCluster
+from dask_jobqueue.pbs import PBSCluster
 from joblib import Memory, Parallel, delayed
 from tqdm import tqdm
 
@@ -109,7 +109,7 @@ class DaskTaskManager(TaskManager):
         if not self.client:
             raise RuntimeError("No Dask client available")
 
-        return self.client.gather(futures)
+        return self.client.gather(futures)  # type: ignore
 
     def run_tasks(
         self, tasks: List[SimulationTask], task_identifiers: list
@@ -155,7 +155,7 @@ class DaskTaskManager(TaskManager):
         if not self.client:
             raise RuntimeError("No Dask client available")
 
-        return {future.key: future.status for future in futures}
+        return {future.key: future.status for future in futures}  # type: ignore
 
     def cancel_tasks(self, futures: List[Future]):
         """Cancel submitted tasks.
@@ -280,8 +280,10 @@ class JoblibTaskManager(TaskManagerExternalDB):
         try:
             # Use tqdm with custom callback for logging
             with tqdm(tasks, desc="Running tasks") as pbar:
-                results = Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
-                    delayed(self._cached_run)(task) for task in pbar
+                results = list(
+                    Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
+                        delayed(self._cached_run)(task) for task in pbar
+                    )
                 )
 
             end_time = time.time()
@@ -351,7 +353,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
         """Log cache statistics for performance monitoring."""
         try:
             # Get joblib cache statistics
-            cache_stats = self.memory.get_stats()
+            cache_stats = self.memory.get_stats()  # type: ignore
             self.logger.info(
                 f"Joblib Cache Stats - "
                 f"Cache hits: {cache_stats.get('hits', 0)}, "
@@ -471,14 +473,6 @@ class PBSTaskManager(DaskTaskManager):
 
     def _initialize_client(self):
         """Initialize Dask client with PBS cluster."""
-        try:
-            from dask_jobqueue import PBSCluster
-        except ImportError:
-            raise RuntimeError(
-                "dask-jobqueue is required for PBS support. "
-                "Install with: pip install dask-jobqueue"
-            )
-
         # Prepare scheduler options for dashboard configuration
         scheduler_options = {}
         if self.enable_dashboard:
