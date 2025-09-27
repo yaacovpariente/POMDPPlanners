@@ -8,6 +8,7 @@ This module tests the Safety Ant Velocity POMDP environment, focusing on:
 """
 
 import random
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
@@ -16,6 +17,7 @@ import pytest
 np.random.seed(42)
 random.seed(42)
 
+from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
@@ -406,7 +408,7 @@ def test_compute_metrics():
             observation=np.array([0.0, 0.0, 1.0, 1.0]),
             reward=1.0,
             next_state=np.array([0.1, 0.1, 1.1, 1.1]),
-            belief=None,
+            belief=Mock(spec=Belief),
         ),
         StepData(
             state=np.array([0.1, 0.1, 1.1, 1.1]),
@@ -414,7 +416,7 @@ def test_compute_metrics():
             observation=np.array([0.1, 0.1, 1.1, 1.1]),
             reward=1.0,
             next_state=np.array([0.2, 0.2, 1.2, 1.2]),
-            belief=None,
+            belief=Mock(spec=Belief),
         ),
     ]
     histories.append(
@@ -440,7 +442,7 @@ def test_compute_metrics():
             observation=np.array([0.0, 0.0, 1.0, 1.0]),
             reward=1.0,
             next_state=np.array([0.1, 0.1, 1.1, 1.1]),
-            belief=None,
+            belief=Mock(spec=Belief),
         ),
         StepData(
             state=np.array([0.1, 0.1, 2.1, 2.1]),  # Only this state has unsafe velocity
@@ -448,7 +450,7 @@ def test_compute_metrics():
             observation=np.array([0.1, 0.1, 2.1, 2.1]),
             reward=-100.0,
             next_state=np.array([0.2, 0.2, 1.2, 1.2]),  # Back to safe velocity
-            belief=None,
+            belief=Mock(spec=Belief),
         ),
     ]
     histories.append(
@@ -474,7 +476,7 @@ def test_compute_metrics():
             observation=np.array([0.0, 0.0, 3.1, 3.1]),
             reward=-100.0,
             next_state=np.array([0.1, 0.1, 3.2, 3.2]),
-            belief=None,
+            belief=Mock(spec=Belief),
         ),
     ]
     histories.append(

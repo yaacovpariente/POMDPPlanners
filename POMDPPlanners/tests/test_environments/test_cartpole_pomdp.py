@@ -372,7 +372,7 @@ def test_cartpole_pomdp_reward():
 
     # Test non-terminal state
     state = np.array([0.0, 0.0, 0.0, 0.0])
-    action = np.array([0])
+    action = 0
     reward = env.reward(state, action)
     assert reward == 1.0
 
@@ -423,7 +423,7 @@ def test_cartpole_pomdp_models():
     # Test model creation
     env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.eye(4) * 0.1)
     state = np.array([0.0, 0.0, 0.0, 0.0])
-    action = np.array([0])
+    action = 0
 
     # Test state transition model
     transition_model = env.state_transition_model(state, action)

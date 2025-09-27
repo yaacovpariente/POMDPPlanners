@@ -10,9 +10,12 @@ This module tests the PacMan POMDP environment, focusing on:
 import random
 from pathlib import Path
 from typing import List, Tuple
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
+
+from POMDPPlanners.core.belief import Belief
 
 from POMDPPlanners.core.environment import SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import History, StepData
@@ -78,10 +81,10 @@ class TestPacManState:
         )
 
         with pytest.raises(AttributeError):
-            state.pacman_pos = (1, 1)
+            state.pacman_pos = (1, 1)  # type: ignore
 
         with pytest.raises(AttributeError):
-            state.score = 10
+            state.score = 10  # type: ignore
 
     def test_pacman_state_validation_invalid_pacman_pos(self):
         """Test PacManState validation with invalid PacMan position.
@@ -96,14 +99,14 @@ class TestPacManState:
         """
         with pytest.raises(ValueError, match="pacman_pos must be a tuple of two integers"):
             PacManState(
-                pacman_pos=[1, 2],  # List instead of tuple
+                pacman_pos=[1, 2],  # List instead of tuple  # type: ignore
                 ghost_positions=((3, 4),),
                 pellets=((0, 0),),
             )
 
         with pytest.raises(ValueError, match="pacman_pos must be a tuple of two integers"):
             PacManState(
-                pacman_pos=(1,),
+                pacman_pos=(1,),  # type: ignore
                 ghost_positions=((3, 4),),
                 pellets=((0, 0),),  # Wrong length
             )
@@ -122,7 +125,7 @@ class TestPacManState:
         with pytest.raises(ValueError, match="ghost_positions must be a tuple of position tuples"):
             PacManState(
                 pacman_pos=(1, 2),
-                ghost_positions="invalid",  # String instead of tuple
+                ghost_positions="invalid",  # String instead of tuple  # type: ignore
                 pellets=((0, 0),),
             )
 
@@ -131,7 +134,7 @@ class TestPacManState:
         ):
             PacManState(
                 pacman_pos=(1, 2),
-                ghost_positions=(["invalid"],),  # List instead of tuple inside
+                ghost_positions=(["invalid"],),  # List instead of tuple inside  # type: ignore
                 pellets=((0, 0),),
             )
 
@@ -150,7 +153,7 @@ class TestPacManState:
             PacManState(
                 pacman_pos=(1, 2),
                 ghost_positions=((3, 4),),
-                pellets=[(0, 0), (1, 1)],  # List instead of tuple
+                pellets=[(0, 0), (1, 1)],  # List instead of tuple  # type: ignore
             )
 
 
@@ -1014,8 +1017,8 @@ class TestPacManPOMDPMetrics:
         )
 
         # Create histories with proper StepData structure
-        # Use None for belief since we're only testing metrics computation
-        dummy_belief = None
+        # Use Mock belief for testing metrics computation
+        dummy_belief = Mock(spec=Belief)
 
         win_history = History(
             history=[
@@ -1099,8 +1102,8 @@ class TestPacManPOMDPMetrics:
         )
 
         # Create histories with proper StepData structure
-        # Use None for belief since we're only testing metrics computation
-        dummy_belief = None
+        # Use Mock belief for testing metrics computation
+        dummy_belief = Mock(spec=Belief)
 
         histories = [
             History(

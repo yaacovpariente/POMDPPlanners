@@ -457,6 +457,7 @@ class TestPushPOMDP:
         best_reward = env.reward(best_state, "right")
 
         # Verify rewards are within expected range
+        assert env.reward_range is not None
         assert worst_reward >= env.reward_range[0]
         assert best_reward <= env.reward_range[1]
 

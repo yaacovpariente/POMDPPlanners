@@ -772,7 +772,7 @@ def test_single_obstacle_reward_behavior():
     Test type: unit
     """
     # Create environment with single obstacle at (5,5) and radius 1.0
-    single_obstacle = [(5, 5)]
+    single_obstacle = [(5.0, 5.0)]
 
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
@@ -1492,7 +1492,7 @@ def test_observation_model_probability_function():
 
     # Calculate expected probability using scipy
     expected_prob = multivariate_normal.pdf(
-        observation_values[0], mean=next_state, cov=observation_cov_matrix
+        observation_values[0], mean=next_state, cov=observation_cov_matrix  # type: ignore
     )
 
     assert isinstance(probabilities, np.ndarray), "Probability should return numpy array"
@@ -1511,7 +1511,7 @@ def test_observation_model_probability_function():
 
     # Calculate expected probabilities
     expected_probs = multivariate_normal.pdf(
-        observation_values, mean=next_state, cov=observation_cov_matrix
+        observation_values, mean=next_state, cov=observation_cov_matrix  # type: ignore
     )
 
     assert len(probabilities) == 3, "Should return three probabilities for three observations"
@@ -1743,19 +1743,27 @@ def test_risk_averse_environment_config_start_state_validity():
         initial_belief,
     ) = env_configs.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=50)
 
+    # Cast to specific type to access attributes
+    from typing import cast
+    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+        ContinuousLightDarkPOMDPDiscreteActions,
+    )
+
+    light_dark_env_typed = cast(ContinuousLightDarkPOMDPDiscreteActions, light_dark_env)
+
     # Check that start state is not terminal
-    assert not light_dark_env.is_terminal(
-        light_dark_env.start_state
-    ), f"RiskAverseEnvironmentConfigsAPI created terminal start state {light_dark_env.start_state}"
+    assert not light_dark_env_typed.is_terminal(
+        light_dark_env_typed.start_state
+    ), f"RiskAverseEnvironmentConfigsAPI created terminal start state {light_dark_env_typed.start_state}"
 
     # Explicitly check distance to each obstacle
-    start_state = light_dark_env.start_state
-    for i in range(light_dark_env.obstacles.shape[1]):
-        obstacle_pos = light_dark_env.obstacles[:, i]
+    start_state = light_dark_env_typed.start_state
+    for i in range(light_dark_env_typed.obstacles.shape[1]):
+        obstacle_pos = light_dark_env_typed.obstacles[:, i]
         distance = np.linalg.norm(start_state - obstacle_pos)
-        assert distance > light_dark_env.obstacle_radius, (
+        assert distance > light_dark_env_typed.obstacle_radius, (
             f"RiskAverseEnvironmentConfigsAPI: Start state {start_state} too close to obstacle {i} "
-            f"at {obstacle_pos} (distance {distance:.2f} <= radius {light_dark_env.obstacle_radius})"
+            f"at {obstacle_pos} (distance {distance:.2f} <= radius {light_dark_env_typed.obstacle_radius})"
         )
 
     # The main test has passed - start state is not terminal and obstacles are far enough away

@@ -1,8 +1,10 @@
 import random
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
@@ -410,7 +412,7 @@ class TestTigerPOMDPMetrics:
                         next_state=state,
                         observation="hear_nothing",
                         reward=-1.0,
-                        belief=None,  # Belief not needed for metrics
+                        belief=Mock(spec=Belief),  # Mock belief for testing
                     )
                 )
             # Open correct door
@@ -422,7 +424,7 @@ class TestTigerPOMDPMetrics:
                     next_state=state,
                     observation="hear_nothing",
                     reward=10.0 if correct_action == "open_right" else -100.0,
-                    belief=None,  # Belief not needed for metrics
+                    belief=Mock(spec=Belief),  # Mock belief for testing
                 )
             )
             histories.append(
@@ -477,7 +479,7 @@ class TestTigerPOMDPMetrics:
                         next_state=state,
                         observation="hear_nothing",
                         reward=-1.0,
-                        belief=None,  # Belief not needed for metrics
+                        belief=Mock(spec=Belief),  # Mock belief for testing
                     )
                 )
             # Open wrong door
@@ -489,7 +491,7 @@ class TestTigerPOMDPMetrics:
                     next_state=state,
                     observation="hear_nothing",
                     reward=-100.0 if wrong_action == "open_left" else 10.0,
-                    belief=None,  # Belief not needed for metrics
+                    belief=Mock(spec=Belief),  # Mock belief for testing
                 )
             )
             histories.append(
@@ -544,7 +546,7 @@ class TestTigerPOMDPMetrics:
                         next_state=state,
                         observation="hear_nothing",
                         reward=-1.0,
-                        belief=None,  # Belief not needed for metrics
+                        belief=Mock(spec=Belief),  # Mock belief for testing
                     )
                 )
             # Alternate between correct and incorrect actions
@@ -556,7 +558,7 @@ class TestTigerPOMDPMetrics:
                     next_state=state,
                     observation="hear_nothing",
                     reward=10.0 if action == "open_right" else -100.0,
-                    belief=None,  # Belief not needed for metrics
+                    belief=Mock(spec=Belief),  # Mock belief for testing
                 )
             )
             histories.append(
@@ -638,7 +640,7 @@ def test_metrics_confidence_intervals(tiger_pomdp):
                     next_state=state,
                     observation="hear_nothing",
                     reward=-1.0,
-                    belief=None,
+                    belief=Mock(spec=Belief),
                 )
             )
 
@@ -657,7 +659,7 @@ def test_metrics_confidence_intervals(tiger_pomdp):
                 next_state=state,
                 observation="hear_nothing",
                 reward=reward,
-                belief=None,
+                belief=Mock(spec=Belief),
             )
         )
 
