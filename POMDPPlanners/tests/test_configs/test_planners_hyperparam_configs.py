@@ -244,10 +244,17 @@ class TestPlannersHyperparamConfigs:
 
         # Check parameter ranges
         param_dict = {param.name: param for param in config.hyper_parameters}
-        assert param_dict["depth"].low == 2
-        assert param_dict["depth"].high == 3
-        assert param_dict["n_return_samples"].low == 10
-        assert param_dict["n_return_samples"].high == 500
+        depth_param = param_dict["depth"]
+        n_return_samples_param = param_dict["n_return_samples"]
+
+        # These should be NumericalHyperParameter instances
+        assert isinstance(depth_param, NumericalHyperParameter)
+        assert isinstance(n_return_samples_param, NumericalHyperParameter)
+
+        assert depth_param.low == 2
+        assert depth_param.high == 3
+        assert n_return_samples_param.low == 10
+        assert n_return_samples_param.high == 500
 
     def test_all_configs_return_hyperparamplannerconfig(self):
         """Test that all configuration methods return HyperParamPlannerConfig instances.
@@ -341,6 +348,7 @@ class TestPlannersHyperparamConfigs:
         )
 
         # Should handle zero range gracefully (exploration constant max should be 0)
+        assert isinstance(exploration_param, NumericalHyperParameter)
         assert exploration_param.high == 0.0
         assert exploration_param.low == 0.0
 
@@ -365,6 +373,7 @@ class TestPlannersHyperparamConfigs:
 
         # Should use absolute difference: (-10.0 - (-50.0)) * max_depth_for_tuning = 40 * 10 = 400
         expected_max = 40.0 * 10
+        assert isinstance(exploration_param, NumericalHyperParameter)
         assert exploration_param.high == expected_max
 
     def test_pomcp_config_with_hyperparameter_tuning(self):

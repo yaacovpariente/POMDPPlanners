@@ -212,7 +212,11 @@ def test_joblib_task_manager_with_cache_clear(cache_db):
     with JoblibTaskManager(cache_db=cache_db, clear_cache_on_start=True) as task_manager:
         assert task_manager.memory is not None
         # Cache should be empty after clearing
-        assert len(list(task_manager.memory.store_backend.get_items())) == 0
+        memory = task_manager.memory
+        assert memory is not None and memory.store_backend is not None
+        items = memory.store_backend.get_items()
+        assert items is not None
+        assert len(list(items)) == 0
 
 
 def test_joblib_task_manager_run_tasks(cache_db, environment, policy):
@@ -533,7 +537,11 @@ def test_sequential_task_manager_with_cache_clear(cache_db):
     with SequentialTaskManager(cache_db=cache_db, clear_cache_on_start=True) as task_manager:
         assert task_manager.memory is not None
         # Cache should be empty after clearing
-        assert len(list(task_manager.memory.store_backend.get_items())) == 0
+        memory = task_manager.memory
+        assert memory is not None and memory.store_backend is not None
+        items = memory.store_backend.get_items()
+        assert items is not None
+        assert len(list(items)) == 0
 
 
 def test_sequential_task_manager_run_tasks(cache_db, environment, policy):
@@ -1354,3 +1362,344 @@ def test_pbs_task_manager_cluster_storage():
     # Check that cluster attribute exists and is initially None
     assert hasattr(manager, "cluster")
     assert manager.cluster is None
+
+
+# Tests for _log_cache_statistics method
+def test_joblib_task_manager_log_cache_statistics_current_behavior(cache_db):
+    """Test _log_cache_statistics current behavior with missing get_stats method.
+
+    Purpose: Validates that _log_cache_statistics handles the missing get_stats method gracefully
+
+    Given: JoblibTaskManager with cache (current joblib version doesn't have get_stats)
+    When: _log_cache_statistics() is called
+    Then: Method catches AttributeError and logs warning message
+
+    Test type: unit
+    """
+    from unittest.mock import patch
+
+    with JoblibTaskManager(cache_db=cache_db) as task_manager:
+        with patch.object(task_manager.logger, "warning") as mock_warning:
+            task_manager._log_cache_statistics()
+
+            # Verify that warning was called once
+            assert mock_warning.call_count == 1
+
+            # Check the warning message
+            warning_message = mock_warning.call_args_list[0][0][0]
+            assert "Could not log cache statistics" in warning_message
+            assert "'Memory' object has no attribute 'get_stats'" in warning_message
+
+
+def test_joblib_task_manager_log_cache_statistics_normal(cache_db):
+    """Test _log_cache_statistics with normal cache statistics (if get_stats existed).
+
+    Purpose: Validates that _log_cache_statistics correctly logs cache hits, misses, and hit rate
+
+    Given: JoblibTaskManager with cache and mock cache statistics
+    When: _log_cache_statistics() is called with normal cache stats
+    Then: Method logs cache hits, misses, and calculated hit rate correctly
+
+    Test type: unit
+    """
+    from unittest.mock import Mock, patch
+
+    with JoblibTaskManager(cache_db=cache_db) as task_manager:
+        # Mock cache statistics
+        mock_cache_stats = {"hits": 8, "misses": 2}
+
+        # Add get_stats method to memory object for testing
+        setattr(task_manager.memory, "get_stats", Mock(return_value=mock_cache_stats))
+
+        with patch.object(task_manager.logger, "info") as mock_info:
+            task_manager._log_cache_statistics()
+
+            # Check that the specific cache statistics messages were logged
+            logged_messages = [call[0][0] for call in mock_info.call_args_list]
+
+            # Find the cache stats message
+            cache_stats_message = None
+            hit_rate_message = None
+
+            for msg in logged_messages:
+                if "Joblib Cache Stats" in msg:
+                    cache_stats_message = msg
+                elif "Cache hit rate:" in msg:
+                    hit_rate_message = msg
+
+            # Verify cache stats message
+            assert cache_stats_message is not None
+            assert "Cache hits: 8" in cache_stats_message
+            assert "Cache misses: 2" in cache_stats_message
+
+            # Verify hit rate message
+            assert hit_rate_message is not None
+            assert "Cache hit rate: 80.0%" in hit_rate_message
+
+
+def test_joblib_task_manager_log_cache_statistics_zero_requests(cache_db):
+    """Test _log_cache_statistics with zero cache requests.
+
+    Purpose: Validates that _log_cache_statistics handles zero total requests correctly
+
+    Given: JoblibTaskManager with cache and zero cache statistics
+    When: _log_cache_statistics() is called with zero hits and misses
+    Then: Method logs cache stats but skips hit rate calculation
+
+    Test type: unit
+    """
+    from unittest.mock import Mock, patch
+
+    with JoblibTaskManager(cache_db=cache_db) as task_manager:
+        # Mock cache statistics with zero requests
+        mock_cache_stats = {"hits": 0, "misses": 0}
+
+        # Add get_stats method to memory object for testing
+        setattr(task_manager.memory, "get_stats", Mock(return_value=mock_cache_stats))
+
+        with patch.object(task_manager.logger, "info") as mock_info:
+            task_manager._log_cache_statistics()
+
+            # Check that the specific cache statistics messages were logged
+            logged_messages = [call[0][0] for call in mock_info.call_args_list]
+
+            # Find the cache stats message
+            cache_stats_message = None
+            hit_rate_message = None
+
+            for msg in logged_messages:
+                if "Joblib Cache Stats" in msg:
+                    cache_stats_message = msg
+                elif "Cache hit rate:" in msg:
+                    hit_rate_message = msg
+
+            # Verify cache stats message
+            assert cache_stats_message is not None
+            assert "Cache hits: 0" in cache_stats_message
+            assert "Cache misses: 0" in cache_stats_message
+
+            # Verify no hit rate message (should be None)
+            assert hit_rate_message is None
+
+
+def test_joblib_task_manager_log_cache_statistics_exception_handling(cache_db):
+    """Test _log_cache_statistics exception handling.
+
+    Purpose: Validates that _log_cache_statistics handles exceptions gracefully
+
+    Given: JoblibTaskManager with cache that raises exception on get_stats()
+    When: _log_cache_statistics() is called and get_stats() raises exception
+    Then: Method catches exception and logs warning message
+
+    Test type: unit
+    """
+    from unittest.mock import Mock, patch
+
+    with JoblibTaskManager(cache_db=cache_db) as task_manager:
+        # Mock get_stats to raise an exception
+        setattr(
+            task_manager.memory,
+            "get_stats",
+            Mock(side_effect=RuntimeError("Cache stats unavailable")),
+        )
+
+        with patch.object(task_manager.logger, "warning") as mock_warning:
+            task_manager._log_cache_statistics()
+
+            # Verify that warning was called once
+            assert mock_warning.call_count == 1
+
+            # Check the warning message
+            warning_message = mock_warning.call_args_list[0][0][0]
+            assert "Could not log cache statistics" in warning_message
+            assert "Cache stats unavailable" in warning_message
+
+
+def test_joblib_task_manager_log_cache_statistics_different_hit_rates(cache_db):
+    """Test _log_cache_statistics with different hit rate scenarios.
+
+    Purpose: Validates that _log_cache_statistics correctly calculates various hit rates
+
+    Given: JoblibTaskManager with cache and different cache statistics
+    When: _log_cache_statistics() is called with various hit/miss ratios
+    Then: Method correctly calculates and logs different hit rates
+
+    Test type: unit
+    """
+    from unittest.mock import Mock, patch
+
+    with JoblibTaskManager(cache_db=cache_db) as task_manager:
+        test_cases = [
+            ({"hits": 0, "misses": 10}, "0.0%"),  # 0% hit rate
+            ({"hits": 5, "misses": 5}, "50.0%"),  # 50% hit rate
+            ({"hits": 10, "misses": 0}, "100.0%"),  # 100% hit rate
+            ({"hits": 3, "misses": 7}, "30.0%"),  # 30% hit rate
+            ({"hits": 7, "misses": 3}, "70.0%"),  # 70% hit rate
+        ]
+
+        for cache_stats, expected_hit_rate in test_cases:
+            # Add get_stats method to memory object for testing
+            setattr(task_manager.memory, "get_stats", Mock(return_value=cache_stats))
+
+            with patch.object(task_manager.logger, "info") as mock_info:
+                task_manager._log_cache_statistics()
+
+                # Check that the specific hit rate message was logged
+                logged_messages = [call[0][0] for call in mock_info.call_args_list]
+
+                # Find the hit rate message
+                hit_rate_message = None
+                for msg in logged_messages:
+                    if "Cache hit rate:" in msg:
+                        hit_rate_message = msg
+                        break
+
+                # Verify hit rate calculation
+                assert hit_rate_message is not None
+                assert f"Cache hit rate: {expected_hit_rate}" in hit_rate_message
+
+
+def test_joblib_task_manager_log_cache_statistics_missing_keys(cache_db):
+    """Test _log_cache_statistics with missing cache statistics keys.
+
+    Purpose: Validates that _log_cache_statistics handles missing keys gracefully
+
+    Given: JoblibTaskManager with cache statistics missing hits/misses keys
+    When: _log_cache_statistics() is called with incomplete stats
+    Then: Method uses default values (0) for missing keys
+
+    Test type: unit
+    """
+    from unittest.mock import Mock, patch
+
+    with JoblibTaskManager(cache_db=cache_db) as task_manager:
+        # Mock cache statistics with missing keys
+        mock_cache_stats = {}  # Empty dict - no hits or misses keys
+
+        # Add get_stats method to memory object for testing
+        setattr(task_manager.memory, "get_stats", Mock(return_value=mock_cache_stats))
+
+        with patch.object(task_manager.logger, "info") as mock_info:
+            task_manager._log_cache_statistics()
+
+            # Check that the specific cache statistics messages were logged
+            logged_messages = [call[0][0] for call in mock_info.call_args_list]
+
+            # Find the cache stats message
+            cache_stats_message = None
+            hit_rate_message = None
+
+            for msg in logged_messages:
+                if "Joblib Cache Stats" in msg:
+                    cache_stats_message = msg
+                elif "Cache hit rate:" in msg:
+                    hit_rate_message = msg
+
+            # Verify cache stats message uses default values
+            assert cache_stats_message is not None
+            assert "Cache hits: 0" in cache_stats_message
+            assert "Cache misses: 0" in cache_stats_message
+
+            # Verify no hit rate message (should be None due to zero total)
+            assert hit_rate_message is None
+
+
+def test_sequential_task_manager_log_cache_statistics_inheritance(cache_db):
+    """Test that SequentialTaskManager inherits _log_cache_statistics method.
+
+    Purpose: Validates that SequentialTaskManager can use _log_cache_statistics from JoblibTaskManager
+
+    Given: SequentialTaskManager with cache and mock cache statistics
+    When: _log_cache_statistics() is called on SequentialTaskManager
+    Then: Method works correctly and logs cache statistics
+
+    Test type: unit
+    """
+    from unittest.mock import Mock, patch
+
+    with SequentialTaskManager(cache_db=cache_db) as task_manager:
+        # Mock cache statistics
+        mock_cache_stats = {"hits": 6, "misses": 4}
+
+        # Add get_stats method to memory object for testing
+        setattr(task_manager.memory, "get_stats", Mock(return_value=mock_cache_stats))
+
+        with patch.object(task_manager.logger, "info") as mock_info:
+            task_manager._log_cache_statistics()
+
+            # Check that the specific cache statistics messages were logged
+            logged_messages = [call[0][0] for call in mock_info.call_args_list]
+
+            # Find the cache stats message
+            cache_stats_message = None
+            hit_rate_message = None
+
+            for msg in logged_messages:
+                if "Joblib Cache Stats" in msg:
+                    cache_stats_message = msg
+                elif "Cache hit rate:" in msg:
+                    hit_rate_message = msg
+
+            # Verify cache stats message
+            assert cache_stats_message is not None
+            assert "Cache hits: 6" in cache_stats_message
+            assert "Cache misses: 4" in cache_stats_message
+
+            # Verify hit rate message
+            assert hit_rate_message is not None
+            assert "Cache hit rate: 60.0%" in hit_rate_message
+
+
+def test_joblib_task_manager_log_cache_statistics_precision(cache_db):
+    """Test _log_cache_statistics hit rate precision formatting.
+
+    Purpose: Validates that _log_cache_statistics formats hit rate with correct precision
+
+    Given: JoblibTaskManager with cache statistics that result in non-integer hit rates
+    When: _log_cache_statistics() is called with fractional hit rates
+    Then: Method formats hit rate to one decimal place
+
+    Test type: unit
+    """
+    from unittest.mock import Mock, patch
+
+    with JoblibTaskManager(cache_db=cache_db) as task_manager:
+        # Mock cache statistics that result in fractional hit rate
+        mock_cache_stats = {"hits": 1, "misses": 3}  # 25.0% hit rate
+
+        # Add get_stats method to memory object for testing
+        setattr(task_manager.memory, "get_stats", Mock(return_value=mock_cache_stats))
+
+        with patch.object(task_manager.logger, "info") as mock_info:
+            task_manager._log_cache_statistics()
+
+            # Check that the specific hit rate message was logged
+            logged_messages = [call[0][0] for call in mock_info.call_args_list]
+
+            # Find the hit rate message
+            hit_rate_message = None
+            for msg in logged_messages:
+                if "Cache hit rate:" in msg:
+                    hit_rate_message = msg
+                    break
+
+            # Check hit rate formatting
+            assert hit_rate_message is not None
+            assert "Cache hit rate: 25.0%" in hit_rate_message
+
+            # Test another fractional case
+            mock_cache_stats = {"hits": 1, "misses": 2}  # 33.333...% hit rate
+            setattr(task_manager.memory, "get_stats", Mock(return_value=mock_cache_stats))
+            task_manager._log_cache_statistics()
+
+            # Get updated messages
+            logged_messages = [call[0][0] for call in mock_info.call_args_list]
+
+            # Find the second hit rate message
+            hit_rate_message = None
+            for msg in logged_messages:
+                if "Cache hit rate: 33.3%" in msg:
+                    hit_rate_message = msg
+                    break
+
+            assert hit_rate_message is not None

@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+from typing import List, cast
 
 import numpy as np
 import pytest
@@ -13,6 +14,7 @@ from POMDPPlanners.core.simulation import (
     NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParameterFeature,
     HyperParameterOptimizationDirection,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
@@ -392,7 +394,7 @@ def test_hyper_parameter_tuning_task_run_multiple_episodes_validation(
     # Test invalid environment type
     with pytest.raises(TypeError, match="environment must be an Environment instance"):
         task.run_multiple_episodes(
-            environment="invalid_environment",
+            environment="invalid_environment",  # type: ignore[arg-type]
             policy=policy,
             initial_belief=belief,
             num_episodes=1,
@@ -403,7 +405,7 @@ def test_hyper_parameter_tuning_task_run_multiple_episodes_validation(
     with pytest.raises(TypeError, match="policy must be a Policy instance"):
         task.run_multiple_episodes(
             environment=environment,
-            policy="invalid_policy",
+            policy="invalid_policy",  # type: ignore[arg-type]
             initial_belief=belief,
             num_episodes=1,
             num_steps=1,
@@ -414,7 +416,7 @@ def test_hyper_parameter_tuning_task_run_multiple_episodes_validation(
         task.run_multiple_episodes(
             environment=environment,
             policy=policy,
-            initial_belief="invalid_belief",
+            initial_belief="invalid_belief",  # type: ignore[arg-type]
             num_episodes=1,
             num_steps=1,
         )
@@ -427,7 +429,7 @@ def test_hyper_parameter_tuning_task_run_multiple_episodes_validation(
             initial_belief=belief,
             num_episodes=1,
             num_steps=1,
-            scheduler_address=123,  # Invalid type
+            scheduler_address=123,  # type: ignore[arg-type]  # Invalid type
         )
 
     # Test invalid num_episodes
@@ -532,7 +534,7 @@ def test_hyper_parameter_tuning_task_run_with_categorical_params(
         environment=environment,
         belief=belief,
         policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-        hyper_parameters=numerical_hyper_parameters,
+        hyper_parameters=cast(List[HyperParameterFeature], numerical_hyper_parameters),
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
         num_steps=2,  # Very small for fast tests
@@ -882,8 +884,9 @@ def test_hyper_parameter_tuning_task_with_constant_parameters(environment, hyper
     assert policy.name == "CustomSparseSamplingPlanner"
 
     # Verify the policy was created with the correct hyperparameters
-    assert policy.branching_factor == result.chosen_hyper_parameters["branching_factor"]
-    assert policy.depth == result.chosen_hyper_parameters["depth"]
+    sparse_policy = cast(StandardSparseSamplingDiscreteActionsPlanner, policy)
+    assert sparse_policy.branching_factor == result.chosen_hyper_parameters["branching_factor"]
+    assert sparse_policy.depth == result.chosen_hyper_parameters["depth"]
 
 
 # =============================================================================
@@ -938,7 +941,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             environment=real_environment,
             belief=real_belief,
             policy_cls=POMCP,
-            hyper_parameters=hyper_parameters,
+            hyper_parameters=cast(List[HyperParameterFeature], hyper_parameters),
             constant_parameters={},  # Missing discount_factor, depth, name - this should cause failure
             num_episodes=2,
             num_steps=3,
@@ -984,7 +987,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             environment=real_environment,
             belief=real_belief,
             policy_cls=POMCP,
-            hyper_parameters=hyper_parameters,
+            hyper_parameters=cast(List[HyperParameterFeature], hyper_parameters),
             constant_parameters={
                 "discount_factor": 0.95,  # Include required discount_factor
                 "depth": 5,  # Include required depth
@@ -1042,7 +1045,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             environment=real_environment,
             belief=real_belief,
             policy_cls=POMCP,
-            hyper_parameters=correct_params,
+            hyper_parameters=cast(List[HyperParameterFeature], correct_params),
             constant_parameters={
                 "discount_factor": 0.95,
                 "depth": 5,
@@ -1068,11 +1071,13 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
         exploration_param = next(
             p for p in task.hyper_parameters if p.name == "exploration_constant"
         )
+        assert isinstance(exploration_param, NumericalHyperParameter)
         assert exploration_param.low == 0.1
         assert exploration_param.high == 10.0
         assert exploration_param.name == "exploration_constant"
 
         simulations_param = next(p for p in task.hyper_parameters if p.name == "n_simulations")
+        assert isinstance(simulations_param, NumericalHyperParameter)
         assert simulations_param.low == 100
         assert simulations_param.high == 500
         assert simulations_param.name == "n_simulations"
@@ -1113,7 +1118,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             environment=real_environment,
             belief=real_belief,
             policy_cls=POMCP,
-            hyper_parameters=hyper_parameters,
+            hyper_parameters=cast(List[HyperParameterFeature], hyper_parameters),
             constant_parameters=constant_parameters,  # FIXED: Include constant parameters
             num_episodes=5,  # Same as in hyper_param_runner.py but smaller for fast tests
             num_steps=10,  # Same as in hyper_param_runner.py but smaller for fast tests
@@ -1175,7 +1180,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             environment=real_environment,
             belief=real_belief,
             policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-            hyper_parameters=hyper_parameters,
+            hyper_parameters=cast(List[HyperParameterFeature], hyper_parameters),
             constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=2,
             num_steps=3,
@@ -1228,7 +1233,7 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             environment=real_environment,
             belief=real_belief,
             policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-            hyper_parameters=hyper_parameters,
+            hyper_parameters=cast(List[HyperParameterFeature], hyper_parameters),
             constant_parameters={},
             num_episodes=2,
             num_steps=2,

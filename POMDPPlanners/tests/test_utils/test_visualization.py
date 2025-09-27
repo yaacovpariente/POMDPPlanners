@@ -114,8 +114,8 @@ def temp_cache_dir():
     temp_dir = Path(tempfile.gettempdir())
     unique_dir = temp_dir / f"test_{uuid.uuid4().hex}"
     unique_dir.mkdir(parents=True, exist_ok=True)
+    temp_cache_dir = unique_dir
     try:
-        temp_cache_dir = unique_dir
         # Ensure the directory exists and is empty
         if temp_cache_dir.exists():
             shutil.rmtree(temp_cache_dir)
@@ -769,14 +769,14 @@ def test_plot_policies_comparison_on_environment_invalid_input(temp_cache_dir):
     # Test with non-dict input
     with pytest.raises(TypeError, match="metrics_dict must be a dictionary"):
         plot_policies_comparison_on_environment(
-            metrics_dict="invalid", cache_dir_path=temp_cache_dir
+            metrics_dict="invalid", cache_dir_path=temp_cache_dir  # type: ignore[arg-type]
         )
 
     # Test with invalid metric values
     invalid_metrics_dict = {"TigerPOMDP": {"Policy1": ["invalid_metric_value"]}}
     with pytest.raises(TypeError, match="All metric values must be MetricValue objects"):
         plot_policies_comparison_on_environment(
-            metrics_dict=invalid_metrics_dict, cache_dir_path=temp_cache_dir
+            metrics_dict=invalid_metrics_dict, cache_dir_path=temp_cache_dir  # type: ignore[arg-type]
         )
 
 

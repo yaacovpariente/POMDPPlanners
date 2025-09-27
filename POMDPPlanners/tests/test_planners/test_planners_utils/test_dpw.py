@@ -108,7 +108,7 @@ def test_action_sampler_abstract_class():
     """
     # Should not be able to instantiate ActionSampler directly
     with pytest.raises(TypeError):
-        ActionSampler()
+        ActionSampler()  # type: ignore[abstract]
 
 
 def test_concrete_action_sampler_implementation(discrete_action_sampler):
@@ -586,8 +586,9 @@ def test_adaptive_action_sampler_usage_example():
                 # Use belief state to inform sampling
                 best_action = self._get_best_action_from_belief(belief_node)
                 # Add exploration noise
-                noise = np.random.normal(0, self.exploration_noise, len(best_action))
-                return best_action + noise
+                best_action_array = np.atleast_1d(best_action)
+                noise = np.random.normal(0, self.exploration_noise, len(best_action_array))
+                return best_action_array + noise
             else:
                 # Random exploration for new nodes
                 return np.random.choice(self.base_actions)

@@ -6,6 +6,7 @@ import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
@@ -258,7 +259,7 @@ def test_episode_simulation_task_execution(environment, policy):
             next_state="tiger_left",
             observation="growl_left",
             reward=-1.0,
-            belief=None,
+            belief=create_test_belief(),
         )
         step2 = StepData(
             state="tiger_left",
@@ -266,7 +267,7 @@ def test_episode_simulation_task_execution(environment, policy):
             next_state="tiger_right",
             observation="tiger_left",
             reward=10.0,
-            belief=None,
+            belief=create_test_belief(),
         )
 
         mock_result = History(
@@ -279,7 +280,7 @@ def test_episode_simulation_task_execution(environment, policy):
             average_reward_time=0.01,
             average_state_sampling_time=0.03,
             discount_factor=0.95,
-            policy_run_data={},
+            policy_run_data=PolicyRunData(info_variables=[]),
         )
         mock_run.return_value = mock_result
 

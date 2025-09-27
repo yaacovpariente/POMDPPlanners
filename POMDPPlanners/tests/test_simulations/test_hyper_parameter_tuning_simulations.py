@@ -8,6 +8,7 @@ import random
 import shutil
 import tempfile
 from pathlib import Path
+from typing import List, cast
 
 import mlflow
 import numpy as np
@@ -20,6 +21,7 @@ from POMDPPlanners.core.simulation import (
     NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParameterFeature,
     HyperParameterOptimizationDirection,
     HyperParameterRunParams,
     OptimizedPolicyResult,
@@ -187,7 +189,7 @@ class TestHyperParameterOptimizerInitialization:
     def test_initialization_with_invalid_cache_dir_type(self):
         """Test initialization with invalid cache_dir_path type raises error."""
         with pytest.raises(TypeError, match="unsupported operand type"):
-            HyperParameterOptimizer(cache_dir_path="/invalid/path/string")
+            HyperParameterOptimizer(cache_dir_path="/invalid/path/string")  # type: ignore[arg-type]
 
 
 class TestHyperParameterOptimizerTaskCreation:
@@ -440,7 +442,7 @@ class TestHyperParameterOptimizerHelperMethods:
         )
 
         with mlflow.start_run():
-            optimizer._log_optimization_results(None, task)
+            optimizer._log_optimization_results(None, task)  # type: ignore[arg-type]
 
             # Verify failure was logged
             run = mlflow.active_run()
@@ -534,11 +536,14 @@ class TestHyperParameterOptimizerEdgeCases:
             environment=real_environment,
             belief=real_belief,
             policy_cls=real_policy_class,
-            hyper_parameters=[
-                NumericalHyperParameter(
-                    "branching_factor", 1, 100
-                )  # Large range but reasonable values
-            ],
+            hyper_parameters=cast(
+                List[HyperParameterFeature],
+                [
+                    NumericalHyperParameter(
+                        low=1, high=100, name="branching_factor"
+                    )  # Large range but reasonable values
+                ],
+            ),
             constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=1,  # Small for fast tests
             num_steps=1,  # Small for fast tests
@@ -665,7 +670,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         assert len(runs) > 0  # Should have at least batch run
 
         # Find the batch run (parent run)
-        batch_runs = runs[runs["tags.mlflow.runName"].str.contains("optimize_batch_", na=False)]
+        batch_runs = runs[runs["tags.mlflow.runName"].str.contains("optimize_batch_", na=False)]  # type: ignore[index]
         assert len(batch_runs) >= 1
 
         batch_run = batch_runs.iloc[0]
@@ -682,7 +687,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         # If optimization succeeded, check nested runs
         if len(result) > 0:
             # Find nested configuration runs
-            config_runs = runs[runs["tags.mlflow.parentRunId"].notna()]
+            config_runs = runs[runs["tags.mlflow.parentRunId"].notna()]  # type: ignore[index]
             assert len(config_runs) >= 1
 
             config_run = config_runs.iloc[0]
@@ -720,10 +725,13 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
 
         # Test correct parameter order: low, high, name
-        correct_hyperparams = [
-            NumericalHyperParameter(1, 3, "branching_factor"),  # Correct: low, high, name
-            NumericalHyperParameter(1, 3, "depth"),
-        ]
+        correct_hyperparams = cast(
+            List[HyperParameterFeature],
+            [
+                NumericalHyperParameter(1, 3, "branching_factor"),  # Correct: low, high, name
+                NumericalHyperParameter(1, 3, "depth"),
+            ],
+        )
 
         correct_config = HyperParameterRunParams(
             environment=real_environment,
@@ -746,21 +754,23 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         task = tasks[0]
         assert task.hyper_parameters[0].name == "branching_factor"
         assert task.hyper_parameters[1].name == "depth"
-        assert task.hyper_parameters[0].low == 1
-        assert task.hyper_parameters[0].high == 3
+        # Cast to NumericalHyperParameter for type checking
+        param0 = cast(NumericalHyperParameter, task.hyper_parameters[0])
+        assert param0.low == 1
+        assert param0.high == 3
 
         # Test that incorrect parameter order (name, low, high) fails
         # This was the original issue in hyper_param_runner.py
         incorrect_hyperparams = [
-            NumericalHyperParameter("branching_factor", 1, 3),  # Wrong order: name, low, high
-            NumericalHyperParameter("depth", 1, 3),  # Wrong order: name, low, high
+            NumericalHyperParameter("branching_factor", 1, 3),  # type: ignore[arg-type]  # Wrong order: name, low, high
+            NumericalHyperParameter("depth", 1, 3),  # type: ignore[arg-type]  # Wrong order: name, low, high
         ]
 
         incorrect_config = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
             policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-            hyper_parameters=incorrect_hyperparams,
+            hyper_parameters=cast(List[HyperParameterFeature], incorrect_hyperparams),
             constant_parameters={},
             num_episodes=1,
             num_steps=1,
@@ -883,14 +893,15 @@ class TestHyperParameterOptimizerMLFlowIntegration:
 
         # Get all runs for this experiment
         experiment = mlflow.get_experiment_by_name(experiment_name)
+        assert experiment is not None, f"Experiment {experiment_name} not found"
         runs = mlflow.search_runs(experiment_ids=[experiment.experiment_id])
 
         # Verify we have both batch and configuration runs
         assert len(runs) >= 1  # At least the batch run
 
         # Check batch run contains expected elements
-        batch_run = runs[
-            runs["tags.mlflow.runName"].str.contains("optimize_batch_", na=False)
+        batch_run = runs[  # type: ignore[index]
+            runs["tags.mlflow.runName"].str.contains("optimize_batch_", na=False)  # type: ignore[index]
         ].iloc[0]
 
         # Batch-level parameters
@@ -909,7 +920,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
 
         # If we have results, check configuration run logging
         if len(result) > 0:
-            config_runs = runs[runs["tags.mlflow.parentRunId"].notna()]
+            config_runs = runs[runs["tags.mlflow.parentRunId"].notna()]  # type: ignore[index]
             if len(config_runs) > 0:
                 config_run = config_runs.iloc[0]
 
