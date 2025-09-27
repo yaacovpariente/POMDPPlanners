@@ -2,6 +2,7 @@ import shutil
 import tempfile
 import time
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
@@ -117,6 +118,8 @@ def test_disk_cache_db_operations(temp_cache_dir, environment, policy):
             console_output=False,
         )
         history = task.run()
+        assert history is not None  # Ensure task.run() didn't return None
+        history = cast(History, history)
 
         # Test setting and getting
         cache_db.set(task._cache_key, history)
@@ -124,6 +127,8 @@ def test_disk_cache_db_operations(temp_cache_dir, environment, policy):
 
         retrieved = cache_db.get(task._cache_key)
         assert isinstance(retrieved, History)
+        # Type cast for pyright - we know it's a History from the assert
+        retrieved = cast(History, retrieved)
         # Compare main fields instead of object equality
         assert retrieved.discount_factor == history.discount_factor
         assert retrieved.actual_num_steps == history.actual_num_steps

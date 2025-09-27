@@ -33,7 +33,7 @@ class TestTaskManagerConfig:
         Test type: unit
         """
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
-            TaskManagerConfig()
+            TaskManagerConfig()  # type: ignore[abstract]
 
     def test_create_task_manager_is_abstract(self):
         """Test that create_task_manager is abstract.
@@ -51,7 +51,7 @@ class TestTaskManagerConfig:
             pass
 
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
-            IncompleteConfig()
+            IncompleteConfig()  # type: ignore[abstract]
 
 
 class TestDaskConfig:
@@ -162,7 +162,7 @@ class TestPBSConfig:
         Test type: unit
         """
         with pytest.raises(TypeError, match="missing 1 required positional argument: 'queue'"):
-            PBSConfig()
+            PBSConfig()  # type: ignore[call-arg]
 
     def test_pbs_config_default_initialization(self):
         """Test PBSConfig initialization with required parameter and defaults.

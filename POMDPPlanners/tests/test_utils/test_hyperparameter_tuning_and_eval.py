@@ -11,6 +11,7 @@ import random
 import shutil
 import tempfile
 from pathlib import Path
+from typing import cast
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -52,8 +53,8 @@ class InvalidPolicy(Policy):
         from POMDPPlanners.core.policy import PolicySpaceInfo, SpaceType
 
         return PolicySpaceInfo(
-            action_space_type=SpaceType.DISCRETE,
-            observation_space_type=SpaceType.DISCRETE,
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.DISCRETE,
         )
 
 
@@ -485,7 +486,7 @@ class TestEvaluateMultipleOptimizedPlanners:
         policy_1.name = "Policy1"
         policy_2 = Mock()
         policy_2.name = "Policy2"
-        optimized_policies = [policy_1, policy_2]
+        optimized_policies = cast(list[Policy], [policy_1, policy_2])
 
         # Mock evaluation results for multiple policies
         mock_episode_results = {
@@ -1643,7 +1644,7 @@ class TestHyperParamRunnerUseCases:
         assert param_dict["mixed_range"].low == -5.5 and param_dict["mixed_range"].high == 5.5
 
         # Test with single parameter
-        single_config = {"single": (0, 1)}
+        single_config = {"single": (0.0, 1.0)}
         single_params = create_numerical_hyperparameter_ranges(single_config)
         assert len(single_params) == 1
         assert single_params[0].name == "single"
@@ -1675,14 +1676,14 @@ class TestHyperParamRunnerUseCases:
         assert len(hyper_params) == 6
 
         # Verify each parameter
-        param_dict = {hp.choices: hp for hp in hyper_params}
+        param_dict = {hp.name: hp for hp in hyper_params}
 
-        assert param_dict["strings"].name == ["a", "b", "c"]
-        assert param_dict["numbers"].name == [1, 2, 3, 4]
-        assert param_dict["booleans"].name == [True, False]
-        assert param_dict["mixed"].name == ["str", 42, True, None]
-        assert param_dict["single_choice"].name == ["only_one"]
-        assert param_dict["empty_list"].name == []
+        assert param_dict["strings"].choices == ["a", "b", "c"]
+        assert param_dict["numbers"].choices == [1, 2, 3, 4]
+        assert param_dict["booleans"].choices == [True, False]
+        assert param_dict["mixed"].choices == ["str", 42, True, None]
+        assert param_dict["single_choice"].choices == ["only_one"]
+        assert param_dict["empty_list"].choices == []
 
         # Test with single parameter
         single_config = {"single": ["choice"]}
@@ -1913,10 +1914,10 @@ class TestHyperParamRunnerUseCases:
         assert len(cat_params) == 3
 
         # Verify parameter names and choices are preserved
-        param_dict = {hp.choices: hp for hp in cat_params}
-        assert param_dict["str_param"].name == ["a", "b"]
-        assert param_dict["num_param"].name == [1, 2, 3]
-        assert param_dict["bool_param"].name == [True, False]
+        param_dict = {hp.name: hp for hp in cat_params}
+        assert param_dict["str_param"].choices == ["a", "b"]
+        assert param_dict["num_param"].choices == [1, 2, 3]
+        assert param_dict["bool_param"].choices == [True, False]
 
     def test_integration_with_real_planner_classes(self, temp_dir):
         """Test integration with actual planner classes and environments.

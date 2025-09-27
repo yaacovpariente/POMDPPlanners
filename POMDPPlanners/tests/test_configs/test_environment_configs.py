@@ -51,7 +51,7 @@ class TestEnvironmentConfigs:
         assert len(belief.particles) > 0
 
         # Test basic functionality
-        actions = pomdp.get_actions()
+        actions = pomdp.get_actions()  # type: ignore
         assert len(actions) > 0, "Environment should have at least one action"
 
         print("  ✓ TigerPOMDP configuration test passed!")

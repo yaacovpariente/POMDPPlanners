@@ -7,8 +7,9 @@ from unittest.mock import Mock, call, patch
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief, Belief
 from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
@@ -58,13 +59,16 @@ def test_belief(tiger_environment):
 @pytest.fixture
 def sample_episode_history():
     """Create a sample episode history for testing."""
+    # Create a mock belief for testing
+    mock_belief = Mock(spec=Belief)
+
     step1 = StepData(
         state="tiger_left",
         action="listen",
         next_state="tiger_left",
         observation="growl_left",
         reward=-1.0,
-        belief=None,
+        belief=mock_belief,
     )
     step2 = StepData(
         state="tiger_left",
@@ -72,7 +76,7 @@ def sample_episode_history():
         next_state="tiger_right",
         observation="tiger_left",
         reward=10.0,
-        belief=None,
+        belief=mock_belief,
     )
 
     history = History(
@@ -85,7 +89,7 @@ def sample_episode_history():
         average_reward_time=0.01,
         average_state_sampling_time=0.03,
         discount_factor=0.95,
-        policy_run_data={},
+        policy_run_data=PolicyRunData(info_variables=[]),
     )
 
     return history

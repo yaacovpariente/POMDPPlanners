@@ -3,7 +3,7 @@ import random
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, cast
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -20,6 +20,7 @@ from POMDPPlanners.core.simulation import (
     NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParameterFeature,
     HyperParameterOptimizationDirection,
     HyperParameterRunParams,
     OptimizedPolicyResult,
@@ -111,11 +112,14 @@ def sample_hyperparameter_run_params(tiger_environment, pomcp_policy):
             environment=tiger_environment,
             belief=initial_belief,
             policy_cls=POMCP,
-            hyper_parameters=[
-                NumericalHyperParameter("exploration_constant", 0.1, 2.0),
-                NumericalHyperParameter("n_simulations", 50, 200),
-                NumericalHyperParameter("depth", 5, 15),
-            ],
+            hyper_parameters=cast(
+                List[HyperParameterFeature],
+                [
+                    NumericalHyperParameter(low=0.1, high=2.0, name="exploration_constant"),
+                    NumericalHyperParameter(low=50, high=200, name="n_simulations"),
+                    NumericalHyperParameter(low=5, high=15, name="depth"),
+                ],
+            ),
             constant_parameters={
                 "discount_factor": 0.95,
                 "name": "OptimizedPOMCP",
@@ -430,7 +434,7 @@ class TestSimulationsAPI:
 
         # Test with empty queue
         with pytest.raises(TypeError, match="missing 1 required positional argument: 'queue'"):
-            api.run_multiple_environments_and_policies_pbs_run(
+            api.run_multiple_environments_and_policies_pbs_run(  # type: ignore[call-arg]
                 environment_run_params=sample_environment_run_params,
                 alpha=0.05,
                 confidence_interval_level=0.95,
@@ -744,10 +748,13 @@ class TestSimulationsAPI:
                 environment=tiger_env,
                 belief=initial_belief,
                 policy_cls=POMCP,
-                hyper_parameters=[
-                    NumericalHyperParameter("exploration_constant", 0.1, 2.0),
-                    NumericalHyperParameter("n_simulations", 50, 200),
-                ],
+                hyper_parameters=cast(
+                    List[HyperParameterFeature],
+                    [
+                        NumericalHyperParameter(low=0.1, high=2.0, name="exploration_constant"),
+                        NumericalHyperParameter(low=50, high=200, name="n_simulations"),
+                    ],
+                ),
                 constant_parameters={"discount_factor": 0.95, "name": "POMCP_Config1"},
                 num_episodes=2,
                 num_steps=5,
@@ -759,10 +766,13 @@ class TestSimulationsAPI:
                 environment=tiger_env,
                 belief=initial_belief,
                 policy_cls=POMCP,
-                hyper_parameters=[
-                    NumericalHyperParameter("depth", 5, 15),
-                    CategoricalHyperParameter("algorithm", ["tpe", "random"]),
-                ],
+                hyper_parameters=cast(
+                    List[HyperParameterFeature],
+                    [
+                        NumericalHyperParameter(low=5, high=15, name="depth"),
+                        CategoricalHyperParameter(choices=["tpe", "random"], name="algorithm"),
+                    ],
+                ),
                 constant_parameters={"discount_factor": 0.95, "name": "POMCP_Config2"},
                 num_episodes=2,
                 num_steps=5,

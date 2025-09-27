@@ -18,7 +18,12 @@ import pytest
 from distributed import Client as DaskClient
 
 from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.simulation import EnvironmentRunParams, History
+from POMDPPlanners.core.simulation import EnvironmentRunParams, History, StepData
+from POMDPPlanners.core.policy import PolicyRunData
+from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment
+from unittest.mock import Mock
+from typing import cast
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDPDiscreteActions,
 )
@@ -33,6 +38,15 @@ from POMDPPlanners.simulations.simulator import POMDPSimulator
 # Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
+
+
+def create_mock_step_data(num_steps: int) -> list:
+    """Create list of mock StepData objects for testing."""
+    mock_belief = Mock(spec=Belief)
+    return [
+        StepData(state=0, action=0, next_state=0, observation=0, reward=0.0, belief=mock_belief)
+        for _ in range(num_steps)
+    ]
 
 
 @pytest.fixture
@@ -119,7 +133,7 @@ def test_pomdp_simulator_parallel_execution_completes_multiple_policy_episodes(
     # ARRANGE: Setup TigerPOMDP environment with POMCP policy for parallel testing
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.0,
@@ -136,7 +150,7 @@ def test_pomdp_simulator_parallel_execution_completes_multiple_policy_episodes(
     results = simulator.simulate_multiple_environments_and_policies_parallel(
         environment_run_params=[
             EnvironmentRunParams(
-                environment=environment,
+                environment=cast(DiscreteActionsEnvironment, environment),
                 belief=initial_belief,
                 policies=[policy],
                 num_episodes=expected_episodes,
@@ -184,7 +198,7 @@ def test_pomdp_simulator_comparison_generates_statistics_dataframe(simulator):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.0,
@@ -199,7 +213,7 @@ def test_pomdp_simulator_comparison_generates_statistics_dataframe(simulator):
     histories, merged_df = simulator.compare_multiple_environments_policies(
         environment_run_params=[
             EnvironmentRunParams(
-                environment=environment,
+                environment=cast(DiscreteActionsEnvironment, environment),
                 belief=initial_belief,
                 policies=[policy],
                 num_episodes=num_episodes,
@@ -250,7 +264,7 @@ def test_parallel_execution_maintains_statistical_properties(simulator):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.0,
@@ -265,7 +279,7 @@ def test_parallel_execution_maintains_statistical_properties(simulator):
     results_1job = simulator.simulate_multiple_environments_and_policies_parallel(
         environment_run_params=[
             EnvironmentRunParams(
-                environment=environment,
+                environment=cast(DiscreteActionsEnvironment, environment),
                 belief=initial_belief,
                 policies=[policy],
                 num_episodes=num_episodes,
@@ -279,7 +293,7 @@ def test_parallel_execution_maintains_statistical_properties(simulator):
     results_2jobs = simulator.simulate_multiple_environments_and_policies_parallel(
         environment_run_params=[
             EnvironmentRunParams(
-                environment=environment,
+                environment=cast(DiscreteActionsEnvironment, environment),
                 belief=initial_belief,
                 policies=[policy],
                 num_episodes=num_episodes,
@@ -321,7 +335,7 @@ def test_invalid_jobs_parameter(simulator):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.0,
@@ -337,7 +351,7 @@ def test_invalid_jobs_parameter(simulator):
         simulator.simulate_multiple_environments_and_policies_parallel(
             environment_run_params=[
                 EnvironmentRunParams(
-                    environment=environment,
+                    environment=cast(DiscreteActionsEnvironment, environment),
                     belief=initial_belief,
                     policies=[policy],
                     num_episodes=num_episodes,
@@ -363,7 +377,7 @@ def test_organize_simulation_results_basic(simulator):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.0,
@@ -379,7 +393,7 @@ def test_organize_simulation_results_basic(simulator):
     task_identifiers = []
     for i in range(num_episodes):
         history = History(
-            history=[(0, 0, 0.0, False) for _ in range(num_steps)],
+            history=create_mock_step_data(num_steps),
             actual_num_steps=num_steps,
             reach_terminal_state=False,
             discount_factor=0.95,
@@ -388,7 +402,7 @@ def test_organize_simulation_results_basic(simulator):
             average_observation_time=0.0,
             average_belief_update_time=0.0,
             average_reward_time=0.0,
-            policy_run_data={},
+            policy_run_data=PolicyRunData(info_variables=[]),
         )
         histories.append(history)
         task_identifiers.append((environment.name, policy.name))
@@ -451,7 +465,7 @@ def test_organize_simulation_results_multiple(simulator):
     # First two histories for policy1
     for _ in range(num_episodes):
         history = History(
-            history=[(0, 0, 0.0, False) for _ in range(num_steps)],
+            history=create_mock_step_data(num_steps),
             actual_num_steps=num_steps,
             reach_terminal_state=False,
             discount_factor=0.95,
@@ -460,7 +474,7 @@ def test_organize_simulation_results_multiple(simulator):
             average_observation_time=0.0,
             average_belief_update_time=0.0,
             average_reward_time=0.0,
-            policy_run_data={},
+            policy_run_data=PolicyRunData(info_variables=[]),
         )
         histories.append(history)
         task_identifiers.append((env1.name, policy1.name))
@@ -468,7 +482,7 @@ def test_organize_simulation_results_multiple(simulator):
     # Next two histories for policy2
     for _ in range(num_episodes):
         history = History(
-            history=[(0, 0, 0.0, False) for _ in range(num_steps)],
+            history=create_mock_step_data(num_steps),
             actual_num_steps=num_steps,
             reach_terminal_state=False,
             discount_factor=0.95,
@@ -477,7 +491,7 @@ def test_organize_simulation_results_multiple(simulator):
             average_observation_time=0.0,
             average_belief_update_time=0.0,
             average_reward_time=0.0,
-            policy_run_data={},
+            policy_run_data=PolicyRunData(info_variables=[]),
         )
         histories.append(history)
         task_identifiers.append((env2.name, policy2.name))
@@ -518,7 +532,7 @@ def test_organize_simulation_results_edge_cases(simulator):
     # Setup
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.0,
@@ -540,9 +554,15 @@ def test_organize_simulation_results_edge_cases(simulator):
     assert len(results_empty[environment.name][policy.name]) == 0
 
     # Test case 2: Single episode
+    # Create a mock belief for the StepData
+    mock_belief = Mock(spec=Belief)
     single_history = [
         History(
-            history=[(0, 0, 0.0, False)],
+            history=[
+                StepData(
+                    state=0, action=0, next_state=0, observation=0, reward=0.0, belief=mock_belief
+                )
+            ],
             actual_num_steps=1,
             reach_terminal_state=False,
             discount_factor=0.95,
@@ -551,7 +571,7 @@ def test_organize_simulation_results_edge_cases(simulator):
             average_observation_time=0.0,
             average_belief_update_time=0.0,
             average_reward_time=0.0,
-            policy_run_data={},
+            policy_run_data=PolicyRunData(info_variables=[]),
         )
     ]
     single_identifier = [(environment.name, policy.name)]
@@ -611,7 +631,7 @@ def test_organize_simulation_results_matches_configurations(simulator):
     # First two histories for policy1 (depth=3)
     for _ in range(num_episodes):
         history = History(
-            history=[(0, 0, 0.0, False) for _ in range(num_steps)],
+            history=create_mock_step_data(num_steps),
             actual_num_steps=num_steps,
             reach_terminal_state=False,
             discount_factor=0.95,
@@ -620,10 +640,7 @@ def test_organize_simulation_results_matches_configurations(simulator):
             average_observation_time=0.0,
             average_belief_update_time=0.0,
             average_reward_time=0.0,
-            policy_run_data={
-                "depth": 3,
-                "exploration_constant": 1.0,
-            },  # Match policy1's config
+            policy_run_data=PolicyRunData(info_variables=[]),  # Match policy1's config
         )
         histories.append(history)
         task_identifiers.append((env1.name, policy1.name))
@@ -631,7 +648,7 @@ def test_organize_simulation_results_matches_configurations(simulator):
     # Next two histories for policy2 (depth=5)
     for _ in range(num_episodes):
         history = History(
-            history=[(0, 0, 0.0, False) for _ in range(num_steps)],
+            history=create_mock_step_data(num_steps),
             actual_num_steps=num_steps,
             reach_terminal_state=False,
             discount_factor=0.95,
@@ -640,10 +657,7 @@ def test_organize_simulation_results_matches_configurations(simulator):
             average_observation_time=0.0,
             average_belief_update_time=0.0,
             average_reward_time=0.0,
-            policy_run_data={
-                "depth": 5,
-                "exploration_constant": 2.0,
-            },  # Match policy2's config
+            policy_run_data=PolicyRunData(info_variables=[]),  # Match policy2's config
         )
         histories.append(history)
         task_identifiers.append((env2.name, policy2.name))
@@ -819,7 +833,7 @@ def test_create_policy_configurations_df(simulator):
     """
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.0,
@@ -830,7 +844,7 @@ def test_create_policy_configurations_df(simulator):
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=environment,
+            environment=cast(DiscreteActionsEnvironment, environment),
             belief=initial_belief,
             policies=[policy],
             num_episodes=2,
@@ -883,7 +897,7 @@ def test_validate_parallel_simulation_inputs(simulator):
     """
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.0,
@@ -894,7 +908,7 @@ def test_validate_parallel_simulation_inputs(simulator):
 
     valid_params = [
         EnvironmentRunParams(
-            environment=environment,
+            environment=cast(DiscreteActionsEnvironment, environment),
             belief=initial_belief,
             policies=[policy],
             num_episodes=2,
@@ -933,7 +947,7 @@ def test_create_simulation_tasks(simulator):
     """
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.0,
@@ -944,7 +958,7 @@ def test_create_simulation_tasks(simulator):
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=environment,
+            environment=cast(DiscreteActionsEnvironment, environment),
             belief=initial_belief,
             policies=[policy],
             num_episodes=2,
@@ -991,7 +1005,7 @@ def test_simulator_handles_empty_results_gracefully(simulator):
     """
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.0,
@@ -1067,7 +1081,7 @@ def test_simulator_writes_files_to_output_directory(temp_cache_dir):
     # Setup environment and policy for simulation
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.0,
@@ -1078,7 +1092,7 @@ def test_simulator_writes_files_to_output_directory(temp_cache_dir):
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=environment,
+            environment=cast(DiscreteActionsEnvironment, environment),
             belief=initial_belief,
             policies=[policy],
             num_episodes=3,  # Small number for fast test
@@ -1189,7 +1203,7 @@ def test_simulator_mlflow_directory_structure_is_correct(temp_cache_dir):
     # Setup minimal simulation to trigger MLflow usage
     environment = TigerPOMDP(discount_factor=0.95)
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=2,
         exploration_constant=1.0,
@@ -1200,7 +1214,7 @@ def test_simulator_mlflow_directory_structure_is_correct(temp_cache_dir):
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=environment,
+            environment=cast(DiscreteActionsEnvironment, environment),
             belief=initial_belief,
             policies=[policy],
             num_episodes=2,  # Changed from 1 to 2 for confidence interval calculation
@@ -1351,14 +1365,15 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data={},
+        policy_run_data=PolicyRunData(info_variables=[]),
     )
 
     # ACT: Test the integration by calling the simulator's visualization caching method
     # This tests the full integration: simulator -> environment.cache_visualization -> visualize_path
+    integration_error = ""  # Initialize to avoid unbound variable error
     try:
         simulator._cache_episode_visualizations(
-            environment=environment,
+            environment=cast(DiscreteActionsEnvironment, environment),
             policy_histories=[test_history],
             policy_dir=test_policy_dir,
         )
@@ -1426,6 +1441,7 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
 
     # This is the key integration test - can the environment handle simulator's data?
     environment_compatible = False
+    environment_error = ""  # Initialize to avoid unbound variable error
     try:
         # Test the exact interface the simulator uses (List[StepData])
         environment.cache_visualization(history=test_history.history, cache_path=test_cache_path)
@@ -1476,7 +1492,7 @@ def test_simulator_skips_visualization_caching_when_disabled(temp_cache_dir):
     )
 
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=2,
         exploration_constant=1.0,
@@ -1488,7 +1504,7 @@ def test_simulator_skips_visualization_caching_when_disabled(temp_cache_dir):
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=environment,
+            environment=cast(DiscreteActionsEnvironment, environment),
             belief=initial_belief,
             policies=[policy],
             num_episodes=3,  # Need at least 2 episodes for confidence interval
@@ -1633,7 +1649,7 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
             average_observation_time=0.01,
             average_belief_update_time=0.03,
             average_reward_time=0.001,
-            policy_run_data={},
+            policy_run_data=PolicyRunData(info_variables=[]),
         ),
         History(
             history=history_entries,  # Reuse same entries for second episode
@@ -1645,13 +1661,13 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
             average_observation_time=0.01,
             average_belief_update_time=0.03,
             average_reward_time=0.001,
-            policy_run_data={},
+            policy_run_data=PolicyRunData(info_variables=[]),
         ),
     ]
 
     # ACT: Call _cache_episode_visualizations method directly
     simulator._cache_episode_visualizations(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         policy_histories=test_histories,
         policy_dir=test_policy_dir,
     )
@@ -1752,7 +1768,7 @@ def test_simulator_visualization_error_handling_with_continuous_light_dark(
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data={},
+        policy_run_data=PolicyRunData(info_variables=[]),
     )
 
     # ACT & ASSERT: Test error handling during visualization
@@ -1765,7 +1781,7 @@ def test_simulator_visualization_error_handling_with_continuous_light_dark(
         with patch.object(simulator.logger, "warning") as mock_warning:
             # Call the visualization method - should handle error gracefully
             simulator._cache_episode_visualizations(
-                environment=environment,
+                environment=cast(DiscreteActionsEnvironment, environment),
                 policy_histories=[test_history],
                 policy_dir=test_policy_dir,
             )
@@ -1814,7 +1830,7 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
     )
 
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=2,
         exploration_constant=1.0,
@@ -1849,14 +1865,14 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data={},
+        policy_run_data=PolicyRunData(info_variables=[]),
     )
 
     results = {environment.name: {policy.name: [test_history]}}
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=environment,
+            environment=cast(DiscreteActionsEnvironment, environment),
             belief=belief,
             policies=[policy],
             num_episodes=1,
@@ -1943,7 +1959,7 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
 
     # Create policies for each environment
     policy1 = POMCP(
-        environment=env1,
+        environment=cast(DiscreteActionsEnvironment, env1),
         discount_factor=0.95,
         depth=2,
         exploration_constant=1.0,
@@ -1952,7 +1968,7 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
     )
 
     policy2 = POMCP(
-        environment=env2,
+        environment=cast(DiscreteActionsEnvironment, env2),
         discount_factor=0.95,
         depth=3,
         exploration_constant=1.5,
@@ -1987,7 +2003,7 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
             average_observation_time=0.01,
             average_belief_update_time=0.03,
             average_reward_time=0.001,
-            policy_run_data={},
+            policy_run_data=PolicyRunData(info_variables=[]),
         )
 
     # Create results structure with both environments
@@ -2080,7 +2096,7 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
     )
 
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=2,
         exploration_constant=1.0,
@@ -2114,14 +2130,14 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data={},
+        policy_run_data=PolicyRunData(info_variables=[]),
     )
 
     results = {environment.name: {policy.name: [test_history]}}
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=environment,
+            environment=cast(DiscreteActionsEnvironment, environment),
             belief=belief,
             policies=[policy],
             num_episodes=1,
@@ -2196,7 +2212,7 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
     )
 
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=2,
         exploration_constant=1.0,
@@ -2230,14 +2246,14 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data={},
+        policy_run_data=PolicyRunData(info_variables=[]),
     )
 
     results = {environment.name: {policy.name: [test_history]}}
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=environment,
+            environment=cast(DiscreteActionsEnvironment, environment),
             belief=belief,
             policies=[policy],
             num_episodes=1,
@@ -2297,7 +2313,7 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
     )
 
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=2,
         exploration_constant=1.0,
@@ -2331,14 +2347,14 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data={},
+        policy_run_data=PolicyRunData(info_variables=[]),
     )
 
     results = {environment.name: {policy.name: [test_history]}}
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=environment,
+            environment=cast(DiscreteActionsEnvironment, environment),
             belief=belief,
             policies=[policy],
             num_episodes=1,
@@ -2400,7 +2416,7 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
     )
 
     policy = POMCP(
-        environment=environment,
+        environment=cast(DiscreteActionsEnvironment, environment),
         discount_factor=0.95,
         depth=2,
         exploration_constant=1.0,
@@ -2434,14 +2450,14 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data={},
+        policy_run_data=PolicyRunData(info_variables=[]),
     )
 
     results = {environment.name: {policy.name: [test_history]}}
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=environment,
+            environment=cast(DiscreteActionsEnvironment, environment),
             belief=belief,
             policies=[policy],
             num_episodes=1,
