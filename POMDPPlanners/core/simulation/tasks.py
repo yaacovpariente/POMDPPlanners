@@ -166,6 +166,10 @@ class TaskManager(ABC):
         """
         pass
 
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        pass
+
 
 class TaskManagerExternalDB(TaskManager):
     """Task manager that uses an external database for caching.
@@ -356,3 +360,7 @@ class TaskManagerExternalDB(TaskManager):
             self.logger.warning(f"{n_failed_tasks} tasks failed.")
 
         return successful_results, successful_identifiers
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        pass

@@ -221,7 +221,7 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
         ),
         PolicyInfoVariable(
             name="actions_visit_count_entropy",
-            value=entropy_value,
+            value=entropy_value,  # type: ignore
         ),
         PolicyInfoVariable(
             name="n_actions_from_root",

@@ -308,7 +308,7 @@ class PFT_DPW(PathSimulationPolicy):
     def sample_existing_belief_node(
         self, belief_node: BeliefNode, action_node: ActionNode
     ) -> Tuple[BeliefNode, float]:
-        immediate_reward = -belief_node.immediate_cost
+        immediate_reward = -belief_node.immediate_cost  # type: ignore
         next_belief_node = action_node.sample_child_node()
         return next_belief_node, immediate_reward
 

@@ -39,9 +39,11 @@ def run_parallel_locally(
         func = memory.cache(func)
 
     # Run tasks in parallel using joblib with progress bar
-    results = Parallel(n_jobs=n_jobs)(
-        delayed(func)(**kwargs)
-        for kwargs in tqdm(kwargs_list, total=len(kwargs_list), desc=description, unit=unit)
+    results = list(
+        Parallel(n_jobs=n_jobs)(
+            delayed(func)(**kwargs)
+            for kwargs in tqdm(kwargs_list, total=len(kwargs_list), desc=description, unit=unit)
+        )
     )
 
     logger.info(f"All parallel tasks completed")
