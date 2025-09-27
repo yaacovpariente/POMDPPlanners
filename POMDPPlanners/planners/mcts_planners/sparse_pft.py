@@ -4,15 +4,13 @@ from typing import Any, Optional, Tuple
 
 import numpy as np
 
-from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.cost import belief_expectation_cost, belief_expectation_reward
+from POMDPPlanners.core.belief import Belief, is_terminal_belief
+from POMDPPlanners.core.cost import belief_expectation_cost_particle_belief, belief_expectation_cost
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
 from POMDPPlanners.core.tree import (
     ActionNode,
     BeliefNode,
-    get_optimal_action_reward_setting,
-    sample_belief_node_child,
 )
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
     PathSimulationPolicy,
@@ -251,12 +249,12 @@ class SparsePFT(PathSimulationPolicy):
             belief_node.parent = None
             return 0
 
-        if self.is_terminal_belief(belief=belief_node.belief):
+        if is_terminal_belief(belief=belief_node.belief, env=self.environment):
             belief_node.visit_count += 1
             return 0
 
         if belief_node.is_leaf:
-            for action in self.environment.get_actions():
+            for action in self.environment.get_actions():  # type: ignore
                 action_node = ActionNode(action=action, parent=belief_node, children=tuple())
 
             state = belief_node.belief.sample()
@@ -284,12 +282,6 @@ class SparsePFT(PathSimulationPolicy):
         )
 
         return return_sample
-
-    def is_terminal_belief(self, belief: Belief) -> bool:
-        """Checks if all paricles are terminal states."""
-        return sum(self.environment.is_terminal(state) for state in belief.particles) == len(
-            belief.particles
-        )
 
     def get_explored_action_node(self, belief_node: BeliefNode) -> ActionNode:
         children_visit_counts = np.array([child.visit_count for child in belief_node.children])
@@ -325,7 +317,7 @@ class SparsePFT(PathSimulationPolicy):
         return sampled_belief_node, expected_reward
 
     def _generate_belief(self, action_node: ActionNode) -> Tuple[BeliefNode, float]:
-        belief = action_node.parent.belief
+        belief = action_node.parent.belief  # type: ignore
         state = belief.sample()
         next_state = self.environment.state_transition_model(
             state=state, action=action_node.action
@@ -354,7 +346,7 @@ class SparsePFT(PathSimulationPolicy):
         if depth > self.depth or self.environment.is_terminal(state=state):
             return 0
 
-        action = random.choice(self.environment.get_actions())
+        action = random.choice(self.environment.get_actions())  # type: ignore
         next_state, next_observation, reward = self.environment.sample_next_step(
             state=state, action=action
         )

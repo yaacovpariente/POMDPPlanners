@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -15,7 +15,7 @@ matplotlib.use("Agg")  # Use non-interactive backend
 import mlflow
 
 from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
-from POMDPPlanners.core.cost import belief_expectation_cost
+from POMDPPlanners.core.cost import belief_expectation_cost_particle_belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import (
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 def plot_metrics_comparison(
     statistics: List[List[MetricValue]],
     environments: List[Environment],
-    policies: List[Policy],
+    policies: Sequence[Policy],
     cache_dir_path: Path,
 ) -> None:
     """
@@ -190,7 +190,7 @@ def plot_discounted_returns_histogram(
 
 def plot_discounted_returns_histogram_multiple_policies(
     histories: Dict[str, List[History]],
-    policies: List[Policy],
+    policies: Sequence[Policy],
     environment: Environment,
     cache_path: Path,
 ) -> None:
@@ -199,7 +199,7 @@ def plot_discounted_returns_histogram_multiple_policies(
 
     Args:
         histories: Dictionary mapping policy names to lists of History objects
-        policies: List of Policy objects
+        policies: Sequence of Policy objects
         environment: Environment object
         cache_path: Path where the histogram plot will be saved
     """
@@ -709,7 +709,7 @@ def plot_policy_returns(
             belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
             # Use belief_expectation_cost to compute the reward
-            step_reward = -belief_expectation_cost(
+            step_reward = -belief_expectation_cost_particle_belief(
                 belief=belief, action=agent_path.action_sequence[i], env=env
             )
 

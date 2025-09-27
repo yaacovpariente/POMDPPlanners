@@ -1,14 +1,12 @@
-import hashlib
-import json
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, List, Optional, Tuple, Union
+from typing import Any, List, Optional, Tuple
 
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 
-from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     Environment,
@@ -86,6 +84,13 @@ class BaseLightDarkPOMDP(Environment, ABC):
         self.beacon_radius = beacon_radius
         self.fuel_cost = fuel_cost
         self.grid_size = grid_size
+
+        self.action_to_vector = {
+            "up": np.array([0, 1]),
+            "down": np.array([0, -1]),
+            "right": np.array([1, 0]),
+            "left": np.array([-1, 0]),
+        }
 
     def _convert_beacons_to_array(self, beacons_list: List[Tuple[float, float]]) -> np.ndarray:
         """Convert list of (x, y) tuples to 2xN numpy array format for beacons.
@@ -260,7 +265,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
                 radius = self.beacon_radius + j * 0.05  # Smaller radius increments
                 # Exponential decay for more realistic light fade
                 alpha = 0.9 * np.exp(-j * 0.3)  # Exponential decay from 0.9 to near 0
-                circle = plt.Circle(
+                circle = plt.Circle(  # type: ignore
                     (beacon_x, beacon_y),
                     radius,
                     facecolor="white",
@@ -295,7 +300,7 @@ class BaseLightDarkPOMDP(Environment, ABC):
                 self.obstacles[0, i],
                 self.obstacles[1, i],
             )  # obstacles[0,i] is x, obstacles[1,i] is y
-            circle = plt.Circle(
+            circle = plt.Circle(  # type: ignore
                 (obstacle_x, obstacle_y),
                 self.obstacle_radius,
                 facecolor="red",
@@ -467,7 +472,14 @@ class BaseLightDarkPOMDP(Environment, ABC):
                 raise ValueError(f"History step missing required attributes: {step}")
 
             agent_path.append(step.state)
-            agent_belief_path.append(step.belief.to_unique_support_distribution())
+            if isinstance(step.belief, WeightedParticleBelief):
+                agent_belief_path.append(step.belief.to_unique_support_distribution())
+            else:
+                particles = [step.belief.sample() for _ in range(20)]
+                weights = np.ones(len(particles)) / len(particles)
+                discrete_distribution = DiscreteDistribution(values=particles, probs=weights)
+                agent_belief_path.append(discrete_distribution)
+
             actions.append(step.action)
 
         # Validate all lists have same length
@@ -587,12 +599,6 @@ class BaseLightDarkPOMDPDiscreteActions(BaseLightDarkPOMDP):
         )
 
         self.actions = ["up", "down", "right", "left"]
-        self.action_to_vector = {
-            "up": np.array([0, 1]),
-            "down": np.array([0, -1]),
-            "right": np.array([1, 0]),
-            "left": np.array([-1, 0]),
-        }
 
     def get_actions(self) -> List[Any]:
         return self.actions

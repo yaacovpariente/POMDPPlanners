@@ -1,7 +1,7 @@
 import pickle
 from abc import ABC, abstractmethod
 from math import floor
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 
@@ -32,7 +32,7 @@ class ActionSampler(ABC):
         ...         self.action_bounds = action_bounds
         ...         self.action_dim = action_dim
         ...
-        ...     def sample(self, belief_node=None):
+        ...     def sample(self, belief_node: Optional[BeliefNode] = None):
         ...         # Sample uniformly from action space
         ...         low, high = self.action_bounds
         ...         return np.random.uniform(low, high, size=self.action_dim)
@@ -61,7 +61,7 @@ class ActionSampler(ABC):
                         self.probabilities = np.array(probabilities)
                         self.probabilities /= np.sum(self.probabilities)  # Normalize
 
-                def sample(self, belief_node=None):
+                def sample(self, belief_node: Optional[BeliefNode] = None):
                     return np.random.choice(self.actions, p=self.probabilities)
 
             # Prefer certain actions over others
@@ -79,7 +79,7 @@ class ActionSampler(ABC):
                     self.base_actions = base_actions
                     self.exploration_noise = exploration_noise
 
-                def sample(self, belief_node=None):
+                def sample(self, belief_node: Optional[BeliefNode] = None):
                     if belief_node is not None and belief_node.visit_count > 10:
                         # Use belief state to inform sampling
                         best_action = self._get_best_action_from_belief(belief_node)
@@ -162,7 +162,7 @@ class ActionSampler(ABC):
     """
 
     @abstractmethod
-    def sample(self, belief_node: BeliefNode = None) -> Any:
+    def sample(self, belief_node: Optional[BeliefNode] = None) -> Any:
         """Sample a new action for progressive widening.
 
         Args:
