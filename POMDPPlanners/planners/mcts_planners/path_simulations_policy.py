@@ -127,14 +127,14 @@ class PathSimulationPolicy(Policy):
 
         return tree
 
-    def _construct_tree_using_n_simulations(self, belief_node: BeliefNode) -> BeliefNode:
+    def _construct_tree_using_n_simulations(self, belief_node: BeliefNode):
         if self.n_simulations is None:
             raise ValueError("n_simulations must not be None")
 
         for _ in range(self.n_simulations):
             self._simulate_path(belief_node=belief_node, depth=0)
 
-    def _construct_tree_using_timeout(self, belief_node: BeliefNode) -> BeliefNode:
+    def _construct_tree_using_timeout(self, belief_node: BeliefNode):
         if self.time_out_in_seconds is None:
             raise ValueError("time_out_in_seconds must not be None")
 
