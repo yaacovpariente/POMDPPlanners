@@ -8,10 +8,12 @@ This module tests the Sanity POMDP environment, focusing on:
 """
 
 import random
+from unittest.mock import Mock
 
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.sanity_pomdp import (
@@ -767,8 +769,12 @@ class TestSanityPOMDPMetrics:
         """
         # Create a simple history
         steps = [
-            StepData(state=0, action=0, next_state=0, observation=0, reward=1.0, belief=None),
-            StepData(state=0, action=1, next_state=1, observation=1, reward=0.0, belief=None),
+            StepData(
+                state=0, action=0, next_state=0, observation=0, reward=1.0, belief=Mock(spec=Belief)
+            ),
+            StepData(
+                state=0, action=1, next_state=1, observation=1, reward=0.0, belief=Mock(spec=Belief)
+            ),
         ]
         history = History(
             history=steps,

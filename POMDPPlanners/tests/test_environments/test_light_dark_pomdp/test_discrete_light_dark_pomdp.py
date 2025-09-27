@@ -589,15 +589,15 @@ class TestDiscreteLightDarkPOMDPConfigId:
         # Default beacons: [(0, 0), (0, 5), (0, 10), (5, 0), (5, 5), (5, 10), (10, 0), (10, 5), (10, 10)]
         # Reorder by swapping first and last
         beacons_reordered = [
-            (10, 10),
-            (0, 5),
-            (0, 10),
-            (5, 0),
-            (5, 5),
-            (5, 10),
-            (10, 0),
-            (10, 5),
-            (0, 0),
+            (10.0, 10.0),
+            (0.0, 5.0),
+            (0.0, 10.0),
+            (5.0, 0.0),
+            (5.0, 5.0),
+            (5.0, 10.0),
+            (10.0, 0.0),
+            (10.0, 5.0),
+            (0.0, 0.0),
         ]
 
         other_env = DiscreteLightDarkPOMDP(
@@ -617,7 +617,7 @@ class TestDiscreteLightDarkPOMDPConfigId:
         # Create environment with same obstacles but in different order
         # Default obstacles: [(3, 7), (5, 5)]
         # Reorder by swapping them
-        obstacles_reordered = [(5, 5), (3, 7)]
+        obstacles_reordered = [(5.0, 5.0), (3.0, 7.0)]
 
         other_env = DiscreteLightDarkPOMDP(
             discount_factor=0.95,
@@ -784,8 +784,8 @@ def test_custom_beacons_and_obstacles_array_structure():
 
     Test type: unit
     """
-    custom_beacons = [(1, 1), (1, 6), (6, 1), (6, 6)]
-    custom_obstacles = [(2, 3), (4, 4), (7, 8)]
+    custom_beacons = [(1.0, 1.0), (1.0, 6.0), (6.0, 1.0), (6.0, 6.0)]
+    custom_obstacles = [(2.0, 3.0), (4.0, 4.0), (7.0, 8.0)]
 
     env = DiscreteLightDarkPOMDP(
         discount_factor=0.95,
@@ -948,8 +948,18 @@ def test_observation_model():
     assert isinstance(dist, ObservationModel)
 
     # Check that the correct state has highest probability
-    correct_state_idx = len(dist.distribution.values) - 1  # Last value is the correct state
-    assert dist.distribution.probs[correct_state_idx] > 0.5  # Should be 1 - observation_error_prob
+    # Cast to specific type to access distribution attribute
+    from typing import cast
+    from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+        DiscreteLDObservationModel,
+    )
+
+    typed_dist = cast(DiscreteLDObservationModel, dist)
+
+    correct_state_idx = len(typed_dist.distribution.values) - 1  # Last value is the correct state
+    assert (
+        typed_dist.distribution.probs[correct_state_idx] > 0.5
+    )  # Should be 1 - observation_error_prob
 
 
 def test_reward_function():

@@ -10,11 +10,12 @@ This module tests the RockSample POMDP environment, focusing on:
 import random
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.rock_sample_pomdp import (
     RockSampleObservationModel,
@@ -65,10 +66,10 @@ class TestRockSampleState:
         state = RockSampleState((1, 1), (True, False))
 
         with pytest.raises(AttributeError):
-            state.robot_pos = (2, 2)
+            state.robot_pos = (2, 2)  # type: ignore
 
         with pytest.raises(AttributeError):
-            state.rocks = (False, True)
+            state.rocks = (False, True)  # type: ignore
 
     def test_state_validation_invalid_robot_pos(self):
         """Test state validation with invalid robot position.
@@ -82,10 +83,10 @@ class TestRockSampleState:
         Test type: unit
         """
         with pytest.raises(ValueError, match="robot_pos must be a tuple of two integers"):
-            RockSampleState([1, 2], (True,))
+            RockSampleState([1, 2], (True,))  # type: ignore
 
         with pytest.raises(ValueError, match="robot_pos must be a tuple of two integers"):
-            RockSampleState((1, 2, 3), (True,))
+            RockSampleState((1, 2, 3), (True,))  # type: ignore
 
     def test_state_validation_invalid_rocks(self):
         """Test state validation with invalid rock states.
@@ -99,7 +100,7 @@ class TestRockSampleState:
         Test type: unit
         """
         with pytest.raises(ValueError, match="rocks must be a tuple of booleans"):
-            RockSampleState((1, 2), [True, False])
+            RockSampleState((1, 2), [True, False])  # type: ignore
 
     def test_state_equality(self):
         """Test state equality comparison.
@@ -884,7 +885,7 @@ class TestMetricsComputation:
                     next_state=state,
                     observation="none",
                     reward=10.0,
-                    belief=None,
+                    belief=Mock(spec=Belief),
                 )
                 steps.append(step)
 
@@ -895,7 +896,7 @@ class TestMetricsComputation:
                 next_state=state,
                 observation="none",
                 reward=-1.0,
-                belief=None,
+                belief=Mock(spec=Belief),
             )
             steps.append(step)
 
@@ -943,7 +944,7 @@ class TestMetricsComputation:
             next_state=terminal_state,
             observation="none",
             reward=10.0,
-            belief=None,
+            belief=Mock(spec=Belief),
         )
         success_history = History(
             history=[success_step],
@@ -967,7 +968,7 @@ class TestMetricsComputation:
             next_state=normal_state,
             observation="none",
             reward=-1.0,
-            belief=None,
+            belief=Mock(spec=Belief),
         )
         fail_history = History(
             history=[fail_step],
@@ -1009,7 +1010,7 @@ class TestVisualization:
         state = RockSampleState((0, 0), (True, False))
 
         with pytest.raises(TypeError, match="cache_path must be a Path object"):
-            pomdp.visualize_path([state], [1], "invalid_path")
+            pomdp.visualize_path([state], [1], "invalid_path")  # type: ignore
 
         with pytest.raises(ValueError, match="cache_path must end with .gif"):
             pomdp.visualize_path([state], [1], Path("test.png"))
@@ -1069,7 +1070,7 @@ class TestVisualization:
             next_state=state2,
             observation="none",
             reward=-1.0,
-            belief=None,
+            belief=Mock(spec=Belief),
         )
         step2 = StepData(
             state=state2,
@@ -1077,7 +1078,7 @@ class TestVisualization:
             next_state=state2,
             observation="none",
             reward=0.0,
-            belief=None,
+            belief=Mock(spec=Belief),
         )
 
         history = History(

@@ -19,7 +19,7 @@ random.seed(42)
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
-from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.laser_tag_pomdp import (
     LaserTagObservation,
@@ -49,11 +49,16 @@ class RandomPolicy(Policy):
     def action(self, belief):
         """Return random action."""
         action = np.random.choice(self.actions)
-        return [action], {"policy_type": "random", "action": action}
+        return [action], PolicyRunData(info_variables=[])
 
-    def get_space_info(self):
+    @classmethod
+    def get_space_info(cls):
         """Return space info from environment."""
-        return self.environment.space_info
+        from POMDPPlanners.core.environment import SpaceType
+
+        return PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
+        )
 
 
 class TestLaserTagState:
@@ -406,7 +411,7 @@ class TestLaserTagPOMDP:
         Test type: unit
         """
         # Create environment with no dangerous areas to get deterministic rewards
-        env = LaserTagPOMDP(discount_factor=0.95, dangerous_areas=[])
+        env = LaserTagPOMDP(discount_factor=0.95, dangerous_areas=set())
 
         # Test successful tag - using position (1, 1) which is not in default dangerous areas
         same_pos_state = LaserTagState(robot=(1, 1), opponent=(1, 1), terminal=False)
@@ -592,7 +597,7 @@ class TestLaserTagPOMDP:
             average_reward_time=0.1,
             actual_num_steps=2,
             reach_terminal_state=False,
-            policy_run_data={"policy_type": "test"},
+            policy_run_data=PolicyRunData(info_variables=[]),
         )
 
         histories = [history]
@@ -705,7 +710,7 @@ class TestLaserTagPOMDP:
             average_reward_time=0.1,
             actual_num_steps=3,
             reach_terminal_state=False,
-            policy_run_data={"policy_type": "test"},
+            policy_run_data=PolicyRunData(info_variables=[]),
         )
 
         cache_path = Path("test_laser_tag_visualization.gif")
@@ -745,7 +750,7 @@ class TestLaserTagPOMDP:
             average_reward_time=0.1,
             actual_num_steps=0,
             reach_terminal_state=False,
-            policy_run_data={"policy_type": "test"},
+            policy_run_data=PolicyRunData(info_variables=[]),
         )
 
         # Create non-empty history for cache_path tests
@@ -775,12 +780,14 @@ class TestLaserTagPOMDP:
             average_reward_time=0.1,
             actual_num_steps=1,
             reach_terminal_state=False,
-            policy_run_data={"policy_type": "test"},
+            policy_run_data=PolicyRunData(info_variables=[]),
         )
 
         # Test with non-Path cache_path
+        from typing import cast
+
         with pytest.raises(TypeError, match="cache_path must be a Path object"):
-            env.cache_visualization(non_empty_history.history, "invalid_path")
+            env.cache_visualization(non_empty_history.history, cast(Path, "invalid_path"))
 
         # Test with non-gif extension
         with pytest.raises(ValueError, match="cache_path must end with .gif"):
@@ -808,7 +815,7 @@ class TestLaserTagPOMDP:
             tag_penalty=10.0,
             step_cost=1.0,
             measurement_noise=0.1,
-            dangerous_areas=[(3, 3), (4, 4)],  # Add some dangerous areas
+            dangerous_areas={(3, 3), (4, 4)},  # Add some dangerous areas
         )
 
         # Generate realistic episode histories by running environment simulation
@@ -865,7 +872,7 @@ class TestLaserTagPOMDP:
                 average_reward_time=0.01,
                 actual_num_steps=len(steps),
                 reach_terminal_state=env.is_terminal(current_state),
-                policy_run_data={"policy_type": "random"},
+                policy_run_data=PolicyRunData(info_variables=[]),
             )
             histories.append(history)
 
@@ -1008,7 +1015,7 @@ class TestLaserTagPOMDP:
             average_reward_time=0.01,
             actual_num_steps=3,
             reach_terminal_state=True,
-            policy_run_data={"policy_type": "test_none_rewards"},
+            policy_run_data=PolicyRunData(info_variables=[]),
         )
 
         # This should not raise any exceptions
@@ -1075,7 +1082,7 @@ def test_metrics_confidence_intervals():
         discount_factor=0.95,
         floor_shape=(7, 7),  # Smaller grid for faster episodes
         walls={(2, 2), (3, 4), (5, 1)},  # Some walls for variety
-        dangerous_areas=[(1, 3), (4, 4)],  # Some dangerous areas
+        dangerous_areas={(1, 3), (4, 4)},  # Some dangerous areas
     )
 
     # Create random policy and initial belief

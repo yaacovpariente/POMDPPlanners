@@ -286,6 +286,7 @@ def test_reward_range():
     min_reward = min(non_goal_reward, goal_reward, past_goal_reward)
     max_reward = max(non_goal_reward, goal_reward, past_goal_reward)
 
+    assert pomdp.reward_range is not None
     assert min_reward == pomdp.reward_range[0]  # Should be -1.0
     assert max_reward == pomdp.reward_range[1]  # Should be 0.0
 
