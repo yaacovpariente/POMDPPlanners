@@ -130,7 +130,7 @@ def compute_statistics_environment_policy_pair(
 
     for i, h in enumerate(histories):
         return_ = sum(
-            h.history[j].reward * h.discount_factor**j
+            h.history[j].reward * h.discount_factor**j  # type: ignore
             for j in range(len(h.history))
             if h.history[j].reward is not None
         )
@@ -145,7 +145,7 @@ def compute_statistics_environment_policy_pair(
         average_reach_terminal_state.append(1 if h.reach_terminal_state else 0)
 
         # Collect policy info variables
-        for info_var in h.policy_run_data.info_variables:
+        for info_var in h.policy_run_data.info_variables:  # type: ignore
             if info_var.name not in policy_info_variables:
                 policy_info_variables[info_var.name] = []
             policy_info_variables[info_var.name].append(float(info_var.value))

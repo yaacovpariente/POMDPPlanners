@@ -419,7 +419,7 @@ class HyperParameterOptimizer:
 
         with self.task_manager:
             task_results, task_identifiers = self.task_manager.run_tasks(
-                tasks, [f"hyperparameter_optimization_{i}" for i in range(len(configs))]
+                tasks=tasks, task_identifiers=[f"hyperparameter_optimization_{i}" for i in range(len(configs))]  # type: ignore
             )
 
         return task_results, tasks
@@ -469,7 +469,7 @@ class HyperParameterOptimizer:
         config: HyperParameterRunParams,
         task: "HyperParameterTuningSimulationTask",
         task_result: "OptimizedPolicyResult",
-    ) -> "OptimizedPolicyResult":
+    ) -> "OptimizedPolicyResult":  # type: ignore
         direction_str = config.direction.value
 
         # Start nested run for this configuration

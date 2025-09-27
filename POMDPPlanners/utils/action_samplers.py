@@ -141,7 +141,7 @@ class UnitCircleActionSampler(ActionSampler):
         """
         self.max_action_magnitude = max_action_magnitude
 
-    def sample(self, belief_node: BeliefNode = None) -> np.ndarray:
+    def sample(self, belief_node: Optional[BeliefNode] = None) -> np.ndarray:
         """
         Sample an action from a unit circle.
 
