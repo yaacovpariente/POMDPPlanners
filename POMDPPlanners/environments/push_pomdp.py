@@ -494,7 +494,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
                             break
                         attempts += 1
 
-                    initial_state = np.concatenate([robot_pos, object_pos, self.target_pos])
+                    initial_state = np.concatenate([robot_pos, object_pos, self.target_pos])  # type: ignore
                     initial_states.append(initial_state)
                 return initial_states
 

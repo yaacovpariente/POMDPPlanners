@@ -994,14 +994,16 @@ class TestDiscreteActionSampler:
         # Test __reduce__ method directly
         reduce_result = sampler.__reduce__()
 
-        # Should return tuple with class and constructor arguments
+        # Should return tuple with class, constructor arguments, and state
         assert isinstance(reduce_result, tuple)
-        assert len(reduce_result) == 2
+        assert len(reduce_result) == 3
         assert reduce_result[0] == DiscreteActionSampler
-        assert reduce_result[1] == (actions,)
+        assert reduce_result[1] == ()  # Empty constructor args
+        assert reduce_result[2] == {"actions": actions}  # State dict
 
         # Test reconstruction
-        reconstructed_sampler = reduce_result[0](*reduce_result[1])
+        reconstructed_sampler = reduce_result[0](actions=[])  # Create with empty actions
+        reconstructed_sampler.__setstate__(reduce_result[2])
         assert reconstructed_sampler.actions == actions
         assert isinstance(reconstructed_sampler, DiscreteActionSampler)
 
