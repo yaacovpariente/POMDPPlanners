@@ -453,7 +453,7 @@ def optimize_planner_hyperparameters(
             environment=environment,
             belief=initial_belief,
             policy_cls=planner_config.policy_cls,
-            hyper_parameters=planner_config.hyper_parameters,
+            hyper_parameters=list(planner_config.hyper_parameters),
             constant_parameters=planner_config.constant_parameters,
             num_episodes=num_episodes,
             num_steps=num_steps,
@@ -566,13 +566,17 @@ def evaluate_optimized_planner(
     # Run evaluation using POMDPSimulator
     if debug:
         logger.debug(f"Creating POMDPSimulator with cache_dir: {eval_cache_dir}")
-        logger.debug(f"Experiment name: {experiment_name}, Task manager: {TaskManagerType.JOBLIB}")
+        logger.debug(f"Experiment name: {experiment_name}, Task manager: JoblibConfig")
+
+    # Create task manager config for joblib
+    from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
+
+    task_manager_config = JoblibConfig(n_jobs=n_jobs)
 
     with POMDPSimulator(
+        task_manager_config=task_manager_config,
         cache_dir_path=eval_cache_dir,
         experiment_name=experiment_name,
-        task_manager_type=TaskManagerType.JOBLIB,
-        n_jobs=n_jobs,
         debug=debug,
         task_console_output=False,  # Reduce output noise
         enable_profiling=False,
@@ -657,9 +661,11 @@ def evaluate_optimized_planner(
                                 logger.info(f"Available statistics for {policy_name}:")
                                 for col in policy_stats.columns:
                                     if col != "policy":
-                                        values = policy_stats[col].values
-                                        if len(values) > 0 and isinstance(values[0], (int, float)):
-                                            logger.info(f"{col:25}: {values[0]:8.3f}")
+                                        values = (
+                                            policy_stats[col][0] if len(policy_stats) > 0 else None
+                                        )
+                                        if values is not None and isinstance(values, (int, float)):
+                                            logger.info(f"{col:25}: {values:8.3f}")
                     else:
                         # DataFrame doesn't have expected structure, show what we have
                         logger.info(f"\n📈 AVAILABLE STATISTICS:")
@@ -782,13 +788,17 @@ def evaluate_multiple_optimized_planners(
     # Run evaluation using POMDPSimulator
     if debug:
         logger.debug(f"Creating POMDPSimulator with cache_dir: {eval_cache_dir}")
-        logger.debug(f"Experiment name: {experiment_name}, Task manager: {TaskManagerType.JOBLIB}")
+        logger.debug(f"Experiment name: {experiment_name}, Task manager: JoblibConfig")
+
+    # Create task manager config for joblib
+    from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
+
+    task_manager_config = JoblibConfig(n_jobs=n_jobs)
 
     with POMDPSimulator(
+        task_manager_config=task_manager_config,
         cache_dir_path=eval_cache_dir,
         experiment_name=experiment_name,
-        task_manager_type=TaskManagerType.JOBLIB,
-        n_jobs=n_jobs,
         debug=debug,
         task_console_output=False,  # Reduce output noise
         enable_profiling=False,
@@ -930,7 +940,7 @@ def create_categorical_hyperparameter_choices(
         for name, choices in parameter_configs.items():
             logger.debug(f"  {name}: {choices}")
 
-    return [CategoricalHyperParameter(name, choices) for name, choices in parameter_configs.items()]
+    return [CategoricalHyperParameter(choices, name) for name, choices in parameter_configs.items()]
 
 
 def get_fast_optimization_defaults() -> Dict[str, Any]:

@@ -11,9 +11,7 @@ from POMDPPlanners.core.config_types import BeliefConfig
 from POMDPPlanners.core.environment import Environment
 
 
-def create_belief(
-    environment: Environment, belief_config: BeliefConfig
-) -> WeightedParticleBeliefReinvigoration:
+def create_belief(environment: Environment, belief_config: BeliefConfig) -> Belief:
     """Create a belief instance from a belief config.
 
     Args:
