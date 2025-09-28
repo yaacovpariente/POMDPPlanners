@@ -192,4 +192,4 @@ class DiscreteActionSampler(ActionSampler):
 
     def __reduce__(self):
         """Support for pickle serialization via __reduce__."""
-        return (self.__class__, (self.actions,))
+        return (self.__class__, (), self.__getstate__())
