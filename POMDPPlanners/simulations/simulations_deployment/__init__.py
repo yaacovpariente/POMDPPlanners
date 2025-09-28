@@ -101,6 +101,10 @@ class TaskManagerFactory:
         job_extra: Optional[list] = None,
         cache_size: int = int(2e9),
         clear_cache_on_start: bool = False,
+        enable_dashboard: bool = True,
+        dashboard_address: str = "0.0.0.0",
+        dashboard_port: int = 8787,
+        dashboard_prefix: Optional[str] = None,
     ) -> PBSTaskManager:
         """Create a PBSTaskManager for PBS cluster computing.
 
@@ -114,6 +118,10 @@ class TaskManagerFactory:
             job_extra: Additional PBS directives as list of strings
             cache_size: Size of cache in bytes
             clear_cache_on_start: If True, clears the cache at startup
+            enable_dashboard: If True, enables the Dask dashboard
+            dashboard_address: Address to bind the dashboard to
+            dashboard_port: Port for the Dask dashboard
+            dashboard_prefix: URL prefix for dashboard (useful with reverse proxies)
 
         Returns:
             A configured PBSTaskManager instance
@@ -131,4 +139,8 @@ class TaskManagerFactory:
             job_extra=job_extra,
             cache_size=cache_size,
             clear_cache_on_start=clear_cache_on_start,
+            enable_dashboard=enable_dashboard,
+            dashboard_address=dashboard_address,
+            dashboard_port=dashboard_port,
+            dashboard_prefix=dashboard_prefix,
         )

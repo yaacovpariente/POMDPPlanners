@@ -473,44 +473,49 @@ class PBSTaskManager(DaskTaskManager):
 
     def _initialize_client(self):
         """Initialize Dask client with PBS cluster."""
-        # Prepare scheduler options for dashboard configuration
-        scheduler_options = {}
-        if self.enable_dashboard:
-            scheduler_options["dashboard_address"] = (
-                f"{self.dashboard_address}:{self.dashboard_port}"
+        try:
+            # Prepare scheduler options for dashboard configuration
+            scheduler_options = {}
+            if self.enable_dashboard:
+                scheduler_options["dashboard_address"] = (
+                    f"{self.dashboard_address}:{self.dashboard_port}"
+                )
+                if self.dashboard_prefix:
+                    scheduler_options["dashboard_prefix"] = self.dashboard_prefix
+
+            # Create PBS cluster configuration
+            self.cluster = PBSCluster(
+                queue=self.queue,
+                cores=self.cores,
+                memory=self.memory,
+                processes=self.processes,
+                walltime=self.walltime,
+                job_extra=self.job_extra,
+                local_directory="./dask-pbs-space",
+                scheduler_options=scheduler_options if scheduler_options else None,
             )
-            if self.dashboard_prefix:
-                scheduler_options["dashboard_prefix"] = self.dashboard_prefix
 
-        # Create PBS cluster configuration
-        self.cluster = PBSCluster(
-            queue=self.queue,
-            cores=self.cores,
-            memory=self.memory,
-            processes=self.processes,
-            walltime=self.walltime,
-            job_extra=self.job_extra,
-            local_directory="./dask-pbs-space",
-            scheduler_options=scheduler_options if scheduler_options else None,
-        )
+            # Scale cluster to desired number of workers
+            self.cluster.scale(jobs=self.n_workers)
 
-        # Scale cluster to desired number of workers
-        self.cluster.scale(jobs=self.n_workers)
+            # Create client
+            self.client = Client(self.cluster)
 
-        # Create client
-        self.client = Client(self.cluster)
+            # Log dashboard information if enabled
+            if self.enable_dashboard:
+                dashboard_url = self.get_dashboard_url()
+                if dashboard_url:
+                    print(f"Dask dashboard available at: {dashboard_url}")
+                else:
+                    print("Dashboard was enabled but URL could not be determined")
 
-        # Log dashboard information if enabled
-        if self.enable_dashboard:
-            dashboard_url = self.get_dashboard_url()
-            if dashboard_url:
-                print(f"Dask dashboard available at: {dashboard_url}")
-            else:
-                print("Dashboard was enabled but URL could not be determined")
-
-        # Initialize cache but don't register it by default
-        self.cache = Cache(self.cache_size)
-        self.cache_registered = False
+            # Initialize cache but don't register it by default
+            self.cache = Cache(self.cache_size)
+            self.cache_registered = False
+        except ImportError as e:
+            if "dask_jobqueue" in str(e):
+                raise RuntimeError("dask-jobqueue is required for PBS support") from e
+            raise
 
     def get_dashboard_url(self) -> Optional[str]:
         """Get the URL for the Dask dashboard.

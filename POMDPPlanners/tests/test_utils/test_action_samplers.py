@@ -181,7 +181,7 @@ class TestUnitCircleActionSampler:
                 assert magnitude <= max_mag + 1e-10
 
             # Check that we actually use the full range (some actions should be near max)
-            max_observed = max(np.linalg.norm(action) for action in actions)
+            max_observed = max(float(np.linalg.norm(action)) for action in actions)
             assert max_observed > max_mag * 0.8  # At least 80% of max magnitude observed
 
     def test_unit_circle_action_sampler_belief_node_parameter(self):
@@ -564,8 +564,8 @@ class TestUsageExamples:
         aggressive_magnitudes = [np.linalg.norm(a) for a in aggressive_actions]
 
         # Validate that conservative actions are indeed smaller
-        max_conservative = max(conservative_magnitudes)
-        max_aggressive = max(aggressive_magnitudes)
+        max_conservative = max(float(mag) for mag in conservative_magnitudes)
+        max_aggressive = max(float(mag) for mag in aggressive_magnitudes)
         avg_conservative = np.mean(conservative_magnitudes)
         avg_aggressive = np.mean(aggressive_magnitudes)
 

@@ -1048,17 +1048,14 @@ def test_pbs_task_manager_missing_dependency():
 
     manager = PBSTaskManager(queue="default")
 
-    # Create a mock that raises ImportError when importing dask_jobqueue
-    def mock_import(name, *args, **kwargs):
-        if name == "dask_jobqueue":
-            raise ImportError("No module named 'dask_jobqueue'")
-        # For other imports, use the real import
-        return __import__(name, *args, **kwargs)
-
-    # Mock the local import inside _initialize_client to raise ImportError
-    with patch("builtins.__import__", side_effect=mock_import):
-        with pytest.raises(RuntimeError, match="dask-jobqueue is required for PBS support"):
-            manager._initialize_client()
+    # Mock the import of dask_jobqueue to raise ImportError
+    with patch.dict("sys.modules", {"dask_jobqueue": None}):
+        with patch(
+            "POMDPPlanners.simulations.simulations_deployment.task_managers.PBSCluster",
+            side_effect=ImportError("No module named 'dask_jobqueue'"),
+        ):
+            with pytest.raises(RuntimeError, match="dask-jobqueue is required for PBS support"):
+                manager._initialize_client()
 
 
 def test_pbs_task_manager_inheritance():
