@@ -368,7 +368,7 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
 
     def pacman_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
         pomdp = PacManPOMDP(
             discount_factor=self.discount_factor,
             name="PacManPOMDP",

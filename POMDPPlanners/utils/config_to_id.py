@@ -7,30 +7,30 @@ import numpy as np
 class NumpyEncoder(json.JSONEncoder):
     """Custom JSON encoder for handling NumPy arrays and other NumPy types"""
 
-    def default(self, obj):
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        if isinstance(obj, np.integer):
-            return int(obj)
-        if isinstance(obj, np.floating):
-            return float(obj)
+    def default(self, o):
+        if isinstance(o, np.ndarray):
+            return o.tolist()
+        if isinstance(o, np.integer):
+            return int(o)
+        if isinstance(o, np.floating):
+            return float(o)
 
         # Handle ActionSampler instances by converting to their state
-        if hasattr(obj, "__class__") and hasattr(obj, "__getstate__"):
+        if hasattr(o, "__class__") and hasattr(o, "__getstate__"):
             try:
                 # Try to get the serializable state
-                state = obj.__getstate__()
+                state = o.__getstate__()
                 # Add class information for reconstruction
                 return {
-                    "__class__": obj.__class__.__name__,
-                    "__module__": obj.__class__.__module__,
+                    "__class__": o.__class__.__name__,
+                    "__module__": o.__class__.__module__,
                     "__state__": state,
                 }
             except Exception:
                 # If serialization fails, use string representation
-                return str(obj)
+                return str(o)
 
-        return super().default(obj)
+        return super().default(o)
 
 
 def config_to_id(config_dict: dict) -> str:
@@ -51,7 +51,7 @@ def config_to_id(config_dict: dict) -> str:
     dict_str = json.dumps(sorted_dict, sort_keys=True, cls=NumpyEncoder)
 
     # Create a hash of the string using SHA-256
-    hash_obj = hashlib.sha256(dict_str.encode())
+    hash_o = hashlib.sha256(dict_str.encode())
 
     # Return the hexadecimal representation of the hash
-    return hash_obj.hexdigest()
+    return hash_o.hexdigest()
