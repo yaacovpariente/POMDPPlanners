@@ -904,7 +904,7 @@ class POMDPSimulator(BaseSimulator):
     def _create_simulation_tasks(
         self,
         environment_run_params: List[EnvironmentRunParams],
-    ) -> Tuple[List[EpisodeSimulationTask], List[Tuple[str, str]]]:
+    ) -> Tuple[List[SimulationTask], List[Tuple[str, str]]]:
         """Create list of simulation tasks with deterministic ordering.
 
         Returns:

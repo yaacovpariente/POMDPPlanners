@@ -201,10 +201,10 @@ class SafeAntVelocityObservation(ObservationModel):
             observations.append(observation)
         return observations
 
-    def probability(self, observations: List[Any]) -> np.ndarray:
+    def probability(self, values: List[Any]) -> np.ndarray:
         # Calculate probabilities based on Gaussian noise model for list of observations
         probabilities = []
-        for observation in observations:
+        for observation in values:
             # Ensure observation is numpy array with correct shape
             if not isinstance(observation, np.ndarray) or observation.size == 0:
                 raise ValueError(

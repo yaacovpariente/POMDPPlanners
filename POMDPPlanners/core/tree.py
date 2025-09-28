@@ -116,6 +116,8 @@ def print_tree(tree: Union[BeliefNode, ActionNode]):
             name = node.spec
         elif isinstance(node, ActionNode):
             name = node.spec
+        else:
+            name = str(node)
 
         print(f"{pre}{name}")
 
