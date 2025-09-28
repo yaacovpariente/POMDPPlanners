@@ -1,0 +1,254 @@
+"""POMCP hyperparameter optimization configurations.
+
+This module contains HyperParameterRunParams configurations for the POMCP planner
+across different POMDP environments. Each configuration defines the hyperparameter
+search space and optimization settings for the POMCP algorithm.
+
+POMCP (Partially Observable Monte Carlo Planning) uses UCB1 for action selection
+and requires parameters for exploration, simulation count/timeout, and search depth.
+"""
+
+import numpy as np
+from typing import List, cast
+from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParameterRunParams,
+    HyperParameterOptimizationDirection,
+    HyperParameterFeature,
+)
+from POMDPPlanners.core.simulation import NumericalHyperParameter
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.push_pomdp import PushPOMDP
+from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
+from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
+)
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDPDiscreteActions,
+)
+from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+from POMDPPlanners.core.belief import get_initial_belief
+
+
+# POMCP hyperparameter ranges
+POMCP_HYPERPARAMETERS = [
+    NumericalHyperParameter(low=0.1, high=10.0, name="exploration_constant"),
+    NumericalHyperParameter(low=5, high=20, name="depth"),
+    NumericalHyperParameter(low=100, high=2000, name="n_simulations"),
+    NumericalHyperParameter(low=5, high=50, name="min_samples_per_node"),
+]
+
+
+# Tiger POMDP Configuration
+class POMCPTigerConfig(HyperParameterRunParams):
+    """POMCP hyperparameter optimization configuration for Tiger POMDP."""
+
+    def __new__(cls):
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        return super().__new__(
+            cls,
+            environment=env,
+            belief=belief,
+            policy_cls=POMCP,
+            hyper_parameters=cast(List[HyperParameterFeature], POMCP_HYPERPARAMETERS),
+            constant_parameters={},
+            num_episodes=50,
+            num_steps=100,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return",
+            n_trials=50,
+        )
+
+
+# CartPole POMDP Configuration
+class POMCPCartPoleConfig(HyperParameterRunParams):
+    """POMCP hyperparameter optimization configuration for CartPole POMDP."""
+
+    def __new__(cls):
+        env = CartPolePOMDP(discount_factor=0.95, noise_cov=np.diag([0.1, 0.1, 0.1, 0.1]))
+        belief = get_initial_belief(env, n_particles=100)
+        return super().__new__(
+            cls,
+            environment=env,
+            belief=belief,
+            policy_cls=POMCP,
+            hyper_parameters=cast(List[HyperParameterFeature], POMCP_HYPERPARAMETERS),
+            constant_parameters={},
+            num_episodes=30,
+            num_steps=200,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return",
+            n_trials=50,
+        )
+
+
+# Mountain Car POMDP Configuration
+class POMCPMountainCarConfig(HyperParameterRunParams):
+    """POMCP hyperparameter optimization configuration for Mountain Car POMDP."""
+
+    def __new__(cls):
+        env = MountainCarPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        return super().__new__(
+            cls,
+            environment=env,
+            belief=belief,
+            policy_cls=POMCP,
+            hyper_parameters=cast(List[HyperParameterFeature], POMCP_HYPERPARAMETERS),
+            constant_parameters={},
+            num_episodes=30,
+            num_steps=200,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return",
+            n_trials=50,
+        )
+
+
+# Push POMDP Configuration
+class POMCPPushConfig(HyperParameterRunParams):
+    """POMCP hyperparameter optimization configuration for Push POMDP."""
+
+    def __new__(cls):
+        env = PushPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        return super().__new__(
+            cls,
+            environment=env,
+            belief=belief,
+            policy_cls=POMCP,
+            hyper_parameters=cast(List[HyperParameterFeature], POMCP_HYPERPARAMETERS),
+            constant_parameters={},
+            num_episodes=40,
+            num_steps=150,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return",
+            n_trials=50,
+        )
+
+
+# Sanity POMDP Configuration
+class POMCPSanityConfig(HyperParameterRunParams):
+    """POMCP hyperparameter optimization configuration for Sanity POMDP."""
+
+    def __new__(cls):
+        env = SanityPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        return super().__new__(
+            cls,
+            environment=env,
+            belief=belief,
+            policy_cls=POMCP,
+            hyper_parameters=cast(List[HyperParameterFeature], POMCP_HYPERPARAMETERS),
+            constant_parameters={},
+            num_episodes=20,
+            num_steps=50,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return",
+            n_trials=50,
+        )
+
+
+# Laser Tag POMDP Configuration
+class POMCPLaserTagConfig(HyperParameterRunParams):
+    """POMCP hyperparameter optimization configuration for Laser Tag POMDP."""
+
+    def __new__(cls):
+        env = LaserTagPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        return super().__new__(
+            cls,
+            environment=env,
+            belief=belief,
+            policy_cls=POMCP,
+            hyper_parameters=cast(List[HyperParameterFeature], POMCP_HYPERPARAMETERS),
+            constant_parameters={},
+            num_episodes=40,
+            num_steps=100,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return",
+            n_trials=50,
+        )
+
+
+# Safety Ant Velocity POMDP Configuration
+class POMCPSafetyAntVelocityConfig(HyperParameterRunParams):
+    """POMCP hyperparameter optimization configuration for Safety Ant Velocity POMDP."""
+
+    def __new__(cls):
+        env = SafeAntVelocityPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        return super().__new__(
+            cls,
+            environment=env,
+            belief=belief,
+            policy_cls=POMCP,
+            hyper_parameters=cast(List[HyperParameterFeature], POMCP_HYPERPARAMETERS),
+            constant_parameters={},
+            num_episodes=30,
+            num_steps=200,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return",
+            n_trials=50,
+        )
+
+
+# Discrete Light Dark POMDP Configuration
+class POMCPDiscreteLightDarkConfig(HyperParameterRunParams):
+    """POMCP hyperparameter optimization configuration for Discrete Light Dark POMDP."""
+
+    def __new__(cls):
+        env = DiscreteLightDarkPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        return super().__new__(
+            cls,
+            environment=env,
+            belief=belief,
+            policy_cls=POMCP,
+            hyper_parameters=cast(List[HyperParameterFeature], POMCP_HYPERPARAMETERS),
+            constant_parameters={},
+            num_episodes=40,
+            num_steps=100,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return",
+            n_trials=50,
+        )
+
+
+# Continuous Light Dark POMDP with Discrete Actions Configuration
+class POMCPContinuousLightDarkDiscreteActionsConfig(HyperParameterRunParams):
+    """POMCP hyperparameter optimization configuration for Continuous Light Dark POMDP with Discrete Actions."""
+
+    def __new__(cls):
+        env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        return super().__new__(
+            cls,
+            environment=env,
+            belief=belief,
+            policy_cls=POMCP,
+            hyper_parameters=cast(List[HyperParameterFeature], POMCP_HYPERPARAMETERS),
+            constant_parameters={},
+            num_episodes=40,
+            num_steps=100,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return",
+            n_trials=50,
+        )
+
+
+# All POMCP configurations for easy access
+ALL_POMCP_CONFIGS = [
+    POMCPTigerConfig(),
+    POMCPCartPoleConfig(),
+    POMCPMountainCarConfig(),
+    POMCPPushConfig(),
+    POMCPSanityConfig(),
+    POMCPLaserTagConfig(),
+    POMCPSafetyAntVelocityConfig(),
+    POMCPDiscreteLightDarkConfig(),
+    POMCPContinuousLightDarkDiscreteActionsConfig(),
+]
