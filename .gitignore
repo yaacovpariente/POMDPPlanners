@@ -91,7 +91,7 @@ legacy/
 experiments/results
 dask-worker-space/
 joblib_cache/
-experiments
+experiments_/
 legacy/
 
 # Project-specific files
