@@ -5,3 +5,10 @@ repos:
       - id: black
         language_version: python3.12
         args: [--line-length=100]
+
+  - repo: https://github.com/RobertCraigie/pyright-python
+    rev: v1.1.391
+    hooks:
+      - id: pyright
+        args: [POMDPPlanners/]
+        exclude: ^(type_hints\.py|setup\.py)$
