@@ -47,12 +47,14 @@ def create_test_history(rewards: List[float], discount_factor: float = 0.95) -> 
         average_reward_time=0.5,
         actual_num_steps=len(steps),
         reach_terminal_state=True,
-        policy_run_data=PolicyRunData(
-            info_variables=[
-                PolicyInfoVariable(name="test_var", value=1.0),
-                PolicyInfoVariable(name="test_var2", value=2.0),
-            ]
-        ),
+        policy_run_data=[
+            PolicyRunData(
+                info_variables=[
+                    PolicyInfoVariable(name="test_var", value=1.0),
+                    PolicyInfoVariable(name="test_var2", value=2.0),
+                ]
+            )
+        ],
     )
     return history
 
@@ -294,12 +296,14 @@ def test_compute_statistics_environment_policy_pair():
             average_reward_time=0.005,
             actual_num_steps=2,
             reach_terminal_state=True,
-            policy_run_data=PolicyRunData(
-                info_variables=[
-                    PolicyInfoVariable(name="test_var", value=1.0),
-                    PolicyInfoVariable(name="test_var2", value=2.0),
-                ]
-            ),
+            policy_run_data=[
+                PolicyRunData(
+                    info_variables=[
+                        PolicyInfoVariable(name="test_var", value=1.0),
+                        PolicyInfoVariable(name="test_var2", value=2.0),
+                    ]
+                )
+            ],
         ),
         History(
             history=[
@@ -328,12 +332,14 @@ def test_compute_statistics_environment_policy_pair():
             average_reward_time=0.005,
             actual_num_steps=2,
             reach_terminal_state=True,
-            policy_run_data=PolicyRunData(
-                info_variables=[
-                    PolicyInfoVariable(name="test_var", value=1.0),
-                    PolicyInfoVariable(name="test_var2", value=2.0),
-                ]
-            ),
+            policy_run_data=[
+                PolicyRunData(
+                    info_variables=[
+                        PolicyInfoVariable(name="test_var", value=1.0),
+                        PolicyInfoVariable(name="test_var2", value=2.0),
+                    ]
+                )
+            ],
         ),
     ]
 
@@ -402,12 +408,14 @@ def test_compute_statistics_environments_policies_comparison():
             average_reward_time=0.005,
             actual_num_steps=1,
             reach_terminal_state=False,
-            policy_run_data=PolicyRunData(
-                info_variables=[
-                    PolicyInfoVariable(name="test_var", value=1.0),
-                    PolicyInfoVariable(name="test_var2", value=2.0),
-                ]
-            ),
+            policy_run_data=[
+                PolicyRunData(
+                    info_variables=[
+                        PolicyInfoVariable(name="test_var", value=1.0),
+                        PolicyInfoVariable(name="test_var2", value=2.0),
+                    ]
+                )
+            ],
         ),
         History(
             history=[
@@ -428,12 +436,14 @@ def test_compute_statistics_environments_policies_comparison():
             average_reward_time=0.005,
             actual_num_steps=1,
             reach_terminal_state=False,
-            policy_run_data=PolicyRunData(
-                info_variables=[
-                    PolicyInfoVariable(name="test_var", value=1.0),
-                    PolicyInfoVariable(name="test_var2", value=2.0),
-                ]
-            ),
+            policy_run_data=[
+                PolicyRunData(
+                    info_variables=[
+                        PolicyInfoVariable(name="test_var", value=1.0),
+                        PolicyInfoVariable(name="test_var2", value=2.0),
+                    ]
+                )
+            ],
         ),
     ]
 
@@ -457,12 +467,14 @@ def test_compute_statistics_environments_policies_comparison():
             average_reward_time=0.005,
             actual_num_steps=1,
             reach_terminal_state=False,
-            policy_run_data=PolicyRunData(
-                info_variables=[
-                    PolicyInfoVariable(name="test_var", value=1.0),
-                    PolicyInfoVariable(name="test_var2", value=2.0),
-                ]
-            ),
+            policy_run_data=[
+                PolicyRunData(
+                    info_variables=[
+                        PolicyInfoVariable(name="test_var", value=1.0),
+                        PolicyInfoVariable(name="test_var2", value=2.0),
+                    ]
+                )
+            ],
         ),
         History(
             history=[
@@ -483,12 +495,14 @@ def test_compute_statistics_environments_policies_comparison():
             average_reward_time=0.005,
             actual_num_steps=1,
             reach_terminal_state=False,
-            policy_run_data=PolicyRunData(
-                info_variables=[
-                    PolicyInfoVariable(name="test_var", value=1.0),
-                    PolicyInfoVariable(name="test_var2", value=2.0),
-                ]
-            ),
+            policy_run_data=[
+                PolicyRunData(
+                    info_variables=[
+                        PolicyInfoVariable(name="test_var", value=1.0),
+                        PolicyInfoVariable(name="test_var2", value=2.0),
+                    ]
+                )
+            ],
         ),
     ]
 

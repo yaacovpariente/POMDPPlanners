@@ -456,7 +456,7 @@ def test_compute_metrics():
         average_reward_time=0.0,
         actual_num_steps=2,
         reach_terminal_state=True,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     # History 2: Hits obstacle (within radius)
@@ -487,7 +487,7 @@ def test_compute_metrics():
         average_reward_time=0.0,
         actual_num_steps=2,
         reach_terminal_state=True,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     # Compute metrics
@@ -640,7 +640,7 @@ def test_continuous_light_dark_pomdp_compute_metrics(base_continuous_light_dark_
         average_reward_time=0.0,
         actual_num_steps=2,
         reach_terminal_state=True,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
     history2 = History(
         [
@@ -669,7 +669,7 @@ def test_continuous_light_dark_pomdp_compute_metrics(base_continuous_light_dark_
         average_reward_time=0.0,
         actual_num_steps=2,
         reach_terminal_state=True,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
     metrics = env.compute_metrics([history1, history2])
     metrics_dict = {metric.name: metric for metric in metrics}

@@ -71,7 +71,7 @@ def test_history_equality():
         average_reward_time=0.5,
         actual_num_steps=2,
         reach_terminal_state=True,
-        policy_run_data=None,
+        policy_run_data=[],
     )
 
     history2 = History(
@@ -84,7 +84,7 @@ def test_history_equality():
         average_reward_time=0.5,
         actual_num_steps=2,
         reach_terminal_state=True,
-        policy_run_data=None,
+        policy_run_data=[],
     )
 
     # Create different history
@@ -98,7 +98,7 @@ def test_history_equality():
         average_reward_time=0.5,
         actual_num_steps=2,
         reach_terminal_state=True,
-        policy_run_data=None,
+        policy_run_data=[],
     )
 
     # Test equality
@@ -119,7 +119,7 @@ def test_history_equality():
         average_reward_time=0.5,
         actual_num_steps=2,
         reach_terminal_state=True,
-        policy_run_data=None,
+        policy_run_data=[],
     )
     assert history1 != history4, "Histories with different discount factors should not be equal"
 
@@ -134,7 +134,7 @@ def test_history_equality():
         average_reward_time=0.5,
         actual_num_steps=1,  # Different num_steps
         reach_terminal_state=True,
-        policy_run_data=None,
+        policy_run_data=[],
     )
     assert history1 != history5, "Histories with different lengths should not be equal"
 
@@ -170,7 +170,7 @@ def test_history_serialization():
         average_reward_time=0.5,
         actual_num_steps=1,
         reach_terminal_state=True,
-        policy_run_data=None,
+        policy_run_data=[],
     )
 
     # Test serialization

@@ -597,7 +597,7 @@ class TestLaserTagPOMDP:
             average_reward_time=0.1,
             actual_num_steps=2,
             reach_terminal_state=False,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
         histories = [history]
@@ -710,7 +710,7 @@ class TestLaserTagPOMDP:
             average_reward_time=0.1,
             actual_num_steps=3,
             reach_terminal_state=False,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
         cache_path = Path("test_laser_tag_visualization.gif")
@@ -750,7 +750,7 @@ class TestLaserTagPOMDP:
             average_reward_time=0.1,
             actual_num_steps=0,
             reach_terminal_state=False,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
         # Create non-empty history for cache_path tests
@@ -780,7 +780,7 @@ class TestLaserTagPOMDP:
             average_reward_time=0.1,
             actual_num_steps=1,
             reach_terminal_state=False,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
         # Test with non-Path cache_path
@@ -872,7 +872,7 @@ class TestLaserTagPOMDP:
                 average_reward_time=0.01,
                 actual_num_steps=len(steps),
                 reach_terminal_state=env.is_terminal(current_state),
-                policy_run_data=PolicyRunData(info_variables=[]),
+                policy_run_data=[PolicyRunData(info_variables=[])],
             )
             histories.append(history)
 
@@ -1015,7 +1015,7 @@ class TestLaserTagPOMDP:
             average_reward_time=0.01,
             actual_num_steps=3,
             reach_terminal_state=True,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
         # This should not raise any exceptions

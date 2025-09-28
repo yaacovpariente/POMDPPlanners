@@ -76,7 +76,7 @@ class History:
     average_reward_time: float
     actual_num_steps: int
     reach_terminal_state: bool
-    policy_run_data: Optional["PolicyRunData"]
+    policy_run_data: List["PolicyRunData"]
 
     def __eq__(self, other: object) -> bool:
         """Compare two History objects for equality.
@@ -108,7 +108,7 @@ class History:
             ...     average_reward_time=0.001,
             ...     actual_num_steps=1,
             ...     reach_terminal_state=False,
-            ...     policy_run_data=policy_data
+            ...     policy_run_data=[policy_data]
             ... )
             >>> history2 = History(
             ...     history=[step],
@@ -120,7 +120,7 @@ class History:
             ...     average_reward_time=0.001,
             ...     actual_num_steps=1,
             ...     reach_terminal_state=False,
-            ...     policy_run_data=policy_data
+            ...     policy_run_data=[policy_data]
             ... )
             >>> history1 == history2
             True
@@ -264,7 +264,9 @@ class History:
                 PolicyInfoVariable(name=iv["name"], value=iv["value"])
                 for iv in policy_run_data.get("info_variables", [])
             ]
-            policy_run_data = PolicyRunData(info_variables=info_variables)
+            policy_run_data = [PolicyRunData(info_variables=info_variables)]
+        elif policy_run_data is None:
+            policy_run_data = []
 
         # Create and return History instance
         return History(

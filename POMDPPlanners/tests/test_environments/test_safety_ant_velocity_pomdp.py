@@ -430,7 +430,7 @@ def test_compute_metrics():
             average_reward_time=0.0,
             actual_num_steps=len(safe_steps),
             reach_terminal_state=False,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
     )
 
@@ -464,7 +464,7 @@ def test_compute_metrics():
             average_reward_time=0.0,
             actual_num_steps=len(mixed_steps),
             reach_terminal_state=False,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
     )
 
@@ -490,7 +490,7 @@ def test_compute_metrics():
             average_reward_time=0.0,
             actual_num_steps=len(critical_steps),
             reach_terminal_state=True,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
     )
 

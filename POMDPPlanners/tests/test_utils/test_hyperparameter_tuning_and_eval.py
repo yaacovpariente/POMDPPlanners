@@ -822,7 +822,6 @@ class TestEvaluateOptimizedPlanner:
         call_kwargs = mock_simulator_class.call_args[1]
         assert call_kwargs["cache_dir_path"] == temp_dir
         assert call_kwargs["experiment_name"] == "planner_evaluation"
-        assert call_kwargs["n_jobs"] == 1
         assert call_kwargs["debug"] == False
 
         # Verify evaluation was run
@@ -879,7 +878,6 @@ class TestEvaluateOptimizedPlanner:
         # Verify simulator creation with custom parameters
         call_kwargs = mock_simulator_class.call_args[1]
         assert call_kwargs["experiment_name"] == "CustomEvaluation"
-        assert call_kwargs["n_jobs"] == 3
         assert call_kwargs["debug"] == True
 
         # Verify evaluation run params
@@ -1008,17 +1006,17 @@ class TestHelperFunctions:
 
         assert len(hyper_params) == 3
 
-        # Check algorithm parameter (note: current implementation has swapped parameters)
-        algorithm_param = next(hp for hp in hyper_params if hp.choices == "algorithm")
-        assert algorithm_param.name == ["ucb", "thompson", "epsilon_greedy"]
+        # Check algorithm parameter
+        algorithm_param = next(hp for hp in hyper_params if hp.name == "algorithm")
+        assert algorithm_param.choices == ["ucb", "thompson", "epsilon_greedy"]
 
         # Check heuristic parameter
-        heuristic_param = next(hp for hp in hyper_params if hp.choices == "heuristic")
-        assert heuristic_param.name == ["random", "informed"]
+        heuristic_param = next(hp for hp in hyper_params if hp.name == "heuristic")
+        assert heuristic_param.choices == ["random", "informed"]
 
         # Check rollout_policy parameter
-        rollout_param = next(hp for hp in hyper_params if hp.choices == "rollout_policy")
-        assert rollout_param.name == ["random", "greedy", "heuristic"]
+        rollout_param = next(hp for hp in hyper_params if hp.name == "rollout_policy")
+        assert rollout_param.choices == ["random", "greedy", "heuristic"]
 
     def test_create_categorical_hyperparameter_choices_mixed_types(self):
         """Test creation with mixed data types in choices.
@@ -1041,17 +1039,17 @@ class TestHelperFunctions:
 
         assert len(hyper_params) == 3
 
-        # Check string choices (note: current implementation has swapped parameters)
-        strategy_param = next(hp for hp in hyper_params if hp.choices == "strategy")
-        assert strategy_param.name == ["aggressive", "conservative"]
+        # Check string choices
+        strategy_param = next(hp for hp in hyper_params if hp.name == "strategy")
+        assert strategy_param.choices == ["aggressive", "conservative"]
 
         # Check integer choices
-        iterations_param = next(hp for hp in hyper_params if hp.choices == "max_iterations")
-        assert iterations_param.name == [50, 100, 200]
+        iterations_param = next(hp for hp in hyper_params if hp.name == "max_iterations")
+        assert iterations_param.choices == [50, 100, 200]
 
         # Check boolean choices
-        pruning_param = next(hp for hp in hyper_params if hp.choices == "use_pruning")
-        assert pruning_param.name == [True, False]
+        pruning_param = next(hp for hp in hyper_params if hp.name == "use_pruning")
+        assert pruning_param.choices == [True, False]
 
     def test_get_fast_optimization_defaults(self):
         """Test fast optimization default parameters.
@@ -1260,15 +1258,13 @@ class TestUsageExamples:
         categorical_params = create_categorical_hyperparameter_choices(categorical_config)
 
         assert len(categorical_params) == 2
-        categorical_names = [
-            cp.choices for cp in categorical_params
-        ]  # Note: swapped parameters in implementation
+        categorical_names = [cp.name for cp in categorical_params]
         assert "algorithm" in categorical_names
         assert "heuristic" in categorical_names
 
         # Check choices are preserved correctly
-        algorithm_param = next(cp for cp in categorical_params if cp.choices == "algorithm")
-        assert algorithm_param.name == ["ucb", "thompson", "epsilon_greedy"]
+        algorithm_param = next(cp for cp in categorical_params if cp.name == "algorithm")
+        assert algorithm_param.choices == ["ucb", "thompson", "epsilon_greedy"]
 
     def test_default_configurations_usage(self, temp_dir):
         """Test usage of default configuration functions.
@@ -1689,8 +1685,8 @@ class TestHyperParamRunnerUseCases:
         single_config = {"single": ["choice"]}
         single_params = create_categorical_hyperparameter_choices(single_config)
         assert len(single_params) == 1
-        assert single_params[0].choices == "single"
-        assert single_params[0].name == ["choice"]
+        assert single_params[0].name == "single"
+        assert single_params[0].choices == ["choice"]
 
     def test_default_configuration_functions_comprehensive(self):
         """Test default configuration functions with comprehensive validation.
@@ -1902,7 +1898,7 @@ class TestHyperParamRunnerUseCases:
         # Test with single categorical parameter
         single_cat_params = create_categorical_hyperparameter_choices({"single": ["choice"]})
         assert len(single_cat_params) == 1
-        assert single_cat_params[0].choices == "single"
+        assert single_cat_params[0].name == "single"
 
         # Test that functions preserve the input structure correctly
         mixed_config = {

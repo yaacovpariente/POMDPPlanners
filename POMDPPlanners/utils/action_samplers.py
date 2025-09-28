@@ -171,13 +171,17 @@ class DiscreteActionSampler(ActionSampler):
     processing environments like joblib.
     """
 
-    def __init__(self, actions: List[Any]):
+    def __init__(self, actions: Optional[List[Any]] = None):
         """Initialize the sampler with a list of discrete actions.
 
         Args:
             actions: List of discrete actions to sample from
         """
-        self.actions = list(actions)
+        if actions is not None:
+            self.actions = list(actions)
+        else:
+            # For compatibility with pickle deserialization via base class __reduce__
+            self.actions = []
 
     def sample(self, belief_node: Optional[Any] = None) -> Any:
         """Sample a random action from the discrete action space.
@@ -190,6 +194,16 @@ class DiscreteActionSampler(ActionSampler):
         """
         return random.choice(self.actions)
 
+    def __getstate__(self):
+        """Get state for pickle serialization."""
+        return {"actions": self.actions}
+
+    def __setstate__(self, state):
+        """Set state for pickle deserialization."""
+        self.actions = state["actions"]
+
     def __reduce__(self):
         """Support for pickle serialization via __reduce__."""
-        return (self.__class__, (), self.__getstate__())
+        cls = self.__class__
+        state = self.__getstate__()
+        return (cls, (), state)
