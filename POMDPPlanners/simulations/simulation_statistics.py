@@ -144,11 +144,25 @@ def compute_statistics_environment_policy_pair(
         average_actual_num_steps.append(h.actual_num_steps)
         average_reach_terminal_state.append(1 if h.reach_terminal_state else 0)
 
-        # Collect policy info variables
-        for info_var in h.policy_run_data.info_variables:  # type: ignore
-            if info_var.name not in policy_info_variables:
-                policy_info_variables[info_var.name] = []
-            policy_info_variables[info_var.name].append(float(info_var.value))
+        # Collect policy info variables - average within each history
+        for info_var_name in set(
+            var.name
+            for policy_run_data in h.policy_run_data
+            for var in policy_run_data.info_variables
+        ):
+            # Collect all values for this variable across all steps in this history
+            values_in_history = []
+            for policy_run_data in h.policy_run_data:
+                for info_var in policy_run_data.info_variables:
+                    if info_var.name == info_var_name:
+                        values_in_history.append(float(info_var.value))
+
+            # Average the values within this history
+            if values_in_history:
+                avg_value = sum(values_in_history) / len(values_in_history)
+                if info_var_name not in policy_info_variables:
+                    policy_info_variables[info_var_name] = []
+                policy_info_variables[info_var_name].append(avg_value)
 
     average_return = sum(return_samples) / len(return_samples)
 

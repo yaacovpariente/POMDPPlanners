@@ -840,7 +840,13 @@ class WeightedParticleBeliefStateUpdate(Belief):
         observation_probability = pomdp.observation_model(
             next_state=state, action=action
         ).probability([observation])[0]
-        new_weights = self.weights + [float(observation_probability)]
+        new_weights = self.weights + [
+            float(
+                observation_probability.item()
+                if hasattr(observation_probability, "item")
+                else observation_probability
+            )
+        ]
         new_belief = WeightedParticleBeliefStateUpdate(particles=new_particles, weights=new_weights)
 
         return new_belief

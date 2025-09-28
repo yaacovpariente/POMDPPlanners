@@ -177,7 +177,7 @@ def test_disk_cache_db_store_and_retrieve(cache_db, environment, policy):
         average_reward_time=0.005,
         actual_num_steps=2,
         reach_terminal_state=True,
-        policy_run_data=None,
+        policy_run_data=[],
     )
 
     # Store in cache
@@ -226,7 +226,7 @@ def test_disk_cache_db_clear(cache_db, environment, policy):
         average_reward_time=0.005,
         actual_num_steps=2,
         reach_terminal_state=True,
-        policy_run_data=None,
+        policy_run_data=[],
     )
 
     # Store in cache

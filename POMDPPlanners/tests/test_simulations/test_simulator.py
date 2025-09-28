@@ -402,7 +402,7 @@ def test_organize_simulation_results_basic(simulator):
             average_observation_time=0.0,
             average_belief_update_time=0.0,
             average_reward_time=0.0,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
         histories.append(history)
         task_identifiers.append((environment.name, policy.name))
@@ -474,7 +474,7 @@ def test_organize_simulation_results_multiple(simulator):
             average_observation_time=0.0,
             average_belief_update_time=0.0,
             average_reward_time=0.0,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
         histories.append(history)
         task_identifiers.append((env1.name, policy1.name))
@@ -491,7 +491,7 @@ def test_organize_simulation_results_multiple(simulator):
             average_observation_time=0.0,
             average_belief_update_time=0.0,
             average_reward_time=0.0,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
         histories.append(history)
         task_identifiers.append((env2.name, policy2.name))
@@ -571,7 +571,7 @@ def test_organize_simulation_results_edge_cases(simulator):
             average_observation_time=0.0,
             average_belief_update_time=0.0,
             average_reward_time=0.0,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
     ]
     single_identifier = [(environment.name, policy.name)]
@@ -640,7 +640,7 @@ def test_organize_simulation_results_matches_configurations(simulator):
             average_observation_time=0.0,
             average_belief_update_time=0.0,
             average_reward_time=0.0,
-            policy_run_data=PolicyRunData(info_variables=[]),  # Match policy1's config
+            policy_run_data=[PolicyRunData(info_variables=[])],  # Match policy1's config
         )
         histories.append(history)
         task_identifiers.append((env1.name, policy1.name))
@@ -657,7 +657,7 @@ def test_organize_simulation_results_matches_configurations(simulator):
             average_observation_time=0.0,
             average_belief_update_time=0.0,
             average_reward_time=0.0,
-            policy_run_data=PolicyRunData(info_variables=[]),  # Match policy2's config
+            policy_run_data=[PolicyRunData(info_variables=[])],  # Match policy2's config
         )
         histories.append(history)
         task_identifiers.append((env2.name, policy2.name))
@@ -683,8 +683,13 @@ def test_organize_simulation_results_matches_configurations(simulator):
     policy1_histories = results[env1.name][policy1.name]
     assert len(policy1_histories) == num_episodes
     for history in policy1_histories:
-        assert history.policy_run_data["depth"] == policy1.depth
-        assert history.policy_run_data["exploration_constant"] == policy1.exploration_constant
+        # policy_run_data is a list of PolicyRunData objects, not a dict
+        assert isinstance(history.policy_run_data, list)
+        assert len(history.policy_run_data) > 0
+        # Each PolicyRunData contains info_variables with tree metrics, not policy configs
+        for policy_data in history.policy_run_data:
+            assert hasattr(policy_data, "info_variables")
+            assert isinstance(policy_data.info_variables, list)
 
     # Verify env2/policy2 histories
     assert env2.name in results
@@ -692,8 +697,13 @@ def test_organize_simulation_results_matches_configurations(simulator):
     policy2_histories = results[env2.name][policy2.name]
     assert len(policy2_histories) == num_episodes
     for history in policy2_histories:
-        assert history.policy_run_data["depth"] == policy2.depth
-        assert history.policy_run_data["exploration_constant"] == policy2.exploration_constant
+        # policy_run_data is a list of PolicyRunData objects, not a dict
+        assert isinstance(history.policy_run_data, list)
+        assert len(history.policy_run_data) > 0
+        # Each PolicyRunData contains info_variables with tree metrics, not policy configs
+        for policy_data in history.policy_run_data:
+            assert hasattr(policy_data, "info_variables")
+            assert isinstance(policy_data.info_variables, list)
 
 
 def test_pomdp_simulator_mlflow_tracking_configures_experiment_directory(
@@ -1365,7 +1375,7 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     # ACT: Test the integration by calling the simulator's visualization caching method
@@ -1649,7 +1659,7 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
             average_observation_time=0.01,
             average_belief_update_time=0.03,
             average_reward_time=0.001,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         ),
         History(
             history=history_entries,  # Reuse same entries for second episode
@@ -1661,7 +1671,7 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
             average_observation_time=0.01,
             average_belief_update_time=0.03,
             average_reward_time=0.001,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         ),
     ]
 
@@ -1768,7 +1778,7 @@ def test_simulator_visualization_error_handling_with_continuous_light_dark(
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     # ACT & ASSERT: Test error handling during visualization
@@ -1865,7 +1875,7 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     results = {environment.name: {policy.name: [test_history]}}
@@ -2003,7 +2013,7 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
             average_observation_time=0.01,
             average_belief_update_time=0.03,
             average_reward_time=0.001,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
     # Create results structure with both environments
@@ -2130,7 +2140,7 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     results = {environment.name: {policy.name: [test_history]}}
@@ -2246,7 +2256,7 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     results = {environment.name: {policy.name: [test_history]}}
@@ -2347,7 +2357,7 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     results = {environment.name: {policy.name: [test_history]}}
@@ -2450,7 +2460,7 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
         average_observation_time=0.01,
         average_belief_update_time=0.03,
         average_reward_time=0.001,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     results = {environment.name: {policy.name: [test_history]}}

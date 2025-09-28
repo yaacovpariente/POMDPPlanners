@@ -438,7 +438,7 @@ class TestTigerPOMDPMetrics:
                     average_reward_time=0.0,
                     actual_num_steps=4,
                     reach_terminal_state=True,
-                    policy_run_data=PolicyRunData(info_variables=[]),
+                    policy_run_data=[PolicyRunData(info_variables=[])],
                 )
             )
 
@@ -505,7 +505,7 @@ class TestTigerPOMDPMetrics:
                     average_reward_time=0.0,
                     actual_num_steps=3,
                     reach_terminal_state=True,
-                    policy_run_data=PolicyRunData(info_variables=[]),
+                    policy_run_data=[PolicyRunData(info_variables=[])],
                 )
             )
 
@@ -572,7 +572,7 @@ class TestTigerPOMDPMetrics:
                     average_reward_time=0.0,
                     actual_num_steps=len(steps),
                     reach_terminal_state=True,
-                    policy_run_data=PolicyRunData(info_variables=[]),
+                    policy_run_data=[PolicyRunData(info_variables=[])],
                 )
             )
 
@@ -674,7 +674,7 @@ def test_metrics_confidence_intervals(tiger_pomdp):
                 average_reward_time=0.0,
                 actual_num_steps=len(steps),
                 reach_terminal_state=True,
-                policy_run_data=PolicyRunData(info_variables=[]),
+                policy_run_data=[PolicyRunData(info_variables=[])],
             )
         )
 

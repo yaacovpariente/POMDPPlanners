@@ -910,7 +910,7 @@ class TestMetricsComputation:
                 average_reward_time=0.0,
                 actual_num_steps=len(steps),
                 reach_terminal_state=False,
-                policy_run_data=None,
+                policy_run_data=[],
             )
             histories.append(history)
 
@@ -956,7 +956,7 @@ class TestMetricsComputation:
             average_reward_time=0.0,
             actual_num_steps=1,
             reach_terminal_state=True,
-            policy_run_data=None,
+            policy_run_data=[],
         )
         histories.append(success_history)
 
@@ -980,7 +980,7 @@ class TestMetricsComputation:
             average_reward_time=0.0,
             actual_num_steps=1,
             reach_terminal_state=False,
-            policy_run_data=None,
+            policy_run_data=[],
         )
         histories.append(fail_history)
 
@@ -1037,7 +1037,7 @@ class TestVisualization:
             average_reward_time=0.0,
             actual_num_steps=0,
             reach_terminal_state=False,
-            policy_run_data=None,
+            policy_run_data=[],
         )
 
         with pytest.raises(ValueError, match="Cannot visualize empty history"):
@@ -1091,7 +1091,7 @@ class TestVisualization:
             average_reward_time=0.0,
             actual_num_steps=2,
             reach_terminal_state=False,
-            policy_run_data=None,
+            policy_run_data=[],
         )
 
         with tempfile.TemporaryDirectory() as temp_dir:

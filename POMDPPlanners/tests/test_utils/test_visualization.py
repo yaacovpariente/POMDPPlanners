@@ -69,7 +69,7 @@ def create_mock_history(rewards, discount_factor=0.95):
         average_reward_time=0.001,
         actual_num_steps=len(rewards),
         reach_terminal_state=True,
-        policy_run_data=None,
+        policy_run_data=[],
     )
 
 

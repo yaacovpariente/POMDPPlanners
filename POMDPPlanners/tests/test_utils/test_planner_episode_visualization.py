@@ -89,7 +89,7 @@ def sample_episode_history():
         average_reward_time=0.01,
         average_state_sampling_time=0.03,
         discount_factor=0.95,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     return history

@@ -1168,7 +1168,7 @@ def test_compute_metrics():
         average_reward_time=0.0,
         actual_num_steps=4,
         reach_terminal_state=True,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     # History 2: Hits obstacle
@@ -1207,7 +1207,7 @@ def test_compute_metrics():
         average_reward_time=0.0,
         actual_num_steps=3,
         reach_terminal_state=True,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     # History 3: Reaches goal in 5 steps, avoiding obstacle by going up
@@ -1270,7 +1270,7 @@ def test_compute_metrics():
         average_reward_time=0.0,
         actual_num_steps=6,
         reach_terminal_state=True,
-        policy_run_data=PolicyRunData(info_variables=[]),
+        policy_run_data=[PolicyRunData(info_variables=[])],
     )
 
     # Compute metrics

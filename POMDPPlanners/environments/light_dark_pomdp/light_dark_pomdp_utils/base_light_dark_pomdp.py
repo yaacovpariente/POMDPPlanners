@@ -506,44 +506,53 @@ class BaseLightDarkPOMDP(Environment, ABC):
         """Generate a deterministic identifier based on environment configuration.
         This implementation ensures that the config_id is invariant to the order of beacons and obstacles.
         """
-        config_dict = {}
+        import logging
+        from enum import Enum
 
-        # Include all public attributes that aren't callables
-        for key, value in self.__dict__.items():
-            if key.startswith("_") or callable(value):
-                continue
-
-            # Handle numpy arrays
+        def serialize_value(value, key=None):
             if isinstance(value, np.ndarray):
-                if key == "beacons":
-                    # Beacons are in 2xN format: [[x1,x2,...], [y1,y2,...]]
-                    # Transpose to get Nx2 format, sort, then transpose back
-                    sorted_array = np.sort(value.T, axis=0).T
-                    config_dict[key] = sorted_array.tolist()
-                elif key == "obstacles":
-                    # Obstacles are in 2xN format: [[x1,x2,...], [y1,y2,...]]
-                    # Transpose to get Nx2 format, sort, then transpose back
-                    sorted_array = np.sort(value.T, axis=0).T
-                    config_dict[key] = sorted_array.tolist()
+                if key in ["beacons", "obstacles"] and value.shape[0] == 2:
+                    # This is beacons or obstacles in 2xN format
+                    # Transpose to get Nx2 format, sort by rows (coordinate pairs), then transpose back
+                    transposed = value.T  # Nx2 format
+                    sorted_indices = np.lexsort(
+                        (transposed[:, 1], transposed[:, 0])
+                    )  # Sort by x, then y
+                    sorted_array = transposed[sorted_indices].T  # Back to 2xN format
+                    # Convert to float to ensure consistent data types
+                    return sorted_array.astype(float).tolist()
                 else:
-                    config_dict[key] = value.tolist()
-            # Handle basic Python types
-            elif isinstance(value, (str, int, float, bool, list, tuple)):
-                config_dict[key] = value
-            # Handle dictionaries
+                    return value.tolist()
+            elif isinstance(value, (str, int, float, bool)):
+                return value
+            elif isinstance(value, (list, tuple)):
+                return [serialize_value(v) for v in value]
             elif isinstance(value, dict):
-                # Only include serializable values
-                serializable_dict = {}
-                for k, v in value.items():
-                    if isinstance(v, (str, int, float, bool, list, tuple)):
-                        serializable_dict[k] = v
-                    elif isinstance(v, np.ndarray):
-                        serializable_dict[k] = v.tolist()
-                config_dict[key] = serializable_dict
+                return {str(k): serialize_value(v) for k, v in sorted(value.items())}
+            elif isinstance(value, SpaceInfo):
+                return {
+                    "action_space": serialize_value(value.action_space),
+                    "observation_space": serialize_value(value.observation_space),
+                }
+            elif isinstance(value, Enum):
+                return value.value
+            elif hasattr(value, "__dict__"):
+                # Skip logger objects
+                if isinstance(value, logging.Logger):
+                    return None
+                return serialize_value(value.__dict__)
+            else:
+                return str(value)
 
-        # Sort dictionary to ensure consistent ordering
+        config_dict = {}
+        for key, value in self.__dict__.items():
+            # Skip logger and private attributes
+            if key.startswith("_") or callable(value) or isinstance(value, logging.Logger):
+                continue
+            serialized_value = serialize_value(value, key)
+            if serialized_value is not None:  # Skip None values (like logger)
+                config_dict[key] = serialized_value
         config_dict = dict(sorted(config_dict.items()))
-
         return config_to_id(config_dict)
 
 

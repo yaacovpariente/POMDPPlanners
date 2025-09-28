@@ -139,6 +139,7 @@ def run_episode(
     state = belief.sample()
 
     history = []
+    policy_run_data_list = []
     i = 1
     while i <= num_steps:
         if environment.is_terminal(state=state):
@@ -156,8 +157,9 @@ def run_episode(
             break
 
         actions_start_time = time()
-        actions, policy_run_data = policy.action(belief)
+        actions, policy_run_data = policy.action(belief)  # TODO: bug here
         actions_time = time() - actions_start_time
+        policy_run_data_list.append(policy_run_data)
 
         average_action_time = (average_action_time * (i - 1) + actions_time) / (
             i - 1 + len(actions)
@@ -227,5 +229,5 @@ def run_episode(
         average_reward_time=average_reward_time,
         actual_num_steps=actual_num_steps,
         reach_terminal_state=reach_terminal_state,
-        policy_run_data=policy_run_data,
+        policy_run_data=policy_run_data_list,
     )

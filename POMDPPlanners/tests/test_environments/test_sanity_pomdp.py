@@ -786,7 +786,7 @@ class TestSanityPOMDPMetrics:
             average_reward_time=0.0,
             actual_num_steps=2,
             reach_terminal_state=False,
-            policy_run_data=PolicyRunData(info_variables=[]),
+            policy_run_data=[PolicyRunData(info_variables=[])],
         )
 
         metrics = sanity_pomdp.compute_metrics([history])

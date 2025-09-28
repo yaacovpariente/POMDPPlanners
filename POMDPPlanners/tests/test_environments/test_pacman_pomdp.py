@@ -1039,7 +1039,7 @@ class TestPacManPOMDPMetrics:
             average_reward_time=0.0,
             actual_num_steps=1,
             reach_terminal_state=True,
-            policy_run_data=None,
+            policy_run_data=[],
         )
 
         lose_history = History(
@@ -1061,7 +1061,7 @@ class TestPacManPOMDPMetrics:
             average_reward_time=0.0,
             actual_num_steps=1,
             reach_terminal_state=True,
-            policy_run_data=None,
+            policy_run_data=[],
         )
 
         histories = [win_history, lose_history, win_history]  # 2 wins, 1 loss
@@ -1125,7 +1125,7 @@ class TestPacManPOMDPMetrics:
                 average_reward_time=0.0,
                 actual_num_steps=1,
                 reach_terminal_state=True,
-                policy_run_data=None,
+                policy_run_data=[],
             ),
             History(
                 history=[
@@ -1146,7 +1146,7 @@ class TestPacManPOMDPMetrics:
                 average_reward_time=0.0,
                 actual_num_steps=1,
                 reach_terminal_state=True,
-                policy_run_data=None,
+                policy_run_data=[],
             ),
         ]
 
@@ -1220,7 +1220,7 @@ class TestPacManPOMDPMetrics:
             average_reward_time=0.0,
             actual_num_steps=2,
             reach_terminal_state=False,
-            policy_run_data=None,
+            policy_run_data=[],
         )
 
         # Episode 2: Two steps with distances 6 and 4 (average = 5)
@@ -1266,7 +1266,7 @@ class TestPacManPOMDPMetrics:
             average_reward_time=0.0,
             actual_num_steps=2,
             reach_terminal_state=False,
-            policy_run_data=None,
+            policy_run_data=[],
         )
 
         metrics = self.pomdp.compute_metrics([history1, history2])
@@ -1357,7 +1357,7 @@ class TestPacManPOMDPMetrics:
             average_reward_time=0.0,
             actual_num_steps=3,
             reach_terminal_state=False,
-            policy_run_data=None,
+            policy_run_data=[],
         )
 
         # Episode 2: One collision
@@ -1399,7 +1399,7 @@ class TestPacManPOMDPMetrics:
             average_reward_time=0.0,
             actual_num_steps=2,
             reach_terminal_state=False,
-            policy_run_data=None,
+            policy_run_data=[],
         )
 
         metrics = self.pomdp.compute_metrics([history1, history2])
