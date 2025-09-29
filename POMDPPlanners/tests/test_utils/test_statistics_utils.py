@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from scipy.stats import norm
 
-from POMDPPlanners.utils.statistics import cvar_estimator
+from POMDPPlanners.utils.statistics_utils import cvar_estimator
 
 np.random.seed(42)
 random.seed(42)
@@ -167,7 +167,7 @@ def test_cvar_estimator_from_dist():
 
     Test type: unit
     """
-    from POMDPPlanners.utils.statistics import cvar_estimator_from_dist
+    from POMDPPlanners.utils.statistics_utils import cvar_estimator_from_dist
 
     # Test single value case
     values = np.array([1.0])
