@@ -6,6 +6,7 @@ FROM base as test
 
 COPY . .
 
+RUN pip install --upgrade pip
 RUN pip install -r requirements.txt -r requirements-dev.txt
 RUN pip install -e .
 
@@ -14,8 +15,8 @@ FROM base
 
 COPY . .
 
+RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
-
 RUN pip install -e .
 
 ENTRYPOINT ["python"] 
