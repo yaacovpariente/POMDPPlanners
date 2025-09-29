@@ -25,75 +25,79 @@ Type Aliases:
     HyperParameterFeature: Union type for categorical or numerical hyperparameter definitions
 
 Example:
-    Basic hyperparameter optimization workflow::
+    Setting up hyperparameter optimization components:
 
-        from pathlib import Path
-        from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
-            HyperParameterOptimizer
-        )
-        from POMDPPlanners.core.simulation import (
-            NumericalHyperParameter, CategoricalHyperParameter
-        )
-        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-            HyperParameterRunParams, HyperParameterOptimizationDirection
-        )
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+    >>> from pathlib import Path
+    >>> from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
+    ...     HyperParameterOptimizer
+    ... )
+    >>> from POMDPPlanners.core.simulation import (
+    ...     NumericalHyperParameter, CategoricalHyperParameter
+    ... )
+    >>> from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    ...     HyperParameterRunParams, HyperParameterOptimizationDirection
+    ... )
+    >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+    >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+    >>> from POMDPPlanners.core.belief import get_initial_belief
 
-        # Set up optimization
-        optimizer = HyperParameterOptimizer(
-            cache_dir_path=Path("./optimization_results"),
-            experiment_name="POMCP_Tiger_Optimization",
-            n_jobs=4,
-            confidence_interval_level=0.95,
-            alpha=0.05
-        )
+    >>> # Set up optimization
+    >>> cache_path = Path("./test_optimization_results")
+    >>> optimizer = HyperParameterOptimizer(
+    ...     cache_dir_path=cache_path,
+    ...     experiment_name="POMCP_Tiger_Test",
+    ...     n_jobs=1,                      # Single job for testing
+    ...     confidence_interval_level=0.95,
+    ...     alpha=0.05
+    ... )
+    >>> optimizer.experiment_name
+    'POMCP_Tiger_Test'
+    >>> optimizer.n_jobs
+    1
 
-        # Create optimization configurations
-        configs = [
-            HyperParameterRunParams(
-                environment=TigerPOMDP(discount_factor=0.95),
-                belief=initial_belief,  # Must provide initial belief
-                policy_cls=POMCP,
-                hyper_parameters=[
-                    NumericalHyperParameter("exploration_constant", 0.1, 10.0),
-                    NumericalHyperParameter("n_simulations", 100, 1000)
-                ],
-                num_episodes=30,       # Number of episodes for final evaluation
-                num_steps=50,          # Number of steps per episode
-                n_trials=100,          # Number of optimization trials
-                direction=HyperParameterOptimizationDirection.MAXIMIZE,
-                parameter_to_optimize="average_return"
-            ),
-            HyperParameterRunParams(
-                environment=TigerPOMDP(discount_factor=0.99),
-                belief=initial_belief,
-                policy_cls=POMCP,
-                hyper_parameters=[
-                    CategoricalHyperParameter("algorithm", ["tpe", "cmaes", "random"]),
-                    NumericalHyperParameter("depth", 5, 15)
-                ],
-                num_episodes=25,
-                num_steps=40,
-                n_trials=75,
-                direction=HyperParameterOptimizationDirection.MINIMIZE,
-                parameter_to_optimize="total_cost"
-            )
-        ]
+    >>> # Create test environment and belief
+    >>> tiger_env = TigerPOMDP(discount_factor=0.95)
+    >>> tiger_env.name
+    'TigerPOMDP'
+    >>> initial_belief = get_initial_belief(tiger_env, n_particles=10)  # Reduced for testing
+    >>> len(initial_belief.particles)
+    10
 
-        # Run batch optimization with automatic MLflow tracking
-        results = optimizer.optimize(configs)
+    >>> # Test hyperparameter definitions (note: order is low, high, name for Numerical)
+    >>> numerical_param = NumericalHyperParameter(0.1, 10.0, "exploration_constant")
+    >>> numerical_param.name
+    'exploration_constant'
+    >>> numerical_param.low
+    0.1
+    >>> numerical_param.high
+    10.0
 
-        # Process results
-        for i, result in enumerate(results):
-            print(f"Configuration {i+1}:")
-            print(f"  Environment: {result.environment.__class__.__name__}")
-            print(f"  Policy: {result.policy.__class__.__name__}")
-            print(f"  Best parameters: {result.chosen_hyper_parameters}")
-            print(f"  Episodes: {result.num_episodes}")
-            print(f"  Steps: {result.num_steps}")
-            print(f"  Direction: {result.direction.value}")
-            print(f"  Metric: {result.parameter_to_optimize}")
+    >>> # For categorical: order is choices, name
+    >>> categorical_param = CategoricalHyperParameter(["tpe", "random"], "algorithm")
+    >>> categorical_param.name
+    'algorithm'
+    >>> len(categorical_param.choices)
+    2
+
+    >>> # Test configuration creation (simplified for testing)
+    >>> config = HyperParameterRunParams(
+    ...     environment=tiger_env,
+    ...     belief=initial_belief,
+    ...     policy_cls=POMCP,
+    ...     hyper_parameters=[numerical_param],
+    ...     constant_parameters={"depth": 5},  # Required parameter
+    ...     num_episodes=2,        # Reduced for testing
+    ...     num_steps=5,           # Reduced for testing
+    ...     n_trials=3,            # Reduced for testing
+    ...     direction=HyperParameterOptimizationDirection.MAXIMIZE,
+    ...     parameter_to_optimize="average_return"
+    ... )
+    >>> config.num_episodes
+    2
+    >>> config.n_trials
+    3
+    >>> config.direction.value
+    'maximize'
 
 Note:
     This module requires Optuna and MLFlow to be installed. The optimization process
@@ -163,45 +167,57 @@ class HyperParameterOptimizer:
         task_manager: JoblibTaskManager instance for task execution and caching
 
     Example:
-        Basic hyperparameter optimization::
+        Creating and configuring hyperparameter optimizer:
 
-            from pathlib import Path
-            from POMDPPlanners.core.simulation import NumericalHyperParameter
-            from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-                HyperParameterRunParams, HyperParameterOptimizationDirection
-            )
+        >>> from pathlib import Path
+        >>> from POMDPPlanners.core.simulation import NumericalHyperParameter
+        >>> from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+        ...     HyperParameterRunParams, HyperParameterOptimizationDirection
+        ... )
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        >>> from POMDPPlanners.core.belief import get_initial_belief
 
-            optimizer = HyperParameterOptimizer(
-                cache_dir_path=Path("./optimization_cache"),
-                experiment_name="POMCP_Tuning",
-                n_jobs=4,
-                confidence_interval_level=0.95,
-                alpha=0.05
-            )
+        >>> # Test optimizer configuration
+        >>> optimizer = HyperParameterOptimizer(
+        ...     cache_dir_path=Path("./test_optimization_cache"),
+        ...     experiment_name="POMCP_Tuning_Test",
+        ...     n_jobs=1,                   # Single job for testing
+        ...     confidence_interval_level=0.95,
+        ...     alpha=0.05
+        ... )
+        >>> optimizer.experiment_name
+        'POMCP_Tuning_Test'
+        >>> optimizer.confidence_interval_level
+        0.95
+        >>> optimizer.alpha
+        0.05
 
-            # Create configuration
-            config = HyperParameterRunParams(
-                environment=env,
-                belief=initial_belief,
-                policy_cls=POMCP,
-                hyper_parameters=[
-                    NumericalHyperParameter("exploration_constant", 0.1, 10.0),
-                    NumericalHyperParameter("n_simulations", 100, 1000)
-                ],
-                num_episodes=50,          # Final evaluation episodes
-                num_steps=100,
-                n_trials=100,             # Number of optimization trials
-                direction=HyperParameterOptimizationDirection.MAXIMIZE,
-                parameter_to_optimize="average_return"
-            )
+        >>> # Create test environment and belief
+        >>> env = TigerPOMDP(discount_factor=0.95)
+        >>> initial_belief = get_initial_belief(env, n_particles=10)  # Reduced for testing
 
-            # Run optimization
-            results = optimizer.optimize([config])
-
-            # Access results
-            for result in results:
-                print(f"Best parameters: {result.chosen_hyper_parameters}")
-                print(f"Policy: {result.policy}")
+        >>> # Test configuration creation
+        >>> config = HyperParameterRunParams(
+        ...     environment=env,
+        ...     belief=initial_belief,
+        ...     policy_cls=POMCP,
+        ...     hyper_parameters=[
+        ...         NumericalHyperParameter(0.1, 10.0, "exploration_constant"),
+        ...     ],
+        ...     constant_parameters={"depth": 5, "n_simulations": 200},  # Required parameter
+        ...     num_episodes=50,          # Reduced for testing
+        ...     num_steps=5,             # Reduced for testing
+        ...     n_trials=2,              # Reduced for testing
+        ...     direction=HyperParameterOptimizationDirection.MAXIMIZE,
+        ...     parameter_to_optimize="average_return"
+        ... )
+        >>> len(config.hyper_parameters)
+        1
+        >>> config.hyper_parameters[0].name
+        'exploration_constant'
+        >>> config.parameter_to_optimize
+        'average_return'
     """
 
     def __init__(

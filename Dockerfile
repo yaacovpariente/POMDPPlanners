@@ -1,5 +1,5 @@
-# Use a standard Python base image (for example, python:3.9-slim) as the base.
-FROM python:3.9-slim as base
+# Use a standard Python base image (for example, python:3.10-slim) as the base.
+FROM python:3.10-slim as base
 
 # Test stage
 FROM base as test
