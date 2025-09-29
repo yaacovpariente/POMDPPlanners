@@ -39,7 +39,7 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
-from POMDPPlanners.utils.statistics import confidence_interval
+from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
 @dataclass

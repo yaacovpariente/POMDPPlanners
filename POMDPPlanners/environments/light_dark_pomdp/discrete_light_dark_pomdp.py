@@ -21,7 +21,7 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_lig
     BaseLightDarkPOMDP,
     BaseLightDarkPOMDPDiscreteActions,
 )
-from POMDPPlanners.utils.statistics import confidence_interval
+from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
 class DiscreteLDObservationModel(ObservationModel):
