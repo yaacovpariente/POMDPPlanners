@@ -61,136 +61,37 @@ class SparsePFT(PathSimulationPolicy):
         n_simulations: Number of MCTS simulations to perform
 
     Example:
-        Using Sparse-PFT on Tiger POMDP with controlled tree growth::
-
-            from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.core.belief import get_initial_belief
-
-            # Create Tiger POMDP environment
-            tiger = TigerPOMDP(discount_factor=0.95)
-
-            # Create Sparse-PFT planner with controlled branching
-            sparse_pft = SparsePFT(
-                environment=tiger,
-                discount_factor=0.95,
-                gamma=0.95,                  # Discount for recursive calls
-                depth=12,                    # Maximum planning depth
-                c_ucb=1.0,                   # Base exploration constant
-                beta_ucb=2.0,                # Enhanced exploration parameter
-                belief_child_num=5,          # Max 5 belief children per action
-                n_simulations=1000,          # Number of MCTS simulations
-                name="SparsePFT_Tiger"
-            )
-
-            # Plan action from initial belief
-            initial_belief = get_initial_belief(tiger, n_particles=1000)
-            action, run_data = sparse_pft.action(initial_belief)
-
-            print(f"Selected action: {action[0]}")
-            print(f"Tree metrics collected: {len(run_data.info_variables)}")
-
-            # Access tree statistics for analysis
-            tree_metrics = run_data.info_variables
-            for metric in tree_metrics:
-                print(f"{metric.name}: {metric.value}")
-
-    Example:
-        Comparing different sparse branching strategies::
-
-            # Conservative branching (small tree, faster planning)
-            conservative_pft = SparsePFT(
-                environment=tiger,
-                discount_factor=0.95,
-                gamma=0.95,
-                depth=15,
-                c_ucb=1.0,
-                beta_ucb=1.0,                # Lower exploration
-                belief_child_num=3,          # Fewer children (sparser tree)
-                n_simulations=500,
-                name="Conservative_SparsePFT"
-            )
-
-            # Aggressive branching (larger tree, more thorough search)
-            aggressive_pft = SparsePFT(
-                environment=tiger,
-                discount_factor=0.95,
-                gamma=0.95,
-                depth=10,
-                c_ucb=2.0,                   # Higher base exploration
-                beta_ucb=3.0,                # Higher enhanced exploration
-                belief_child_num=8,          # More children per action
-                n_simulations=2000,          # More simulations
-                name="Aggressive_SparsePFT"
-            )
-
-            # Compare performance
-            conservative_action, conservative_data = conservative_pft.action(initial_belief)
-            aggressive_action, aggressive_data = aggressive_pft.action(initial_belief)
-
-            print("Conservative approach:")
-            print(f"  Action: {conservative_action[0]}")
-            print(f"  Planning time: {conservative_data.info_variables}")
-
-            print("Aggressive approach:")
-            print(f"  Action: {aggressive_action[0]}")
-            print(f"  Planning time: {aggressive_data.info_variables}")
-
-    Example:
-        Using Sparse-PFT with different environments requiring parameter tuning::
-
-            from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
-
-            # For environments with complex dynamics, tune parameters differently
-            mountain_car = MountainCarPOMDP(discount_factor=0.99)
-
-            mountain_pft = SparsePFT(
-                environment=mountain_car,
-                discount_factor=0.99,
-                gamma=0.99,
-                depth=20,                    # Deeper search for longer episodes
-                c_ucb=1.5,                   # Moderate exploration
-                beta_ucb=1.8,                # Balanced exploration enhancement
-                belief_child_num=6,          # Moderate branching
-                n_simulations=1500,          # More simulations for complex dynamics
-                name="SparsePFT_MountainCar"
-            )
-
-            # The algorithm automatically handles the different observation space
-            mountain_belief = get_initial_belief(mountain_car, n_particles=500)
-            mountain_action, mountain_data = mountain_pft.action(mountain_belief)
-
-            print(f"Mountain Car action: {mountain_action[0]}")  # One of [-1, 0, 1]
-
-    Algorithm Details:
-
-    **Tree Construction Process:**
-    1. Start with root belief node
-    2. For each simulation:
-       - Traverse tree using enhanced UCB until leaf
-       - Expand leaf with all available actions
-       - For each action, maintain at most belief_child_num children
-       - Sample existing children or generate new ones based on capacity
-       - Perform random rollout from leaf for value estimation
-       - Backpropagate values up the tree
-
-    **Memory Management:**
-    The sparse structure ensures memory usage stays bounded even for long planning
-    horizons by limiting the branching factor at each action node.
-
-    **Exploration Strategy:**
-    The enhanced UCB formula with beta_ucb parameter provides better exploration
-    control compared to standard UCB, especially important in sparse trees where
-    exploration opportunities are limited.
-
-    **Comparison with Other Algorithms:**
-    - **vs POMCP**: More memory efficient due to sparse structure, may sacrifice some optimality
-    - **vs PFT-DPW**: Works with discrete actions, uses different progressive strategy
-    - **vs Sparse Sampling**: Adds MCTS tree structure for better sequential planning
-
-    References:
-    - Browne, C., et al. "A Survey of Monte Carlo Tree Search Methods." IEEE TCIAIG 2012.
-    - Kearns, M., et al. "Near-Optimal Reinforcement Learning in Polynomial Time." ML 2002.
+        >>> import numpy as np
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> from POMDPPlanners.core.belief import get_initial_belief
+        >>> np.random.seed(42)  # For reproducible results
+        >>>
+        >>> # Create environment and planner
+        >>> tiger = TigerPOMDP(discount_factor=0.95)
+        >>> planner = SparsePFT(
+        ...     environment=tiger,
+        ...     discount_factor=0.95,
+        ...     gamma=0.95,
+        ...     depth=5,
+        ...     c_ucb=1.0,
+        ...     beta_ucb=2.0,
+        ...     belief_child_num=3,
+        ...     n_simulations=10,
+        ...     name="ExamplePlanner"
+        ... )
+        >>>
+        >>> # Basic planner interface usage
+        >>> planner.name
+        'ExamplePlanner'
+        >>>
+        >>> # Action selection from belief
+        >>> initial_belief = get_initial_belief(tiger, n_particles=10)
+        >>> actions, run_data = planner.action(initial_belief)
+        >>>
+        >>> # Planner space information
+        >>> space_info = SparsePFT.get_space_info()
+        >>> space_info.action_space.name
+        'DISCRETE'
     """
 
     def __init__(

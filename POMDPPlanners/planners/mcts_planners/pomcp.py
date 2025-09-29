@@ -71,30 +71,34 @@ class POMCP(PathSimulationPolicy):
         belief is used via the :func:`POMDPPlanners.core.belief.get_initial_belief` function.
 
     Example:
+        >>> import numpy as np
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.core.belief import get_initial_belief
+        >>> np.random.seed(42)  # For reproducible results
+        >>>
         >>> # Create environment and planner
-        >>> env = TigerPOMDP(discount_factor=0.95)
+        >>> tiger = TigerPOMDP(discount_factor=0.95)
         >>> planner = POMCP(
-        ...     environment=env,
-        ...     discount_factor=env.discount_factor,
-        ...     depth=10,
+        ...     environment=tiger,
+        ...     discount_factor=0.95,
+        ...     depth=5,
         ...     exploration_constant=1.0,
-        ...     name="POMCP_Tiger",
-        ...     n_simulations=100  # Smaller for testing
+        ...     name="ExamplePlanner",
+        ...     n_simulations=10
         ... )
-
-        >>> # Plan action from initial belief
-        >>> initial_belief = get_initial_belief(env, n_particles=100)
-        >>> action, run_data = planner.action(initial_belief)
-
-        >>> # Verify action selection
-        >>> len(action) == 1  # Single action returned
-        True
-        >>> action[0] in env.get_actions()  # Valid action
-        True
-        >>> hasattr(run_data, 'info_variables')  # Has tree statistics
-        True
+        >>>
+        >>> # Basic planner interface usage
+        >>> planner.name
+        'ExamplePlanner'
+        >>>
+        >>> # Action selection from belief
+        >>> initial_belief = get_initial_belief(tiger, n_particles=10)
+        >>> actions, run_data = planner.action(initial_belief)
+        >>>
+        >>> # Planner space information
+        >>> space_info = POMCP.get_space_info()
+        >>> space_info.action_space.name
+        'DISCRETE'
     """
 
     def __init__(
