@@ -34,7 +34,7 @@ def cvar_estimator(vec: np.ndarray, alpha: float) -> float:
         Risk analysis of POMDP algorithm performance:
 
         >>> import numpy as np
-        >>> from POMDPPlanners.utils.statistics import cvar_estimator
+        >>> from POMDPPlanners.utils.statistics_utils import cvar_estimator
 
         >>> # Simulate algorithm returns from multiple episodes
         >>> returns = np.array([12.5, 8.3, 15.7, -2.1, 9.8, 13.2, 6.4, 11.0, -1.5, 14.3])
