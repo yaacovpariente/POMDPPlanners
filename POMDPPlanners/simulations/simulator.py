@@ -789,81 +789,62 @@ class POMDPSimulator(BaseSimulator):
     - Custom environment-specific metrics
 
     Example:
-        Comparing POMCP and Sparse Sampling on Tiger POMDP::
+        Creating and configuring a POMDP simulator for algorithm comparison:
 
-            from pathlib import Path
-            from POMDPPlanners.simulations.simulator import POMDPSimulator
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-            from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
-            from POMDPPlanners.core.belief import get_initial_belief
-            from POMDPPlanners.core.simulation import EnvironmentRunParams
-            from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
+        >>> from pathlib import Path
+        >>> from POMDPPlanners.simulations.simulator import POMDPSimulator
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        >>> from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+        >>> from POMDPPlanners.core.belief import get_initial_belief
+        >>> from POMDPPlanners.core.simulation import EnvironmentRunParams
+        >>> from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
 
-            # Create environment
-            tiger_env = TigerPOMDP(discount_factor=0.95)
-            initial_belief = get_initial_belief(tiger_env, n_particles=1000)
+        >>> # Create environment
+        >>> tiger_env = TigerPOMDP(discount_factor=0.95)
+        >>> # Create initial belief for testing
+        >>> initial_belief = get_initial_belief(tiger_env, n_particles=10)  # Reduced for testing
 
-            # Create policies to compare
-            pomcp = POMCP(
-                environment=tiger_env,
-                discount_factor=0.95,
-                depth=10,
-                exploration_constant=1.0,
-                name="POMCP",
-                n_simulations=1000
-            )
+        >>> # Create policies to compare
+        >>> pomcp = POMCP(
+        ...     environment=tiger_env,
+        ...     discount_factor=0.95,
+        ...     depth=5,               # Reduced for testing
+        ...     exploration_constant=1.0,
+        ...     name="POMCP_Test",
+        ...     n_simulations=10       # Reduced for testing
+        ... )
 
-            sparse_sampling = StandardSparseSamplingDiscreteActionsPlanner(
-                environment=tiger_env,
-                branching_factor=5,
-                depth=5,
-                name="SparseSampling"
-            )
+        >>> sparse_sampling = StandardSparseSamplingDiscreteActionsPlanner(
+        ...     environment=tiger_env,
+        ...     branching_factor=2,    # Reduced for testing
+        ...     depth=3,               # Reduced for testing
+        ...     name="SparseSampling_Test"
+        ... )
 
-            # Configure simulation parameters
-            env_params = [
-                EnvironmentRunParams(
-                    environment=tiger_env,
-                    belief=initial_belief,
-                    policies=[pomcp, sparse_sampling],
-                    num_episodes=100,
-                    num_steps=20
-                )
-            ]
+        >>> # Configure simulation parameters
+        >>> env_params = [
+        ...     EnvironmentRunParams(
+        ...         environment=tiger_env,
+        ...         belief=initial_belief,
+        ...         policies=[pomcp, sparse_sampling],
+        ...         num_episodes=2,    # Reduced for testing
+        ...         num_steps=5        # Reduced for testing
+        ...     )
+        ... ]
 
-            # Configure task manager
-            joblib_config = JoblibConfig(n_jobs=4)
+        >>> # Configure task manager
+        >>> joblib_config = JoblibConfig(n_jobs=1)  # Single job for testing
+        >>> joblib_config.n_jobs
+        1
 
-            # Run simulation with profiling
-            with POMDPSimulator(
-                task_manager_config=joblib_config,
-                cache_dir_path=Path("./tiger_comparison"),
-                experiment_name="Tiger_POMDP_Comparison",
-                enable_profiling=True
-            ) as simulator:
-                results, statistics_df = simulator.compare_multiple_environments_policies(
-                    environment_run_params=env_params,
-                    alpha=0.05,  # 5% risk level for CVaR
-                    confidence_interval_level=0.95
-                )
-
-            # Analyze results
-            print("Simulation completed!")
-            print(f"Results structure: {results.keys()}")
-            print(f"Statistics shape: {statistics_df.shape}")
-
-            # Access policy-specific results
-            tiger_results = results['TigerPOMDP']
-            pomcp_histories = tiger_results['POMCP']
-            sparse_histories = tiger_results['SparseSampling']
-
-            # Compare average returns
-            pomcp_stats = statistics_df[statistics_df['policy'] == 'POMCP']
-            sparse_stats = statistics_df[statistics_df['policy'] == 'SparseSampling']
-
-            print(f"POMCP average return: {pomcp_stats['average_return'].iloc[0]:.3f}")
-            print(f"Sparse Sampling average return: {sparse_stats['average_return'].iloc[0]:.3f}")
+        >>> # Test simulator configuration
+        >>> simulator = POMDPSimulator(
+        ...     task_manager_config=joblib_config,
+        ...     experiment_name="Tiger_POMDP_Test",
+        ...     debug=False,
+        ...     enable_profiling=False
+        ... )
     """
 
     def __init__(
