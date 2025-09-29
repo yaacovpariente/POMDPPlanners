@@ -2641,6 +2641,20 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
             n_jobs=1,
         )
 
+    # Ensure all logs are flushed before checking log files
+    import logging
+    import time
+
+    # Flush all handlers in the logging system
+    for logger_name in logging.Logger.manager.loggerDict:
+        logger = logging.getLogger(logger_name)
+        for handler in logger.handlers:
+            if hasattr(handler, "flush"):
+                handler.flush()
+
+    # Small delay to ensure file system operations complete
+    time.sleep(0.1)
+
     # ASSERT: Check that log files are created correctly
 
     # Verify log directory exists
