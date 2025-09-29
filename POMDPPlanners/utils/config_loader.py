@@ -26,101 +26,129 @@ def load_config(config_path: str) -> Dict[str, Any]:
         yaml.YAMLError: If the file contains invalid YAML syntax
 
     Example:
-        Loading experiment configuration::
+        Loading experiment configuration:
 
-            from POMDPPlanners.utils.config_loader import load_config
+        >>> from POMDPPlanners.utils.config_loader import load_config
+        >>> import tempfile
+        >>> import os
 
-            # Load experiment configuration
-            config = load_config("experiments/tiger_pomdp_study.yaml")
+        >>> # Create a temporary config file for testing
+        >>> config_content = '''
+        ... environment:
+        ...   name: "TigerPOMDP"
+        ...   discount_factor: 0.95
+        ... planners:
+        ...   - name: "POMCP"
+        ...     n_simulations: 1000
+        ... simulation:
+        ...   episodes_per_run: 100
+        ... '''
+        >>> with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        ...     _ = f.write(config_content)
+        ...     temp_config_path = f.name
 
-            # Access configuration sections
-            env_config = config['environment']
-            planner_configs = config['planners']
-            simulation_config = config['simulation']
+        >>> # Load experiment configuration
+        >>> config = load_config(temp_config_path)
+        >>> config['environment']['name']
+        'TigerPOMDP'
+        >>> config['environment']['discount_factor']
+        0.95
+        >>> config['planners'][0]['name']
+        'POMCP'
+        >>> config['simulation']['episodes_per_run']
+        100
 
-            print(f"Environment: {env_config['name']}")
-            print(f"Planners: {[p['name'] for p in planner_configs]}")
-            print(f"Episodes per run: {simulation_config['episodes_per_run']}")
-
-    Example:
-        Using with environment configuration::
-
-            # Example YAML content (tiger_config.yaml):
-            # environment:
-            #   name: "TigerPOMDP"
-            #   discount_factor: 0.95
-            #   observation_accuracy: 0.85
-            # planners:
-            #   - name: "POMCP"
-            #     n_simulations: 1000
-            #     depth: 20
-            #     exploration_constant: 1.0
-            #   - name: "PFT_DPW"
-            #     n_simulations: 500
-            #     depth: 15
-            #     k_a: 2.0
-            # simulation:
-            #   episodes_per_run: 100
-            #   num_runs: 10
-
-            config = load_config("tiger_config.yaml")
-
-            # Create environment from config
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            env = TigerPOMDP(discount_factor=config['environment']['discount_factor'])
-
-            # Create planners from config
-            planners = []
-            for planner_config in config['planners']:
-                if planner_config['name'] == 'POMCP':
-                    from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-                    planner = POMCP(
-                        environment=env,
-                        discount_factor=env.discount_factor,
-                        n_simulations=planner_config['n_simulations'],
-                        depth=planner_config['depth'],
-                        exploration_constant=planner_config['exploration_constant'],
-                        name=planner_config['name']
-                    )
-                    planners.append(planner)
+        >>> # Clean up
+        >>> os.unlink(temp_config_path)
 
     Example:
-        Handling configuration hierarchies and defaults::
+        Using with environment configuration:
 
-            # Example YAML with nested configuration:
-            # defaults:
-            #   simulation:
-            #     episodes: 50
-            #     particles: 100
-            # experiments:
-            #   quick_test:
-            #     environment: "SanityPOMDP"
-            #     planners: ["POMCP"]
-            #   full_study:
-            #     environment: "TigerPOMDP"
-            #     planners: ["POMCP", "PFT_DPW", "SparsePFT"]
-            #     simulation:
-            #       episodes: 200
-            #       particles: 500
+        >>> # Create a temporary config file with environment and planners
+        >>> config_content = '''
+        ... environment:
+        ...   name: "TigerPOMDP"
+        ...   discount_factor: 0.95
+        ...   observation_accuracy: 0.85
+        ... planners:
+        ...   - name: "POMCP"
+        ...     n_simulations: 100
+        ...     depth: 5
+        ...     exploration_constant: 1.0
+        ... simulation:
+        ...   episodes_per_run: 10
+        ...   num_runs: 2
+        ... '''
+        >>> with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        ...     _ = f.write(config_content)
+        ...     temp_config_path = f.name
 
-            config = load_config("multi_experiment_config.yaml")
+        >>> config = load_config(temp_config_path)
 
-            # Access different experiment configurations
-            defaults = config['defaults']
-            quick_config = config['experiments']['quick_test']
-            full_config = config['experiments']['full_study']
+        >>> # Create environment from config
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> env = TigerPOMDP(discount_factor=config['environment']['discount_factor'])
+        >>> env.discount_factor
+        0.95
 
-            # Merge defaults with specific configuration
-            def merge_config(base_config, specific_config):
-                merged = base_config.copy()
-                merged.update(specific_config)
-                return merged
+        >>> # Access planner configuration
+        >>> planner_config = config['planners'][0]
+        >>> planner_config['name']
+        'POMCP'
+        >>> planner_config['n_simulations']
+        100
 
-            full_simulation_config = merge_config(
-                defaults['simulation'],
-                full_config.get('simulation', {})
-            )
-            print(f"Full study episodes: {full_simulation_config['episodes']}")
+        >>> # Clean up
+        >>> os.unlink(temp_config_path)
+
+    Example:
+        Handling configuration hierarchies and defaults:
+
+        >>> # Create a nested configuration file
+        >>> nested_config_content = '''
+        ... defaults:
+        ...   simulation:
+        ...     episodes: 50
+        ...     particles: 100
+        ... experiments:
+        ...   quick_test:
+        ...     environment: "SanityPOMDP"
+        ...     planners: ["POMCP"]
+        ...   full_study:
+        ...     environment: "TigerPOMDP"
+        ...     planners: ["POMCP", "PFT_DPW"]
+        ...     simulation:
+        ...       episodes: 200
+        ...       particles: 500
+        ... '''
+        >>> with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+        ...     _ = f.write(nested_config_content)
+        ...     temp_config_path = f.name
+
+        >>> config = load_config(temp_config_path)
+
+        >>> # Access different experiment configurations
+        >>> defaults = config['defaults']
+        >>> quick_config = config['experiments']['quick_test']
+        >>> full_config = config['experiments']['full_study']
+
+        >>> # Verify configuration structure
+        >>> defaults['simulation']['episodes']
+        50
+        >>> quick_config['environment']
+        'SanityPOMDP'
+        >>> full_config['simulation']['episodes']
+        200
+
+        >>> # Simple config merging test
+        >>> merged = {**defaults['simulation'], **full_config.get('simulation', {})}
+        >>> merged['episodes']
+        200
+        >>> merged['particles']
+        500
+
+        >>> # Clean up
+        >>> os.unlink(temp_config_path)
 
     Configuration Best Practices:
         **File Organization**:
