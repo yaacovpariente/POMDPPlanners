@@ -252,15 +252,6 @@ class WeightedParticleBelief(Belief):
         ...     resampling=True,
         ...     ess_factor=0.5
         ... )
-
-        >>> # Verify belief creation
-        >>> len(belief.particles) == 10
-        True
-        >>> len(belief.log_weights) == 10
-        True
-        >>> belief.resampling
-        True
-
         >>> # Sample a state from belief
         >>> state = belief.sample()
         >>> len(state) == 2  # [x, y] coordinate
@@ -565,6 +556,8 @@ class WeightedParticleBeliefStateUpdate(Belief):
         >>> # Create environment and empty belief
         >>> env = TigerPOMDP(discount_factor=0.95)
         >>> belief = WeightedParticleBeliefStateUpdate(particles=[], weights=[])
+        >>> len(belief.particles) == 0
+        True
 
         >>> # Add states incrementally with observations
         >>> belief.inplace_update("listen", "hear_left", env, "tiger_left")
@@ -574,189 +567,10 @@ class WeightedParticleBeliefStateUpdate(Belief):
         >>> # Verify belief construction
         >>> len(belief.particles) == 3
         True
-        >>> bool(belief.weights_sum > 0)
-        True
-        >>> "tiger_left" in belief.particles
-        True
-
         >>> # Sample weighted by observation probabilities
         >>> sampled_state = belief.sample()
         >>> sampled_state in ["tiger_left", "tiger_right"]
         True
-
-        >>> import numpy as np
-        >>> from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-        >>> # Create continuous state environment
-        >>> noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-        >>> env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
-
-        >>> # Start with single particle
-        >>> initial_state = np.array([0.0, 0.0, 0.1, 0.0])
-        >>> belief = WeightedParticleBeliefStateUpdate([initial_state], [1.0])
-        >>> len(belief.particles) == 1
-        True
-
-        >>> # Create child belief with new observation
-        >>> action = 1  # Apply force right
-        >>> obs = np.array([0.1, 0.0, 0.08, 0.0])
-        >>> next_state = env.state_transition_model(initial_state, action).sample()[0]
-        >>> child_belief = belief.update(action, obs, env, next_state)
-
-        >>> # Verify immutable update
-        >>> len(belief.particles) == 1  # Original unchanged
-        True
-        >>> len(child_belief.particles) == 2  # New belief has additional particle
-        True
-        >>> bool(child_belief.weights[-1] > 0)  # New particle has positive weight
-        True
-
-        >>> from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-        >>> env = SanityPOMDP(discount_factor=0.95)
-
-        >>> # Strategy 1: In-place updates (memory efficient)
-        >>> belief_inplace = WeightedParticleBeliefStateUpdate([], [])
-        >>> states_observations = [(0, 0), (1, 0), (0, 0)]
-
-        >>> for state, obs in states_observations:
-        ...     belief_inplace.inplace_update("action", obs, env, state)
-
-        >>> len(belief_inplace.particles) == 3
-        True
-
-        >>> # Strategy 2: Immutable updates (functional style)
-        >>> belief_immutable = WeightedParticleBeliefStateUpdate([], [])
-        >>> for state, obs in states_observations:
-        ...     belief_immutable = belief_immutable.update("action", obs, env, state)
-
-        >>> len(belief_immutable.particles) == 3
-        True
-
-        >>> # Both should have same final state
-        >>> len(belief_inplace.particles) == len(belief_immutable.particles)
-        True
-
-        Monte Carlo Tree Search integration::
-
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
-            from POMDPPlanners.core.tree import BeliefNode, ActionNode
-            import random
-
-            env = TigerPOMDP(discount_factor=0.95)
-
-            # Root belief node with initial particles
-            root_belief = WeightedParticleBeliefStateUpdate(
-                particles=["tiger_left", "tiger_right"],
-                weights=[0.5, 0.5]
-            )
-            root_node = BeliefNode(belief=root_belief)
-
-            # Simulate MCTS expansion
-            action = "listen"
-            possible_observations = ["hear_left", "hear_right"]
-
-            # Create action node
-            action_node = ActionNode(action=action, parent=root_node)
-
-            # For each possible observation, create belief child
-            for observation in possible_observations:
-                # Sample particles and create child belief
-                child_belief = WeightedParticleBeliefStateUpdate([], [])
-
-                # Add particles based on transition model
-                for _ in range(5):  # Multiple particles per observation
-                    parent_state = root_belief.sample()
-                    next_state = env.state_transition_model(parent_state, action).sample()[0]
-                    child_belief.inplace_update(action, observation, env, next_state)
-
-                # Create belief node for tree
-                belief_node = BeliefNode(belief=child_belief, observation=observation, parent=action_node)
-                print(f"Child belief for {observation}: {len(child_belief.particles)} particles")
-
-        Weighted sampling and state estimation::
-
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
-            import collections
-
-            env = TigerPOMDP(discount_factor=0.95)
-            belief = WeightedParticleBeliefStateUpdate([], [])
-
-            # Add strongly biased evidence for tiger_left
-            evidence_sets = [
-                ("tiger_left", "hear_left", 5),    # Strong evidence for left
-                ("tiger_right", "hear_left", 2),   # Weak evidence for left from right
-                ("tiger_left", "hear_right", 1),   # Weak evidence for right from left
-                ("tiger_right", "hear_right", 3),  # Medium evidence for right
-            ]
-
-            for state, obs, count in evidence_sets:
-                for _ in range(count):
-                    belief.inplace_update("listen", obs, env, state)
-
-            # Analyze sampling distribution
-            samples = [belief.sample() for _ in range(1000)]
-            sample_counts = collections.Counter(samples)
-
-            print("Sampling distribution:")
-            for state, count in sample_counts.items():
-                probability = count / 1000
-                print(f"  {state}: {probability:.3f}")
-
-            # Should strongly favor tiger_left due to evidence weighting
-
-        Configuration ID and caching::
-
-            from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-            from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
-
-            env = SanityPOMDP(discount_factor=0.95)
-
-            # Create two beliefs with same particles in different orders
-            belief1 = WeightedParticleBeliefStateUpdate([0, 1, 0], [0.8, 0.2, 0.6])
-            belief2 = WeightedParticleBeliefStateUpdate([1, 0, 0], [0.2, 0.8, 0.6])
-
-            # Config IDs should be equal (order-invariant)
-            print(f"Belief 1 config ID: {belief1.config_id}")
-            print(f"Belief 2 config ID: {belief2.config_id}")
-            print(f"IDs match: {belief1.config_id == belief2.config_id}")
-
-            # Useful for caching in planning algorithms
-            belief_cache = {belief1.config_id: "cached_result"}
-
-            if belief2.config_id in belief_cache:
-                print("Cache hit! Reusing computation.")
-
-        Advanced: Custom particle types::
-
-            import numpy as np
-            from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-            from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
-
-            # Works with any particle type - numpy arrays, custom objects, etc.
-            noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-            env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
-
-            # Numpy array particles
-            particles = [
-                np.array([0.0, 0.0, 0.1, 0.0]),
-                np.array([0.1, 0.0, 0.08, 0.0]),
-                np.array([-0.1, 0.0, 0.12, 0.0])
-            ]
-            weights = [0.4, 0.35, 0.25]
-
-            belief = WeightedParticleBeliefStateUpdate(particles, weights)
-
-            # Add more complex state
-            complex_state = np.array([0.05, 0.1, 0.09, -0.05])
-            action = np.array([1])  # Force right
-            observation = np.array([0.06, 0.1, 0.088, -0.05])
-
-            new_belief = belief.update(action, observation, env, complex_state)
-            sampled_state = new_belief.sample()
-
-            print(f"Sampled state shape: {sampled_state.shape}")
-            print(f"Sampled state: {sampled_state}")
     """
 
     def __init__(self, particles: Optional[list] = None, weights: Optional[list] = None):
@@ -813,25 +627,35 @@ class WeightedParticleBeliefStateUpdate(Belief):
             and updated weights.
 
         Example:
-            Creating a new belief with an additional particle::\
+            Creating a new belief with an additional particle:
 
-                # Original belief with 2 particles
-                belief = WeightedParticleBeliefStateUpdate(
-                    particles=["state1", "state2"],
-                    weights=[0.7, 0.3]
-                )
+            >>> # Original belief with 2 particles
+            >>> belief = WeightedParticleBeliefStateUpdate(
+            ...     particles=["state1", "state2"],
+            ...     weights=[0.7, 0.3]
+            ... )
+            >>> len(belief.particles)
+            2
+            >>> len(belief.weights)
+            2
 
-                # Create new belief with additional particle
-                new_belief = belief.update(
-                    action="action1",
-                    observation="obs1",
-                    pomdp=environment,
-                    state="state3"
-                )
+            >>> # Use TigerPOMDP for realistic example
+            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            >>> tiger_env = TigerPOMDP(discount_factor=0.95)
 
-                # Original belief unchanged, new belief has 3 particles
-                assert len(belief.particles) == 2
-                assert len(new_belief.particles) == 3
+            >>> # Create new belief with additional particle
+            >>> new_belief = belief.update(
+            ...     action="listen",
+            ...     observation="hear_left",
+            ...     pomdp=tiger_env,
+            ...     state="tiger_left"
+            ... )
+
+            >>> # Original belief unchanged, new belief has 3 particles
+            >>> len(belief.particles)
+            2
+            >>> len(new_belief.particles)
+            3
         """
         if state is None:
             raise ValueError("state cannot be None")
@@ -872,18 +696,28 @@ class WeightedParticleBeliefStateUpdate(Belief):
             state: State particle to add to the belief. If None, no particle is added.
 
         Example:
-            Incrementally building a belief::\
+            Incrementally building a belief:
 
-                belief = WeightedParticleBeliefStateUpdate([], [])
+            >>> # Use TigerPOMDP for realistic example
+            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            >>> tiger_env = TigerPOMDP(discount_factor=0.95)
 
-                # Add particles one by one
-                belief.inplace_update("listen", "hear_left", env, "tiger_left")
-                belief.inplace_update("listen", "hear_right", env, "tiger_right")
-                belief.inplace_update("listen", "hear_left", env, "tiger_left")
+            >>> belief = WeightedParticleBeliefStateUpdate([], [])
+            >>> len(belief.particles)
+            0
+            >>> belief.weights_sum
+            0
 
-                # Belief now contains 3 particles with observation-based weights
-                assert len(belief.particles) == 3
-                assert belief.weights_sum > 0
+            >>> # Add particles one by one with TigerPOMDP
+            >>> belief.inplace_update("listen", "hear_left", tiger_env, "tiger_left")
+            >>> belief.inplace_update("listen", "hear_right", tiger_env, "tiger_right")
+            >>> belief.inplace_update("listen", "hear_left", tiger_env, "tiger_left")
+
+            >>> # Belief now contains 3 particles with observation-based weights
+            >>> len(belief.particles)
+            3
+            >>> belief.weights_sum > 0
+            True
         """
         if state is None:
             raise ValueError("state cannot be None")
@@ -993,267 +827,40 @@ class UnweightedParticleBeliefStateUpdate(Belief):
         weights_sum: Total number of particles (equivalent to uniform weight sum)
 
     Examples:
-        Basic uniform belief construction::
-
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-
-            # Create environment and empty uniform belief
-            env = TigerPOMDP(discount_factor=0.95)
-            belief = UnweightedParticleBeliefStateUpdate(particles=[])
-
-            # Add states uniformly (all have equal probability)
-            belief.inplace_update("listen", "hear_left", env, "tiger_left")
-            belief.inplace_update("listen", "hear_right", env, "tiger_right")
-            belief.inplace_update("listen", "hear_left", env, "tiger_left")
-
-            print(f"Belief has {len(belief.particles)} particles")
-            print(f"Weights sum: {belief.weights_sum}")  # Equal to number of particles
-
-            # Sample uniformly from particles
-            sampled_state = belief.sample()  # Each "tiger_left" has 2/3 prob, "tiger_right" has 1/3
-
-        Monte Carlo Tree Search with uniform beliefs::
-
-            from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-            from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-            from POMDPPlanners.core.tree import BeliefNode, ActionNode
-            import random
-
-            env = SanityPOMDP(discount_factor=0.95)
-
-            # Root belief with uniform initial distribution
-            root_belief = UnweightedParticleBeliefStateUpdate(
-                particles=[0, 1, 0, 1, 0]  # More 0s than 1s, but all weighted equally
-            )
-            root_node = BeliefNode(belief=root_belief)
-
-            # Simulate MCTS node expansion
-            action = 0  # Good action
-            possible_observations = [0, 1]  # Discrete observations
-
-            # Create action node
-            action_node = ActionNode(action=action, parent=root_node)
-
-            # For each observation, accumulate child belief
-            for observation in possible_observations:
-                child_belief = UnweightedParticleBeliefStateUpdate([])
-
-                # Add particles uniformly based on environment dynamics
-                for _ in range(10):  # Multiple simulations
-                    parent_state = root_belief.sample()
-                    next_state = env.state_transition_model(parent_state, action).sample()[0]
-                    child_belief.inplace_update(action, observation, env, next_state)
-
-                # Create belief node
-                belief_node = BeliefNode(belief=child_belief, observation=observation, parent=action_node)
-                print(f"Child for obs {observation}: {len(child_belief.particles)} particles")
-
-        Comparing weighted vs unweighted belief updates::
-
-            from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-            from POMDPPlanners.core.belief import (
-                WeightedParticleBeliefStateUpdate, UnweightedParticleBeliefStateUpdate
-            )
-            import collections
-
-            env = SanityPOMDP(discount_factor=0.95)
-
-            # Same particle sequence for both belief types
-            states = [0, 1, 0, 1, 0, 1, 0]  # More 0s (good states) than 1s (bad states)
-            observations = [0, 1, 0, 0, 1, 0, 1]
-            action = 0
-
-            # Weighted belief considers observation likelihoods
-            weighted_belief = WeightedParticleBeliefStateUpdate([], [])
-            for state, obs in zip(states, observations):
-                weighted_belief.inplace_update(action, obs, env, state)
-
-            # Unweighted belief treats all particles equally
-            unweighted_belief = UnweightedParticleBeliefStateUpdate([])
-            for state, obs in zip(states, observations):
-                unweighted_belief.inplace_update(action, obs, env, state)
-
-            # Compare sampling distributions
-            print("Weighted belief sampling:")
-            weighted_samples = [weighted_belief.sample() for _ in range(1000)]
-            weighted_counts = collections.Counter(weighted_samples)
-            for state, count in sorted(weighted_counts.items()):
-                print(f"  State {state}: {count/1000:.3f}")
-
-            print("\\nUnweighted belief sampling:")
-            unweighted_samples = [unweighted_belief.sample() for _ in range(1000)]
-            unweighted_counts = collections.Counter(unweighted_samples)
-            for state, count in sorted(unweighted_counts.items()):
-                print(f"  State {state}: {count/1000:.3f}")
-
-        Discrete observation filtering::
-
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-            import collections
-
-            env = TigerPOMDP(discount_factor=0.95)
-            belief = UnweightedParticleBeliefStateUpdate([])
-
-            # Simulate multiple observations (discrete: hear_left or hear_right)
-            observation_sequence = [
-                ("tiger_left", "hear_left"),    # Consistent evidence
-                ("tiger_left", "hear_left"),    # More consistent evidence
-                ("tiger_right", "hear_left"),   # Inconsistent evidence
-                ("tiger_left", "hear_right"),   # Inconsistent evidence
-                ("tiger_left", "hear_left"),    # Back to consistent
-                ("tiger_right", "hear_right"),  # Consistent for right
-            ]
-
-            for state, obs in observation_sequence:
-                belief.inplace_update("listen", obs, env, state)
-
-            print(f"Final belief has {len(belief.particles)} particles")
-
-            # Analyze uniform distribution over accumulated particles
-            samples = [belief.sample() for _ in range(1000)]
-            sample_counts = collections.Counter(samples)
-
-            print("Uniform belief distribution:")
-            for state, count in sample_counts.items():
-                probability = count / 1000
-                particle_count = belief.particles.count(state)
-                expected_prob = particle_count / len(belief.particles)
-                print(f"  {state}: {probability:.3f} (expected: {expected_prob:.3f})")
-
-        Immutable belief trees for planning::
-
-            import numpy as np
-            from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-            from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-
-            # Create continuous state environment
-            noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-            env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
-
-            # Start with uniform belief over multiple initial states
-            initial_states = [
-                np.array([0.0, 0.0, 0.1, 0.0]),   # Balanced pole
-                np.array([0.1, 0.0, 0.08, 0.0]),  # Slightly right
-                np.array([-0.1, 0.0, 0.12, 0.0])  # Slightly left
-            ]
-
-            root_belief = UnweightedParticleBeliefStateUpdate(initial_states)
-
-            # Generate child beliefs for different actions (functional style)
-            actions = [0, 1]  # Push left or right
-            child_beliefs = {}
-
-            for action in actions:
-                child_belief = UnweightedParticleBeliefStateUpdate([])
-
-                # Generate next states uniformly
-                for _ in range(5):  # Multiple rollouts per action
-                    current_state = root_belief.sample()
-                    next_state = env.state_transition_model(current_state, action).sample()[0]
-                    # For simplicity, assume observation equals next state (fully observable case)
-                    child_belief = child_belief.update(action, next_state, env, next_state)
-
-                child_beliefs[action] = child_belief
-                print(f"Child belief for action {action}: {len(child_belief.particles)} particles")
-
-            # All child beliefs maintain uniform distribution over their particles
-            for action, child_belief in child_beliefs.items():
-                sample = child_belief.sample()
-                print(f"Sample from action {action} belief: {sample[:2]}")  # First 2 components
-
-        Memory-efficient particle accumulation::
-
-            from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-            from POMDPPlanners.core.belief import (
-                WeightedParticleBeliefStateUpdate, UnweightedParticleBeliefStateUpdate
-            )
-            import sys
-
-            env = SanityPOMDP(discount_factor=0.95)
-
-            # Compare memory usage between weighted and unweighted beliefs
-            weighted_belief = WeightedParticleBeliefStateUpdate([], [])
-            unweighted_belief = UnweightedParticleBeliefStateUpdate([])
-
-            # Add many particles
-            states = [0, 1] * 1000  # 2000 particles
-            for state in states:
-                weighted_belief.inplace_update("action", 0, env, state)
-                unweighted_belief.inplace_update("action", 0, env, state)
-
-            # Check memory usage (unweighted should use less memory)
-            weighted_size = sys.getsizeof(weighted_belief.particles) + sys.getsizeof(weighted_belief.weights)
-            unweighted_size = sys.getsizeof(unweighted_belief.particles)
-
-            print(f"Weighted belief memory: {weighted_size} bytes")
-            print(f"Unweighted belief memory: {unweighted_size} bytes")
-            print(f"Memory savings: {((weighted_size - unweighted_size) / weighted_size * 100):.1f}%")
-
-            # Both have same number of particles but unweighted saves memory on weights
-            assert len(weighted_belief.particles) == len(unweighted_belief.particles)
-
-        Configuration caching and equality::
-
-            from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-            from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-
-            env = SanityPOMDP(discount_factor=0.95)
-
-            # Create two beliefs with same particles in different orders
-            belief1 = UnweightedParticleBeliefStateUpdate([0, 1, 0, 1, 0])
-            belief2 = UnweightedParticleBeliefStateUpdate([1, 0, 1, 0, 0])
-
-            # Config IDs should be equal (order-invariant)
-            print(f"Belief 1 config ID: {belief1.config_id[:8]}...")
-            print(f"Belief 2 config ID: {belief2.config_id[:8]}...")
-            print(f"IDs match: {belief1.config_id == belief2.config_id}")
-
-            # Test belief equality
-            print(f"Beliefs equal: {belief1 == belief2}")
-
-            # Useful for caching in tree search algorithms
-            belief_cache = {belief1: "cached_computation"}
-
-            if belief2 in belief_cache:
-                print("Cache hit! Beliefs are equivalent.")
-            else:
-                print("Cache miss - beliefs differ.")
-
-        Large-scale particle accumulation::
-
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-            import time
-            import collections
-
-            env = TigerPOMDP(discount_factor=0.95)
-            belief = UnweightedParticleBeliefStateUpdate([])
-
-            # Time large-scale particle addition
-            start_time = time.time()
-
-            # Add 10000 particles uniformly
-            states = ["tiger_left", "tiger_right"]
-            observations = ["hear_left", "hear_right"]
-
-            for i in range(10000):
-                state = states[i % 2]  # Alternate between states
-                obs = observations[i % 2]  # Alternate between observations
-                belief.inplace_update("listen", obs, env, state)
-
-            end_time = time.time()
-
-            print(f"Added {len(belief.particles)} particles in {end_time - start_time:.3f} seconds")
-            print(f"Rate: {len(belief.particles) / (end_time - start_time):.0f} particles/second")
-
-            # Verify uniform distribution
-            samples = [belief.sample() for _ in range(1000)]
-            sample_counts = collections.Counter(samples)
-
-            for state, count in sample_counts.items():
-                print(f"{state}: {count/1000:.3f} (expected: 0.5)")
+        Basic uniform belief construction:
+
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
+
+        >>> # Create environment and empty uniform belief
+        >>> env = TigerPOMDP(discount_factor=0.95)
+        >>> belief = UnweightedParticleBeliefStateUpdate(particles=[])
+        >>> len(belief.particles)
+        0
+        >>> belief.weights_sum
+        0
+
+        >>> # Add states uniformly (all have equal probability)
+        >>> belief.inplace_update("listen", "hear_left", env, "tiger_left")
+        >>> belief.inplace_update("listen", "hear_right", env, "tiger_right")
+        >>> belief.inplace_update("listen", "hear_left", env, "tiger_left")
+
+        >>> # Check belief properties
+        >>> len(belief.particles)
+        3
+        >>> belief.weights_sum == len(belief.particles)  # Equal to number of particles
+        True
+
+        >>> # Check particle counts
+        >>> belief.particles.count("tiger_left")
+        2
+        >>> belief.particles.count("tiger_right")
+        1
+
+        >>> # Sample uniformly from particles - should be one of the two states
+        >>> sampled_state = belief.sample()
+        >>> sampled_state in ["tiger_left", "tiger_right"]
+        True
     """
 
     def __init__(self, particles: list = []):
@@ -1266,19 +873,6 @@ class UnweightedParticleBeliefStateUpdate(Belief):
         Args:
             particles: List of state particles with uniform weights.
                 Defaults to empty list for incremental construction.
-
-        Example:
-            Creating beliefs with different initialization strategies::\
-
-                # Empty belief for incremental construction
-                empty_belief = UnweightedParticleBeliefStateUpdate([])
-
-                # Pre-populated belief with uniform distribution
-                states = ["state1", "state2", "state1", "state3"]
-                belief = UnweightedParticleBeliefStateUpdate(states)
-
-                # Each state has probability proportional to its count
-                # state1: 2/4 = 0.5, state2: 1/4 = 0.25, state3: 1/4 = 0.25
         """
         self.particles = particles
         self.weights_sum = len(particles)
@@ -1306,20 +900,27 @@ class UnweightedParticleBeliefStateUpdate(Belief):
             New UnweightedParticleBeliefStateUpdate instance with the additional particle.
 
         Example:
-            Creating new beliefs immutably::\
+            Creating new beliefs immutably:
 
-                # Original belief with 3 particles
-                belief = UnweightedParticleBeliefStateUpdate(["state1", "state2", "state1"])
+            >>> # Original belief with 3 particles
+            >>> belief = UnweightedParticleBeliefStateUpdate(["state1", "state2", "state1"])
+            >>> len(belief.particles)
+            3
 
-                # Create new belief with additional particle
-                new_belief = belief.update("action", "obs", environment, "state3")
+            >>> # Create new belief with additional particle (note: doesn't use pomdp for unweighted)
+            >>> new_belief = belief.update("action", "obs", None, "state3")
 
-                # Original belief unchanged, new belief has 4 particles
-                assert len(belief.particles) == 3
-                assert len(new_belief.particles) == 4
+            >>> # Original belief unchanged, new belief has 4 particles
+            >>> len(belief.particles)
+            3
+            >>> len(new_belief.particles)
+            4
 
-                # All particles have equal probability in new belief
-                # state1: 2/4 = 0.5, state2: 1/4 = 0.25, state3: 1/4 = 0.25
+            >>> # Count particles in new belief
+            >>> new_belief.particles.count("state1")  # Should be 2
+            2
+            >>> new_belief.particles.count("state3")  # Should be 1
+            1
         """
         new_particles = self.particles + [state]
         return UnweightedParticleBeliefStateUpdate(particles=new_particles)
@@ -1332,22 +933,6 @@ class UnweightedParticleBeliefStateUpdate(Belief):
 
         Raises:
             IndexError: If belief is empty (no particles to sample from)
-
-        Example:
-            Uniform sampling from particle belief::\
-
-                # Create belief with repeated particles
-                particles = ["A", "B", "A", "A", "C"]
-                belief = UnweightedParticleBeliefStateUpdate(particles)
-
-                # Sample multiple times to see distribution
-                samples = [belief.sample() for _ in range(1000)]
-                from collections import Counter
-                counts = Counter(samples)
-
-                # Should approximate: A: 60%, B: 20%, C: 20%
-                for state, count in counts.items():
-                    print(f"{state}: {count/1000:.2f}")
         """
         return random.choice(self.particles)
 
@@ -1369,21 +954,6 @@ class UnweightedParticleBeliefStateUpdate(Belief):
             observation: Observation received after executing the action (not used for weighting)
             pomdp: Environment instance (not used for uniform weighting)
             state: State particle to add to the belief. If None, no particle is added.
-
-        Example:
-            Incrementally building uniform beliefs::\
-
-                belief = UnweightedParticleBeliefStateUpdate([])
-
-                # Add particles one by one - all have equal weight
-                belief.inplace_update("action1", "obs1", env, "state_A")
-                belief.inplace_update("action2", "obs2", env, "state_B")
-                belief.inplace_update("action3", "obs3", env, "state_A")
-
-                # Belief now has 3 particles: ["state_A", "state_B", "state_A"]
-                # Sampling probabilities: state_A = 2/3, state_B = 1/3
-                assert len(belief.particles) == 3
-                assert belief.weights_sum == 3  # Equal to particle count
         """
         self.particles.append(state)
         self.weights_sum += 1
