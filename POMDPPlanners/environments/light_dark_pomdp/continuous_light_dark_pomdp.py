@@ -90,7 +90,7 @@ class ContinuousLightDarkStateTransitionModel(StateTransitionModel):
         >>> cov_matrix = np.eye(2) * 0.1  # Small movement noise
         >>>
         >>> # Create transition model
-        >>> transition = StateTransitionModel(
+        >>> transition = ContinuousLightDarkStateTransitionModel(
         ...     state=state,
         ...     action=action,
         ...     state_transition_cov_matrix=cov_matrix
@@ -161,7 +161,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         >>> # Sample initial state and take continuous action
         >>> state_dist = env.initial_state_dist()
         >>> state = state_dist.sample()[0]
-        >>> len(state) == 2  # 2D position
+        >>> np.array_equal(state, np.array([0, 5]))  # 2D position
         True
         >>>
         >>> # Move toward goal with continuous action
@@ -476,7 +476,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
         >>>
         >>> # Simulate step
         >>> state = env.start_state
-        >>> reward = env.reward(state, action)  # doctest: +SKIP
+        >>> reward = env.reward(state, action)
     """
 
     def __init__(
