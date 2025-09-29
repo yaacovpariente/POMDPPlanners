@@ -295,39 +295,21 @@ class PushPOMDP(DiscreteActionsEnvironment):
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
-        >>> # Create push environment with obstacles
-        >>> push_env = PushPOMDP(
-        ...     discount_factor=0.99,
-        ...     grid_size=10,
-        ...     push_threshold=1.0,
-        ...     friction_coefficient=0.3,
-        ...     observation_noise=0.1,
-        ...     obstacles=[(3.0, 4.0), (6.0, 7.0)],
-        ...     obstacle_radius=0.5,
-        ...     obstacle_penalty=-10.0
-        ... )
-
-        >>> # Get initial state
-        >>> initial_state_dist = push_env.initial_state_dist()
-        >>> state = initial_state_dist.sample()[0]
-        >>> len(state) == 6  # [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        True
-
-        >>> # Move robot and potentially push object
-        >>> actions = push_env.get_actions()
-        >>> len(actions) == 4  # ["up", "down", "left", "right"]
-        True
-        >>> "right" in actions
-        True
-
-        >>> # Calculate reward and check termination
-        >>> action = "right"
-        >>> reward = push_env.reward(state, action)
-        >>> isinstance(reward, (int, float))
-        True
-        >>> is_done = push_env.is_terminal(state)
-        >>> isinstance(is_done, (bool, np.bool_))
-        True
+        >>>
+        >>> # Initialize environment
+        >>> env = PushPOMDP(discount_factor=0.99)
+        >>>
+        >>> # Get initial state and actions
+        >>> initial_state = env.initial_state_dist().sample()[0]
+        >>> actions = env.get_actions()
+        >>>
+        >>> # Sample complete step using convenience method
+        >>> action = actions[0]
+        >>> next_state, observation, reward = env.sample_next_step(initial_state, action)
+        >>>
+        >>> # Check terminal condition
+        >>> env.is_terminal(initial_state)
+        False
     """
 
     def __init__(

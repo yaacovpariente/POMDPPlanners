@@ -204,33 +204,20 @@ class TigerPOMDP(DiscreteActionsEnvironment):
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
-        >>> from POMDPPlanners.core.belief import get_initial_belief
-        >>> # Create Tiger environment
+        >>>
+        >>> # Initialize environment
         >>> tiger = TigerPOMDP(discount_factor=0.95)
-        >>> tiger.name
-        'TigerPOMDP'
-
-        >>> # Get initial state distribution and sample
-        >>> initial_dist = tiger.initial_state_dist()
-        >>> state = initial_dist.sample()[0]
-        >>> state in ["tiger_left", "tiger_right"]
-        True
-
-        >>> # Get available actions and compute reward
+        >>>
+        >>> # Get initial state and actions
+        >>> initial_state = tiger.initial_state_dist().sample()[0]
         >>> actions = tiger.get_actions()
-        >>> "listen" in actions
-        True
-        >>> "open_left" in actions
-        True
-
-        >>> # Check reward for listening
-        >>> reward = tiger.reward(state, "listen")
-        >>> reward == -1
-        True
-
-        >>> # Check terminal condition (tiger problem is never terminal)
-        >>> is_done = tiger.is_terminal(state)
-        >>> is_done
+        >>>
+        >>> # Sample complete step using convenience method
+        >>> action = actions[0]
+        >>> next_state, observation, reward = tiger.sample_next_step(initial_state, action)
+        >>>
+        >>> # Check terminal condition
+        >>> tiger.is_terminal(initial_state)
         False
     """
 

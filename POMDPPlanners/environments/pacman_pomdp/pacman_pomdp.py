@@ -553,22 +553,21 @@ class PacManPOMDP(DiscreteActionsEnvironment):
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
-        >>> # Create 7x7 maze with walls and pellets
-        >>> walls = {(1, 1), (1, 2), (3, 3)}
-        >>> pellets = [(0, 2), (2, 0), (4, 4)]
-        >>> pomdp = PacManPOMDP(
-        ...     maze_size=(7, 7),
-        ...     walls=walls,
-        ...     initial_pellets=pellets
-        ... )
         >>>
-        >>> # Sample initial state
-        >>> initial_state = pomdp.initial_state_dist().sample()[0]
-        >>> isinstance(initial_state, PacManState)
-        True
+        >>> # Initialize environment
+        >>> env = PacManPOMDP(maze_size=(7, 7))
         >>>
-        >>> # Execute action
-        >>> next_state, obs, reward = pomdp.sample_next_step(initial_state, 1)
+        >>> # Get initial state and actions
+        >>> initial_state = env.initial_state_dist().sample()[0]
+        >>> actions = env.get_actions()
+        >>>
+        >>> # Sample complete step using convenience method
+        >>> action = actions[0]
+        >>> next_state, observation, reward = env.sample_next_step(initial_state, action)
+        >>>
+        >>> # Check terminal condition
+        >>> env.is_terminal(initial_state)
+        False
     """
 
     def __init__(

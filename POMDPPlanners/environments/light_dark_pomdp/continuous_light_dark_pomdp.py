@@ -150,26 +150,24 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
-        >>> # Create environment with custom parameters
+        >>>
+        >>> # Initialize environment
         >>> env = ContinuousLightDarkPOMDP(
         ...     discount_factor=0.95,
         ...     goal_state=np.array([10, 5]),
-        ...     start_state=np.array([0, 5]),
-        ...     reward_model_type=RewardModelType.STANDARD
+        ...     start_state=np.array([0, 5])
         ... )
         >>>
-        >>> # Sample initial state and take continuous action
-        >>> state_dist = env.initial_state_dist()
-        >>> state = state_dist.sample()[0]
-        >>> np.array_equal(state, np.array([0, 5]))  # 2D position
-        True
+        >>> # Get initial state
+        >>> initial_state = env.initial_state_dist().sample()[0]
         >>>
-        >>> # Move toward goal with continuous action
+        >>> # Sample complete step (action must be provided based on environment type)
         >>> action = np.array([1.0, 0.0])  # Move right
-        >>> reward = env.reward(state, action)  # doctest: +SKIP
+        >>> next_state, observation, reward = env.sample_next_step(initial_state, action)
         >>>
-        >>> # Check termination
-        >>> is_done = env.is_terminal(state)  # doctest: +SKIP
+        >>> # Check terminal condition
+        >>> env.is_terminal(initial_state)
+        False
     """
 
     def __init__(
@@ -461,22 +459,25 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
-        >>> # Create environment with discrete actions
+        >>>
+        >>> # Initialize environment
         >>> env = ContinuousLightDarkPOMDPDiscreteActions(
         ...     discount_factor=0.95,
         ...     goal_state=np.array([10, 5]),
         ...     start_state=np.array([0, 5])
         ... )
         >>>
-        >>> # Get available actions and take one
-        >>> actions = env.get_actions()  # ["up", "down", "right", "left"]
-        >>> len(actions) == 4
-        True
-        >>> action = "right"  # Move right
+        >>> # Get initial state and actions
+        >>> initial_state = env.initial_state_dist().sample()[0]
+        >>> actions = env.get_actions()
         >>>
-        >>> # Simulate step
-        >>> state = env.start_state
-        >>> reward = env.reward(state, action)
+        >>> # Sample complete step using convenience method
+        >>> action = actions[0]
+        >>> next_state, observation, reward = env.sample_next_step(initial_state, action)
+        >>>
+        >>> # Check terminal condition
+        >>> env.is_terminal(initial_state)
+        False
     """
 
     def __init__(

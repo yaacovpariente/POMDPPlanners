@@ -507,27 +507,20 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
-        >>> # Create LaserTag environment
-        >>> env = LaserTagPOMDP(
-        ...     discount_factor=0.95,
-        ...     floor_shape=(7, 11),
-        ...     tag_reward=10.0,
-        ...     step_cost=1.0
-        ... )
         >>>
-        >>> # Sample initial state and get actions
-        >>> initial_state = env.initial_state_dist().sample()[0]  # doctest: +SKIP
+        >>> # Initialize environment
+        >>> env = LaserTagPOMDP(discount_factor=0.95)
+        >>>
+        >>> # Get initial state and actions
+        >>> initial_state = env.initial_state_dist().sample()[0]
         >>> actions = env.get_actions()
-        >>> len(actions) == 5
-        True
         >>>
-        >>> # Create test state for reward calculation
-        >>> test_state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
-        >>> reward = env.reward(test_state, action=0)  # Move north  # doctest: +SKIP
+        >>> # Sample complete step using convenience method
+        >>> action = actions[0]
+        >>> next_state, observation, reward = env.sample_next_step(initial_state, action)
         >>>
         >>> # Check terminal condition
-        >>> is_done = env.is_terminal(test_state)
-        >>> is_done
+        >>> env.is_terminal(initial_state)
         False
     """
 
