@@ -53,8 +53,8 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
         resampling: Whether to resample particles during belief updates
 
     Note:
-        This is an abstract base class. Subclasses must implement the value
-        update methods for leaf and non-leaf nodes.
+        This is an abstract base class and cannot be instantiated directly.
+        Subclasses must implement the value update methods for leaf and non-leaf nodes.
     """
 
     def __init__(
@@ -189,26 +189,32 @@ class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActions
     policy is ε-optimal, where ε decreases with increasing depth and branching factor.
 
     Example:
-        Creating and using a sparse sampling planner::
-
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.core.belief import get_initial_belief
-
-            # Create environment and planner
-            env = TigerPOMDP(discount_factor=0.95)
-            planner = StandardSparseSamplingDiscreteActionsPlanner(
-                environment=env,
-                branching_factor=10,  # Sample 10 outcomes per node
-                depth=2,              # Plan 5 steps ahead
-                name="SparseSampling_Tiger"
-            )
-
-            # Plan action from initial belief
-            initial_belief = get_initial_belief(env, n_particles=1000)
-            action, run_data = planner.action(initial_belief)
-
-            print(f"Selected action: {action[0]}")
-            print(f"Planning completed with info: {run_data.info_variables}")
+        >>> import numpy as np
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> from POMDPPlanners.core.belief import get_initial_belief
+        >>> np.random.seed(42)  # For reproducible results
+        >>>
+        >>> # Create environment and planner
+        >>> tiger = TigerPOMDP(discount_factor=0.95)
+        >>> planner = StandardSparseSamplingDiscreteActionsPlanner(
+        ...     environment=tiger,
+        ...     branching_factor=2,
+        ...     depth=2,
+        ...     name="ExamplePlanner"
+        ... )
+        >>>
+        >>> # Basic planner interface usage
+        >>> planner.name
+        'ExamplePlanner'
+        >>>
+        >>> # Action selection from belief
+        >>> initial_belief = get_initial_belief(tiger, n_particles=10)
+        >>> actions, run_data = planner.action(initial_belief)
+        >>>
+        >>> # Planner space information
+        >>> space_info = StandardSparseSamplingDiscreteActionsPlanner.get_space_info()
+        >>> space_info.action_space.name
+        'DISCRETE'
     """
 
     def __init__(

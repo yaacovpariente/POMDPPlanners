@@ -96,44 +96,49 @@ class POMCPOW(PathSimulationPolicy):
         debug: Enable debug logging if True
 
     Example:
+        >>> import numpy as np
+        >>> import random
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.core.belief import get_initial_belief
         >>> from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-        >>> import random
-        >>> # Create a simple action sampler
+        >>> np.random.seed(42)  # For reproducible results
+        >>>
+        >>> # Create action sampler
         >>> class DiscreteActionSampler(ActionSampler):
         ...     def __init__(self, actions):
         ...         self.actions = actions
         ...     def sample(self, belief_node=None):
         ...         return random.choice(self.actions)
-
-        >>> # Initialize environment and belief
-        >>> environment = TigerPOMDP(discount_factor=0.95)
-        >>> action_sampler = DiscreteActionSampler(environment.get_actions())
-
-        >>> # Create POMCPOW planner
+        >>>
+        >>> # Create environment and planner
+        >>> tiger = TigerPOMDP(discount_factor=0.95)
+        >>> action_sampler = DiscreteActionSampler(tiger.get_actions())
         >>> planner = POMCPOW(
-        ...     environment=environment,
+        ...     environment=tiger,
         ...     discount_factor=0.95,
-        ...     depth=10,
+        ...     depth=5,
         ...     exploration_constant=1.0,
         ...     k_o=3.0,
         ...     k_a=3.0,
         ...     alpha_o=0.5,
         ...     alpha_a=0.5,
         ...     action_sampler=action_sampler,
-        ...     n_simulations=1000,
-        ...     name="POMCPOW_Planner"
+        ...     n_simulations=10,
+        ...     name="ExamplePlanner"
         ... )
-
-        >>> # Get initial belief and plan action
-        >>> belief = get_initial_belief(
-        ...     pomdp=environment,
-        ...     n_particles=100,
-        ...     resampling=True
-        ... )
-
-        >>> action, run_data = planner.action(belief)  # doctest: +SKIP
+        >>>
+        >>> # Basic planner interface usage
+        >>> planner.name
+        'ExamplePlanner'
+        >>>
+        >>> # Action selection from belief
+        >>> initial_belief = get_initial_belief(tiger, n_particles=10)
+        >>> actions, run_data = planner.action(initial_belief)
+        >>>
+        >>> # Planner space information
+        >>> space_info = POMCPOW.get_space_info()
+        >>> space_info.action_space.name
+        'MIXED'
     """
 
     def __init__(

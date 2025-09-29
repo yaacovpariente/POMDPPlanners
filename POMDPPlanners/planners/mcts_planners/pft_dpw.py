@@ -79,93 +79,38 @@ class PFT_DPW(PathSimulationPolicy):
         time_out_in_seconds: Time limit for planning (mutually exclusive with n_simulations)
 
     Example:
-        Using PFT-DPW for continuous control in CartPole::
-
-            import numpy as np
-            from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW, ActionSampler
-            from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-            from POMDPPlanners.core.belief import get_initial_belief
-
-            # Custom action sampler for CartPole
-            class CartPoleActionSampler(ActionSampler):
-                def sample(self, belief_node=None):
-                    return np.random.choice([0, 1])  # Left or right force
-
-            # Create CartPole environment
-            cartpole = CartPolePOMDP(
-                discount_factor=0.99,
-                noise_cov=np.diag([0.1, 0.1, 0.1, 0.1])
-            )
-
-            # Create PFT-DPW planner
-            pft_planner = PFT_DPW(
-                environment=cartpole,
-                discount_factor=0.99,
-                depth=10,
-                name="PFT_DPW_CartPole",
-                action_sampler=CartPoleActionSampler(),
-                k_a=2.0,                    # Action widening parameter
-                alpha_a=0.5,                # Action widening exponent
-                k_o=1.0,                    # Observation widening parameter
-                alpha_o=0.5,                # Observation widening exponent
-                exploration_constant=1.41,   # UCB1 exploration (√2)
-                n_simulations=1000          # Number of MCTS simulations
-            )
-
-            # Plan from initial belief
-            initial_belief = get_initial_belief(cartpole, n_particles=500)
-            action, run_data = pft_planner.action(initial_belief)
-
-            print(f"Selected action: {action[0]}")
-            print(f"Planning completed with {len(run_data.info_variables)} metrics")
-
-    Example:
-        Using PFT-DPW for 2D continuous navigation::
-
-            import numpy as np
-            from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW, ActionSampler
-
-            class NavigationActionSampler(ActionSampler):
-                def __init__(self, max_velocity=1.0):
-                    self.max_velocity = max_velocity
-
-                def sample(self, belief_node=None):
-                    # Sample 2D velocity vector
-                    angle = np.random.uniform(0, 2 * np.pi)
-                    speed = np.random.uniform(0, self.max_velocity)
-                    return np.array([speed * np.cos(angle), speed * np.sin(angle)])
-
-            # Assume we have a 2D navigation environment
-            # nav_env = NavigationPOMDP(...)
-
-            navigation_planner = PFT_DPW(
-                environment=nav_env,
-                discount_factor=0.95,
-                depth=15,
-                name="PFT_DPW_Navigation",
-                action_sampler=NavigationActionSampler(max_velocity=2.0),
-                k_a=3.0,                    # More aggressive action widening
-                alpha_a=0.6,                # Faster action space expansion
-                exploration_constant=2.0,    # Higher exploration
-                n_simulations=2000          # More simulations for complex space
-            )
-
-    Mathematical Background:
-    Action progressive widening condition:
-        Add new action when: ⌊N(s)^α_a⌋ > ⌊(N(s)-1)^α_a⌋
-        where N(s) is the visit count of belief node s
-
-    Observation progressive widening condition:
-        Add new observation when: |C(s,a)| ≤ k_o * N(s,a)^α_o
-        where |C(s,a)| is the number of observation children
-
-    UCB1 action selection:
-        UCB(s,a) = Q(s,a) + c * √(ln(N(s)) / N(s,a))
-        where c is the exploration constant
-
-    References:
-    - Couëtoux, A., et al. "Continuous Upper Confidence Trees." LION 2011.
-    - Browne, C., et al. "A Survey of Monte Carlo Tree Search Methods." IEEE TCIAIG 2012.
+        >>> import numpy as np
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> from POMDPPlanners.core.belief import get_initial_belief
+        >>> from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
+        >>> np.random.seed(42)  # For reproducible results
+        >>>
+        >>> # Create environment and planner
+        >>> tiger = TigerPOMDP(discount_factor=0.95)
+        >>> action_sampler = DiscreteActionSampler(tiger.get_actions())
+        >>> planner = PFT_DPW(
+        ...     environment=tiger,
+        ...     discount_factor=0.95,
+        ...     depth=5,
+        ...     name="ExamplePlanner",
+        ...     action_sampler=action_sampler,
+        ...     k_a=2.0,
+        ...     alpha_a=0.5,
+        ...     n_simulations=10
+        ... )
+        >>>
+        >>> # Basic planner interface usage
+        >>> planner.name
+        'ExamplePlanner'
+        >>>
+        >>> # Action selection from belief
+        >>> initial_belief = get_initial_belief(tiger, n_particles=10)
+        >>> actions, run_data = planner.action(initial_belief)
+        >>>
+        >>> # Planner space information
+        >>> space_info = PFT_DPW.get_space_info()
+        >>> space_info.action_space.name
+        'CONTINUOUS'
     """
 
     def __init__(
