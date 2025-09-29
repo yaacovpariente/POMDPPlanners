@@ -17,7 +17,7 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.config_to_id import config_to_id
-from POMDPPlanners.utils.statistics import confidence_interval
+from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
 class BaseLightDarkPOMDP(Environment, ABC):

@@ -57,7 +57,7 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_da
     ContinuousLightDarkDecayingHitProbabilityRewardModel,
     ContinuousLightDarkRewardModel,
 )
-from POMDPPlanners.utils.statistics import confidence_interval
+from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
 class RewardModelType(Enum):
