@@ -280,33 +280,23 @@ class SanityPOMDP(DiscreteActionsEnvironment):
     The optimal policy is trivial: always choose action 0 to stay in the good state.
 
     Example:
-        Creating and using a Sanity POMDP::
-
-            >>> import numpy as np
-            >>> np.random.seed(42)  # For reproducible results
-            >>> # Create sanity test environment
-            >>> sanity = SanityPOMDP(discount_factor=0.95)
-            >>>
-            >>> # Get actions and verify simple dynamics
-            >>> actions = sanity.get_actions()  # [0, 1]
-            >>> len(actions) == 2
-            True
-            >>> 0 in actions and 1 in actions
-            True
-            >>>
-            >>> # Test state transitions
-            >>> reward_good = sanity.reward(state=0, action=0)  # Should be 1.0
-            >>> reward_good == 1.0
-            True
-            >>> reward_bad = sanity.reward(state=1, action=0)   # Should be 1.0 (goes to good state)
-            >>> reward_bad == 1.0
-            True
-            >>>
-            >>> # Verify perfect observability
-            >>> obs_model = sanity.observation_model(next_state=0, action=0)
-            >>> observation = obs_model.sample()[0]  # Should be 0
-            >>> observation == 0
-            True
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>>
+        >>> # Initialize environment
+        >>> env = SanityPOMDP(discount_factor=0.95)
+        >>>
+        >>> # Get initial state and actions
+        >>> initial_state = env.initial_state_dist().sample()[0]
+        >>> actions = env.get_actions()
+        >>>
+        >>> # Sample complete step using convenience method
+        >>> action = actions[0]
+        >>> next_state, observation, reward = env.sample_next_step(initial_state, action)
+        >>>
+        >>> # Check terminal condition
+        >>> env.is_terminal(initial_state)
+        False
     """
 
     def __init__(

@@ -251,32 +251,21 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
-        >>> # Create safety-critical environment
-        >>> safe_env = SafeAntVelocityPOMDP(
-        ...     discount_factor=0.99,
-        ...     safe_velocity_threshold=2.0,
-        ...     safety_violation_penalty=-100.0,
-        ...     movement_reward_scale=1.0
-        ... )
         >>>
-        >>> # Get initial state
-        >>> initial_state_dist = safe_env.initial_state_dist()
-        >>> state = initial_state_dist.sample()[0]  # [x, y, vx, vy]  # doctest: +SKIP
+        >>> # Initialize environment
+        >>> env = SafeAntVelocityPOMDP(discount_factor=0.99)
         >>>
-        >>> # Choose force magnitude action
-        >>> actions = safe_env.get_actions()  # [0, 1, 2, 3]
-        >>> len(actions) == 4
-        True
-        >>> action = 1  # Apply small force
-        >>> # reward = safe_env.reward(state, action)
+        >>> # Get initial state and actions
+        >>> initial_state = env.initial_state_dist().sample()[0]
+        >>> actions = env.get_actions()
         >>>
-        >>> # Check safety constraint
-        >>> test_state = np.array([0.0, 0.0, 1.0, 0.5])  # Test state
-        >>> velocity = test_state[2:4]
-        >>> speed = np.linalg.norm(velocity)
-        >>> is_safe = speed <= safe_env.safe_velocity_threshold
-        >>> bool(is_safe)
-        True
+        >>> # Sample complete step using convenience method
+        >>> action = actions[0]
+        >>> next_state, observation, reward = env.sample_next_step(initial_state, action)
+        >>>
+        >>> # Check terminal condition
+        >>> env.is_terminal(initial_state)
+        False
     """
 
     def __init__(

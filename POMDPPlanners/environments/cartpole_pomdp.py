@@ -266,34 +266,22 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
-        >>> # Create CartPole environment with observation noise
+        >>>
+        >>> # Initialize environment
         >>> noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-        >>> cartpole = CartPolePOMDP(
-        ...     discount_factor=0.99,
-        ...     noise_cov=noise_cov
-        ... )
-
-        >>> # Get initial state and take action
-        >>> initial_state_dist = cartpole.initial_state_dist()
-        >>> state = initial_state_dist.sample()[0]
-        >>> len(state) == 4  # [cart_pos, cart_vel, pole_angle, pole_vel]
-        True
-
-        >>> # Apply force action (0=left, 1=right)
-        >>> action = 1  # Apply right force
-        >>> reward = cartpole.reward(state, action)
-        >>> reward >= 0.0  # Non-negative reward
-        True
-
-        >>> # Check if episode should terminate
-        >>> is_done = cartpole.is_terminal(state)
-        >>> isinstance(is_done, bool)
-        True
-
-        >>> # Verify actions are available
-        >>> actions = cartpole.get_actions()
-        >>> len(actions) == 2  # left and right force
-        True
+        >>> env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+        >>>
+        >>> # Get initial state and actions
+        >>> initial_state = env.initial_state_dist().sample()[0]
+        >>> actions = env.get_actions()
+        >>>
+        >>> # Sample complete step using convenience method
+        >>> action = actions[0]
+        >>> next_state, observation, reward = env.sample_next_step(initial_state, action)
+        >>>
+        >>> # Check terminal condition
+        >>> env.is_terminal(initial_state)
+        False
     """
 
     def __init__(

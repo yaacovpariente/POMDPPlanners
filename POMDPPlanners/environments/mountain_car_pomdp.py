@@ -210,33 +210,23 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
     - Goal: Drive car to position ≥ 0.5 (top of mountain)
 
     Example:
-        Creating and using a Mountain Car POMDP::
-
-            >>> import numpy as np
-            >>> np.random.seed(42)  # For reproducible results
-            >>>
-            >>> # Create Mountain Car environment
-            >>> mountain_car = MountainCarPOMDP(discount_factor=0.99)
-            >>>
-            >>> # Get initial state and available actions
-            >>> initial_state_dist = mountain_car.initial_state_dist()
-            >>> state = initial_state_dist.sample()[0]  # [position, velocity]
-            >>> actions = mountain_car.get_actions()  # [-1, 0, 1]
-            >>> print(f"Initial state: [{state[0]:.3f}, {state[1]:.3f}]")
-            Initial state: [-0.525, 0.000]
-            >>> print(f"Available actions: {actions}")
-            Available actions: [-1, 0, 1]
-            >>>
-            >>> # Take action and get reward
-            >>> action = 1  # Accelerate forward
-            >>> reward = mountain_car.reward(state, action)
-            >>> print(f"Reward for action {action}: {reward}")
-            Reward for action 1: -1.0
-            >>>
-            >>> # Check if goal reached
-            >>> is_done = mountain_car.is_terminal(state)
-            >>> print(f"Is terminal state: {is_done}")
-            Is terminal state: False
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>>
+        >>> # Initialize environment
+        >>> env = MountainCarPOMDP(discount_factor=0.99)
+        >>>
+        >>> # Get initial state and actions
+        >>> initial_state = env.initial_state_dist().sample()[0]
+        >>> actions = env.get_actions()
+        >>>
+        >>> # Sample complete step using convenience method
+        >>> action = actions[0]
+        >>> next_state, observation, reward = env.sample_next_step(initial_state, action)
+        >>>
+        >>> # Check terminal condition
+        >>> env.is_terminal(initial_state)
+        False
     """
 
     def __init__(

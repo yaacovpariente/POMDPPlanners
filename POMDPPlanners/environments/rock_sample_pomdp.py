@@ -215,19 +215,21 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
-        >>> # Create 5x5 grid with 3 rocks
-        >>> pomdp = RockSamplePOMDP(
-        ...     map_size=(5, 5),
-        ...     rock_positions=[(0, 0), (2, 2), (3, 3)]
-        ... )
-
-        >>> # Sample initial state
-        >>> initial_state = pomdp.initial_state_dist().sample()[0]
-        >>> isinstance(initial_state, RockSampleState)
-        True
-
-        >>> # Execute action
-        >>> next_state, obs, reward = pomdp.sample_next_step(initial_state, 0)
+        >>>
+        >>> # Initialize environment
+        >>> env = RockSamplePOMDP(map_size=(5, 5), rock_positions=[(0, 0), (2, 2), (3, 3)])
+        >>>
+        >>> # Get initial state and actions
+        >>> initial_state = env.initial_state_dist().sample()[0]
+        >>> actions = env.get_actions()
+        >>>
+        >>> # Sample complete step using convenience method
+        >>> action = actions[0]
+        >>> next_state, observation, reward = env.sample_next_step(initial_state, action)
+        >>>
+        >>> # Check terminal condition
+        >>> env.is_terminal(initial_state)
+        False
     """
 
     def __init__(

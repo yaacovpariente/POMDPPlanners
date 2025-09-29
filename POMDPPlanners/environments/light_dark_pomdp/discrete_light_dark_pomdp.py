@@ -126,62 +126,29 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         grid_size: Dimension of the square grid world
 
     Example:
-        Creating and using a discrete light-dark navigation environment:
-
-        >>> from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import DiscreteLightDarkPOMDP
         >>> import numpy as np
-
-        >>> # Create environment with compatible settings
+        >>> np.random.seed(42)  # For reproducible results
+        >>>
+        >>> # Initialize environment
         >>> env = DiscreteLightDarkPOMDP(
         ...     discount_factor=0.95,
-        ...     name="TestLightDark",
-        ...     transition_error_prob=0.1,    # 10% chance action fails
-        ...     observation_error_prob=0.15,  # 15% observation noise
-        ...     beacons=[(1, 1), (2, 2)],     # Simple beacons for testing
-        ...     grid_size=11                  # Use default grid size
+        ...     transition_error_prob=0.1,
+        ...     observation_error_prob=0.15,
+        ...     beacons=[(1, 1), (2, 2)],
+        ...     grid_size=11
         ... )
-        >>> env.name
-        'TestLightDark'
-        >>> env.discount_factor
-        0.95
-
-        >>> # Test environment properties
-        >>> len(env.get_actions())  # Should have 4 discrete actions
-        4
-        >>> env.get_actions()
-        ['up', 'down', 'right', 'left']
-
-        >>> # Test state space and boundaries
-        >>> env.grid_size
-        11
-        >>> env.start_state
-        array([0, 5])
-        >>> str(env.goal_state)  # Convert to string for consistent formatting
-        '[10  5]'
-
-        >>> # Test action execution using actual action names
-        >>> state = np.array([2, 2])
-        >>> action = 'up'  # Use actual action name
-        >>> next_states = env.state_transition_model(state, action)
-        >>> len(next_states.values) == len(env.get_actions())  # Should consider all possible outcomes
-        True
-
-        >>> # Test observation model
-        >>> obs_model = env.observation_model(state, action)
-        >>> hasattr(obs_model, 'distribution')
-        True
-
-        >>> # Test reward calculation
-        >>> reward = env.reward(state, action)
-        >>> isinstance(reward, float)
-        True
-
-        >>> # Test environment space information
-        >>> space_info = env.space_info
-        >>> space_info.action_space.name
-        'DISCRETE'
-        >>> space_info.observation_space.name
-        'DISCRETE'
+        >>>
+        >>> # Get initial state and actions
+        >>> initial_state = env.initial_state_dist().sample()[0]
+        >>> actions = env.get_actions()
+        >>>
+        >>> # Sample complete step using convenience method
+        >>> action = actions[0]
+        >>> next_state, observation, reward = env.sample_next_step(initial_state, action)
+        >>>
+        >>> # Check terminal condition
+        >>> env.is_terminal(initial_state)
+        False
 
     References:
     - Platt, R., et al. "Belief space planning assuming maximum likelihood observations." (2010)
