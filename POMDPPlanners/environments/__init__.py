@@ -89,20 +89,31 @@ def get_environment(env_type: str, **kwargs) -> Any:
         ValueError: If the environment type is not registered
 
     Example:
-        Creating different environments::
+        Creating different environments:
 
-            # Create Tiger POMDP
-            tiger = get_environment("TigerPOMDP", discount_factor=0.95)
+        >>> # Create Tiger POMDP
+        >>> tiger = get_environment("TigerPOMDP", discount_factor=0.95)
+        >>> tiger.name
+        'TigerPOMDP'
+        >>> tiger.discount_factor
+        0.95
 
-            # Create Light-Dark POMDP with custom parameters
-            lightdark = get_environment(
-                "ContinuousLightDarkPOMDP",
-                discount_factor=0.99,
-                light_loc=[5.0, 0.0]
-            )
+        >>> # Create Sanity POMDP (simpler environment for testing)
+        >>> sanity = get_environment(
+        ...     "SanityPOMDP",
+        ...     discount_factor=0.95
+        ... )
+        >>> sanity.name
+        'SanityPOMDP'
+        >>> sanity.discount_factor
+        0.95
 
-            # Create CartPole POMDP
-            cartpole = get_environment("CartPolePOMDP", discount_factor=0.95)
+        >>> # Create Mountain Car POMDP
+        >>> mountain_car = get_environment("MountainCarPOMDP", discount_factor=0.99)
+        >>> mountain_car.name
+        'MountainCarPOMDP'
+        >>> mountain_car.discount_factor
+        0.99
     """
     if env_type not in ENVIRONMENT_REGISTRY:
         raise ValueError(

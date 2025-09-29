@@ -72,6 +72,123 @@ class DiscreteLDObservationModel(ObservationModel):
 
 
 class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsEnvironment):
+    """Discrete Light-Dark POMDP Environment for Robot Navigation with Observation Uncertainty.
+
+    This environment implements a discretized version of the classic Light-Dark POMDP problem,
+    where a robot must navigate from a start position to a goal position in a grid world
+    with beacons and obstacles. The key challenge is that the robot's observation quality
+    depends on its distance from beacons - closer to beacons means more accurate observations.
+
+    Problem Description:
+    The robot operates in a discrete grid world where it can move in four cardinal directions.
+    The environment includes:
+    - Beacons: Fixed positions that provide location reference with varying accuracy
+    - Obstacles: Grid cells that incur penalties when hit
+    - Goal: Target position that provides high reward when reached
+    - Observation uncertainty: Decreases with proximity to beacons (light areas)
+
+    Key Features:
+    - Discrete state space: Robot positions are restricted to grid cells
+    - Discrete action space: North, South, East, West movements
+    - Distance-dependent observation accuracy: Closer to beacons = better observations
+    - Stochastic transitions: Actions may fail with configurable probability
+    - Obstacle avoidance: Penalties for hitting obstacles during navigation
+    - Configurable environment parameters: Grid size, beacon positions, obstacles
+
+    State Space:
+    - 2D grid coordinates (x, y) representing robot position
+    - Bounded by grid_size parameter (default: 11x11 grid)
+
+    Action Space:
+    - Discrete actions: ['North', 'South', 'East', 'West']
+    - Each action moves robot one grid cell in the corresponding direction
+    - Boundary conditions: Actions that would move outside grid are blocked
+
+    Observation Space:
+    - Discrete observations based on beacon proximity and noise
+    - Observation accuracy improves with proximity to beacons
+    - Stochastic observation errors controlled by observation_error_prob
+
+    Reward Structure:
+    - Goal reward: Large positive reward for reaching the goal state
+    - Obstacle penalty: Negative reward for hitting obstacles
+    - Fuel cost: Small negative reward for each movement action
+    - Distance-based penalties: Encourage efficient navigation
+
+    Attributes:
+        transition_error_prob: Probability that an action fails (results in different movement)
+        observation_error_prob: Probability of observation noise/error
+        is_stochastic_reward: Whether rewards include stochastic components
+        beacons: List of (x, y) beacon positions that provide navigation references
+        goal_state: Target position (x, y) that robot should reach
+        start_state: Initial robot position (x, y)
+        obstacles: List of (x, y) obstacle positions to avoid
+        grid_size: Dimension of the square grid world
+
+    Example:
+        Creating and using a discrete light-dark navigation environment:
+
+        >>> from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import DiscreteLightDarkPOMDP
+        >>> import numpy as np
+
+        >>> # Create environment with compatible settings
+        >>> env = DiscreteLightDarkPOMDP(
+        ...     discount_factor=0.95,
+        ...     name="TestLightDark",
+        ...     transition_error_prob=0.1,    # 10% chance action fails
+        ...     observation_error_prob=0.15,  # 15% observation noise
+        ...     beacons=[(1, 1), (2, 2)],     # Simple beacons for testing
+        ...     grid_size=11                  # Use default grid size
+        ... )
+        >>> env.name
+        'TestLightDark'
+        >>> env.discount_factor
+        0.95
+
+        >>> # Test environment properties
+        >>> len(env.get_actions())  # Should have 4 discrete actions
+        4
+        >>> env.get_actions()
+        ['up', 'down', 'right', 'left']
+
+        >>> # Test state space and boundaries
+        >>> env.grid_size
+        11
+        >>> env.start_state
+        array([0, 5])
+        >>> str(env.goal_state)  # Convert to string for consistent formatting
+        '[10  5]'
+
+        >>> # Test action execution using actual action names
+        >>> state = np.array([2, 2])
+        >>> action = 'up'  # Use actual action name
+        >>> next_states = env.state_transition_model(state, action)
+        >>> len(next_states.values) == len(env.get_actions())  # Should consider all possible outcomes
+        True
+
+        >>> # Test observation model
+        >>> obs_model = env.observation_model(state, action)
+        >>> hasattr(obs_model, 'distribution')
+        True
+
+        >>> # Test reward calculation
+        >>> reward = env.reward(state, action)
+        >>> isinstance(reward, float)
+        True
+
+        >>> # Test environment space information
+        >>> space_info = env.space_info
+        >>> space_info.action_space.name
+        'DISCRETE'
+        >>> space_info.observation_space.name
+        'DISCRETE'
+
+    References:
+    - Platt, R., et al. "Belief space planning assuming maximum likelihood observations." (2010)
+    - Kurniawati, H., et al. "SARSOP: Efficient point-based POMDP planning by approximating optimally reachable belief spaces." (2008)
+    - Light-Dark domain: Classic POMDP benchmark for testing observation uncertainty
+    """
+
     def __init__(
         self,
         discount_factor: float,

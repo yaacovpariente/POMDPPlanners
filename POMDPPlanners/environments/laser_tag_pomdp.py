@@ -100,8 +100,8 @@ class LaserTagStateTransition(StateTransitionModel):
         ...     floor_shape=(7, 11),
         ...     walls=set()
         ... )
-        >>> next_states = transition.sample(n_samples=5)  # doctest: +SKIP
-        >>> probabilities = transition.probability(next_states)  # doctest: +SKIP
+        >>> next_states = transition.sample(n_samples=5)
+        >>> probabilities = transition.probability(next_states)
     """
 
     def __init__(

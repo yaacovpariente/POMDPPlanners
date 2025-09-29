@@ -568,7 +568,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         True
         >>>
         >>> # Execute action
-        >>> next_state, obs, reward = pomdp.sample_next_step(initial_state, 1)  # doctest: +SKIP
+        >>> next_state, obs, reward = pomdp.sample_next_step(initial_state, 1)
     """
 
     def __init__(
