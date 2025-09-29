@@ -49,44 +49,45 @@ def run_episode(
         TypeError: If any input parameters are of incorrect type
 
     Example:
-        Running a single episode with POMCP on Tiger POMDP::
+        Running a single episode with POMCP on Tiger POMDP:
 
-            from POMDPPlanners.simulations.episodes import run_episode
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-            from POMDPPlanners.core.belief import get_initial_belief
-            from POMDPPlanners.utils.logger import get_logger
+        >>> from POMDPPlanners.simulations.episodes import run_episode
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        >>> from POMDPPlanners.core.belief import get_initial_belief
+        >>> from POMDPPlanners.utils.logger import get_logger
 
-            # Create environment and policy
-            env = TigerPOMDP(discount_factor=0.95)
-            policy = POMCP(
-                environment=env,
-                discount_factor=0.95,
-                depth=10,
-                exploration_constant=1.0,
-                name="POMCP_Tiger",
-                n_simulations=1000
-            )
+        >>> # Create environment and policy
+        >>> env = TigerPOMDP(discount_factor=0.95)
+        >>> policy = POMCP(
+        ...     environment=env,
+        ...     discount_factor=0.95,
+        ...     depth=5,                 # Reduced for testing
+        ...     exploration_constant=1.0,
+        ...     name="POMCP_Tiger",
+        ...     n_simulations=10         # Reduced for testing
+        ... )
 
-            # Set up initial belief and logger
-            initial_belief = get_initial_belief(env, n_particles=1000)
-            logger = get_logger("episode_runner", debug=True)
+        >>> # Set up initial belief and logger
+        >>> initial_belief = get_initial_belief(env, n_particles=10)  # Reduced for testing
+        >>> logger = get_logger("episode_runner", debug=False)  # Disable debug for testing
 
-            # Run episode
-            history = run_episode(
-                environment=env,
-                policy=policy,
-                initial_belief=initial_belief,
-                num_steps=20,
-                logger=logger
-            )
+        >>> # Run episode
+        >>> history = run_episode(
+        ...     environment=env,
+        ...     policy=policy,
+        ...     initial_belief=initial_belief,
+        ...     num_steps=3,             # Reduced for testing
+        ...     logger=logger
+        ... )
 
-            # Access results
-            total_reward = sum(step.reward for step in history.history if step.reward is not None)
-            print(f"Total reward: {total_reward}")
-            print(f"Episode length: {history.actual_num_steps}")
-            print(f"Average action time: {history.average_action_time:.4f}s")
-            print(f"Reached terminal: {history.reach_terminal_state}")
+        >>> # Access results
+        >>> isinstance(history.history, list)
+        True
+        >>> # Print history steps
+        >>> for i, step in enumerate(history.history):
+        ...     print(f"Step {i}: state={step.state}, action={step.action}, reward={step.reward}")  # doctest: +ELLIPSIS
+        Step 0: state=..., action=..., reward=...
     """
     # Input validation
     if environment is None:
