@@ -2713,20 +2713,20 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
 
         # Verify structured logging format is used
         if "TigerEnv1.POMCP1" in log_file.name:
-            # This combination has 2 episodes
+            # This combination has 2 episodes (0-based indexing)
             assert (
-                "[EPISODE_001]" in content and "[EPISODE_002]" in content
-            ), f"Log file {log_file.name} should contain episodes 001 and 002"
+                "[EPISODE_000]" in content and "[EPISODE_001]" in content
+            ), f"Log file {log_file.name} should contain episodes 000 and 001"
         elif "TigerEnv2.POMCP2" in log_file.name:
-            # This combination has 2 episodes
+            # This combination has 2 episodes (0-based indexing)
             assert (
-                "[EPISODE_001]" in content and "[EPISODE_002]" in content
-            ), f"Log file {log_file.name} should contain episodes 001 and 002"
+                "[EPISODE_000]" in content and "[EPISODE_001]" in content
+            ), f"Log file {log_file.name} should contain episodes 000 and 001"
         elif "TigerEnv3.POMCP3" in log_file.name:
-            # This combination has 1 episode
+            # This combination has 1 episode (0-based indexing)
             assert (
-                "[EPISODE_001]" in content
-            ), f"Log file {log_file.name} should contain episode 001"
+                "[EPISODE_000]" in content
+            ), f"Log file {log_file.name} should contain episode 000"
 
     # Verify simulation results are valid
     assert results is not None, "Simulation should return valid results"

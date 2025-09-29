@@ -15,6 +15,18 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(o, np.floating):
             return float(o)
 
+        # Handle Environment and Belief objects by using their config_id
+        if hasattr(o, "config_id"):
+            try:
+                return {
+                    "__class__": o.__class__.__name__,
+                    "__module__": o.__class__.__module__,
+                    "__config_id__": o.config_id,
+                }
+            except Exception:
+                # If config_id fails, fall through to other methods
+                pass
+
         # Handle ActionSampler instances by converting to their state
         if hasattr(o, "__class__") and hasattr(o, "__getstate__"):
             try:
