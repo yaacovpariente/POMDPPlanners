@@ -5,7 +5,7 @@ import pandas as pd
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.simulation import History, MetricValue
-from POMDPPlanners.utils.statistics import (
+from POMDPPlanners.utils.statistics_utils import (
     confidence_interval,
     cvar_confidence_interval,
     cvar_estimator,

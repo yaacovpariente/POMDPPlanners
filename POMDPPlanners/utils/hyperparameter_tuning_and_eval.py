@@ -10,65 +10,6 @@ Key Features:
 - Flexible configuration for different planners and environments
 - Fast execution with optimized default parameters
 - Comprehensive result reporting and visualization
-
-Example:
-    Basic usage for multiple planners on Tiger POMDP::
-
-        from pathlib import Path
-        from POMDPPlanners.utils.hyperparameter_tuning_utils import optimize_and_evaluate_planners, HyperParamPlannerConfig
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-        from POMDPPlanners.planners.sparse_sampling_planners.standard_sparse_sampling_discrete_actions import StandardSparseSamplingDiscreteActionsPlanner
-        from POMDPPlanners.core.simulation import NumericalHyperParameter
-        from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParameterOptimizationDirection
-        from POMDPPlanners.core.belief import get_initial_belief
-
-        # Set up environment
-        env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
-        initial_belief = get_initial_belief(env, n_particles=100)
-
-        # Define planner configurations
-        planner_configs = [
-            # POMCP configuration
-            HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[
-                    NumericalHyperParameter(0.1, 5.0, "exploration_constant"),
-                    NumericalHyperParameter(50, 200, "n_simulations"),
-                    NumericalHyperParameter(3, 8, "depth")
-                ],
-                constant_parameters={"discount_factor": env.discount_factor, "name": "OptimizedPOMCP"}
-            ),
-            # Sparse Sampling configuration
-            HyperParamPlannerConfig(
-                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-                hyper_parameters=[
-                    NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
-                    NumericalHyperParameter(100, 500, "n_simulations")
-                ],
-                constant_parameters={"discount_factor": env.discount_factor, "name": "OptimizedSSDAP"}
-            )
-        ]
-
-        # Run optimization and evaluation for all planners
-        results = optimize_and_evaluate_planners(
-            environment=env,
-            initial_belief=initial_belief,
-            planner_configs=planner_configs,
-            cache_dir=Path("./optimization_results"),
-            optimization_direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return"
-        )
-
-        # Access results
-        optimization_results = results['optimization_results']  # List of OptimizedPolicyResult
-        evaluation_results = results['evaluation_results']
-        evaluation_statistics = results['evaluation_statistics']
-
-        # Log results (logger is automatically available when importing this module)
-        logger.info(f"Optimized {len(optimization_results)} planners")
-        for i, result in enumerate(optimization_results):
-            logger.info(f"Planner {i+1}: {result.policy.name} - Best hyperparameters: {result.chosen_hyper_parameters}")
 """
 
 import logging
@@ -207,31 +148,37 @@ def optimize_and_evaluate_planners(
     Example:
         Optimize multiple planners on Tiger POMDP::
 
-            planner_configs = [
-                HyperParamPlannerConfig(
-                    policy_cls=POMCP,
-                    hyper_parameters=[
-                        NumericalHyperParameter(0.1, 5.0, "exploration_constant"),
-                        NumericalHyperParameter(50, 200, "n_simulations")
-                    ],
-                    constant_parameters={"discount_factor": 0.95, "name": "POMCP"}
-                ),
-                HyperParamPlannerConfig(
-                    policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-                    hyper_parameters=[
-                        NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
-                        NumericalHyperParameter(100, 500, "n_simulations")
-                    ],
-                    constant_parameters={"discount_factor": 0.95, "name": "SSSDAP"}
-                )
-            ]
-
-            results = optimize_and_evaluate_planners(
-                environment=TigerPOMDP(discount_factor=0.95),
-                initial_belief=get_initial_belief(env, n_particles=100),
-                planner_configs=planner_configs,
-                cache_dir=Path("./results")
-            )
+            >>> from pathlib import Path
+            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+            >>> from POMDPPlanners.planners.sparse_sampling_planner import StandardSparseSamplingDiscreteActionsPlanner
+            >>> from POMDPPlanners.core.simulation import NumericalHyperParameter
+            >>> from POMDPPlanners.core.belief import get_initial_belief
+            >>>
+            >>> # Create environment and belief
+            >>> env = TigerPOMDP(discount_factor=0.95)
+            >>> initial_belief = get_initial_belief(env, n_particles=100)
+            >>>
+            >>> # Configure planners (simplified for doctest)
+            >>> planner_configs = [
+            ...     HyperParamPlannerConfig(
+            ...         policy_cls=POMCP,
+            ...         hyper_parameters=[
+            ...             NumericalHyperParameter(0.1, 5.0, "exploration_constant")
+            ...         ],
+            ...         constant_parameters={"discount_factor": 0.95, "name": "POMCP"}
+            ...     )
+            ... ]
+            >>>
+            >>> # This would run optimization (commented out for doctest)
+            >>> # results = optimize_and_evaluate_planners(
+            >>> #     environment=env,
+            >>> #     initial_belief=initial_belief,
+            >>> #     planner_configs=planner_configs,
+            >>> #     cache_dir=Path("./results")
+            >>> # )
+            >>> len(planner_configs) == 1  # Verify example setup
+            True
     """
     # Configure logging based on parameters
     configure_logging(debug=debug, verbose=verbose)
@@ -900,11 +847,11 @@ def create_numerical_hyperparameter_ranges(
     Example:
         Create hyperparameters for POMCP::
 
-            hyper_params = create_numerical_hyperparameter_ranges({
-                "exploration_constant": (0.1, 5.0),
-                "n_simulations": (50, 200),
-                "depth": (3, 8)
-            })
+            >>> hyper_params = create_numerical_hyperparameter_ranges({
+            ...     "exploration_constant": (0.1, 5.0),
+            ...     "n_simulations": (50, 200),
+            ...     "depth": (3, 8)
+            ... })
     """
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(f"Creating {len(parameter_configs)} numerical hyperparameters")
@@ -930,10 +877,10 @@ def create_categorical_hyperparameter_choices(
     Example:
         Create hyperparameters::
 
-            hyper_params = create_categorical_hyperparameter_choices({
-                "algorithm": ["ucb", "thompson", "epsilon_greedy"],
-                "heuristic": ["random", "informed"]
-            })
+            >>> hyper_params = create_categorical_hyperparameter_choices({
+            ...     "algorithm": ["ucb", "thompson", "epsilon_greedy"],
+            ...     "heuristic": ["random", "informed"]
+            ... })
     """
     if logger.isEnabledFor(logging.DEBUG):
         logger.debug(f"Creating {len(parameter_configs)} categorical hyperparameters")
@@ -1012,11 +959,12 @@ def get_benchmark_hyperparameter_planners(
     Example:
         Get compatible planners for Tiger POMDP (discrete actions, discrete observations)::
 
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-
-            env = TigerPOMDP(discount_factor=0.95)
-            compatible_planners = get_benchmark_hyperparameter_planners(env)
-            print(f"Compatible planners: {[p.__name__ for p in compatible_planners]}")
+            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            >>>
+            >>> env = TigerPOMDP(discount_factor=0.95)
+            >>> compatible_planners = get_benchmark_hyperparameter_planners(env)
+            >>> print(f"Compatible planners: {[p.__name__ for p in compatible_planners]}")
+            Compatible planners: ['POMCP', 'StandardSparseSamplingDiscreteActionsPlanner', 'SparsePFT', 'POMCPOW', 'PFT_DPW', 'POMCP_DPW', 'DiscreteActionSequencesPlanner']
     """
     from POMDPPlanners.planners import POLICY_REGISTRY
 
