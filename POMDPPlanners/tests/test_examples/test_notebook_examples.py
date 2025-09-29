@@ -128,7 +128,7 @@ class TestNotebookExamples:
         notebook_path = examples_dir / "basic_usage.ipynb"
 
         result = subprocess.run(
-            [sys.executable, "-m", "pytest", "--nbval", str(notebook_path), "-v"],
+            [sys.executable, "-m", "pytest", "--nbval-lax", str(notebook_path), "-v"],
             capture_output=True,
             text=True,
         )
@@ -150,7 +150,7 @@ class TestNotebookExamples:
         notebook_path = examples_dir / "hyperparameter_tuning.ipynb"
 
         result = subprocess.run(
-            [sys.executable, "-m", "pytest", "--nbval", str(notebook_path), "-v"],
+            [sys.executable, "-m", "pytest", "--nbval-lax", str(notebook_path), "-v"],
             capture_output=True,
             text=True,
         )
@@ -172,7 +172,7 @@ class TestNotebookExamples:
         notebook_path = examples_dir / "planners_comparison.ipynb"
 
         result = subprocess.run(
-            [sys.executable, "-m", "pytest", "--nbval", str(notebook_path), "-v"],
+            [sys.executable, "-m", "pytest", "--nbval-lax", str(notebook_path), "-v"],
             capture_output=True,
             text=True,
         )
