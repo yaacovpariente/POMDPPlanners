@@ -31,24 +31,18 @@ class EnvironmentConfig:
         params: Dictionary of parameters to pass to the environment constructor
 
     Example:
-        Creating environment configurations::
+        Creating environment configurations:
 
-            # Tiger POMDP configuration
-            tiger_config = EnvironmentConfig(
-                class_name="TigerPOMDP",
-                params={
-                    "discount_factor": 0.95,
-                    "tiger_location": "left",
-                    "reward_correct": 10.0,
-                    "reward_incorrect": -100.0
-                }
-            )
-
-            # Light-dark POMDP configuration
-            lightdark_config = EnvironmentConfig(
-                class_name="ContinuousLightDarkPOMDP",
-                params={"discount_factor": 0.95, "light_loc": [5.0, 0.0]}
-            )
+        >>> # Tiger POMDP configuration
+        >>> tiger_config = EnvironmentConfig(
+        ...     class_name="TigerPOMDP",
+        ...     params={
+        ...         "discount_factor": 0.95,
+        ...         "tiger_location": "left",
+        ...         "reward_correct": 10.0,
+        ...         "reward_incorrect": -100.0
+        ...     }
+        ... )
     """
 
     class_name: str
@@ -67,23 +61,17 @@ class PolicyConfig:
         params: Dictionary of parameters to pass to the policy constructor
 
     Example:
-        Creating policy configurations::
+        Creating policy configurations:
 
-            # POMCP policy configuration
-            pomcp_config = PolicyConfig(
-                class_name="POMCP",
-                params={
-                    "num_simulations": 1000,
-                    "exploration_constant": 1.0,
-                    "max_depth": 10
-                }
-            )
-
-            # PFT-DPW policy configuration
-            pft_config = PolicyConfig(
-                class_name="PFT_DPW",
-                params={"num_simulations": 500, "alpha": 0.5, "k": 10.0}
-            )
+        >>> # POMCP policy configuration
+        >>> pomcp_config = PolicyConfig(
+        ...     class_name="POMCP",
+        ...     params={
+        ...         "num_simulations": 1000,
+        ...         "exploration_constant": 1.0,
+        ...         "max_depth": 10
+        ...     }
+        ... )
     """
 
     class_name: str

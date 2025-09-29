@@ -58,25 +58,13 @@ class SpaceInfo:
         observation_space: The type of observation space (discrete, continuous, or mixed)
 
     Example:
-        Creating space info for different environment types::
+        Creating space info for different environment types:
 
-            # Discrete actions, continuous observations
-            space_info = SpaceInfo(
-                action_space=SpaceType.DISCRETE,
-                observation_space=SpaceType.CONTINUOUS
-            )
-
-            # Both discrete
-            discrete_space = SpaceInfo(
-                action_space=SpaceType.DISCRETE,
-                observation_space=SpaceType.DISCRETE
-            )
-
-            # Mixed space types
-            mixed_space = SpaceInfo(
-                action_space=SpaceType.MIXED,
-                observation_space=SpaceType.CONTINUOUS
-            )
+        >>> # Discrete actions, continuous observations
+        >>> space_info = SpaceInfo(
+        ...     action_space=SpaceType.DISCRETE,
+        ...     observation_space=SpaceType.CONTINUOUS
+        ... )
     """
 
     action_space: SpaceType
