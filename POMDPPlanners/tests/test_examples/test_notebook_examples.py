@@ -17,24 +17,6 @@ import sys
 from pathlib import Path
 
 
-# Check if nbval pytest plugin is available
-def _check_nbval_available():
-    """Check if nbval pytest plugin is properly installed and available."""
-    try:
-        import nbval
-
-        # Test if the --nbval option is actually available by running pytest --help
-        result = subprocess.run(
-            [sys.executable, "-m", "pytest", "--help"], capture_output=True, text=True, timeout=10
-        )
-        return "--nbval" in result.stdout
-    except (ImportError, subprocess.TimeoutExpired, FileNotFoundError):
-        return False
-
-
-NBVAL_AVAILABLE = _check_nbval_available()
-
-
 class TestNotebookExamples:
     """Test cases for Jupyter notebook examples."""
 
@@ -132,7 +114,6 @@ class TestNotebookExamples:
         assert len(notebook_data["cells"]) > 0, "Notebook has no cells"
 
     @pytest.mark.slow
-    @pytest.mark.skipif(not NBVAL_AVAILABLE, reason="nbval not available")
     def test_basic_usage_notebook_execution(self, examples_dir):
         """Test that basic_usage.ipynb can be executed without errors.
 
@@ -155,7 +136,6 @@ class TestNotebookExamples:
         assert result.returncode == 0, f"Notebook execution failed: {result.stderr}"
 
     @pytest.mark.slow
-    @pytest.mark.skipif(not NBVAL_AVAILABLE, reason="nbval not available")
     def test_hyperparameter_tuning_notebook_execution(self, examples_dir):
         """Test that hyperparameter_tuning.ipynb can be executed without errors.
 
@@ -178,7 +158,6 @@ class TestNotebookExamples:
         assert result.returncode == 0, f"Notebook execution failed: {result.stderr}"
 
     @pytest.mark.slow
-    @pytest.mark.skipif(not NBVAL_AVAILABLE, reason="nbval not available")
     def test_planners_comparison_notebook_execution(self, examples_dir):
         """Test that planners_comparison.ipynb can be executed without errors.
 
