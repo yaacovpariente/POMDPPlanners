@@ -44,99 +44,35 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
         TypeError: If tree is not a BeliefNode instance
 
     Example:
-        Analyzing POMCP search tree quality::
-
-            from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
-            from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-            from POMDPPlanners.core.belief import get_initial_belief
-
-            # Create POMCP planner and run planning
-            env = TigerPOMDP(discount_factor=0.95)
-            planner = POMCP(
-                environment=env,
-                discount_factor=0.95,
-                depth=20,
-                exploration_constant=1.0,
-                name="POMCP_Analysis",
-                n_simulations=1000
-            )
-
-            initial_belief = get_initial_belief(env, n_particles=200)
-            action, run_data = planner.action(initial_belief)
-
-            # Extract tree metrics from run data
-            metrics = run_data.info_variables
-            for metric in metrics:
-                print(f"{metric.name}: {metric.value:.3f}")
-
-            # Example output:
-            # min_actions_visit_count: 87.000
-            # max_actions_visit_count: 543.000
-            # actions_visit_count_entropy: 1.234
-
-    Example:
-        Comparing exploration patterns across algorithms::
-
-            # Compare tree statistics between different MCTS algorithms
-            from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
-
-            algorithms = {
-                'POMCP': POMCP(env, 0.95, depth=15, exploration_constant=1.0,
-                             name="POMCP", n_simulations=500),
-                'SparsePFT': SparsePFT(env, 0.95, depth=15, c_ucb=1.0, beta_ucb=2.0,
-                                     belief_child_num=5, name="SparsePFT", n_simulations=500)
-            }
-
-            print("Algorithm Exploration Analysis:")
-            print("-" * 50)
-
-            for name, planner in algorithms.items():
-                action, run_data = planner.action(initial_belief)
-
-                # Extract metrics
-                metrics_dict = {m.name: m.value for m in run_data.info_variables}
-                min_visits = metrics_dict['min_actions_visit_count']
-                max_visits = metrics_dict['max_actions_visit_count']
-                entropy = metrics_dict['actions_visit_count_entropy']
-
-                print(f"{name}:")
-                print(f"  Visit range: {min_visits:.0f} - {max_visits:.0f}")
-                print(f"  Exploration entropy: {entropy:.3f}")
-                print(f"  Visit ratio: {max_visits/min_visits:.2f}")
-                print()
-
-    Example:
-        Tree analysis for parameter tuning::
-
-            # Analyze how exploration parameter affects tree statistics
-            exploration_constants = [0.5, 1.0, 1.414, 2.0]
-
-            print("Exploration Parameter Analysis:")
-            print("-" * 60)
-            print("c_exp  | min_vis | max_vis | entropy | ratio")
-            print("-" * 60)
-
-            for c_exp in exploration_constants:
-                planner = POMCP(
-                    environment=env,
-                    discount_factor=0.95,
-                    depth=15,
-                    exploration_constant=c_exp,
-                    name=f"POMCP_c{c_exp}",
-                    n_simulations=500
-                )
-
-                action, run_data = planner.action(initial_belief)
-
-                # Extract and display metrics
-                metrics_dict = {m.name: m.value for m in run_data.info_variables}
-                min_vis = metrics_dict['min_actions_visit_count']
-                max_vis = metrics_dict['max_actions_visit_count']
-                entropy = metrics_dict['actions_visit_count_entropy']
-                ratio = max_vis / min_vis if min_vis > 0 else float('inf')
-
-                print(f"{c_exp:6.1f} | {min_vis:7.0f} | {max_vis:7.0f} | {entropy:7.3f} | {ratio:5.2f}")
+        >>> import numpy as np
+        >>> np.random.seed(42)  # For reproducible results
+        >>>
+        >>> from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
+        >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> from POMDPPlanners.core.belief import get_initial_belief
+        >>>
+        >>> # Create POMCP planner and run planning
+        >>> env = TigerPOMDP(discount_factor=0.95)
+        >>> planner = POMCP(
+        ...     environment=env,
+        ...     discount_factor=0.95,
+        ...     depth=20,
+        ...     exploration_constant=1.0,
+        ...     name="POMCP_Analysis",
+        ...     n_simulations=100
+        ... )
+        >>>
+        >>> initial_belief = get_initial_belief(env, n_particles=200)
+        >>> action, run_data = planner.action(initial_belief)
+        >>>
+        >>> # Extract tree metrics from run data
+        >>> metrics = run_data.info_variables
+        >>> len(metrics) > 0
+        True
+        >>> import numbers
+        >>> isinstance(metrics[0].value, numbers.Number)
+        True
 
     Metric Interpretation:
         **min_actions_visit_count**:
