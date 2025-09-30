@@ -212,7 +212,7 @@ class WeightedParticleBeliefContinuousLightDarkFullCoverage(WeightedParticleBeli
             # Clip to ensure within grid bounds
             reinvigorated_states = np.clip(reinvigorated_states, 0, pomdp.grid_size)  # type: ignore[attr-defined]
 
-            self.particles[-n_reinvigorate:] = reinvigorated_states.tolist()
+            self.particles[-n_reinvigorate:] = list(reinvigorated_states)
 
         return self
 
