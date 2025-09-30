@@ -1845,3 +1845,79 @@ def test_environment_configuration_obstacle_placement():
         assert (
             start_goal_distance > env.goal_state_radius
         ), f"Start and goal too close for grid size {config['grid_size']}"
+
+
+def test_continuous_light_dark_state_transition_model_sample_returns_list_of_numpy_arrays():
+    """Test that ContinuousLightDarkStateTransitionModel.sample() returns a list containing only numpy arrays.
+
+    Purpose: Validates that the sample method returns a properly structured list of numpy arrays
+
+    Given: A ContinuousLightDarkStateTransitionModel with specific state, action, and covariance
+    When: sample() is called with different numbers of samples
+    Then: Returns a list where all elements are numpy arrays with correct shapes
+
+    Test type: unit
+    """
+    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+        ContinuousLightDarkStateTransitionModel,
+    )
+
+    # Set up test parameters
+    state = np.array([2.0, 3.0])
+    action = np.array([1.0, -0.5])
+    state_transition_cov_matrix = np.eye(2) * 0.1
+
+    # Create transition model
+    transition_model = ContinuousLightDarkStateTransitionModel(
+        state=state,
+        action=action,
+        state_transition_cov_matrix=state_transition_cov_matrix,
+    )
+
+    # Test single sample
+    single_sample = transition_model.sample(n_samples=1)
+    assert isinstance(single_sample, list), "sample() should return a list"
+    assert len(single_sample) == 1, "Single sample should return list of length 1"
+    assert isinstance(single_sample[0], np.ndarray), "First element should be numpy array"
+    assert single_sample[0].shape == (2,), "Each sample should be 2D position"
+
+    # Test multiple samples
+    multiple_samples = transition_model.sample(n_samples=5)
+    assert isinstance(multiple_samples, list), "sample() should return a list"
+    assert len(multiple_samples) == 5, "Should return exactly 5 samples"
+
+    # Check that all elements are numpy arrays
+    assert all(
+        isinstance(sample, np.ndarray) for sample in multiple_samples
+    ), "All elements in the list should be numpy arrays"
+
+    # Check that all arrays have correct shape
+    assert all(
+        sample.shape == (2,) for sample in multiple_samples
+    ), "All samples should be 2D positions with shape (2,)"
+
+    # Test with larger number of samples
+    many_samples = transition_model.sample(n_samples=100)
+    assert len(many_samples) == 100, "Should return exactly 100 samples"
+    assert all(
+        isinstance(sample, np.ndarray) for sample in many_samples
+    ), "All 100 elements should be numpy arrays"
+    assert all(
+        sample.shape == (2,) for sample in many_samples
+    ), "All 100 samples should have shape (2,)"
+
+    # Test that samples are different (due to randomness)
+    # Note: This is probabilistic, but with 100 samples it's extremely unlikely to get identical samples
+    sample_values = [tuple(sample) for sample in many_samples]
+    unique_samples = set(sample_values)
+    assert len(unique_samples) > 1, "Samples should be different due to randomness"
+
+    # Test that samples are approximately centered around expected mean
+    expected_mean = state + action  # [3.0, 2.5]
+    sample_array = np.array(many_samples)
+    actual_mean = np.mean(sample_array, axis=0)
+
+    # Allow for some deviation due to randomness (within 2 standard deviations)
+    assert np.allclose(
+        actual_mean, expected_mean, atol=0.5
+    ), f"Sample mean {actual_mean} should be close to expected mean {expected_mean}"
