@@ -120,8 +120,7 @@ class ContinuousLightDarkStateTransitionModel(StateTransitionModel):
             mean=self.mean, cov=self.state_transition_cov_matrix, size=n_samples
         )
 
-        # Convert to list of arrays
-        return [sample for sample in samples]
+        return list(samples)
 
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
         # Convert list to numpy array for vectorized computation
