@@ -973,3 +973,52 @@ class TestSimulationsAPI:
 
         assert isinstance(results, list)
         assert len(results) == 0
+
+    @patch("POMDPPlanners.simulations.simulations_api.optimize_and_evaluate_planners")
+    def test_run_hyperparameter_optimization_and_evaluation_success(
+        self,
+        mock_optimize_and_evaluate,
+        temp_cache_dir,
+        tiger_environment,
+    ):
+        """Test successful execution of run_hyperparameter_optimization_and_evaluation.
+
+        Purpose: Validates that the API method correctly calls the utility function
+
+        Given: Environment, belief, and planner configs, and mocked utility function
+        When: run_hyperparameter_optimization_and_evaluation is executed
+        Then: Utility function is called with correct parameters and results are returned
+
+        Test type: unit
+        """
+        from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
+        from POMDPPlanners.core.belief import get_initial_belief
+
+        # Mock results
+        mock_results = {"optimization_results": [], "evaluation_results": {}}
+        mock_optimize_and_evaluate.return_value = mock_results
+
+        # Create test data
+        initial_belief = get_initial_belief(tiger_environment, n_particles=10)
+        planner_configs = [
+            HyperParamPlannerConfig(
+                policy_cls=POMCP, hyper_parameters=[], constant_parameters={"name": "TestPOMCP"}
+            )
+        ]
+
+        api = SimulationsAPI()
+        results = api.run_hyperparameter_optimization_and_evaluation(
+            environment=tiger_environment,
+            initial_belief=initial_belief,
+            planner_configs=planner_configs,
+            cache_dir=temp_cache_dir,
+            n_trials=1,
+            optimization_episodes=2,
+            evaluation_episodes=3,
+        )
+
+        # Verify utility function was called
+        mock_optimize_and_evaluate.assert_called_once()
+
+        # Verify results are returned
+        assert results == mock_results
