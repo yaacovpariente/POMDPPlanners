@@ -837,3 +837,88 @@ class SimulationsAPI:
                 optimizer.cleanup()
             except Exception as cleanup_error:
                 self.logger.warning(f"Error during optimizer cleanup: {cleanup_error}")
+
+    def run_hyperparameter_optimization_and_evaluation(
+        self,
+        environment,
+        initial_belief,
+        planner_configs,
+        cache_dir=None,
+        optimization_direction=None,
+        parameter_to_optimize="average_return",
+        experiment_name="POMDP_Hyperparameter_Optimization_And_Evaluation",
+        # Optimization parameters
+        optimization_episodes=3,
+        optimization_steps=6,
+        n_trials=3,
+        optimization_n_jobs=-1,
+        # Evaluation parameters
+        evaluation_episodes=10,
+        evaluation_steps=8,
+        evaluation_n_jobs=1,
+        # General parameters
+        confidence_interval_level=0.95,
+        alpha=0.05,
+        debug=False,
+        verbose=True,
+    ):
+        """Run hyperparameter optimization followed by comprehensive evaluation.
+
+        This method is a simple wrapper around the optimize_and_evaluate_planners utility function.
+
+        Args:
+            environment: The POMDP environment to optimize and evaluate on
+            initial_belief: Initial belief state for the environment
+            planner_configs: List of HyperParamPlannerConfig objects
+            cache_dir: Directory for storing optimization and evaluation results
+            optimization_direction: Direction of optimization (MAXIMIZE or MINIMIZE)
+            parameter_to_optimize: Name of the metric to optimize
+            experiment_name: Name for the experiment
+            optimization_episodes: Number of episodes for optimization trials
+            optimization_steps: Number of steps per optimization episode
+            n_trials: Number of optimization trials per planner
+            optimization_n_jobs: Number of parallel jobs for optimization
+            evaluation_episodes: Number of episodes for evaluation
+            evaluation_steps: Number of steps per evaluation episode
+            evaluation_n_jobs: Number of parallel jobs for evaluation
+            confidence_interval_level: Confidence level for statistical analysis
+            alpha: Alpha value for risk metrics
+            debug: Whether to enable debug logging
+            verbose: Whether to print progress messages
+
+        Returns:
+            Results dictionary from optimize_and_evaluate_planners utility function
+        """
+        from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
+            optimize_and_evaluate_planners,
+        )
+        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+            HyperParameterOptimizationDirection,
+        )
+
+        if optimization_direction is None:
+            optimization_direction = HyperParameterOptimizationDirection.MAXIMIZE
+
+        if cache_dir is None:
+            cache_dir = Path(f"./{experiment_name.lower().replace(' ', '_')}_results")
+
+        return optimize_and_evaluate_planners(
+            environment=environment,
+            initial_belief=initial_belief,
+            planner_configs=planner_configs,
+            cache_dir=cache_dir,
+            optimization_direction=optimization_direction,
+            parameter_to_optimize=parameter_to_optimize,
+            experiment_name=experiment_name,
+            optimization_episodes=optimization_episodes,
+            optimization_steps=optimization_steps,
+            n_trials=n_trials,
+            optimization_n_jobs=optimization_n_jobs,
+            evaluation_episodes=evaluation_episodes,
+            evaluation_steps=evaluation_steps,
+            evaluation_n_jobs=evaluation_n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            debug=debug,
+            verbose=verbose,
+        )
