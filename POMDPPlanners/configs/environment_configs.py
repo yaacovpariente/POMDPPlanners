@@ -62,14 +62,14 @@ class EnvironmentConfigsAPI:
 
     def push_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
         pomdp = PushPOMDP(discount_factor=self.discount_factor, name="PushPOMDP")
         belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
         return pomdp, belief
 
     def continuous_observations_discrete_actions_light_dark_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
         DISCOUNT_FACTOR = self.discount_factor
         STATE_TRANSITION_COV_MATRIX = np.eye(2) * 0.075  # Identity matrix for state transitions
         OBSERVATION_COV_MATRIX = np.array(
@@ -218,7 +218,7 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
 
     def continuous_observations_discrete_actions_light_dark_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
         DISCOUNT_FACTOR = self.discount_factor
         STATE_TRANSITION_COV_MATRIX = np.eye(2) * 0.075  # Identity matrix for state transitions
         OBSERVATION_COV_MATRIX = np.array(
@@ -351,7 +351,7 @@ class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
 
     def push_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
         pomdp = PushPOMDP(
             discount_factor=self.discount_factor,
             grid_size=10,

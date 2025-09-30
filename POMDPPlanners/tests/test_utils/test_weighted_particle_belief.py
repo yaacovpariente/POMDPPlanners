@@ -538,3 +538,69 @@ def test_continuous_full_coverage_gmm_sampling():
         distances = np.linalg.norm(reinvigorated_particles - center, axis=1)
         # Check that at least 10% of particles are within 2 standard deviations
         assert np.mean(distances < 2 * np.sqrt(0.1)) > 0.1
+
+
+def test_continuous_full_coverage_particle_type_preservation_after_update():
+    """Test that particles maintain numpy array type and shape after belief update.
+
+    Purpose: Validates that WeightedParticleBeliefContinuousLightDarkFullCoverage maintains particle data types and shapes after update
+
+    Given: WeightedParticleBeliefContinuousLightDarkFullCoverage with numpy array particles of shape (2,) and ContinuousLightDarkPOMDP environment
+    When: belief.update() is called with valid action, observation, and environment
+    Then: All particles in updated belief remain numpy arrays with original shape (2,), preserving data type consistency
+
+    Test type: unit
+    """
+    # Create test data with numpy array particles
+    n_particles = 20
+    particles = [np.array([1.0, 2.0], dtype=np.float64) for _ in range(n_particles)]
+    log_weights = np.log(np.ones(n_particles) / n_particles)
+
+    # Initialize belief
+    belief = WeightedParticleBeliefContinuousLightDarkFullCoverage(
+        particles=particles,
+        log_weights=log_weights,
+        ess_factor=0.5,
+        reinvigoration_fraction=0.1,
+        reinvigoration_cov_matrix=np.eye(2) * 0.1,
+    )
+
+    # Create environment
+    env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+
+    # Verify original particle types and shapes
+    for particle in belief.particles:
+        assert isinstance(
+            particle, np.ndarray
+        ), f"Original particle should be numpy array, got {type(particle)}"
+        assert particle.shape == (
+            2,
+        ), f"Original particle should have shape (2,), got {particle.shape}"
+
+    # Perform belief update
+    action = "right"
+    observation = np.array([3.0, 4.0])
+    updated_belief = belief.update(action=action, observation=observation, pomdp=env)
+
+    # Verify all particles maintain numpy array type and correct shape after update
+    for i, particle in enumerate(updated_belief.particles):
+        assert isinstance(
+            particle, np.ndarray
+        ), f"Updated particle {i} should be numpy array, got {type(particle)}"
+        assert particle.shape == (
+            2,
+        ), f"Updated particle {i} should have shape (2,), got {particle.shape}"
+        assert particle.dtype in [
+            np.float64,
+            np.float32,
+        ], f"Updated particle {i} should have float dtype, got {particle.dtype}"
+
+    # Verify particle count is preserved
+    assert (
+        len(updated_belief.particles) == n_particles
+    ), f"Particle count should be preserved, got {len(updated_belief.particles)} instead of {n_particles}"
+
+    # Verify log_weights shape is preserved
+    assert updated_belief.log_weights.shape == (
+        n_particles,
+    ), f"Log weights shape should be ({n_particles},), got {updated_belief.log_weights.shape}"
