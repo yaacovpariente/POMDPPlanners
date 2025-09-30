@@ -59,8 +59,8 @@ class TestNumpyEncoder:
         # Test floating types
         np_float32 = np.float32(3.14)
         result_float32 = encoder.default(np_float32)
-        assert abs(result_float32 - 3.14) < 1e-6  # Account for float32 precision
         assert isinstance(result_float32, float)
+        assert abs(result_float32 - 3.14) < 1e-6  # Account for float32 precision
 
         np_float64 = np.float64(2.71)
         assert encoder.default(np_float64) == 2.71
