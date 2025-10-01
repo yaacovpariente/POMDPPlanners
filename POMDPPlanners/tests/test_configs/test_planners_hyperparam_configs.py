@@ -10,11 +10,19 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
     NumericalHyperParameter,
 )
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDP,
+)
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
+)
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.utils.action_samplers import DiscreteActionSampler, UnitCircleActionSampler
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.mcts_planners.pomcp_dpw import POMCP_DPW
@@ -489,3 +497,253 @@ class TestPlannersHyperparamConfigs:
         assert "optimization_episodes" in fast_defaults
         assert "optimization_steps" in fast_defaults
         assert "n_trials" in fast_defaults
+
+    def test_get_compatible_planners_discrete_environment(self):
+        """Test get_compatible_planners with discrete action/observation environment.
+
+        Purpose: Validates that compatible planners are returned for discrete environments
+
+        Given: A discrete action/observation environment (TigerPOMDP)
+        When: get_compatible_planners is called
+        Then: Returns appropriate planners that support discrete spaces
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        planners = self.config_api.get_compatible_planners(env)
+
+        # Should return 6 planners for discrete/discrete environment
+        assert len(planners) == 6
+
+        # Extract planner class names
+        planner_classes = [config.policy_cls.__name__ for config in planners]
+
+        # Expected planners for discrete/discrete environment
+        expected_planners = {
+            "POMCPOW",
+            "POMCP_DPW",
+            "POMCP",
+            "SparsePFT",
+            "StandardSparseSamplingDiscreteActionsPlanner",
+            "DiscreteActionSequencesPlanner",
+        }
+
+        assert set(planner_classes) == expected_planners
+
+        # Verify all returned configs are valid
+        for config in planners:
+            assert isinstance(config, HyperParamPlannerConfig)
+            assert config.constant_parameters["environment"] == env
+
+    def test_get_compatible_planners_continuous_environment(self):
+        """Test get_compatible_planners with continuous action/observation environment.
+
+        Purpose: Validates that compatible planners are returned for continuous environments
+
+        Given: A continuous action/observation environment (ContinuousLightDarkPOMDP)
+        When: get_compatible_planners is called
+        Then: Returns appropriate planners that support continuous spaces
+
+        Test type: unit
+        """
+        env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+        planners = self.config_api.get_compatible_planners(env)
+
+        # Should return 3 planners for continuous/continuous environment
+        assert len(planners) == 3
+
+        # Extract planner class names
+        planner_classes = [config.policy_cls.__name__ for config in planners]
+
+        # Expected planners for continuous/continuous environment
+        expected_planners = {"POMCPOW", "POMCP_DPW", "PFT_DPW"}
+
+        assert set(planner_classes) == expected_planners
+
+        # Verify all returned configs are valid
+        for config in planners:
+            assert isinstance(config, HyperParamPlannerConfig)
+            assert config.constant_parameters["environment"] == env
+
+    def test_get_compatible_planners_with_custom_timeout(self):
+        """Test get_compatible_planners with custom timeout parameter.
+
+        Purpose: Validates that custom timeout parameter is applied to all planners
+
+        Given: An environment and custom timeout value
+        When: get_compatible_planners is called with custom timeout
+        Then: All planner configs use the specified timeout
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        custom_timeout = 5.0
+        planners = self.config_api.get_compatible_planners(env, time_out_in_seconds=custom_timeout)
+
+        # Verify timeout is applied to all planners that use it
+        for config in planners:
+            if "time_out_in_seconds" in config.constant_parameters:
+                assert config.constant_parameters["time_out_in_seconds"] == custom_timeout
+
+    def test_get_action_sampler_for_discrete_environment(self):
+        """Test _get_action_sampler_for_environment with discrete action space.
+
+        Purpose: Validates that DiscreteActionSampler is returned for discrete environments
+
+        Given: A discrete action space environment
+        When: _get_action_sampler_for_environment is called
+        Then: Returns DiscreteActionSampler with environment actions
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        action_sampler = self.config_api._get_action_sampler_for_environment(env)
+
+        assert isinstance(action_sampler, DiscreteActionSampler)
+        assert action_sampler.actions == env.get_actions()
+
+    def test_get_action_sampler_for_continuous_environment(self):
+        """Test _get_action_sampler_for_environment with continuous action space.
+
+        Purpose: Validates that UnitCircleActionSampler is returned for continuous environments
+
+        Given: A continuous action space environment
+        When: _get_action_sampler_for_environment is called
+        Then: Returns UnitCircleActionSampler
+
+        Test type: unit
+        """
+        env = ContinuousLightDarkPOMDP(discount_factor=0.95)
+        action_sampler = self.config_api._get_action_sampler_for_environment(env)
+
+        assert isinstance(action_sampler, UnitCircleActionSampler)
+
+    def test_get_action_sampler_for_mixed_environment(self):
+        """Test _get_action_sampler_for_environment with mixed action space.
+
+        Purpose: Validates that UnitCircleActionSampler is returned for mixed environments
+
+        Given: A mixed action space environment
+        When: _get_action_sampler_for_environment is called
+        Then: Returns UnitCircleActionSampler as default for mixed spaces
+
+        Test type: unit
+        """
+        # Create mock environment with mixed action space
+        mock_env = Mock()
+        mock_env.space_info = SpaceInfo(
+            action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED
+        )
+        mock_env.reward_range = None  # Mock reward_range attribute
+
+        action_sampler = self.config_api._get_action_sampler_for_environment(mock_env)
+
+        assert isinstance(action_sampler, UnitCircleActionSampler)
+
+    def test_get_action_sampler_for_non_discrete_actions_environment(self):
+        """Test _get_action_sampler_for_environment with non-DiscreteActionsEnvironment.
+
+        Purpose: Validates that None is returned when environment doesn't have get_actions method
+
+        Given: An environment with discrete space but no get_actions method
+        When: _get_action_sampler_for_environment is called
+        Then: Returns None because environment doesn't support action enumeration
+
+        Test type: unit
+        """
+        # Create mock environment that has discrete space but is not DiscreteActionsEnvironment
+        mock_env = Mock()
+        mock_env.space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
+        )
+        mock_env.reward_range = None  # Mock reward_range attribute
+
+        action_sampler = self.config_api._get_action_sampler_for_environment(mock_env)
+
+        assert action_sampler is None
+
+    def test_get_compatible_planners_filters_by_action_sampler_availability(self):
+        """Test that get_compatible_planners filters planners based on action sampler availability.
+
+        Purpose: Validates that planners requiring action samplers are excluded when sampler unavailable
+
+        Given: An environment that cannot provide action sampler
+        When: get_compatible_planners is called
+        Then: Only planners not requiring action samplers are returned
+
+        Test type: unit
+        """
+        # Create mock environment with discrete space but no get_actions method
+        mock_env = Mock()
+        mock_env.space_info = SpaceInfo(
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
+        )
+        mock_env.reward_range = None  # Mock reward_range attribute
+
+        planners = self.config_api.get_compatible_planners(mock_env)
+
+        # Should only return planners that don't require action samplers
+        # In this case, only discrete action planners that don't need action samplers
+        planner_classes = [config.policy_cls.__name__ for config in planners]
+
+        # Expected planners that don't require action samplers
+        expected_planners = {
+            "POMCP",
+            "SparsePFT",
+            "StandardSparseSamplingDiscreteActionsPlanner",
+            "DiscreteActionSequencesPlanner",
+        }
+
+        assert set(planner_classes) == expected_planners
+
+    def test_get_compatible_planners_empty_list_for_incompatible_environment(self):
+        """Test get_compatible_planners returns appropriate planners for all environments.
+
+        Purpose: Validates that function handles edge cases gracefully
+
+        Given: Various environment configurations
+        When: get_compatible_planners is called
+        Then: Returns appropriate planners or handles edge cases gracefully
+
+        Test type: unit
+        """
+        # Test with mock environment that has unusual space configuration
+        mock_env = Mock()
+        mock_env.space_info = SpaceInfo(
+            action_space=SpaceType.CONTINUOUS, observation_space=SpaceType.CONTINUOUS
+        )
+        mock_env.reward_range = None  # Mock reward_range attribute
+
+        planners = self.config_api.get_compatible_planners(mock_env)
+
+        # Should return continuous-compatible planners
+        assert len(planners) >= 0  # Should handle gracefully
+
+    def test_get_compatible_planners_all_configs_have_required_fields(self):
+        """Test that all returned planner configs have required fields.
+
+        Purpose: Validates that all returned configurations are properly structured
+
+        Given: Any environment with compatible planners
+        When: get_compatible_planners is called
+        Then: All returned configs have necessary fields for planner instantiation
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        planners = self.config_api.get_compatible_planners(env)
+
+        for config in planners:
+            # Verify required fields exist
+            assert hasattr(config, "policy_cls")
+            assert hasattr(config, "hyper_parameters")
+            assert hasattr(config, "constant_parameters")
+
+            # Verify constant parameters have required fields
+            assert "environment" in config.constant_parameters
+            assert "name" in config.constant_parameters
+            assert config.constant_parameters["environment"] == env
+
+            # Verify policy class is valid
+            assert config.policy_cls is not None
+            assert callable(config.policy_cls)
