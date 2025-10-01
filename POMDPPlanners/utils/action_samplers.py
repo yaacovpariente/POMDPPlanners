@@ -82,7 +82,7 @@ class DiscreteActionSampler(ActionSampler):
             # For compatibility with pickle deserialization via base class __reduce__
             self.actions = []
 
-    def sample(self, belief_node: Optional[Any] = None) -> Any:
+    def sample(self, belief_node: Optional[BeliefNode] = None) -> Any:
         """Sample a random action from the discrete action space.
 
         Args:
