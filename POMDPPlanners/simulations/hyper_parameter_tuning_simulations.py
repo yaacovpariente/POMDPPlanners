@@ -324,8 +324,9 @@ class HyperParameterOptimizer:
 
     def _create_tasks(
         self, configs: List[HyperParameterRunParams]
-    ) -> List[HyperParameterTuningSimulationTask]:
+    ) -> Tuple[List[HyperParameterTuningSimulationTask], List[str]]:
         tasks = []
+        task_identifiers = []
         for config in configs:
             task = HyperParameterTuningSimulationTask(
                 environment=config.environment,
@@ -346,8 +347,9 @@ class HyperParameterOptimizer:
                 alpha=self.alpha,
             )
             tasks.append(task)
+            task_identifiers.append(task.get_config_id())
 
-        return tasks
+        return tasks, task_identifiers
 
     def optimize(self, configs: List[HyperParameterRunParams]) -> List[OptimizedPolicyResult]:
         """Optimize hyperparameters for multiple configurations.
@@ -431,11 +433,11 @@ class HyperParameterOptimizer:
     def _execute_optimization_tasks(
         self, configs: List[HyperParameterRunParams]
     ) -> Tuple[List[OptimizedPolicyResult], List[HyperParameterTuningSimulationTask]]:
-        tasks = self._create_tasks(configs)
+        tasks, task_identifiers = self._create_tasks(configs)
 
         with self.task_manager:
             task_results, task_identifiers = self.task_manager.run_tasks(
-                tasks=tasks, task_identifiers=[f"hyperparameter_optimization_{i}" for i in range(len(configs))]  # type: ignore
+                tasks=tasks, task_identifiers=task_identifiers  # type: ignore
             )
 
         return task_results, tasks
