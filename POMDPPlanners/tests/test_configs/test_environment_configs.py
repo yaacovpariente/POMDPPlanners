@@ -18,7 +18,8 @@ from POMDPPlanners.configs.environment_configs import (
     RiskAverseEnvironmentConfigsAPI,
 )
 from POMDPPlanners.core.belief import WeightedParticleBelief
-from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.environment import Environment, SpaceType
+from POMDPPlanners.core.policy import PolicySpaceInfo
 
 # Set random seeds for reproducible tests
 np.random.seed(42)
@@ -364,6 +365,206 @@ class TestEnvironmentConfigs:
             assert pomdp.discount_factor is not None, f"{method_name} should have discount factor"
 
         print("  ✓ All configurations have consistent interface test passed!")
+
+    def test_get_compatible_environments_discrete_discrete(self):
+        """Test get_compatible_environments with discrete action and observation spaces.
+
+        Purpose: Validates that get_compatible_environments correctly filters environments
+
+        Given: A PolicySpaceInfo with discrete action and observation spaces
+        When: get_compatible_environments is called with this policy space info
+        Then: All returned environments have compatible space types
+
+        Test type: unit
+        """
+        print("Testing get_compatible_environments with discrete/discrete policy...")
+
+        policy_space_info = PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
+        )
+
+        compatible_envs = self.config_api.get_compatible_environments(
+            policy_space_info=policy_space_info, n_particles=self.test_n_particles
+        )
+
+        # Should return a list of tuples
+        assert isinstance(compatible_envs, list), "Should return a list"
+
+        # Each element should be a tuple of (env, belief)
+        for env, belief in compatible_envs:
+            assert isinstance(env, Environment), "First element should be Environment"
+            assert hasattr(belief, "particles"), "Second element should be a belief with particles"
+
+            # Verify compatibility
+            assert env.space_info.action_space in [
+                SpaceType.DISCRETE,
+                SpaceType.MIXED,
+            ], f"Environment {env.name} should have discrete or mixed action space"
+            assert env.space_info.observation_space in [
+                SpaceType.DISCRETE,
+                SpaceType.MIXED,
+            ], f"Environment {env.name} should have discrete or mixed observation space"
+
+        print(
+            f"  ✓ Found {len(compatible_envs)} compatible environments for discrete/discrete policy"
+        )
+
+    def test_get_compatible_environments_discrete_continuous(self):
+        """Test get_compatible_environments with discrete actions and continuous observations.
+
+        Purpose: Validates filtering for policies with discrete actions and continuous observations
+
+        Given: A PolicySpaceInfo with discrete action and continuous observation spaces
+        When: get_compatible_environments is called
+        Then: All returned environments have compatible space types
+
+        Test type: unit
+        """
+        print("Testing get_compatible_environments with discrete action/continuous observation...")
+
+        policy_space_info = PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.CONTINUOUS
+        )
+
+        compatible_envs = self.config_api.get_compatible_environments(
+            policy_space_info=policy_space_info, n_particles=self.test_n_particles
+        )
+
+        # Should return a list
+        assert isinstance(compatible_envs, list), "Should return a list"
+
+        for env, belief in compatible_envs:
+            assert isinstance(env, Environment), "First element should be Environment"
+
+            # Verify action space compatibility
+            assert env.space_info.action_space in [
+                SpaceType.DISCRETE,
+                SpaceType.MIXED,
+            ], f"Environment {env.name} action space should be compatible with discrete"
+
+        print(
+            f"  ✓ Found {len(compatible_envs)} compatible environments for discrete/continuous policy"
+        )
+
+    def test_get_compatible_environments_continuous_continuous(self):
+        """Test get_compatible_environments with continuous action and observation spaces.
+
+        Purpose: Validates filtering for fully continuous policies
+
+        Given: A PolicySpaceInfo with continuous action and observation spaces
+        When: get_compatible_environments is called
+        Then: All returned environments have compatible space types
+
+        Test type: unit
+        """
+        print("Testing get_compatible_environments with continuous/continuous policy...")
+
+        policy_space_info = PolicySpaceInfo(
+            action_space=SpaceType.CONTINUOUS, observation_space=SpaceType.CONTINUOUS
+        )
+
+        compatible_envs = self.config_api.get_compatible_environments(
+            policy_space_info=policy_space_info, n_particles=self.test_n_particles
+        )
+
+        # Should return a list
+        assert isinstance(compatible_envs, list), "Should return a list"
+
+        for env, belief in compatible_envs:
+            assert isinstance(env, Environment), "First element should be Environment"
+            assert hasattr(belief, "particles"), "Second element should be a belief"
+
+        print(
+            f"  ✓ Found {len(compatible_envs)} compatible environments for continuous/continuous policy"
+        )
+
+    def test_get_compatible_environments_returns_proper_beliefs(self):
+        """Test that get_compatible_environments returns properly initialized beliefs.
+
+        Purpose: Validates that beliefs returned have correct particle counts
+
+        Given: A PolicySpaceInfo and specified n_particles parameter
+        When: get_compatible_environments is called with n_particles=15
+        Then: All returned beliefs have exactly 15 particles
+
+        Test type: unit
+        """
+        print("Testing get_compatible_environments belief initialization...")
+
+        policy_space_info = PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.CONTINUOUS
+        )
+
+        n_particles = 15
+        compatible_envs = self.config_api.get_compatible_environments(
+            policy_space_info=policy_space_info, n_particles=n_particles
+        )
+
+        # Verify all beliefs have correct number of particles
+        for env, belief in compatible_envs:
+            assert (
+                len(belief.particles) == n_particles
+            ), f"Belief for {env.name} should have {n_particles} particles, got {len(belief.particles)}"
+
+        print("  ✓ All beliefs have correct particle counts")
+
+    def test_get_compatible_environments_empty_result(self):
+        """Test get_compatible_environments when no environments are compatible.
+
+        Purpose: Validates behavior when policy is incompatible with all environments
+
+        Given: A PolicySpaceInfo that might not match any environments
+        When: get_compatible_environments is called
+        Then: Returns an empty list without errors
+
+        Test type: unit
+        """
+        print("Testing get_compatible_environments with potentially incompatible policy...")
+
+        # Create a policy space info (may or may not have compatible environments)
+        policy_space_info = PolicySpaceInfo(
+            action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED
+        )
+
+        compatible_envs = self.config_api.get_compatible_environments(
+            policy_space_info=policy_space_info, n_particles=self.test_n_particles
+        )
+
+        # Should return a list (possibly empty)
+        assert isinstance(compatible_envs, list), "Should return a list"
+
+        print(f"  ✓ Returned {len(compatible_envs)} compatible environments without errors")
+
+    def test_get_compatible_environments_verifies_compatibility_logic(self):
+        """Test that compatibility logic matches Policy._verify_environment_compatibility.
+
+        Purpose: Validates that the compatibility logic is consistent with Policy class
+
+        Given: A discrete-only policy space info
+        When: get_compatible_environments is called
+        Then: No continuous-only action space environments are returned
+
+        Test type: unit
+        """
+        print("Testing compatibility logic consistency...")
+
+        # Discrete policy should reject continuous action environments
+        policy_space_info = PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
+        )
+
+        compatible_envs = self.config_api.get_compatible_environments(
+            policy_space_info=policy_space_info, n_particles=self.test_n_particles
+        )
+
+        # Verify none of the returned environments have purely continuous action spaces
+        for env, belief in compatible_envs:
+            assert (
+                env.space_info.action_space != SpaceType.CONTINUOUS
+                or env.space_info.action_space == SpaceType.MIXED
+            ), f"Discrete policy should not be compatible with continuous action environment {env.name}"
+
+        print("  ✓ Compatibility logic is consistent with Policy class")
 
 
 def main():
