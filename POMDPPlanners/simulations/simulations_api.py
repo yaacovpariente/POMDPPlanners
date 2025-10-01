@@ -801,11 +801,14 @@ class SimulationsAPI:
         # Create cache directory if it doesn't exist
         cache_dir_path.mkdir(parents=True, exist_ok=True)
 
+        task_manager_config = JoblibConfig(n_jobs=1)
+
         # Initialize the hyperparameter optimizer
         optimizer = HyperParameterOptimizer(
             cache_dir_path=cache_dir_path,
             experiment_name=experiment_name,
             n_jobs=n_jobs,
+            task_manager_config=task_manager_config,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             use_queue_logger=use_queue_logger,
