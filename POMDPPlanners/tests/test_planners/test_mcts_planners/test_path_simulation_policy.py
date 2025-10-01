@@ -120,9 +120,7 @@ class ConcretePathSimulationPolicy(PathSimulationPolicy):
     @classmethod
     def get_space_info(cls) -> PolicySpaceInfo:
         """Get space type requirements for this test policy."""
-        return PolicySpaceInfo(
-            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
-        )
+        return PolicySpaceInfo(action_space=SpaceType.MIXED, observation_space=SpaceType.DISCRETE)
 
 
 @pytest.fixture

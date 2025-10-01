@@ -57,7 +57,7 @@ class RandomPolicy(Policy):
         from POMDPPlanners.core.environment import SpaceType
 
         return PolicySpaceInfo(
-            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.CONTINUOUS
         )
 
 
