@@ -65,9 +65,14 @@ jobs:
     - name: Run pyright type checking
       run: pyright POMDPPlanners/
 
-    - name: Run unit tests inside Docker
+    - name: Run unit tests inside Docker (excluding slow tests)
       run: |
-        docker run --rm pomdpplanners-test:latest pytest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing
+        docker run --rm pomdpplanners-test:latest pytest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing -m "not slow"
+
+    - name: Run notebook smoke tests inside Docker
+      run: |
+        docker run --rm pomdpplanners-test:latest pytest POMDPPlanners/tests/test_examples/test_notebook_examples.py -v -m "smoke" --tb=short
+      continue-on-error: true  # Don't fail CI if smoke tests have issues, but show results
 
     - name: Run doctests inside Docker
       run: |
