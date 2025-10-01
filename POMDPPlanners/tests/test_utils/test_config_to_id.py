@@ -193,15 +193,22 @@ class TestNumpyEncoder:
         """
         encoder = NumpyEncoder()
 
-        # Complex number should fall back to __getstate__ mechanism
-        complex_num = complex(1, 2)
-        result = encoder.default(complex_num)
+        # Create a custom object that has __getstate__ but no config_id
+        class CustomObject:
+            def __init__(self, value):
+                self.value = value
+
+            def __getstate__(self):
+                return {"value": self.value}
+
+        custom_obj = CustomObject(42)
+        result = encoder.default(custom_obj)
 
         # Should get dict with class info and state
         assert isinstance(result, dict)
-        assert result["__class__"] == "complex"
-        assert result["__module__"] == "builtins"
+        assert result["__class__"] == "CustomObject"
         assert "__state__" in result
+        assert result["__state__"] == {"value": 42}
 
 
 class TestConfigToId:
