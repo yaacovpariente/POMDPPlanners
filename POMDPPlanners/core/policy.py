@@ -22,9 +22,12 @@ import numpy as np
 from POMDPPlanners.utils.config_to_id import config_to_id
 from POMDPPlanners.utils.logger import get_logger
 
+from POMDPPlanners.core.environment import Environment, SpaceType
+
 if TYPE_CHECKING:
     from POMDPPlanners.core.belief import Belief
-    from POMDPPlanners.core.environment import Environment, SpaceType
+
+    # from POMDPPlanners.core.environment import Environment, SpaceType
 
 
 @dataclass
@@ -115,8 +118,31 @@ class Policy(ABC):
         self.debug = debug
         self.use_queue_logger = use_queue_logger
 
+        self._verify_environment_compatibility()
+
         # Initialize logger with the policy's name and user-specified settings
         self.logger.info(f"Initialized policy: {self.name} (debug={self.debug})")
+
+    def _verify_environment_compatibility(self) -> None:
+        """Verify that the policy is compatible with the environment."""
+        policy_space_info = self.get_space_info()
+        environment_space_info = self.environment.space_info
+
+        if (
+            policy_space_info.action_space == SpaceType.DISCRETE
+            and environment_space_info.action_space in [SpaceType.CONTINUOUS, SpaceType.MIXED]
+        ):
+            raise ValueError(
+                f"Policy {self.name} is not compatible with the environment {self.environment.name} because the policy assumes discrete action space and the environment assumes continuous action space"
+            )
+
+        if (
+            policy_space_info.observation_space == SpaceType.DISCRETE
+            and environment_space_info.observation_space in [SpaceType.CONTINUOUS, SpaceType.MIXED]
+        ):
+            raise ValueError(
+                f"Policy {self.name} is not compatible with the environment {self.environment.name} because the policy assumes discrete observation space and the environment assumes continuous observation space"
+            )
 
     @property
     def logger(self) -> logging.Logger:
