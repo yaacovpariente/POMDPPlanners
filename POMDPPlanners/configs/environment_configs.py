@@ -1,9 +1,10 @@
-from typing import Tuple
+from typing import List, Tuple
 
 import numpy as np
 
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
-from POMDPPlanners.core.environment import Environment, DiscreteActionsEnvironment
+from POMDPPlanners.core.environment import Environment, DiscreteActionsEnvironment, SpaceType
+from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
@@ -23,14 +24,127 @@ from POMDPPlanners.utils.weighted_particle_beliefs import (
 )
 
 
+def get_compatible_environments(
+    config_api_instance, policy_space_info: PolicySpaceInfo, n_particles: int = 20, seed: int = 42
+) -> List[Tuple[Environment, WeightedParticleBelief]]:
+    """Get list of environments compatible with the given policy space info.
+
+    Args:
+        config_api_instance: Instance of EnvironmentConfigsAPI or its subclass
+        policy_space_info: Policy space information containing action and observation space types
+        n_particles: Number of particles for belief initialization
+        seed: Random seed for reproducible belief initialization
+
+    Returns:
+        List of tuples containing (environment, belief) pairs that are compatible with the policy
+    """
+    np.random.seed(seed)
+    compatible_envs = []
+    seen_env_names = set()
+
+    # Get all config methods (methods ending with '_config')
+    config_methods = [
+        method_name
+        for method_name in dir(config_api_instance)
+        if method_name.endswith("_config") and callable(getattr(config_api_instance, method_name))
+    ]
+
+    for method_name in config_methods:
+        # Get environment instance by calling the config method
+        env, belief = getattr(config_api_instance, method_name)(n_particles=n_particles)
+
+        # Check compatibility and avoid duplicates
+        if _is_compatible(policy_space_info, env.space_info) and env.name not in seen_env_names:
+            compatible_envs.append((env, belief))
+            seen_env_names.add(env.name)
+
+    return compatible_envs
+
+
+def _is_compatible(policy_space_info: PolicySpaceInfo, env_space_info) -> bool:
+    """Check if policy and environment space types are compatible."""
+    # Check action space compatibility
+    if policy_space_info.action_space == SpaceType.DISCRETE and env_space_info.action_space in [
+        SpaceType.CONTINUOUS,
+        SpaceType.MIXED,
+    ]:
+        return False
+
+    # Check observation space compatibility
+    if (
+        policy_space_info.observation_space == SpaceType.DISCRETE
+        and env_space_info.observation_space in [SpaceType.CONTINUOUS, SpaceType.MIXED]
+    ):
+        return False
+
+    return True
+
+
+def get_all_environments(
+    n_particles: int = 20, include_risk_averse: bool = True
+) -> List[Tuple[Environment, WeightedParticleBelief]]:
+    """Get all environments from both standard and risk-averse API classes.
+
+    Args:
+        n_particles: Number of particles for belief initialization
+        include_risk_averse: Whether to include environments from RiskAverseEnvironmentConfigsAPI
+
+    Returns:
+        List of tuples containing (environment, belief) pairs from all available configurations
+    """
+    all_environments = []
+
+    # Get environments from standard API
+    standard_api = EnvironmentConfigsAPI()
+    config_methods = [
+        method_name
+        for method_name in dir(standard_api)
+        if method_name.endswith("_config") and callable(getattr(standard_api, method_name))
+    ]
+
+    for method_name in config_methods:
+        env, belief = getattr(standard_api, method_name)(n_particles=n_particles)
+        all_environments.append((env, belief))
+
+    # Get environments from risk-averse API if requested
+    if include_risk_averse:
+        risk_averse_api = RiskAverseEnvironmentConfigsAPI()
+        risk_averse_config_methods = [
+            method_name
+            for method_name in dir(risk_averse_api)
+            if method_name.endswith("_config") and callable(getattr(risk_averse_api, method_name))
+        ]
+
+        for method_name in risk_averse_config_methods:
+            env, belief = getattr(risk_averse_api, method_name)(n_particles=n_particles)
+            all_environments.append((env, belief))
+
+    return all_environments
+
+
 class EnvironmentConfigsAPI:
     def __init__(self, discount_factor: float = 0.95, debug: bool = False):
         self.debug = debug
         self.discount_factor = discount_factor
 
+    def get_compatible_environments(
+        self, policy_space_info: PolicySpaceInfo, n_particles: int = 20, seed: int = 42
+    ) -> List[Tuple[Environment, WeightedParticleBelief]]:
+        """Get list of environments compatible with the given policy space info.
+
+        Args:
+            policy_space_info: Policy space information containing action and observation space types
+            n_particles: Number of particles for belief initialization
+            seed: Random seed for reproducible belief initialization
+
+        Returns:
+            List of tuples containing (environment, belief) pairs that are compatible with the policy
+        """
+        return get_compatible_environments(self, policy_space_info, n_particles, seed)
+
     def tiger_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
         pomdp = TigerPOMDP(
             discount_factor=self.discount_factor, name="TigerPOMDP", debug=self.debug
         )
@@ -40,7 +154,7 @@ class EnvironmentConfigsAPI:
 
     def cartpole_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
         # Create noise covariance matrix for CartPole observations
         noise_cov = np.diag(
             [0.1, 0.1, 0.1, 0.1]
@@ -55,7 +169,7 @@ class EnvironmentConfigsAPI:
 
     def mountain_car_pomdp_config(
         self, n_particles: int = 20
-    ) -> Tuple[Environment, WeightedParticleBelief]:
+    ) -> Tuple[DiscreteActionsEnvironment, WeightedParticleBelief]:
         pomdp = MountainCarPOMDP(discount_factor=self.discount_factor, name="MountainCarPOMDP")
         belief = get_initial_belief(pomdp=pomdp, n_particles=n_particles, resampling=True)
         return pomdp, belief
@@ -215,6 +329,21 @@ class EnvironmentConfigsAPI:
 class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
     def __init__(self, discount_factor: float = 0.95, debug: bool = False):
         super().__init__(discount_factor=discount_factor, debug=debug)
+
+    def get_compatible_environments(
+        self, policy_space_info: PolicySpaceInfo, n_particles: int = 20, seed: int = 42
+    ) -> List[Tuple[Environment, WeightedParticleBelief]]:
+        """Get list of environments compatible with the given policy space info.
+
+        Args:
+            policy_space_info: Policy space information containing action and observation space types
+            n_particles: Number of particles for belief initialization
+            seed: Random seed for reproducible belief initialization
+
+        Returns:
+            List of tuples containing (environment, belief) pairs that are compatible with the policy
+        """
+        return get_compatible_environments(self, policy_space_info, n_particles, seed)
 
     def continuous_observations_discrete_actions_light_dark_pomdp_config(
         self, n_particles: int = 20
