@@ -34,6 +34,9 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
     HyperParameterOptimizer,
 )
+from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+    JoblibConfig,
+)
 from POMDPPlanners.simulations.simulations_deployment.task_managers import (
     TaskManagerType,
 )
@@ -378,10 +381,13 @@ def optimize_planner_hyperparameters(
         logger.debug(f"Creating HyperParameterOptimizer with {n_jobs} jobs")
         logger.debug(f"Confidence interval level: {confidence_interval_level}, Alpha: {alpha}")
 
+    task_manager_config = JoblibConfig(n_jobs=1)
+
     # Create optimizer
     optimizer = HyperParameterOptimizer(
         cache_dir_path=cache_dir,
         experiment_name=experiment_name,
+        task_manager_config=task_manager_config,
         n_jobs=n_jobs,
         confidence_interval_level=confidence_interval_level,
         alpha=alpha,

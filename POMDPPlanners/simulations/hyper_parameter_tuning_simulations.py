@@ -128,6 +128,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
 from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
+    TaskManagerConfig,
 )
 from POMDPPlanners.simulations.simulations_deployment.task_managers import (
     SequentialTaskManager,
@@ -224,6 +225,7 @@ class HyperParameterOptimizer:
         self,
         cache_dir_path: Path,
         experiment_name: str = "POMDP_Parameter_Optimization",
+        task_manager_config: TaskManagerConfig = JoblibConfig(n_jobs=1),
         n_jobs: int = 1,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
@@ -262,6 +264,7 @@ class HyperParameterOptimizer:
         """
         self.cache_dir_path = cache_dir_path
         self.experiment_name = experiment_name
+        self.task_manager_config = task_manager_config
         self.n_jobs = n_jobs
         self.confidence_interval_level = confidence_interval_level
         self.alpha = alpha
@@ -280,15 +283,18 @@ class HyperParameterOptimizer:
         mlflow.set_tracking_uri(self.mlflow_tracking_uri)
         mlflow.set_experiment(experiment_name)
 
-        # Initialize cache database and task manager
-        cache_db = DiskCacheDB(cache_dir=str(self.cache_dir_path / "task_manager_cache"))
-        self.task_manager = SequentialTaskManager(
-            cache_db=cache_db,
-            cache_dir=str(self.cache_dir_path / "task_manager_cache"),
-            clear_cache_on_start=False,
-            verbose=0,
-            logger_debug=False,
+        self.task_manager = self.task_manager_config.create_task_manager(
+            cache_dir=str(self.cache_dir_path / "task_manager_cache")
         )
+        # Initialize cache database and task manager
+        # cache_db = DiskCacheDB(cache_dir=str(self.cache_dir_path / "task_manager_cache"))
+        # self.task_manager = SequentialTaskManager(
+        #     cache_db=cache_db,
+        #     cache_dir=str(self.cache_dir_path / "task_manager_cache"),
+        #     clear_cache_on_start=False,
+        #     verbose=0,
+        #     logger_debug=False,
+        # )
 
     def __enter__(self):
         """Context manager entry."""
