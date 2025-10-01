@@ -974,7 +974,7 @@ class TestSimulationsAPI:
         assert isinstance(results, list)
         assert len(results) == 0
 
-    @patch("POMDPPlanners.simulations.simulations_api.optimize_and_evaluate_planners")
+    @patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_and_evaluate_planners")
     def test_run_hyperparameter_optimization_and_evaluation_success(
         self,
         mock_optimize_and_evaluate,

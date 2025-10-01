@@ -190,14 +190,18 @@ def confidence_interval(data, confidence=0.95) -> Tuple[float, float]:
         ValueError: If data contains NaN values or has insufficient samples
     """
     data = np.array(data)
-    if len(data) <= 1:
-        raise ValueError("Data must contain at least two elements")
+    if len(data) == 0:
+        raise ValueError("Data must contain at least one element")
+
+    # For single data point, return the value as both bounds
+    if len(data) == 1:
+        return (-np.inf, np.inf)
 
     if np.any(np.isnan(data)):
         raise ValueError("Data contains NaN values")
 
     # If all values are the same, return the value as both bounds
-    if np.all(data == data[0]):
+    if np.all(data == data[0]) and len(data) > 1:
         return (data[0], data[0])
 
     mean = np.mean(data)
@@ -228,6 +232,11 @@ def cvar_confidence_interval(data, alpha=0.95, delta=0.05):
         raise ValueError("confidence must be between 0 and 1")
     if len(data) == 0:
         raise ValueError("Input vector must not be empty")
+
+    # For single data point, return the value as both bounds
+    if len(data) == 1:
+        cvar_value = cvar_estimator(data, alpha)
+        return (cvar_value, cvar_value)
 
     lower_bound = cvar_probabilistic_lower_bound_thomas(
         vec=data, alpha=alpha, delta=delta / 2, dist_lower_bound=0
@@ -339,6 +348,11 @@ def quantile_confidence_interval(data, alpha=0.95, conf_level=0.95):
     """
     x = np.sort(np.asarray(data))
     n = len(x)
+
+    # For single data point, return the value with indices
+    if n == 1:
+        return x[0], x[0], 1, 1
+
     delta = 1 - conf_level
 
     # find smallest k1 such that P(Y < k1) >= delta/2
