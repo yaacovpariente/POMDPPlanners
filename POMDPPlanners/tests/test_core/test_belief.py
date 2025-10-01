@@ -2362,6 +2362,7 @@ def test_unweighted_particle_belief_state_update_sample_with_extreme_cases():
     belief2 = UnweightedParticleBeliefStateUpdate(particles=mixed_particles)
 
     sample2 = belief2.sample()
+    # Sample should be one of the original particles (no type conversion)
     # Need to handle numpy array comparison carefully
     found_sample = False
     for particle in mixed_particles:

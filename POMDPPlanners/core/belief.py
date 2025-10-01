@@ -464,7 +464,14 @@ class WeightedParticleBelief(Belief):
     def sample(self):
         """Sample a particle from the belief."""
         idx = np.random.choice(len(self.particles), p=self.normalized_weights)
-        return self.particles[idx]
+        particle = self.particles[idx]
+
+        # Defensive programming: ensure particle is a numpy array if it's a list
+        # (fix for 'list' object has no attribute 'shape' error)
+        if isinstance(particle, list):
+            particle = np.array(particle)
+
+        return particle
 
 
 class WeightedParticleBeliefReinvigoration(WeightedParticleBelief, ABC):
@@ -745,7 +752,14 @@ class WeightedParticleBeliefStateUpdate(Belief):
         normalized_weights = [w / float(self.weights_sum) for w in self.weights]
 
         # Sample based on normalized weights
-        return random.choices(self.particles, weights=normalized_weights, k=1)[0]
+        particle = random.choices(self.particles, weights=normalized_weights, k=1)[0]
+
+        # Defensive programming: ensure particle is a numpy array if it's a list
+        # (fix for 'list' object has no attribute 'shape' error)
+        if isinstance(particle, list):
+            particle = np.array(particle)
+
+        return particle
 
     @property
     def config_id(self) -> str:
