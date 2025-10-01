@@ -29,6 +29,8 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     DaskConfig,
     JoblibConfig,
@@ -1501,11 +1503,14 @@ def test_simulator_skips_visualization_caching_when_disabled(temp_cache_dir):
         name="TestLightDarkNoViz",
     )
 
-    policy = POMCP(
-        environment=cast(DiscreteActionsEnvironment, environment),
+    action_sampler = DiscreteActionSampler(environment.get_actions())
+    policy = PFT_DPW(
+        environment=environment,
         discount_factor=0.95,
         depth=2,
-        exploration_constant=1.0,
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.5,
         name="NoVizPolicy",
         n_simulations=2,
     )
@@ -1514,7 +1519,7 @@ def test_simulator_skips_visualization_caching_when_disabled(temp_cache_dir):
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=cast(DiscreteActionsEnvironment, environment),
+            environment=environment,
             belief=initial_belief,
             policies=[policy],
             num_episodes=3,  # Need at least 2 episodes for confidence interval
@@ -1839,11 +1844,14 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
         name="CacheTestEnv",
     )
 
-    policy = POMCP(
-        environment=cast(DiscreteActionsEnvironment, environment),
+    action_sampler = DiscreteActionSampler(environment.get_actions())
+    policy = PFT_DPW(
+        environment=environment,
         discount_factor=0.95,
         depth=2,
-        exploration_constant=1.0,
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.5,
         name="CacheTestPolicy",
         n_simulations=2,
     )
@@ -1882,7 +1890,7 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=cast(DiscreteActionsEnvironment, environment),
+            environment=environment,
             belief=belief,
             policies=[policy],
             num_episodes=1,
@@ -1968,20 +1976,26 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
     )
 
     # Create policies for each environment
-    policy1 = POMCP(
-        environment=cast(DiscreteActionsEnvironment, env1),
+    action_sampler1 = DiscreteActionSampler(env1.get_actions())
+    policy1 = PFT_DPW(
+        environment=env1,
         discount_factor=0.95,
         depth=2,
-        exploration_constant=1.0,
+        action_sampler=action_sampler1,
+        k_a=2.0,
+        alpha_a=0.5,
         name="ParallelPolicy1",
         n_simulations=2,
     )
 
-    policy2 = POMCP(
-        environment=cast(DiscreteActionsEnvironment, env2),
+    action_sampler2 = DiscreteActionSampler(env2.get_actions())
+    policy2 = PFT_DPW(
+        environment=env2,
         discount_factor=0.95,
         depth=3,
-        exploration_constant=1.5,
+        action_sampler=action_sampler2,
+        k_a=2.0,
+        alpha_a=0.5,
         name="ParallelPolicy2",
         n_simulations=3,
     )
@@ -2105,11 +2119,14 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
         name="MLflowTestEnv",
     )
 
-    policy = POMCP(
-        environment=cast(DiscreteActionsEnvironment, environment),
+    action_sampler = DiscreteActionSampler(environment.get_actions())
+    policy = PFT_DPW(
+        environment=environment,
         discount_factor=0.95,
         depth=2,
-        exploration_constant=1.0,
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.5,
         name="MLflowTestPolicy",
         n_simulations=2,
     )
@@ -2147,7 +2164,7 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=cast(DiscreteActionsEnvironment, environment),
+            environment=environment,
             belief=belief,
             policies=[policy],
             num_episodes=1,
@@ -2221,11 +2238,14 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
         name="CleanupTestEnv",
     )
 
-    policy = POMCP(
-        environment=cast(DiscreteActionsEnvironment, environment),
+    action_sampler = DiscreteActionSampler(environment.get_actions())
+    policy = PFT_DPW(
+        environment=environment,
         discount_factor=0.95,
         depth=2,
-        exploration_constant=1.0,
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.5,
         name="CleanupTestPolicy",
         n_simulations=2,
     )
@@ -2263,7 +2283,7 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=cast(DiscreteActionsEnvironment, environment),
+            environment=environment,
             belief=belief,
             policies=[policy],
             num_episodes=1,
@@ -2322,11 +2342,14 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
         name="DisabledCachingEnv",
     )
 
-    policy = POMCP(
-        environment=cast(DiscreteActionsEnvironment, environment),
+    action_sampler = DiscreteActionSampler(environment.get_actions())
+    policy = PFT_DPW(
+        environment=environment,
         discount_factor=0.95,
         depth=2,
-        exploration_constant=1.0,
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.5,
         name="DisabledCachingPolicy",
         n_simulations=2,
     )
@@ -2364,7 +2387,7 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=cast(DiscreteActionsEnvironment, environment),
+            environment=environment,
             belief=belief,
             policies=[policy],
             num_episodes=1,
@@ -2425,11 +2448,14 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
         name="ErrorTestEnv",
     )
 
-    policy = POMCP(
-        environment=cast(DiscreteActionsEnvironment, environment),
+    action_sampler = DiscreteActionSampler(environment.get_actions())
+    policy = PFT_DPW(
+        environment=environment,
         discount_factor=0.95,
         depth=2,
-        exploration_constant=1.0,
+        action_sampler=action_sampler,
+        k_a=2.0,
+        alpha_a=0.5,
         name="ErrorTestPolicy",
         n_simulations=2,
     )
@@ -2467,7 +2493,7 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
 
     env_run_params = [
         EnvironmentRunParams(
-            environment=cast(DiscreteActionsEnvironment, environment),
+            environment=environment,
             belief=belief,
             policies=[policy],
             num_episodes=1,

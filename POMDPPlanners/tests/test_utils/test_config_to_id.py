@@ -587,12 +587,11 @@ class TestConfigToIdIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 
-        # Create environment
-        noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
-        env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+        # Create environment (using TigerPOMDP which has discrete observations compatible with POMCP)
+        env = TigerPOMDP(discount_factor=0.99)
 
         # Create multiple identical planners
         planner1 = POMCP(
