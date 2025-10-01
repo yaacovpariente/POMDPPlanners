@@ -422,6 +422,7 @@ class PBSTaskManager(DaskTaskManager):
         cores: int = 1,
         memory: str = "4GB",
         processes: int = 1,
+        scheduler_address: Optional[str] = None,
         walltime: str = "01:00:00",
         job_extra: Optional[List[str]] = None,
         cache_size: int = int(2e9),
@@ -439,6 +440,7 @@ class PBSTaskManager(DaskTaskManager):
             cores: Number of CPU cores per PBS job
             memory: Memory per PBS job (e.g., "4GB", "1000MB")
             processes: Number of processes per PBS job
+            scheduler_address: Address of Dask scheduler (None for local)
             walltime: Maximum runtime per job in HH:MM:SS format
             job_extra: Additional PBS directives as list of strings
             cache_size: Size of cache in bytes
@@ -448,6 +450,13 @@ class PBSTaskManager(DaskTaskManager):
             dashboard_port: Port for the Dask dashboard
             dashboard_prefix: URL prefix for dashboard (useful with reverse proxies)
         """
+        super().__init__(
+            n_workers=n_workers,
+            scheduler_address=scheduler_address,
+            cache_size=cache_size,
+            clear_cache_on_start=clear_cache_on_start,
+        )
+
         self.queue = queue
         self.cores = cores
         self.memory = memory
@@ -462,10 +471,6 @@ class PBSTaskManager(DaskTaskManager):
         self.dashboard_prefix = dashboard_prefix
 
         # Initialize parent attributes without calling _initialize_client
-        self.scheduler_address = None  # Will be set by PBS cluster
-        self.n_workers = n_workers
-        self.cache_size = cache_size
-        self.clear_cache_on_start = clear_cache_on_start
         self.client = None
         self.cache = None
         self.cache_registered = False
@@ -491,6 +496,7 @@ class PBSTaskManager(DaskTaskManager):
                 processes=self.processes,
                 walltime=self.walltime,
                 job_extra=self.job_extra,
+                scheduler_address=self.scheduler_address,
                 local_directory="./dask-pbs-space",
                 scheduler_options=scheduler_options if scheduler_options else None,
             )
