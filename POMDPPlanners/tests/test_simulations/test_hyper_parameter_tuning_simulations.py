@@ -199,7 +199,7 @@ class TestHyperParameterOptimizerTaskCreation:
         """Test task creation with real configurations."""
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
 
-        tasks = optimizer._create_tasks(sample_configs)
+        tasks, task_identifiers = optimizer._create_tasks(sample_configs)
 
         assert len(tasks) == len(sample_configs)
         # Verify tasks are real HyperParameterTuningSimulationTask instances
@@ -213,7 +213,7 @@ class TestHyperParameterOptimizerTaskCreation:
         """Test task creation preserves configuration parameters."""
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
 
-        tasks = optimizer._create_tasks(sample_configs)
+        tasks, task_identifiers = optimizer._create_tasks(sample_configs)
 
         for i, task in enumerate(tasks):
             config = sample_configs[i]
@@ -228,13 +228,21 @@ class TestHyperParameterOptimizerTaskCreation:
             assert task.parameter_to_optimize == config.parameter_to_optimize
 
     def test_create_tasks_returns_correct_type(self, temp_cache_dir, sample_configs):
-        """Test that _create_tasks returns List[HyperParameterTuningSimulationTask]."""
+        """Test that _create_tasks returns Tuple[List[HyperParameterTuningSimulationTask], List[str]]."""
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
 
-        tasks = optimizer._create_tasks(sample_configs)
+        tasks, task_identifiers = optimizer._create_tasks(sample_configs)
 
-        # Check that it returns a list
+        # Check that it returns a tuple
+        assert isinstance((tasks, task_identifiers), tuple)
+
+        # Check that first element is a list
         assert isinstance(tasks, list)
+
+        # Check that second element is a list of strings
+        assert isinstance(task_identifiers, list)
+        for identifier in task_identifiers:
+            assert isinstance(identifier, str)
 
         # Check that each item is a HyperParameterTuningSimulationTask
         from POMDPPlanners.simulations.simulations_deployment.tasks import (
@@ -244,8 +252,9 @@ class TestHyperParameterOptimizerTaskCreation:
         for task in tasks:
             assert isinstance(task, HyperParameterTuningSimulationTask)
 
-        # Check that the list has the expected length
+        # Check that the lists have the expected length
         assert len(tasks) == len(sample_configs)
+        assert len(task_identifiers) == len(sample_configs)
 
     def test_execute_optimization_tasks_returns_correct_type(self, temp_cache_dir, sample_configs):
         """Test that _execute_optimization_tasks returns Tuple[List[OptimizedPolicyResult], List[HyperParameterTuningSimulationTask]]."""
@@ -518,8 +527,9 @@ class TestHyperParameterOptimizerErrorHandling:
         )
 
         # Should not crash during task creation even with empty hyperparameters
-        tasks = optimizer._create_tasks([minimal_config])
+        tasks, task_identifiers = optimizer._create_tasks([minimal_config])
         assert len(tasks) == 1
+        assert len(task_identifiers) == 1
 
 
 class TestHyperParameterOptimizerEdgeCases:
@@ -747,8 +757,9 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         )
 
         # This should work
-        tasks = optimizer._create_tasks([correct_config])
+        tasks, task_identifiers = optimizer._create_tasks([correct_config])
         assert len(tasks) == 1
+        assert len(task_identifiers) == 1
 
         # Verify hyperparameter names are correctly set
         task = tasks[0]
@@ -822,8 +833,9 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         )
 
         # Task creation should succeed
-        tasks = optimizer._create_tasks([config_missing_constants])
+        tasks, task_identifiers = optimizer._create_tasks([config_missing_constants])
         assert len(tasks) == 1
+        assert len(task_identifiers) == 1
 
         # But optimization execution should fail with clear error
         with pytest.raises(Exception) as exc_info:
@@ -1010,8 +1022,9 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         )
 
         # This should work now
-        tasks = optimizer._create_tasks([fixed_config])
+        tasks, task_identifiers = optimizer._create_tasks([fixed_config])
         assert len(tasks) == 1
+        assert len(task_identifiers) == 1
 
         # Verify the task has correct configuration
         task = tasks[0]
