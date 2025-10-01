@@ -520,6 +520,7 @@ class SimulationsAPI:
         processes: int = 1,
         walltime: str = "01:00:00",
         job_extra: Optional[List[str]] = None,
+        n_jobs: int = -1,
         cache_dir_path: Optional[Path] = None,
         clear_cache_on_start: bool = False,
         enable_profiling: bool = False,
@@ -548,6 +549,9 @@ class SimulationsAPI:
             processes: Number of processes per PBS job
             walltime: Maximum runtime per job in HH:MM:SS format
             job_extra: Additional PBS directives as list of strings
+            n_jobs: Number of parallel jobs for simulation execution. Use -1 to use
+                all available workers (n_workers × processes), or specify a positive
+                integer for a specific number of parallel jobs.
             cache_dir_path: Optional path for storing simulation results and logs
             clear_cache_on_start: Whether to clear cache before starting simulation
             enable_profiling: Whether to enable performance profiling
@@ -649,7 +653,7 @@ class SimulationsAPI:
                 environment_run_params=environment_run_params,
                 alpha=alpha,
                 confidence_interval_level=confidence_interval_level,
-                n_jobs=n_workers,  # Use n_workers for consistency
+                n_jobs=n_jobs,
                 cache_visualizations=True,
             )
             self.logger.info("PBS cluster simulation run completed")
