@@ -68,6 +68,8 @@ class EpisodeSimulationTask(SimulationTask):
         self.console_output = console_output
         self.cache_dir = cache_dir
         self.use_queue_logger = use_queue_logger
+        # Cache logger name to avoid issues after cleanup sets environment/policy to None
+        self._env_policy_logger_name = f"env_policy.{self.environment.name}.{self.policy.name}"
         # Generate cache key after all attributes are set
         self._cache_key = self._generate_cache_key()
 
@@ -105,7 +107,7 @@ class EpisodeSimulationTask(SimulationTask):
 
     def _get_env_policy_logger_name(self) -> str:
         """Get the shared logger name for this environment-policy combination."""
-        return f"env_policy.{self.environment.name}.{self.policy.name}"
+        return self._env_policy_logger_name
 
     def _get_logger_name(self) -> str:
         """Get the name of the logger for this task (legacy method for compatibility)."""
@@ -154,6 +156,32 @@ class EpisodeSimulationTask(SimulationTask):
         """Create a SimulationTask instance from a dictionary."""
         return cls(**data)
 
+    def run(self) -> Union[History, None]:
+        """Run the simulation task.
+
+        Returns:
+            History: The simulation history or None if execution fails.
+        """
+        start_time = time.time()
+
+        self._log_episode_start()
+        self._log_debug_configuration()
+
+        random_state = self._setup_random_seed()
+
+        try:
+            result = self._execute_episode()
+            self._log_episode_completion(result)
+
+        except Exception as e:
+            self._log_episode_error(e)
+            result = None
+        finally:
+            self._restore_random_state(random_state)
+            self._log_execution_time(start_time)
+            self.cleanup(is_final_task=True)
+        return result
+
     def cleanup_logger(self) -> None:
         """Clean up logger resources to prevent file handle leaks.
 
@@ -172,124 +200,178 @@ class EpisodeSimulationTask(SimulationTask):
             # Don't let cleanup errors affect the main task
             pass
 
-    def run(self) -> Union[History, None]:
-        """Run the simulation task.
+    def cleanup(self, is_final_task: bool = False) -> None:
+        """Comprehensive cleanup to prevent memory leaks.
 
-        Returns:
-            History: The simulation history
+        Args:
+            is_final_task: If True and this is the last task using the shared logger,
+                          close logger handlers instead of just flushing them.
         """
-        # Start timing
-        start_time = time.time()
+        try:
+            # Step 1: Clean up logger (flush handlers)
+            self.cleanup_logger()
 
-        # Create episode context for structured logging
-        episode_context = {
-            "episode_id": self.episode_id,
-            "episode_number": self.episode_number,
-            "num_steps": self.num_steps,
-            "seed": self.seed,
-            "discount_factor": self.discount_factor,
-            "cache_key": self._cache_key,
-        }
+            # Step 2: Close handlers only if this is the final task
+            if is_final_task:
+                logger = logging.getLogger(self._get_env_policy_logger_name())
+                for handler in logger.handlers[
+                    :
+                ]:  # Copy list to avoid modification during iteration
+                    try:
+                        handler.close()
+                        logger.removeHandler(handler)
+                    except Exception:
+                        pass
 
-        # Use structured logging with episode context
+            # Step 3: Clear references to large objects
+            self.environment = None
+            self.policy = None
+            self.initial_belief = None
+            # Note: Don't clear _cache_key as get_config_id() must return str
+
+        except Exception as e:
+            # Don't let cleanup errors affect the main task
+            pass
+
+    def _log_episode_start(self) -> None:
+        """Log episode start information."""
         self.logger.info(
             f"[EPISODE_{self.episode_id:03d}] Starting episode simulation "
             f"(num={self.episode_number}, steps={self.num_steps}, seed={self.seed})"
         )
 
-        # Log detailed configuration in debug mode
-        if self.debug:
-            self.logger.debug(
-                f"[EPISODE_{self.episode_id:03d}] Environment: {self.environment.name} (config_id: {self.environment.config_id})"
-            )
-            self.logger.debug(
-                f"[EPISODE_{self.episode_id:03d}] Policy: {self.policy.name} (config_id: {self.policy.config_id})"
-            )
-            self.logger.debug(
-                f"[EPISODE_{self.episode_id:03d}] Initial belief: {self.initial_belief.config_id}"
-            )
-            self.logger.debug(
-                f"[EPISODE_{self.episode_id:03d}] Configuration: discount_factor={self.discount_factor}"
-            )
-            self.logger.debug(
-                f"[EPISODE_{self.episode_id:03d}] Debug mode: {self.debug}, Console output: {self.console_output}"
-            )
-            if self.cache_dir:
-                self.logger.debug(
-                    f"[EPISODE_{self.episode_id:03d}] Cache directory: {self.cache_dir}"
-                )
-            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Cache key: {self._cache_key}")
+    def _log_debug_configuration(self) -> None:
+        """Log detailed configuration in debug mode."""
+        if not self.debug:
+            return
 
-        # Log random state setup
+        self.logger.debug(
+            f"[EPISODE_{self.episode_id:03d}] Environment: {self.environment.name} (config_id: {self.environment.config_id})"
+        )
+        self.logger.debug(
+            f"[EPISODE_{self.episode_id:03d}] Policy: {self.policy.name} (config_id: {self.policy.config_id})"
+        )
+        self.logger.debug(
+            f"[EPISODE_{self.episode_id:03d}] Initial belief: {self.initial_belief.config_id}"
+        )
+        self.logger.debug(
+            f"[EPISODE_{self.episode_id:03d}] Configuration: discount_factor={self.discount_factor}"
+        )
+        self.logger.debug(
+            f"[EPISODE_{self.episode_id:03d}] Debug mode: {self.debug}, Console output: {self.console_output}"
+        )
+        if self.cache_dir:
+            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Cache directory: {self.cache_dir}")
+        self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Cache key: {self._cache_key}")
+
+    def _setup_random_seed(self) -> Any:
+        """Set random seed and return previous state for restoration.
+
+        Returns:
+            Previous numpy random state for later restoration.
+        """
         self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Setting random seed to {self.seed}")
         state = np.random.get_state()
-
         random.seed(self.seed)
         np.random.seed(self.seed)
+        return state
 
-        try:
-            # Run simulation with seed parameter
-            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Starting episode simulation...")
-            result = run_episode(
-                environment=self.environment,
-                policy=self.policy,
-                initial_belief=self.initial_belief,
-                num_steps=self.num_steps,
-                logger=self.logger,
+    def _restore_random_state(self, state: Any) -> None:
+        """Restore numpy random state.
+
+        Args:
+            state: Previously saved numpy random state.
+        """
+        self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Restoring random state")
+        np.random.set_state(state)
+        self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Random state restored")
+
+    def _execute_episode(self) -> Union[History, None]:
+        """Execute the episode simulation.
+
+        Returns:
+            Simulation history or None if execution fails.
+        """
+        self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Starting episode simulation...")
+
+        # Ensure attributes are not None before executing episode
+        if self.environment is None or self.policy is None or self.initial_belief is None:
+            raise RuntimeError("Cannot execute episode: task has been cleaned up")
+
+        return run_episode(
+            environment=self.environment,
+            policy=self.policy,
+            initial_belief=self.initial_belief,
+            num_steps=self.num_steps,
+            logger=self.logger,
+        )
+
+    def _extract_episode_metrics(self, result: History) -> tuple[float, int, bool]:
+        """Extract metrics from episode result.
+
+        Args:
+            result: Episode simulation result.
+
+        Returns:
+            Tuple of (total_reward, actual_steps, reached_terminal).
+        """
+        total_reward = 0
+        actual_steps = 0
+        reached_terminal = False
+
+        if hasattr(result, "history") and result.history:
+            actual_steps = len(result.history)
+            total_reward = sum(
+                float(step.reward) for step in result.history if step.reward is not None
             )
 
-            if result is not None:
-                # Calculate total reward from history
-                total_reward = 0
-                actual_steps = 0
-                reached_terminal = False
+        if hasattr(result, "reach_terminal_state"):
+            reached_terminal = result.reach_terminal_state
 
-                if hasattr(result, "history") and result.history:
-                    actual_steps = len(result.history)
-                    total_reward = sum(
-                        float(step.reward) for step in result.history if step.reward is not None
-                    )
+        if hasattr(result, "actual_num_steps"):
+            actual_steps = result.actual_num_steps
 
-                if hasattr(result, "reach_terminal_state"):
-                    reached_terminal = result.reach_terminal_state
+        return total_reward, actual_steps, reached_terminal
 
-                if hasattr(result, "actual_num_steps"):
-                    actual_steps = result.actual_num_steps
+    def _log_episode_completion(self, result: Union[History, None]) -> None:
+        """Log episode completion with metrics.
 
-                # Structured success log with key metrics
-                self.logger.info(
-                    f"[EPISODE_{self.episode_id:03d}] Completed successfully "
-                    f"(reward={total_reward:.4f}, steps={actual_steps}, terminal={reached_terminal})"
-                )
+        Args:
+            result: Episode simulation result or None.
+        """
+        if result is not None:
+            total_reward, actual_steps, reached_terminal = self._extract_episode_metrics(result)
 
-                if self.debug:
-                    self.logger.debug(
-                        f"[EPISODE_{self.episode_id:03d}] Result type: {type(result)}"
-                    )
-            else:
-                self.logger.warning(f"[EPISODE_{self.episode_id:03d}] Episode returned None result")
-
-        except Exception as e:
-            self.logger.error(f"[EPISODE_{self.episode_id:03d}] Error running episode: {e}")
-            self.logger.exception(f"[EPISODE_{self.episode_id:03d}] Full exception details:")
-            result = None
-        finally:
-            # Restore random state
-            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Restoring random state")
-            np.random.set_state(state)
-            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Random state restored")
-
-            # Log total execution time
-            end_time = time.time()
-            execution_time = end_time - start_time
             self.logger.info(
-                f"[EPISODE_{self.episode_id:03d}] Execution completed in {execution_time:.4f} seconds"
+                f"[EPISODE_{self.episode_id:03d}] Completed successfully "
+                f"(reward={total_reward:.4f}, steps={actual_steps}, terminal={reached_terminal})"
             )
 
-            # Clean up logger resources (flush only, don't close shared logger)
-            self.cleanup_logger()
+            if self.debug:
+                self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Result type: {type(result)}")
+        else:
+            self.logger.warning(f"[EPISODE_{self.episode_id:03d}] Episode returned None result")
 
-        return result
+    def _log_episode_error(self, error: Exception) -> None:
+        """Log episode execution error.
+
+        Args:
+            error: Exception that occurred during execution.
+        """
+        self.logger.error(f"[EPISODE_{self.episode_id:03d}] Error running episode: {error}")
+        self.logger.exception(f"[EPISODE_{self.episode_id:03d}] Full exception details:")
+
+    def _log_execution_time(self, start_time: float) -> None:
+        """Log total execution time.
+
+        Args:
+            start_time: Episode start timestamp.
+        """
+        end_time = time.time()
+        execution_time = end_time - start_time
+        self.logger.info(
+            f"[EPISODE_{self.episode_id:03d}] Execution completed in {execution_time:.4f} seconds"
+        )
 
     def __eq__(self, other: object) -> bool:
         """Check if two tasks are equal."""
