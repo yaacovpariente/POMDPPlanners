@@ -403,3 +403,94 @@ def test_queue_logger_backwards_compatibility(tmp_path):
 
     finally:
         cleanup_all_loggers()
+
+
+def test_logger_no_multiple_files_on_repeated_calls(tmp_path):
+    """Test that repeated get_logger calls with same name don't create multiple log files.
+
+    Purpose: Validates that repeated calls to get_logger with same name reuse existing logger
+             and don't create new log files with different timestamps
+
+    Given: Multiple sequential calls to get_logger with the same logger name
+    When: Messages are logged after each get_logger call
+    Then: Only ONE log file is created, containing all messages from all calls
+
+    Test type: unit
+    """
+    logger_name = "test.single_file"
+
+    # First call - creates logger and log file
+    logger1 = get_logger(logger_name, debug=True, output_dir=tmp_path, console_output=False)
+    logger1.info("Message from first call")
+
+    # Small delay to ensure timestamp would be different if new file was created
+    time.sleep(0.1)
+
+    # Second call - should reuse existing logger and file
+    logger2 = get_logger(logger_name, debug=True, output_dir=tmp_path, console_output=False)
+    logger2.info("Message from second call")
+
+    # Small delay
+    time.sleep(0.1)
+
+    # Third call - should still reuse existing logger and file
+    logger3 = get_logger(logger_name, debug=True, output_dir=tmp_path, console_output=False)
+    logger3.info("Message from third call")
+
+    # Check that only ONE log file was created
+    log_dir = tmp_path / "logs"
+    log_files = list(log_dir.glob("test_single_file_*.log"))
+
+    assert len(log_files) == 1, (
+        f"Expected exactly 1 log file, but found {len(log_files)}: "
+        f"{[f.name for f in log_files]}"
+    )
+
+    # Check that all messages are in the single log file
+    with open(log_files[0], "r") as f:
+        content = f.read()
+
+    assert "Message from first call" in content
+    assert "Message from second call" in content
+    assert "Message from third call" in content
+
+    # Verify messages appear exactly once
+    assert content.count("Message from first call") == 1
+    assert content.count("Message from second call") == 1
+    assert content.count("Message from third call") == 1
+
+
+def test_logger_reuses_handlers_with_same_name(tmp_path):
+    """Test that get_logger with same name returns logger with existing handlers.
+
+    Purpose: Validates that calling get_logger multiple times with the same name
+             returns the same logger instance with the same handlers
+
+    Given: Logger created with specific name and output directory
+    When: get_logger is called again with the same name
+    Then: Same logger instance is returned with same handler configuration
+
+    Test type: unit
+    """
+    logger_name = "test.handler_reuse"
+
+    # First call
+    logger1 = get_logger(logger_name, debug=True, output_dir=tmp_path, console_output=False)
+    handler_count_1 = len(logger1.handlers)
+    handler_ids_1 = [id(h) for h in logger1.handlers]
+
+    # Second call
+    logger2 = get_logger(logger_name, debug=True, output_dir=tmp_path, console_output=False)
+    handler_count_2 = len(logger2.handlers)
+    handler_ids_2 = [id(h) for h in logger2.handlers]
+
+    # Should be the same logger instance
+    assert logger1 is logger2, "get_logger should return the same logger instance for the same name"
+
+    # Should have the same handlers
+    assert (
+        handler_count_1 == handler_count_2
+    ), f"Handler count changed from {handler_count_1} to {handler_count_2}"
+
+    # Handler IDs should be the same (handlers were reused, not recreated)
+    assert handler_ids_1 == handler_ids_2, "Handlers were recreated instead of being reused"
