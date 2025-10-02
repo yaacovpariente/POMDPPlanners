@@ -877,7 +877,7 @@ class UnweightedParticleBeliefStateUpdate(Belief):
         True
     """
 
-    def __init__(self, particles: list = []):
+    def __init__(self, particles: Optional[list] = None):
         """Initialize unweighted particle belief.
 
         Creates a belief state with uniform probability distribution over
@@ -888,6 +888,8 @@ class UnweightedParticleBeliefStateUpdate(Belief):
             particles: List of state particles with uniform weights.
                 Defaults to empty list for incremental construction.
         """
+        if particles is None:
+            particles = []
         self.particles = particles
         self.weights_sum = len(particles)
 
