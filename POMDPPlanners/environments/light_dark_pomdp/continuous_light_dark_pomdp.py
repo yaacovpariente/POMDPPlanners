@@ -442,7 +442,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         )
 
 
-class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP):
+class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, DiscreteActionsEnvironment):
     """Continuous Light-Dark POMDP environment with discrete actions.
 
     This variant of the Continuous Light-Dark POMDP uses discrete directional actions
