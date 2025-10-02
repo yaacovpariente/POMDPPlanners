@@ -2,7 +2,10 @@ import importlib
 import inspect
 import os
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+
+if TYPE_CHECKING:
+    from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
 
 import pandas as pd
 
@@ -847,28 +850,28 @@ class SimulationsAPI:
 
     def run_hyperparameter_optimization_and_evaluation(
         self,
-        environment,
-        initial_belief,
-        planner_configs,
-        cache_dir=None,
-        optimization_direction=None,
-        parameter_to_optimize="average_return",
-        experiment_name="POMDP_Hyperparameter_Optimization_And_Evaluation",
+        environment: Environment,
+        initial_belief: Belief,
+        planner_configs: List["HyperParamPlannerConfig"],
+        cache_dir: Optional[Path] = None,
+        optimization_direction: Optional["HyperParameterOptimizationDirection"] = None,
+        parameter_to_optimize: str = "average_return",
+        experiment_name: str = "POMDP_Hyperparameter_Optimization_And_Evaluation",
         # Optimization parameters
-        optimization_episodes=3,
-        optimization_steps=6,
-        n_trials=3,
-        optimization_n_jobs=-1,
+        optimization_episodes: int = 3,
+        optimization_steps: int = 6,
+        n_trials: int = 3,
+        optimization_n_jobs: int = -1,
         # Evaluation parameters
-        evaluation_episodes=10,
-        evaluation_steps=8,
-        evaluation_n_jobs=1,
+        evaluation_episodes: int = 10,
+        evaluation_steps: int = 8,
+        evaluation_n_jobs: int = 1,
         # General parameters
-        confidence_interval_level=0.95,
-        alpha=0.05,
-        debug=False,
-        verbose=True,
-    ):
+        confidence_interval_level: float = 0.95,
+        alpha: float = 0.05,
+        debug: bool = False,
+        verbose: bool = True,
+    ) -> Dict[str, Any]:
         """Run hyperparameter optimization followed by comprehensive evaluation.
 
         This method is a simple wrapper around the optimize_and_evaluate_planners utility function.
@@ -921,6 +924,169 @@ class SimulationsAPI:
             optimization_steps=optimization_steps,
             n_trials=n_trials,
             optimization_n_jobs=optimization_n_jobs,
+            evaluation_episodes=evaluation_episodes,
+            evaluation_steps=evaluation_steps,
+            evaluation_n_jobs=evaluation_n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            debug=debug,
+            verbose=verbose,
+        )
+
+    def run_hyperparameter_optimization_and_evaluation_pbs(
+        self,
+        environment: Environment,
+        initial_belief: Belief,
+        planner_configs: List["HyperParamPlannerConfig"],
+        queue: str,
+        cache_dir: Optional[Path] = None,
+        optimization_direction: Optional["HyperParameterOptimizationDirection"] = None,
+        parameter_to_optimize: str = "average_return",
+        experiment_name: str = "POMDP_Hyperparameter_Optimization_And_Evaluation_PBS",
+        # Optimization parameters
+        optimization_episodes: int = 3,
+        optimization_steps: int = 6,
+        n_trials: int = 3,
+        n_workers: int = 4,
+        cores: int = 1,
+        memory: str = "4GB",
+        processes: int = 1,
+        walltime: str = "01:00:00",
+        job_extra: Optional[List[str]] = None,
+        optimization_n_jobs: int = -1,
+        enable_dashboard: bool = True,
+        dashboard_address: str = "0.0.0.0",
+        dashboard_port: int = 8787,
+        dashboard_prefix: Optional[str] = None,
+        # Evaluation parameters
+        evaluation_episodes: int = 10,
+        evaluation_steps: int = 8,
+        evaluation_n_jobs: int = 1,
+        # General parameters
+        confidence_interval_level: float = 0.95,
+        alpha: float = 0.05,
+        debug: bool = False,
+        verbose: bool = True,
+    ) -> Dict[str, Any]:
+        """Run hyperparameter optimization followed by comprehensive evaluation using PBS cluster.
+
+        This method is a simple wrapper around the optimize_and_evaluate_planners_pbs utility function,
+        providing PBS cluster computing for large-scale hyperparameter optimization experiments.
+
+        Args:
+            environment: The POMDP environment to optimize and evaluate on
+            initial_belief: Initial belief state for the environment
+            planner_configs: List of HyperParamPlannerConfig objects
+            queue: PBS queue name to submit jobs to
+            cache_dir: Directory for storing optimization and evaluation results
+            optimization_direction: Direction of optimization (MAXIMIZE or MINIMIZE)
+            parameter_to_optimize: Name of the metric to optimize
+            experiment_name: Name for the experiment
+            optimization_episodes: Number of episodes for optimization trials
+            optimization_steps: Number of steps per optimization episode
+            n_trials: Number of optimization trials per planner
+            n_workers: Number of PBS worker nodes to request
+            cores: Number of CPU cores per worker
+            memory: Memory per worker (e.g., "4GB", "8GB")
+            processes: Number of processes per worker
+            walltime: Maximum job runtime in HH:MM:SS format
+            job_extra: Additional PBS job directives
+            optimization_n_jobs: Number of parallel jobs for optimization
+            enable_dashboard: Whether to enable Dask dashboard
+            dashboard_address: Dashboard bind address
+            dashboard_port: Dashboard port
+            dashboard_prefix: Dashboard URL prefix
+            evaluation_episodes: Number of episodes for evaluation
+            evaluation_steps: Number of steps per evaluation episode
+            evaluation_n_jobs: Number of parallel jobs for evaluation
+            confidence_interval_level: Confidence level for statistical analysis
+            alpha: Alpha value for risk metrics
+            debug: Whether to enable debug logging
+            verbose: Whether to print progress messages
+
+        Returns:
+            Results dictionary from optimize_and_evaluate_planners_pbs utility function
+
+        Example:
+            Running PBS hyperparameter optimization on Tiger POMDP::
+
+                >>> from pathlib import Path
+                >>> from POMDPPlanners.simulations.simulations_api import SimulationsAPI
+                >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+                >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+                >>> from POMDPPlanners.core.belief import get_initial_belief
+                >>> from POMDPPlanners.core.simulation import NumericalHyperParameter
+                >>> from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
+                >>> # Initialize the API
+                >>> api = SimulationsAPI(debug=False)
+                >>> # Create environment and belief
+                >>> tiger = TigerPOMDP(discount_factor=0.95)
+                >>> initial_belief = get_initial_belief(tiger, n_particles=100)
+                >>> # Configure planners
+                >>> planner_configs = [
+                ...     HyperParamPlannerConfig(
+                ...         policy_cls=POMCP,
+                ...         hyper_parameters=[
+                ...             NumericalHyperParameter(0.1, 5.0, "exploration_constant")
+                ...         ],
+                ...         constant_parameters={"discount_factor": 0.95, "name": "POMCP"}
+                ...     )
+                ... ]
+                >>> # Run PBS optimization (commented out for doctest)
+                >>> # results = api.run_hyperparameter_optimization_and_evaluation_pbs(
+                >>> #     environment=tiger,
+                >>> #     initial_belief=initial_belief,
+                >>> #     planner_configs=planner_configs,
+                >>> #     queue="short",
+                >>> #     n_workers=8,
+                >>> #     cores=2,
+                >>> #     memory="8GB",
+                >>> #     walltime="02:00:00"
+                >>> # )
+                >>> len(planner_configs) == 1  # Verify example setup
+                True
+        """
+        from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
+            optimize_and_evaluate_planners_pbs,
+        )
+        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+            HyperParameterOptimizationDirection,
+        )
+
+        self.logger.info(f"Starting PBS hyperparameter optimization and evaluation")
+        self.logger.debug(
+            f"PBS Configuration: queue={queue}, workers={n_workers}, cores={cores}, memory={memory}"
+        )
+
+        if optimization_direction is None:
+            optimization_direction = HyperParameterOptimizationDirection.MAXIMIZE
+
+        if cache_dir is None:
+            cache_dir = Path(f"./{experiment_name.lower().replace(' ', '_')}_results")
+
+        return optimize_and_evaluate_planners_pbs(
+            environment=environment,
+            initial_belief=initial_belief,
+            planner_configs=planner_configs,
+            cache_dir=cache_dir,
+            queue=queue,
+            optimization_direction=optimization_direction,
+            parameter_to_optimize=parameter_to_optimize,
+            experiment_name=experiment_name,
+            optimization_episodes=optimization_episodes,
+            optimization_steps=optimization_steps,
+            n_trials=n_trials,
+            n_workers=n_workers,
+            cores=cores,
+            memory=memory,
+            processes=processes,
+            walltime=walltime,
+            job_extra=job_extra,
+            optimization_n_jobs=optimization_n_jobs,
+            enable_dashboard=enable_dashboard,
+            dashboard_address=dashboard_address,
+            dashboard_port=dashboard_port,
+            dashboard_prefix=dashboard_prefix,
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
