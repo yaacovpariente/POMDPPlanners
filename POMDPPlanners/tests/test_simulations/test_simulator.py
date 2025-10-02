@@ -1156,13 +1156,6 @@ def test_simulator_writes_files_to_output_directory(temp_cache_dir):
         if artifacts_dir.exists() and artifacts_dir.is_dir():
             artifacts_found = True
 
-            # Check for policy comparison plots
-            policy_plots_dir = artifacts_dir / "policy_comparison_plots"
-            if policy_plots_dir.exists():
-                plot_files = list(policy_plots_dir.glob("*.png"))
-                if plot_files:
-                    assert len(plot_files) > 0, "Expected at least one policy comparison plot file"
-
             # Check for environment-specific artifacts
             env_artifact_dir = artifacts_dir / environment.name
             if env_artifact_dir.exists():
