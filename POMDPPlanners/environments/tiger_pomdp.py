@@ -90,7 +90,9 @@ class TigerStateTransition(StateTransitionModel):
             # State only changes when opening a door
             if self.action in ("open_left", "open_right"):
                 # After opening a door, tiger is randomly placed behind either door
-                samples.append(np.random.choice(STATES))
+                chosen_state = np.random.choice(STATES)
+                # Ensure we return a Python string, not numpy string
+                samples.append(str(chosen_state))
             else:
                 samples.append(self.state)
         return samples
