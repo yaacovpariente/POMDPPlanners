@@ -317,7 +317,7 @@ class BaseSimulator(ABC):
 
             self._log_comparison_data_to_mlflow(merged_df, environment_run_params)
 
-            self._generate_and_log_comparison_plots(metrics)
+            # self._generate_and_log_comparison_plots(metrics)
 
             self._create_and_log_environment_visualizations(
                 results=results,
@@ -997,6 +997,8 @@ class POMDPSimulator(BaseSimulator):
         cache_visualizations: bool,
     ) -> None:
         """Create and save visualizations for a specific environment."""
+        import gc
+
         # Don't create env_dir since the entire results_dir is already the environment directory
         # env_dir = results_dir / env_name
         # env_dir.mkdir(exist_ok=True)
@@ -1010,6 +1012,8 @@ class POMDPSimulator(BaseSimulator):
                 env_dir=results_dir,  # Use results_dir directly instead of env_dir
                 cache_visualizations=cache_visualizations,
             )
+            # Force cleanup after each policy visualization
+            gc.collect()
 
         # Create comparison plot
         comparison_plot_path = (
@@ -1021,6 +1025,8 @@ class POMDPSimulator(BaseSimulator):
             environment=environment,
             cache_path=comparison_plot_path,
         )
+        # Final cleanup
+        gc.collect()
 
     def _create_policy_visualizations(
         self,
