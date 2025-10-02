@@ -23,7 +23,7 @@ from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment
 from unittest.mock import Mock
-from typing import cast
+from typing import cast, Dict
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDPDiscreteActions,
 )
@@ -2771,3 +2771,351 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
     # Verify simulation results are valid
     assert results is not None, "Simulation should return valid results"
     assert len(results) > 0, "Simulation should return non-empty results"
+
+
+# ==============================================================================
+# MEMORY LEAK DIAGNOSTIC TESTS
+# ==============================================================================
+# These tests help identify specific sources of memory leaks in the simulator.
+# Tests that fail indicate components that need memory management fixes.
+
+
+import gc
+import psutil
+import mlflow
+
+
+class MemoryTracker:
+    """Utility class for tracking memory usage in tests."""
+
+    def __init__(self, test_name: str):
+        self.test_name = test_name
+        self.process = psutil.Process()
+        self.initial_memory: float = 0.0
+        self.peak_memory: float = 0.0
+        self.measurements = []
+
+    def start(self):
+        """Start memory tracking."""
+        gc.collect()  # Clean up before measurement
+        self.initial_memory = self.process.memory_info().rss / 1024 / 1024  # MB
+        self.peak_memory = self.initial_memory
+
+    def checkpoint(self, label: str = ""):
+        """Record a memory checkpoint."""
+        gc.collect()
+        current_memory = self.process.memory_info().rss / 1024 / 1024  # MB
+        self.peak_memory = max(self.peak_memory, current_memory)
+        growth = current_memory - self.initial_memory
+        self.measurements.append((label, current_memory, growth))
+        return current_memory, growth
+
+    def finish(self):
+        """Finish tracking and return final results."""
+        final_memory, final_growth = self.checkpoint("Final")
+        peak_growth = self.peak_memory - self.initial_memory
+
+        return {
+            "initial_memory": self.initial_memory,
+            "final_memory": final_memory,
+            "peak_memory": self.peak_memory,
+            "final_growth": final_growth,
+            "peak_growth": peak_growth,
+            "measurements": self.measurements,
+        }
+
+
+def test_memory_leak_mlflow_cleanup_resource_management():
+    """
+    Purpose: Validates that MLflow operations don't cause memory leaks during repeated experiment setups
+
+    Given: Multiple MLflow experiment setups and cleanups with runs and artifact logging
+    When: MLflow experiments are created, used, and cleaned up repeatedly
+    Then: Memory growth stays under 100MB indicating proper MLflow resource management
+
+    Test type: unit
+    """
+    tracker = MemoryTracker("MLflow Cleanup Test")
+    tracker.start()
+
+    temp_dir = Path(tempfile.mkdtemp())
+    original_tracking_uri = mlflow.get_tracking_uri()
+
+    try:
+        # Test multiple MLflow experiment setups and cleanups
+        for i in range(10):  # Simulate multiple test runs
+            # Setup MLflow tracking
+            mlruns_path = temp_dir / f"mlruns_{i}"
+            mlruns_path.mkdir(parents=True, exist_ok=True)
+            tracking_uri = f"file://{mlruns_path.absolute()}"
+            mlflow.set_tracking_uri(tracking_uri)
+            mlflow.set_experiment(f"test_experiment_{i}")
+
+            # Create and end multiple runs
+            for j in range(5):
+                with mlflow.start_run(run_name=f"test_run_{j}"):
+                    mlflow.log_param("test_param", f"value_{j}")
+                    mlflow.log_metric("test_metric", j * 1.5)
+
+                    # Log some artifacts to simulate real usage
+                    temp_file = temp_dir / f"temp_artifact_{j}.txt"
+                    temp_file.write_text(f"Test artifact content {j}")
+                    mlflow.log_artifact(str(temp_file))
+
+            # Cleanup MLflow state
+            if mlflow.active_run():
+                mlflow.end_run()
+
+            # Force cleanup
+            gc.collect()
+
+    finally:
+        # Cleanup
+        if mlflow.active_run():
+            mlflow.end_run()
+        mlflow.set_tracking_uri(original_tracking_uri)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    results = tracker.finish()
+
+    # Assert memory growth is reasonable (<100MB for MLflow operations)
+    assert (
+        results["final_growth"] < 100
+    ), f"MLflow operations leaked {results['final_growth']:.1f} MB"
+
+
+def test_memory_leak_visualization_cache_management():
+    """
+    Purpose: Validates that visualization file operations don't accumulate memory across iterations
+
+    Given: Multiple cycles of visualization file creation and deletion
+    When: Mock visualization files (plots, GIFs) are created and cleaned up repeatedly
+    Then: Memory growth stays under 50MB indicating proper file handle and cache management
+
+    Test type: unit
+    """
+    tracker = MemoryTracker("Visualization Test")
+    tracker.start()
+
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        # Simulate multiple visualization operations
+        for i in range(20):  # More iterations to amplify any leaks
+            # Create visualization directories (similar to simulator)
+            viz_dir = temp_dir / f"viz_{i}"
+            viz_dir.mkdir(parents=True, exist_ok=True)
+
+            # Create mock visualization files
+            for j in range(5):
+                # Simulate creating plots/visualizations
+                plot_file = viz_dir / f"plot_{j}.png"
+                gif_file = viz_dir / f"animation_{j}.gif"
+
+                # Create mock file content (simulate matplotlib/gif creation)
+                plot_data = np.random.random((100, 100, 3)) * 255
+                gif_data = b"GIF89a" + np.random.bytes(10000)  # Mock GIF data
+
+                # Write files
+                plot_file.write_bytes(plot_data.astype(np.uint8).tobytes())
+                gif_file.write_bytes(gif_data)
+
+            # Cleanup visualization directory (simulate what simulator does)
+            shutil.rmtree(viz_dir, ignore_errors=True)
+
+            # Force cleanup
+            gc.collect()
+
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    results = tracker.finish()
+
+    # Assert memory growth is reasonable (<50MB for visualization operations)
+    assert (
+        results["final_growth"] < 50
+    ), f"Visualization operations leaked {results['final_growth']:.1f} MB"
+
+
+def test_memory_leak_simulator_context_manager_resource_cleanup():
+    """
+    Purpose: Validates that simulator context manager properly cleans up all resources
+
+    Given: Multiple simulator instances used as context managers with full simulation runs
+    When: Simulators are created, used for complete simulations, and cleaned up via context manager
+    Then: Memory growth stays under 300MB indicating proper context manager resource cleanup
+
+    Test type: integration
+    """
+    tracker = MemoryTracker("Simulator Context Manager Test")
+    tracker.start()
+
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        # Test multiple simulator context manager usages
+        for i in range(3):  # Reduced to 3 for practical CI/testing
+            with POMDPSimulator(
+                task_manager_config=JoblibConfig(n_jobs=1),
+                cache_dir_path=temp_dir / f"cache_{i}",
+                experiment_name=f"Test_Experiment_{i}",
+                debug=False,
+                enable_profiling=False,
+            ) as simulator:
+                # Do some basic operations
+                env = TigerPOMDP(discount_factor=0.95)
+                policy = POMCP(
+                    environment=env,
+                    discount_factor=0.95,
+                    depth=3,
+                    exploration_constant=1.0,
+                    name="TestPolicy",
+                    n_simulations=5,
+                )
+
+                # Test some simulator methods
+                belief = get_initial_belief(env, n_particles=10)
+                env_params = [
+                    EnvironmentRunParams(
+                        environment=env,
+                        belief=belief,
+                        policies=[policy],
+                        num_episodes=2,
+                        num_steps=3,
+                    )
+                ]
+
+                # Run a small simulation
+                results, _ = simulator.compare_multiple_environments_policies(
+                    environment_run_params=env_params,
+                    alpha=0.1,
+                    n_jobs=1,
+                    cache_visualizations=False,  # Disable to isolate context manager
+                )
+
+            # Force cleanup
+            gc.collect()
+
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    results = tracker.finish()
+
+    # Assert memory growth is reasonable (<300MB for 3 simulator instances with full simulations)
+    # Updated threshold based on actual testing - reduced to 3 iterations for practical CI testing
+    assert (
+        results["final_growth"] < 300
+    ), f"Simulator context manager leaked {results['final_growth']:.1f} MB"
+
+
+def test_memory_leak_mlflow_state_persistence_across_simulators():
+    """
+    Purpose: Validates that MLflow state doesn't accumulate across multiple simulator instances
+
+    Given: Multiple simulator instances that each modify MLflow tracking state
+    When: Simulators create different experiments and tracking contexts
+    Then: Memory growth stays under 150MB and MLflow state is properly isolated
+
+    Test type: integration
+    """
+    tracker = MemoryTracker("MLflow State Persistence Test")
+    tracker.start()
+
+    temp_dir = Path(tempfile.mkdtemp())
+    original_tracking_uri = mlflow.get_tracking_uri()
+
+    try:
+        # Create multiple simulators that modify MLflow state
+        for i in range(15):
+            simulator_temp_dir = temp_dir / f"simulator_{i}"
+
+            with POMDPSimulator(
+                task_manager_config=JoblibConfig(n_jobs=1),
+                cache_dir_path=simulator_temp_dir,
+                experiment_name=f"Persistence_Test_{i}",
+                debug=False,
+            ) as simulator:
+                pass  # Just test setup and cleanup
+
+        gc.collect()
+
+    finally:
+        # Restore original tracking URI
+        mlflow.set_tracking_uri(original_tracking_uri)
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    results = tracker.finish()
+
+    # Assert reasonable memory growth
+    assert (
+        results["final_growth"] < 150
+    ), f"MLflow state persistence leaked {results['final_growth']:.1f} MB"
+
+
+def test_memory_leak_full_simulator_integration_reduced_scale():
+    """
+    Purpose: Validates memory behavior of full simulator with reduced scale to isolate leak sources
+
+    Given: Multiple complete simulation runs with all simulator features enabled but reduced scale
+    When: Full simulations run with environments, policies, MLflow tracking, and visualizations
+    Then: Memory growth stays under 500MB indicating the core simulator works without major leaks
+
+    Test type: integration
+    """
+    tracker = MemoryTracker("Full Simulator Integration Test")
+    tracker.start()
+
+    temp_dir = Path(tempfile.mkdtemp())
+
+    try:
+        # Run multiple reduced-scale simulations
+        for i in range(3):  # Further reduced from 5 for practical testing
+            with POMDPSimulator(
+                task_manager_config=JoblibConfig(n_jobs=1),
+                cache_dir_path=temp_dir / f"sim_{i}",
+                experiment_name=f"Integration_Test_{i}",
+                debug=False,
+                enable_profiling=False,
+            ) as simulator:
+                # Create environment and policy
+                env = TigerPOMDP(discount_factor=0.95)
+                policy = POMCP(
+                    environment=env,
+                    discount_factor=0.95,
+                    depth=3,
+                    exploration_constant=1.0,
+                    name="IntegrationTestPolicy",
+                    n_simulations=3,  # Reduced simulations
+                )
+
+                belief = get_initial_belief(env, n_particles=5)  # Reduced particles
+                env_params = [
+                    EnvironmentRunParams(
+                        environment=env,
+                        belief=belief,
+                        policies=[policy],
+                        num_episodes=2,  # Reduced episodes
+                        num_steps=3,  # Reduced steps
+                    )
+                ]
+
+                # Run full simulation with all features
+                results, df = simulator.compare_multiple_environments_policies(
+                    environment_run_params=env_params,
+                    alpha=0.1,
+                    n_jobs=1,
+                    cache_visualizations=True,  # Enable to test full functionality
+                )
+
+            gc.collect()
+
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    results = tracker.finish()
+
+    # Assert memory growth is reasonable (<250MB for 3 reduced full simulations with visualizations)
+    # Updated threshold based on actual testing - reduced to 3 iterations with practical limits
+    assert (
+        results["final_growth"] < 250
+    ), f"Full simulator integration leaked {results['final_growth']:.1f} MB"

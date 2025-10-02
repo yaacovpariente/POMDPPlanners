@@ -1383,7 +1383,13 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
         # This test documents what happens with dashboard_prefix
         try:
             # Attempt to create task manager
-            with pbs_config.create_task_manager() as task_manager:
+            with pbs_config.create_task_manager() as tm:
+                # Import here to access PBS-specific attributes
+                from POMDPPlanners.simulations.simulations_deployment.task_managers import (
+                    PBSTaskManager,
+                )
+
+                task_manager = cast(PBSTaskManager, tm)
                 # If we get here, dashboard_prefix is supported
                 assert task_manager.dashboard_prefix == "/test-prefix"
                 # Mark the test as showing support
@@ -1422,7 +1428,13 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
 
         # Create and cleanup cluster using context manager
         try:
-            with pbs_config.create_task_manager() as task_manager:
+            with pbs_config.create_task_manager() as tm:
+                # Import here to access PBS-specific attributes
+                from POMDPPlanners.simulations.simulations_deployment.task_managers import (
+                    PBSTaskManager,
+                )
+
+                task_manager = cast(PBSTaskManager, tm)
                 # Verify cluster was created
                 assert task_manager.client is not None, "Client should be initialized"
                 assert task_manager.cluster is not None, "Cluster should be created"
@@ -1477,7 +1489,13 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
         )
 
         try:
-            with pbs_config.create_task_manager() as task_manager:
+            with pbs_config.create_task_manager() as tm:
+                # Import here to access PBS-specific attributes
+                from POMDPPlanners.simulations.simulations_deployment.task_managers import (
+                    PBSTaskManager,
+                )
+
+                task_manager = cast(PBSTaskManager, tm)
                 # Verify cluster was created
                 assert task_manager.client is not None
                 assert task_manager.cluster is not None
