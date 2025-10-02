@@ -450,13 +450,8 @@ class PBSTaskManager(DaskTaskManager):
             dashboard_port: Port for the Dask dashboard
             dashboard_prefix: URL prefix for dashboard (useful with reverse proxies)
         """
-        super().__init__(
-            n_workers=n_workers,
-            scheduler_address=scheduler_address,
-            cache_size=cache_size,
-            clear_cache_on_start=clear_cache_on_start,
-        )
-
+        # Set PBS-specific attributes BEFORE calling super().__init__()
+        # This prevents AttributeError when parent's _initialize_client() is called
         self.queue = queue
         self.cores = cores
         self.memory = memory
@@ -470,15 +465,37 @@ class PBSTaskManager(DaskTaskManager):
         self.dashboard_port = dashboard_port
         self.dashboard_prefix = dashboard_prefix
 
-        # Initialize parent attributes without calling _initialize_client
+        # Initialize parent attributes that will be overridden
         self.client = None
         self.cache = None
         self.cache_registered = False
         self.cluster = None  # Store cluster reference for dashboard access
 
+        # Call parent's __init__ which will call _initialize_client()
+        # Note: We override _initialize_client() to use PBS cluster configuration
+        super().__init__(
+            n_workers=n_workers,
+            scheduler_address=scheduler_address,
+            cache_size=cache_size,
+            clear_cache_on_start=clear_cache_on_start,
+        )
+
     def _initialize_client(self):
         """Initialize Dask client with PBS cluster."""
         try:
+            # If scheduler_address is provided, connect to existing cluster
+            if self.scheduler_address is not None:
+                try:
+                    self.client = Client(self.scheduler_address, timeout=0.1)
+                    # Initialize cache
+                    self.cache = Cache(self.cache_size)
+                    self.cache_registered = False
+                    return
+                except Exception as e:
+                    raise RuntimeError(
+                        f"Failed to connect to Dask scheduler at {self.scheduler_address}. Error: {e}"
+                    )
+
             # Prepare scheduler options for dashboard configuration
             scheduler_options = {}
             if self.enable_dashboard:
@@ -488,7 +505,7 @@ class PBSTaskManager(DaskTaskManager):
                 if self.dashboard_prefix:
                     scheduler_options["dashboard_prefix"] = self.dashboard_prefix
 
-            # Create PBS cluster configuration
+            # Create PBS cluster configuration (without scheduler_address parameter)
             self.cluster = PBSCluster(
                 queue=self.queue,
                 cores=self.cores,
@@ -496,7 +513,6 @@ class PBSTaskManager(DaskTaskManager):
                 processes=self.processes,
                 walltime=self.walltime,
                 job_extra=self.job_extra,
-                scheduler_address=self.scheduler_address,
                 local_directory="./dask-pbs-space",
                 scheduler_options=scheduler_options if scheduler_options else None,
             )
