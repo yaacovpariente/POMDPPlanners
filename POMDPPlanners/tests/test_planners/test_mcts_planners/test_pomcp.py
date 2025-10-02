@@ -644,3 +644,81 @@ def test_pomcp_config_id_hash_properties(
     # Should be a valid hexadecimal hash (SHA-256 produces 64 hex characters)
     assert len(config_id) == 64
     assert all(c in "0123456789abcdef" for c in config_id.lower())
+
+
+# ==============================================================================
+# MEMORY LEAK DIAGNOSTIC TESTS
+# ==============================================================================
+# These tests help identify specific sources of memory leaks in POMCP.
+# Tests that fail indicate components that need memory management fixes.
+
+import gc
+
+from POMDPPlanners.utils.memory_tracker import MemoryTracker
+
+
+def test_memory_leak_environment_policy_object_accumulation(environment, discount_factor):
+    """
+    Purpose: Validates that Environment and Policy objects are properly garbage collected
+
+    Given: Multiple cycles of environment and policy object creation with MCTS tree building
+    When: Many POMDP environments and policies with search trees are created and cleared
+    Then: Memory growth stays under 100MB after explicit cleanup indicating proper garbage collection
+
+    Test type: unit
+    """
+    tracker = MemoryTracker(enable_tracking=True, tracking_mode="lightweight")
+    tracker.checkpoint("initial")
+
+    environments = []
+    policies = []
+    beliefs = []
+
+    try:
+        # Create many environment and policy objects
+        for i in range(50):  # Create many objects to amplify leaks
+            # Create environment
+            env = TigerPOMDP(discount_factor=discount_factor, name=f"Tiger_{i}")
+            environments.append(env)
+
+            # Create policy with potentially large search tree
+            policy = POMCP(
+                environment=env,
+                discount_factor=discount_factor,
+                depth=5,  # Deeper tree for more memory usage
+                exploration_constant=1.0,
+                name=f"POMCP_{i}",
+                n_simulations=20,  # More simulations for larger tree
+            )
+            policies.append(policy)
+
+            # Create belief with many particles
+            belief = get_initial_belief(env, n_particles=100)
+            beliefs.append(belief)
+
+            # Simulate some policy usage to build search tree
+            action, _ = policy.action(belief)
+
+        tracker.checkpoint("after_creation")
+
+        # Clear references explicitly
+        environments.clear()
+        policies.clear()
+        beliefs.clear()
+
+        # Force garbage collection
+        gc.collect()
+        tracker.checkpoint("after_cleanup")
+
+    finally:
+        # Final cleanup
+        environments.clear()
+        policies.clear()
+        beliefs.clear()
+        gc.collect()
+
+    # Get memory growth
+    memory_growth = tracker.get_memory_growth()
+
+    # Assert memory growth is reasonable after cleanup (<100MB)
+    assert memory_growth < 100, f"Environment/Policy objects leaked {memory_growth:.1f} MB"
