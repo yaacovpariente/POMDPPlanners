@@ -249,16 +249,31 @@ class JoblibTaskManager(TaskManagerExternalDB):
         """Run tasks in parallel using joblib."""
         import time
 
-        # Log system information
+        # Log system information and setup
         self._log_system_info()
-
-        # Log parallel processing setup
-        self.logger.info(f"Starting parallel processing with {self.n_jobs} jobs")
-        self.logger.info(f"Processing {len(tasks)} tasks using joblib")
+        self._log_parallel_processing_setup(tasks)
 
         start_time = time.time()
 
-        # Create a custom tqdm callback that logs to logger
+        # Run tasks with progress logging
+        try:
+            results = self._execute_tasks_parallel(tasks, start_time)
+            self._log_completion_statistics(results, start_time)
+            return results
+
+        except Exception as e:
+            self.logger.error(f"Error during parallel processing: {str(e)}")
+            raise e
+
+    def _log_parallel_processing_setup(self, tasks: List[SimulationTask]) -> None:
+        """Log parallel processing setup information."""
+        self.logger.info(f"Starting parallel processing with {self.n_jobs} jobs")
+        self.logger.info(f"Processing {len(tasks)} tasks using joblib")
+
+    def _create_progress_callback(self, tasks: List[SimulationTask], start_time: float):
+        """Create a custom tqdm callback that logs progress to logger."""
+        import time
+
         def tqdm_logger_callback(tqdm_obj):
             """Custom tqdm callback to log progress to logger."""
             last_logged = 0
@@ -276,39 +291,40 @@ class JoblibTaskManager(TaskManagerExternalDB):
                     last_logged = current_progress
                 yield i
 
-        # Run tasks with progress logging
-        try:
-            # Use tqdm with custom callback for logging
-            with tqdm(tasks, desc="Running tasks") as pbar:
-                results = list(
-                    Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
-                        delayed(self._cached_run)(task) for task in pbar
-                    )
+        return tqdm_logger_callback
+
+    def _execute_tasks_parallel(self, tasks: List[SimulationTask], start_time: float) -> list:
+        """Execute tasks in parallel using joblib with progress tracking."""
+        import time
+
+        # Use tqdm with custom callback for logging
+        with tqdm(tasks, desc="Running tasks") as pbar:
+            results = list(
+                Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
+                    delayed(self._cached_run)(task) for task in pbar
                 )
-
-            end_time = time.time()
-            total_time = end_time - start_time
-
-            # Log completion statistics
-            successful_results = [r for r in results if r is not None]
-            failed_count = len(results) - len(successful_results)
-
-            self.logger.info(f"Parallel processing completed in {total_time:.2f}s")
-            self.logger.info(
-                f"Results: {len(successful_results)} successful, {failed_count} failed"
             )
+        return results
 
-            if failed_count > 0:
-                self.logger.warning(f"{failed_count} tasks failed during parallel processing")
+    def _log_completion_statistics(self, results: list, start_time: float) -> None:
+        """Log completion statistics and cache information."""
+        import time
 
-            # Log cache statistics
-            self._log_cache_statistics()
+        end_time = time.time()
+        total_time = end_time - start_time
 
-            return results
+        # Log completion statistics
+        successful_results = [r for r in results if r is not None]
+        failed_count = len(results) - len(successful_results)
 
-        except Exception as e:
-            self.logger.error(f"Error during parallel processing: {str(e)}")
-            raise e
+        self.logger.info(f"Parallel processing completed in {total_time:.2f}s")
+        self.logger.info(f"Results: {len(successful_results)} successful, {failed_count} failed")
+
+        if failed_count > 0:
+            self.logger.warning(f"{failed_count} tasks failed during parallel processing")
+
+        # Log cache statistics
+        self._log_cache_statistics()
 
     def clear_cache(self):
         """Clear the joblib cache."""
@@ -322,6 +338,15 @@ class JoblibTaskManager(TaskManagerExternalDB):
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit with proper resource cleanup."""
         import gc
+
+        # Shutdown loky worker pool to prevent orphaned processes
+        try:
+            from joblib.externals.loky import get_reusable_executor
+
+            get_reusable_executor().shutdown(wait=True, kill_workers=True)
+            self.logger.debug("Shut down loky worker pool")
+        except Exception as e:
+            self.logger.warning(f"Error shutting down loky executor: {e}")
 
         # Clear joblib Memory cache to free cached function results
         if hasattr(self, "memory") and self.memory is not None:
