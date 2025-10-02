@@ -219,8 +219,11 @@ class JoblibTaskManager(TaskManagerExternalDB):
         self.cache_dir = Path(cache_dir)
         self.cache_dir.mkdir(parents=True, exist_ok=True)
 
-        # Initialize memory cache
-        self.memory = Memory(self.cache_dir, verbose=verbose)
+        # Initialize memory cache in a subdirectory to avoid clearing other files
+        # like mlruns when memory.clear() is called
+        self.joblib_cache_dir = self.cache_dir / "joblib_cache"
+        self.joblib_cache_dir.mkdir(parents=True, exist_ok=True)
+        self.memory = Memory(self.joblib_cache_dir, verbose=verbose)
         if clear_cache_on_start:
             self.memory.clear()
             self.cache_db.clear()
@@ -355,14 +358,6 @@ class JoblibTaskManager(TaskManagerExternalDB):
                 self.logger.debug("Cleared joblib Memory cache")
             except Exception as e:
                 self.logger.warning(f"Error clearing joblib Memory cache: {e}")
-
-        # Clear cached function reference
-        if hasattr(self, "_cached_run"):
-            self._cached_run = None
-
-        # Clear memory reference
-        if hasattr(self, "memory"):
-            self.memory = None
 
         # Force garbage collection to clean up joblib parallel backend resources
         gc.collect()
