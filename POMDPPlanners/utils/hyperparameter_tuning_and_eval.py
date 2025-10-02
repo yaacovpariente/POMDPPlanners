@@ -36,6 +36,7 @@ from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
 )
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
+    PBSConfig,
 )
 from POMDPPlanners.simulations.simulations_deployment.task_managers import (
     TaskManagerType,
@@ -331,6 +332,302 @@ def optimize_and_evaluate_planners(
     return results
 
 
+def optimize_and_evaluate_planners_pbs(
+    environment: Environment,
+    initial_belief: Belief,
+    planner_configs: List[HyperParamPlannerConfig],
+    cache_dir: Path,
+    queue: str,
+    optimization_direction: HyperParameterOptimizationDirection = HyperParameterOptimizationDirection.MAXIMIZE,
+    parameter_to_optimize: str = "average_return",
+    experiment_name: str = "planner_optimization_pbs",
+    # Optimization parameters
+    optimization_episodes: int = 3,
+    optimization_steps: int = 6,
+    n_trials: int = 3,
+    n_workers: int = 4,
+    cores: int = 1,
+    memory: str = "4GB",
+    processes: int = 1,
+    walltime: str = "01:00:00",
+    job_extra: Optional[List[str]] = None,
+    optimization_n_jobs: int = -1,
+    enable_dashboard: bool = True,
+    dashboard_address: str = "0.0.0.0",
+    dashboard_port: int = 8787,
+    dashboard_prefix: Optional[str] = None,
+    # Evaluation parameters
+    evaluation_episodes: int = 10,
+    evaluation_steps: int = 8,
+    evaluation_n_jobs: int = 1,
+    # General parameters
+    confidence_interval_level: float = 0.95,
+    alpha: float = 0.05,
+    debug: bool = False,
+    verbose: bool = True,
+) -> Dict[str, Any]:
+    """Perform hyperparameter optimization followed by comprehensive evaluation using PBS cluster computing.
+
+    This function provides a complete workflow for optimizing multiple POMDP planners'
+    hyperparameters using PBS cluster computing and then evaluating all optimized policies'
+    performance together. It's similar to optimize_and_evaluate_planners but uses PBS
+    for distributed hyperparameter optimization.
+
+    Args:
+        environment: The POMDP environment to optimize and evaluate on
+        initial_belief: Initial belief state for the environment
+        planner_configs: List of HyperParamPlannerConfig objects, each containing
+                        a policy class, hyperparameters, and constant parameters
+        cache_dir: Directory for storing optimization and evaluation results
+        queue: PBS queue name to submit jobs to
+        optimization_direction: Direction of optimization (MAXIMIZE or MINIMIZE)
+        parameter_to_optimize: Name of the metric to optimize (e.g., "average_return")
+        experiment_name: Name for the experiment (used in MLflow tracking)
+        optimization_episodes: Number of episodes for optimization trials
+        optimization_steps: Number of steps per optimization episode
+        n_trials: Number of optimization trials to run per planner
+        n_workers: Number of PBS worker nodes to request
+        cores: Number of CPU cores per worker
+        memory: Memory per worker (e.g., "4GB", "8GB")
+        processes: Number of processes per worker
+        walltime: Maximum job runtime in HH:MM:SS format
+        job_extra: Additional PBS job directives
+        optimization_n_jobs: Number of parallel jobs for optimization (-1 for all cores)
+        enable_dashboard: Whether to enable Dask dashboard
+        dashboard_address: Dashboard bind address
+        dashboard_port: Dashboard port
+        dashboard_prefix: Dashboard URL prefix
+        evaluation_episodes: Number of episodes for final evaluation
+        evaluation_steps: Number of steps per evaluation episode
+        evaluation_n_jobs: Number of parallel jobs for evaluation
+        confidence_interval_level: Confidence level for statistical analysis
+        alpha: Alpha value for risk metrics (CVaR, VaR)
+        debug: Whether to enable debug logging
+        verbose: Whether to print progress messages
+
+    Returns:
+        Dictionary containing:
+        - 'optimization_results': List of OptimizedPolicyResult objects, one per planner
+        - 'evaluation_results': Raw episode histories from evaluation for all planners
+        - 'evaluation_statistics': DataFrame with evaluation statistics for all planners
+        - 'cache_paths': Dictionary with paths to optimization and evaluation results
+        - 'summary': Summary information including all optimized planners
+
+    Raises:
+        ValueError: If optimization fails for any planner or returns no results
+        TypeError: If any policy_cls is not a valid Policy subclass
+
+    Example:
+        Optimize multiple planners on Tiger POMDP using PBS cluster::
+
+            >>> from pathlib import Path
+            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+            >>> from POMDPPlanners.core.simulation import NumericalHyperParameter
+            >>> from POMDPPlanners.core.belief import get_initial_belief
+            >>>
+            >>> # Create environment and belief
+            >>> env = TigerPOMDP(discount_factor=0.95)
+            >>> initial_belief = get_initial_belief(env, n_particles=100)
+            >>>
+            >>> # Configure planners
+            >>> planner_configs = [
+            ...     HyperParamPlannerConfig(
+            ...         policy_cls=POMCP,
+            ...         hyper_parameters=[
+            ...             NumericalHyperParameter(0.1, 5.0, "exploration_constant")
+            ...         ],
+            ...         constant_parameters={"discount_factor": 0.95, "name": "POMCP"}
+            ...     )
+            ... ]
+            >>>
+            >>> # This would run PBS optimization (commented out for doctest)
+            >>> # results = optimize_and_evaluate_planners_pbs(
+            >>> #     environment=env,
+            >>> #     initial_belief=initial_belief,
+            >>> #     planner_configs=planner_configs,
+            >>> #     cache_dir=Path("./results"),
+            >>> #     queue="short",
+            >>> #     n_workers=8,
+            >>> #     cores=2,
+            >>> #     memory="8GB",
+            >>> #     walltime="02:00:00"
+            >>> # )
+            >>> len(planner_configs) == 1  # Verify example setup
+            True
+    """
+    # Configure logging based on parameters
+    configure_logging(debug=debug, verbose=verbose)
+
+    if verbose:
+        planner_names = [config.policy_cls.__name__ for config in planner_configs]
+        logger.info(
+            f"Starting PBS hyperparameter optimization and evaluation for {len(planner_configs)} planners: {planner_names}"
+        )
+        logger.info(f"Environment: {environment.name}")
+        logger.info(
+            f"PBS Configuration: queue={queue}, workers={n_workers}, cores={cores}, memory={memory}"
+        )
+        logger.info(
+            f"Optimization: {n_trials} trials per planner, {optimization_episodes} episodes, {optimization_steps} steps"
+        )
+        logger.info(f"Evaluation: {evaluation_episodes} episodes, {evaluation_steps} steps")
+
+    # Step 1: Run PBS hyperparameter optimization for all planners in a single call
+    if verbose:
+        logger.info(f"\n{'='*60}")
+        logger.info(f"PHASE 1: PBS HYPERPARAMETER OPTIMIZATION")
+        logger.info(f"{'='*60}")
+
+    if debug:
+        logger.debug(
+            f"Starting PBS optimization with {len(planner_configs)} planner configurations"
+        )
+        for i, config in enumerate(planner_configs):
+            logger.debug(
+                f"Planner {i+1}: {config.policy_cls.__name__} with {len(config.hyper_parameters)} hyperparameters"
+            )
+
+    # Optimize all planners together using PBS
+    optimization_results = optimize_planner_hyperparameters_pbs(
+        environment=environment,
+        initial_belief=initial_belief,
+        planner_configs=planner_configs,
+        cache_dir=cache_dir,
+        queue=queue,
+        optimization_direction=optimization_direction,
+        parameter_to_optimize=parameter_to_optimize,
+        experiment_name=experiment_name,
+        num_episodes=optimization_episodes,
+        num_steps=optimization_steps,
+        n_trials=n_trials,
+        n_workers=n_workers,
+        cores=cores,
+        memory=memory,
+        processes=processes,
+        walltime=walltime,
+        job_extra=job_extra,
+        n_jobs=optimization_n_jobs,
+        enable_dashboard=enable_dashboard,
+        dashboard_address=dashboard_address,
+        dashboard_port=dashboard_port,
+        dashboard_prefix=dashboard_prefix,
+        confidence_interval_level=confidence_interval_level,
+        alpha=alpha,
+        debug=debug,
+        verbose=verbose,
+    )
+
+    if not optimization_results or len(optimization_results) != len(planner_configs):
+        error_msg = f"PBS hyperparameter optimization failed - expected {len(planner_configs)} results but got {len(optimization_results) if optimization_results else 0}"
+        logger.error(error_msg)
+        raise ValueError(error_msg)
+
+    # Extract optimized policies
+    optimized_policies = [result.policy for result in optimization_results]
+
+    if verbose:
+        logger.info(f"\n✓ PBS optimization completed for all {len(planner_configs)} planners!")
+        for i, (result, config) in enumerate(zip(optimization_results, planner_configs)):
+            logger.info(f"  {i+1}. {config.policy_cls.__name__}: {result.policy.name}")
+            logger.info(f"     Best hyperparameters: {result.chosen_hyper_parameters}")
+
+    # Step 2: Evaluate all optimized policies together
+    if verbose:
+        logger.info(f"\n{'='*60}")
+        logger.info(f"PHASE 2: POLICY EVALUATION")
+        logger.info(f"{'='*60}")
+        logger.info(f"Evaluating {len(optimized_policies)} PBS-optimized policies together...")
+
+    if debug:
+        logger.debug(f"Starting evaluation with {len(optimized_policies)} PBS-optimized policies")
+        for i, policy in enumerate(optimized_policies):
+            logger.debug(f"Policy {i+1}: {policy.name} (type: {type(policy).__name__})")
+
+    evaluation_results, evaluation_statistics = evaluate_multiple_optimized_planners(
+        environment=environment,
+        optimized_policies=optimized_policies,
+        initial_belief=initial_belief,
+        cache_dir=cache_dir,
+        experiment_name=f"{experiment_name}_evaluation",
+        num_episodes=evaluation_episodes,
+        num_steps=evaluation_steps,
+        n_jobs=evaluation_n_jobs,
+        confidence_interval_level=confidence_interval_level,
+        alpha=alpha,
+        debug=debug,
+        verbose=verbose,
+    )
+
+    if verbose:
+        logger.info(f"\n✓ Evaluation completed successfully!")
+        total_episodes = sum(
+            len(evaluation_results[environment.name][policy.name]) for policy in optimized_policies
+        )
+        logger.info(
+            f"Evaluated {total_episodes} total episodes across {len(optimized_policies)} policies"
+        )
+
+    # Prepare result summary
+    cache_paths = {
+        "optimization_cache": cache_dir,
+        "evaluation_cache": cache_dir / "evaluation",
+        "optimization_mlruns": cache_dir / "mlruns",
+        "evaluation_mlruns": cache_dir / "evaluation" / "mlruns",
+    }
+
+    if debug:
+        logger.debug("Preparing PBS results summary")
+        logger.debug(f"Cache paths: {cache_paths}")
+
+    results = {
+        "optimization_results": optimization_results,  # List of results, one per planner
+        "evaluation_results": evaluation_results,
+        "evaluation_statistics": evaluation_statistics,
+        "cache_paths": cache_paths,
+        "summary": {
+            "planners": [
+                {
+                    "policy_name": result.policy.name,
+                    "policy_type": planner_configs[i].policy_cls.__name__,
+                    "best_hyperparameters": result.chosen_hyper_parameters,
+                }
+                for i, result in enumerate(optimization_results)
+            ],
+            "environment_name": environment.name,
+            "num_planners": len(planner_configs),
+            "optimization_trials_per_planner": n_trials,
+            "evaluation_episodes": evaluation_episodes,
+            "pbs_configuration": {
+                "queue": queue,
+                "n_workers": n_workers,
+                "cores": cores,
+                "memory": memory,
+                "walltime": walltime,
+            },
+        },
+    }
+
+    if verbose:
+        logger.info(f"\n{'='*60}")
+        logger.info(f"PBS OPTIMIZATION AND EVALUATION COMPLETE")
+        logger.info(f"{'='*60}")
+        logger.info(f"Environment: {environment.name}")
+        logger.info(f"Optimized planners: {len(optimization_results)}")
+        for i, result in enumerate(optimization_results):
+            planner_type = planner_configs[i].policy_cls.__name__
+            logger.info(f"  {i+1}. {result.policy.name} ({planner_type})")
+        logger.info(f"PBS Queue: {queue} ({n_workers} workers, {cores} cores each)")
+        logger.info(f"Results saved to: {cache_dir}")
+        logger.info(f"MLflow tracking: {cache_paths['optimization_mlruns']} (optimization)")
+        logger.info(f"MLflow tracking: {cache_paths['evaluation_mlruns']} (evaluation)")
+
+    if debug:
+        logger.debug("Final PBS results summary prepared and returning")
+
+    return results
+
+
 def optimize_planner_hyperparameters(
     environment: Environment,
     initial_belief: Belief,
@@ -452,6 +749,220 @@ def optimize_planner_hyperparameters(
     else:
         if verbose:
             logger.warning("Warning: No optimization results returned")
+        if debug:
+            logger.debug("No optimization results to return")
+        return []
+
+
+def optimize_planner_hyperparameters_pbs(
+    environment: Environment,
+    initial_belief: Belief,
+    planner_configs: List[HyperParamPlannerConfig],
+    cache_dir: Path,
+    queue: str,
+    optimization_direction: HyperParameterOptimizationDirection = HyperParameterOptimizationDirection.MAXIMIZE,
+    parameter_to_optimize: str = "average_return",
+    experiment_name: str = "planner_optimization_pbs",
+    num_episodes: int = 3,
+    num_steps: int = 6,
+    n_trials: int = 3,
+    n_workers: int = 4,
+    cores: int = 1,
+    memory: str = "4GB",
+    processes: int = 1,
+    walltime: str = "01:00:00",
+    job_extra: Optional[List[str]] = None,
+    n_jobs: int = -1,
+    confidence_interval_level: float = 0.95,
+    alpha: float = 0.1,
+    enable_dashboard: bool = True,
+    dashboard_address: str = "0.0.0.0",
+    dashboard_port: int = 8787,
+    dashboard_prefix: Optional[str] = None,
+    debug: bool = False,
+    verbose: bool = True,
+) -> List[OptimizedPolicyResult]:
+    """Optimize hyperparameters for multiple POMDP planners using Optuna with PBS task manager.
+
+    This function is similar to optimize_planner_hyperparameters but uses PBS cluster
+    computing for distributed hyperparameter optimization, allowing for scalable
+    computation across multiple cluster nodes.
+
+    Args:
+        environment: The POMDP environment to optimize on
+        initial_belief: Initial belief state for the environment
+        planner_configs: List of HyperParamPlannerConfig objects containing planner configurations
+        cache_dir: Directory for storing optimization results
+        queue: PBS queue name to submit jobs to
+        optimization_direction: Direction of optimization (MAXIMIZE or MINIMIZE)
+        parameter_to_optimize: Name of the metric to optimize
+        experiment_name: Name for the optimization experiment
+        num_episodes: Number of episodes per optimization trial
+        num_steps: Number of steps per episode
+        n_trials: Number of optimization trials per planner
+        n_workers: Number of PBS worker nodes to request
+        cores: Number of CPU cores per worker
+        memory: Memory per worker (e.g., "4GB", "8GB")
+        processes: Number of processes per worker
+        walltime: Maximum job runtime in HH:MM:SS format
+        job_extra: Additional PBS job directives
+        n_jobs: Number of parallel jobs for optimization (-1 for all cores)
+        confidence_interval_level: Confidence level for statistics
+        alpha: Alpha value for statistics computation
+        enable_dashboard: Whether to enable Dask dashboard
+        dashboard_address: Dashboard bind address
+        dashboard_port: Dashboard port
+        dashboard_prefix: Dashboard URL prefix
+        debug: Whether to enable debug logging
+        verbose: Whether to print progress messages
+
+    Returns:
+        List of OptimizedPolicyResult objects, one for each planner configuration
+
+    Example:
+        Optimize planners using PBS cluster::
+
+            >>> from pathlib import Path
+            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+            >>> from POMDPPlanners.core.simulation import NumericalHyperParameter
+            >>> from POMDPPlanners.core.belief import get_initial_belief
+            >>>
+            >>> # Create environment and belief
+            >>> env = TigerPOMDP(discount_factor=0.95)
+            >>> initial_belief = get_initial_belief(env, n_particles=100)
+            >>>
+            >>> # Configure planners
+            >>> planner_configs = [
+            ...     HyperParamPlannerConfig(
+            ...         policy_cls=POMCP,
+            ...         hyper_parameters=[
+            ...             NumericalHyperParameter(0.1, 5.0, "exploration_constant")
+            ...         ],
+            ...         constant_parameters={"discount_factor": 0.95, "name": "POMCP"}
+            ...     )
+            ... ]
+            >>>
+            >>> # Run PBS optimization (commented out for doctest)
+            >>> # results = optimize_planner_hyperparameters_pbs(
+            >>> #     environment=env,
+            >>> #     initial_belief=initial_belief,
+            >>> #     planner_configs=planner_configs,
+            >>> #     cache_dir=Path("./results"),
+            >>> #     queue="short",
+            >>> #     n_workers=8,
+            >>> #     cores=2,
+            >>> #     memory="8GB",
+            >>> #     walltime="02:00:00"
+            >>> # )
+            >>> len(planner_configs) == 1  # Verify example setup
+            True
+    """
+    if verbose:
+        total_hyperparams = sum(len(config.hyper_parameters) for config in planner_configs)
+        planner_names = [config.policy_cls.__name__ for config in planner_configs]
+        logger.info(
+            f"Optimizing {len(planner_configs)} planners ({planner_names}) with {total_hyperparams} total hyperparameters using PBS cluster..."
+        )
+        logger.info(
+            f"PBS Configuration: queue={queue}, workers={n_workers}, cores={cores}, memory={memory}"
+        )
+        logger.info(f"Walltime: {walltime}, trials per planner: {n_trials}")
+
+    if debug:
+        logger.debug(f"Creating HyperParameterOptimizer with PBS task manager")
+        logger.debug(f"PBS queue: {queue}, workers: {n_workers}, cores: {cores}")
+        logger.debug(f"Memory: {memory}, processes: {processes}, walltime: {walltime}")
+        logger.debug(f"Confidence interval level: {confidence_interval_level}, Alpha: {alpha}")
+
+    # Create PBS task manager configuration
+    task_manager_config = PBSConfig(
+        queue=queue,
+        n_workers=n_workers,
+        cores=cores,
+        memory=memory,
+        processes=processes,
+        walltime=walltime,
+        job_extra=job_extra,
+        enable_dashboard=enable_dashboard,
+        dashboard_address=dashboard_address,
+        dashboard_port=dashboard_port,
+        dashboard_prefix=dashboard_prefix,
+    )
+
+    # Create optimizer with PBS configuration
+    optimizer = HyperParameterOptimizer(
+        cache_dir_path=cache_dir,
+        experiment_name=experiment_name,
+        task_manager_config=task_manager_config,
+        n_jobs=n_jobs,
+        confidence_interval_level=confidence_interval_level,
+        alpha=alpha,
+    )
+
+    # Configure optimization parameters for all planners
+    if debug:
+        logger.debug("Creating optimization configurations for all planners")
+
+    optimization_configs = []
+    for i, planner_config in enumerate(planner_configs):
+        if debug:
+            logger.debug(f"Creating config for planner {i+1}: {planner_config.policy_cls.__name__}")
+
+        config = HyperParameterRunParams(
+            environment=environment,
+            belief=initial_belief,
+            policy_cls=planner_config.policy_cls,
+            hyper_parameters=list(planner_config.hyper_parameters),
+            constant_parameters=planner_config.constant_parameters,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            n_trials=n_trials,
+            direction=optimization_direction,
+            parameter_to_optimize=parameter_to_optimize,
+        )
+        optimization_configs.append(config)
+
+    if debug:
+        logger.debug(f"Created {len(optimization_configs)} optimization configurations")
+
+    # Run optimization for all planners in a single call
+    if verbose:
+        logger.info(f"Running PBS cluster optimization with:")
+        for i, planner_config in enumerate(planner_configs):
+            logger.info(f"  - Planner {i+1}: {planner_config.policy_cls.__name__}")
+            logger.info(
+                f"    Hyperparameters: {[hp.name for hp in planner_config.hyper_parameters]}"
+            )
+        logger.info(f"  - Environment: {environment.name}")
+        logger.info(f"  - Trials per planner: {n_trials}")
+        logger.info(f"  - Episodes per trial: {num_episodes}")
+        logger.info(f"  - Steps per episode: {num_steps}")
+        logger.info(f"  - PBS workers: {n_workers}")
+        logger.info(f"  - Dashboard enabled: {enable_dashboard}")
+        if enable_dashboard:
+            logger.info(f"  - Dashboard URL: http://{dashboard_address}:{dashboard_port}")
+
+    if debug:
+        logger.debug("Starting PBS optimization with HyperParameterOptimizer")
+
+    optimization_results = optimizer.optimize(optimization_configs)
+
+    if debug:
+        logger.debug(
+            f"PBS optimization completed, received {len(optimization_results) if optimization_results else 0} results"
+        )
+
+    # Return all results
+    if optimization_results:
+        if verbose:
+            logger.info(f"PBS optimization completed for {len(optimization_results)} planners")
+        if debug:
+            logger.debug(f"Returning {len(optimization_results)} optimization results")
+        return optimization_results
+    else:
+        if verbose:
+            logger.warning("Warning: No optimization results returned from PBS cluster")
         if debug:
             logger.debug("No optimization results to return")
         return []
