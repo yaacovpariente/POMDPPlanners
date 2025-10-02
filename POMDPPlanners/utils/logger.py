@@ -425,7 +425,11 @@ def _create_individual_logger(
     logger = logging.getLogger(name)
     logger.setLevel(logging.DEBUG if debug else level)
 
-    # Remove any existing handlers
+    # If logger already has handlers, return it as-is to avoid creating multiple log files
+    if logger.handlers:
+        return logger
+
+    # Remove any existing handlers (should be empty at this point, but just in case)
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
 
