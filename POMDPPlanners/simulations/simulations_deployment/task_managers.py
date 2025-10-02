@@ -31,7 +31,7 @@ class DaskTaskManager(TaskManager):
 
     def __init__(
         self,
-        n_workers: Optional[int] = None,
+        n_workers: int = 1,
         scheduler_address: Optional[str] = None,
         cache_size: int = int(2e9),  # 2GB default cache size
         clear_cache_on_start: bool = False,
@@ -39,7 +39,7 @@ class DaskTaskManager(TaskManager):
         """Initialize the task manager.
 
         Args:
-            n_workers: Number of worker processes (None for auto)
+            n_workers: Number of worker processes (1 for local)
             scheduler_address: Address of Dask scheduler (None for local)
             cache_size: Size of cache in bytes
             clear_cache_on_start: If True, clears the cache at startup

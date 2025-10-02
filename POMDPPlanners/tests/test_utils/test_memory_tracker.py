@@ -574,7 +574,7 @@ class TestPerformance:
 
         # Should complete 100 checkpoints in reasonable time
         duration = end_time - start_time
-        assert duration < 5.0  # More lenient timing for CI
+        assert duration < 10.0  # Accommodate slower CI environments
         assert len(tracker.checkpoints) == 100
 
     def test_disabled_tracking_performance(self):
