@@ -298,7 +298,7 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
 
     def is_terminal(self, state: Tuple[float, float]) -> bool:
         position, _ = state
-        return position >= self.goal_position
+        return bool(position >= self.goal_position)
 
     def initial_state_dist(self) -> Distribution:
         class InitialState(Distribution):
