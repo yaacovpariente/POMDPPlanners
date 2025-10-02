@@ -320,9 +320,30 @@ class JoblibTaskManager(TaskManagerExternalDB):
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
-        # No cleanup needed for joblib
-        pass
+        """Context manager exit with proper resource cleanup."""
+        import gc
+
+        # Clear joblib Memory cache to free cached function results
+        if hasattr(self, "memory") and self.memory is not None:
+            try:
+                self.memory.clear()
+                self.logger.debug("Cleared joblib Memory cache")
+            except Exception as e:
+                self.logger.warning(f"Error clearing joblib Memory cache: {e}")
+
+        # Clear cached function reference
+        if hasattr(self, "_cached_run"):
+            self._cached_run = None
+
+        # Clear memory reference
+        if hasattr(self, "memory"):
+            self.memory = None
+
+        # Force garbage collection to clean up joblib parallel backend resources
+        gc.collect()
+
+        # Call parent cleanup
+        super().__exit__(exc_type, exc_val, exc_tb)
 
     def _log_system_info(self):
         """Log system information for debugging and monitoring."""

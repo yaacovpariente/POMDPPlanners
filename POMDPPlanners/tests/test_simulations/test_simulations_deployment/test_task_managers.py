@@ -1715,3 +1715,187 @@ def test_joblib_task_manager_log_cache_statistics_precision(cache_db):
                     break
 
             assert hit_rate_message is not None
+
+
+# ==============================================================================
+# MEMORY LEAK DIAGNOSTIC TESTS
+# ==============================================================================
+# These tests help identify specific sources of memory leaks in task managers.
+# Tests that fail indicate components that need memory management fixes.
+
+import gc
+import psutil
+from joblib import Parallel, delayed
+
+from POMDPPlanners.core.belief import get_initial_belief
+from POMDPPlanners.core.simulation import EnvironmentRunParams, StepData
+from POMDPPlanners.core.policy import PolicyRunData
+from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+    JoblibConfig,
+)
+from typing import Dict
+
+
+class MemoryTracker:
+    """Utility class for tracking memory usage in tests."""
+
+    def __init__(self, test_name: str):
+        self.test_name = test_name
+        self.process = psutil.Process()
+        self.initial_memory: float = 0.0
+        self.peak_memory: float = 0.0
+        self.measurements = []
+
+    def start(self):
+        """Start memory tracking."""
+        gc.collect()  # Clean up before measurement
+        self.initial_memory = self.process.memory_info().rss / 1024 / 1024  # MB
+        self.peak_memory = self.initial_memory
+
+    def checkpoint(self, label: str = ""):
+        """Record a memory checkpoint."""
+        gc.collect()
+        current_memory = self.process.memory_info().rss / 1024 / 1024  # MB
+        self.peak_memory = max(self.peak_memory, current_memory)
+        growth = current_memory - self.initial_memory
+        self.measurements.append((label, current_memory, growth))
+        return current_memory, growth
+
+    def finish(self):
+        """Finish tracking and return final results."""
+        final_memory, final_growth = self.checkpoint("Final")
+        peak_growth = self.peak_memory - self.initial_memory
+
+        return {
+            "initial_memory": self.initial_memory,
+            "final_memory": final_memory,
+            "peak_memory": self.peak_memory,
+            "final_growth": final_growth,
+            "peak_growth": peak_growth,
+            "measurements": self.measurements,
+        }
+
+
+def test_memory_leak_parallel_execution_resource_cleanup(temp_cache_dir, environment):
+    """
+    Purpose: Validates that parallel execution using joblib doesn't accumulate memory across iterations
+
+    Given: Multiple parallel execution cycles with POMDP objects and simulation data
+    When: Parallel tasks create environments, policies, and beliefs repeatedly
+    Then: Memory growth stays under 200MB indicating proper parallel resource cleanup
+
+    Test type: unit
+    """
+    tracker = MemoryTracker("Parallel Execution Test")
+    tracker.start()
+
+    def memory_intensive_task(task_id: int) -> Dict:
+        """Simulate a memory-intensive task similar to simulation."""
+        # Create some objects similar to what simulation does
+        env = TigerPOMDP(discount_factor=0.95)
+        policy = POMCP(
+            environment=env,
+            discount_factor=0.95,
+            depth=3,
+            exploration_constant=1.0,
+            name=f"TestPolicy_{task_id}",
+            n_simulations=5,
+        )
+
+        # Simulate some computation
+        belief = get_initial_belief(env, n_particles=50)
+
+        # Create mock history
+        mock_steps = []
+        for step in range(10):
+            step_data = StepData(
+                state=env.initial_state_dist().sample()[0],
+                action=env.get_actions()[0],
+                next_state=env.initial_state_dist().sample()[0],
+                observation=env.get_actions()[0],  # Simple mock
+                reward=1.0,
+                belief=belief,
+            )
+            mock_steps.append(step_data)
+
+        history = History(
+            history=mock_steps,
+            actual_num_steps=10,
+            reach_terminal_state=False,
+            discount_factor=0.95,
+            average_state_sampling_time=0.01,
+            average_action_time=0.02,
+            average_observation_time=0.01,
+            average_belief_update_time=0.03,
+            average_reward_time=0.001,
+            policy_run_data=[PolicyRunData(info_variables=[])],
+        )
+
+        return {"task_id": task_id, "history": history, "policy": policy, "env": env}
+
+    try:
+        # Test multiple parallel executions
+        for iteration in range(5):
+            # Run parallel tasks
+            results = Parallel(n_jobs=2)(
+                delayed(memory_intensive_task)(task_id) for task_id in range(10)
+            )
+
+            # Clear results
+            del results
+            gc.collect()
+
+    finally:
+        gc.collect()
+
+    results = tracker.finish()
+
+    # Assert memory growth is reasonable (<200MB for parallel operations)
+    assert (
+        results["final_growth"] < 200
+    ), f"Parallel execution leaked {results['final_growth']:.1f} MB"
+
+
+def test_memory_leak_task_manager_resource_cleanup(temp_cache_dir):
+    """
+    Purpose: Validates that task manager instances properly release their resources
+
+    Given: Multiple task manager instances created and used for parallel operations
+    When: Task managers execute parallel operations and are cleaned up
+    Then: Memory growth stays under 80MB indicating proper task manager resource management
+
+    Test type: unit
+    """
+    tracker = MemoryTracker("Task Manager Cleanup Test")
+    tracker.start()
+
+    try:
+        # Test multiple task manager creations and cleanups
+        for i in range(20):
+            # Create task manager config
+            config = JoblibConfig(n_jobs=2, verbose=0)
+            task_manager = config.create_task_manager(cache_dir=str(temp_cache_dir))
+
+            # Use task manager for some operations
+            with task_manager:
+                # Simulate task execution
+                def dummy_task(x):
+                    return x * 2
+
+                results = Parallel(n_jobs=2)(delayed(dummy_task)(x) for x in range(10))
+
+            # Explicit cleanup
+            del task_manager
+            del results
+            gc.collect()
+
+    finally:
+        gc.collect()
+
+    results = tracker.finish()
+
+    # Assert memory growth is reasonable (<80MB for task manager operations)
+    assert (
+        results["final_growth"] < 80
+    ), f"Task manager resources leaked {results['final_growth']:.1f} MB"
