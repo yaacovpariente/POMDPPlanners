@@ -1022,3 +1022,415 @@ class TestSimulationsAPI:
 
         # Verify results are returned
         assert results == mock_results
+
+    @patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_and_evaluate_planners_pbs")
+    def test_run_hyperparameter_optimization_and_evaluation_pbs_success(
+        self,
+        mock_optimize_and_evaluate_pbs,
+        temp_cache_dir,
+        tiger_environment,
+    ):
+        """Test successful execution of run_hyperparameter_optimization_and_evaluation_pbs.
+
+        Purpose: Validates that the PBS API method correctly calls the PBS utility function with proper parameters
+
+        Given: Environment, belief, planner configs, PBS queue, and mocked PBS utility function
+        When: run_hyperparameter_optimization_and_evaluation_pbs is executed
+        Then: PBS utility function is called with correct parameters including PBS configuration and results are returned
+
+        Test type: unit
+        """
+        from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
+        from POMDPPlanners.core.belief import get_initial_belief
+
+        # Mock results
+        mock_results = {
+            "optimization_results": [],
+            "evaluation_results": {},
+            "summary": {
+                "pbs_configuration": {
+                    "queue": "test_queue",
+                    "n_workers": 4,
+                    "cores": 2,
+                    "memory": "8GB",
+                    "walltime": "02:00:00",
+                }
+            },
+        }
+        mock_optimize_and_evaluate_pbs.return_value = mock_results
+
+        # Create test data
+        initial_belief = get_initial_belief(tiger_environment, n_particles=10)
+        planner_configs = [
+            HyperParamPlannerConfig(
+                policy_cls=POMCP, hyper_parameters=[], constant_parameters={"name": "TestPOMCP"}
+            )
+        ]
+
+        api = SimulationsAPI()
+        results = api.run_hyperparameter_optimization_and_evaluation_pbs(
+            environment=tiger_environment,
+            initial_belief=initial_belief,
+            planner_configs=planner_configs,
+            queue="test_queue",
+            cache_dir=temp_cache_dir,
+            n_trials=1,
+            optimization_episodes=2,
+            evaluation_episodes=3,
+            n_workers=4,
+            cores=2,
+            memory="8GB",
+            walltime="02:00:00",
+        )
+
+        # Verify PBS utility function was called
+        mock_optimize_and_evaluate_pbs.assert_called_once()
+
+        # Verify call arguments
+        call_kwargs = mock_optimize_and_evaluate_pbs.call_args[1]
+        assert call_kwargs["queue"] == "test_queue"
+        assert call_kwargs["n_workers"] == 4
+        assert call_kwargs["cores"] == 2
+        assert call_kwargs["memory"] == "8GB"
+        assert call_kwargs["walltime"] == "02:00:00"
+        assert call_kwargs["n_trials"] == 1
+        assert call_kwargs["optimization_episodes"] == 2
+        assert call_kwargs["evaluation_episodes"] == 3
+
+        # Verify results are returned
+        assert results == mock_results
+
+    @patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_and_evaluate_planners_pbs")
+    def test_run_hyperparameter_optimization_and_evaluation_pbs_default_parameters(
+        self,
+        mock_optimize_and_evaluate_pbs,
+        temp_cache_dir,
+        tiger_environment,
+    ):
+        """Test PBS hyperparameter optimization with default parameters.
+
+        Purpose: Validates that PBS API method uses correct default values when optional parameters are not provided
+
+        Given: Only required parameters (environment, initial_belief, planner_configs, queue)
+        When: run_hyperparameter_optimization_and_evaluation_pbs is called with minimal parameters
+        Then: PBS utility function is called with correct default values
+
+        Test type: unit
+        """
+        from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
+        from POMDPPlanners.core.belief import get_initial_belief
+
+        # Mock results
+        mock_results = {"optimization_results": [], "evaluation_results": {}}
+        mock_optimize_and_evaluate_pbs.return_value = mock_results
+
+        # Create test data
+        initial_belief = get_initial_belief(tiger_environment, n_particles=10)
+        planner_configs = [
+            HyperParamPlannerConfig(
+                policy_cls=POMCP, hyper_parameters=[], constant_parameters={"name": "TestPOMCP"}
+            )
+        ]
+
+        api = SimulationsAPI()
+        results = api.run_hyperparameter_optimization_and_evaluation_pbs(
+            environment=tiger_environment,
+            initial_belief=initial_belief,
+            planner_configs=planner_configs,
+            queue="default_queue",  # Only required PBS parameter
+        )
+
+        # Verify PBS utility function was called
+        mock_optimize_and_evaluate_pbs.assert_called_once()
+
+        # Verify default parameters
+        call_kwargs = mock_optimize_and_evaluate_pbs.call_args[1]
+        assert call_kwargs["queue"] == "default_queue"
+        assert call_kwargs["optimization_direction"].name == "MAXIMIZE"  # Default
+        assert call_kwargs["parameter_to_optimize"] == "average_return"  # Default
+        assert (
+            call_kwargs["experiment_name"] == "POMDP_Hyperparameter_Optimization_And_Evaluation_PBS"
+        )  # Default
+        assert call_kwargs["optimization_episodes"] == 3  # Default
+        assert call_kwargs["optimization_steps"] == 6  # Default
+        assert call_kwargs["n_trials"] == 3  # Default
+        assert call_kwargs["n_workers"] == 4  # Default
+        assert call_kwargs["cores"] == 1  # Default
+        assert call_kwargs["memory"] == "4GB"  # Default
+        assert call_kwargs["processes"] == 1  # Default
+        assert call_kwargs["walltime"] == "01:00:00"  # Default
+        assert call_kwargs["job_extra"] is None  # Default
+        assert call_kwargs["optimization_n_jobs"] == -1  # Default
+        assert call_kwargs["enable_dashboard"] == True  # Default
+        assert call_kwargs["dashboard_address"] == "0.0.0.0"  # Default
+        assert call_kwargs["dashboard_port"] == 8787  # Default
+        assert call_kwargs["dashboard_prefix"] is None  # Default
+        assert call_kwargs["evaluation_episodes"] == 10  # Default
+        assert call_kwargs["evaluation_steps"] == 8  # Default
+        assert call_kwargs["evaluation_n_jobs"] == 1  # Default
+        assert call_kwargs["confidence_interval_level"] == 0.95  # Default
+        assert call_kwargs["alpha"] == 0.05  # Default
+        assert call_kwargs["debug"] == False  # Default
+        assert call_kwargs["verbose"] == True  # Default
+
+        # Verify results are returned
+        assert results == mock_results
+
+    @patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_and_evaluate_planners_pbs")
+    def test_run_hyperparameter_optimization_and_evaluation_pbs_custom_parameters(
+        self,
+        mock_optimize_and_evaluate_pbs,
+        temp_cache_dir,
+        tiger_environment,
+    ):
+        """Test PBS hyperparameter optimization with custom parameters.
+
+        Purpose: Validates that PBS API method correctly passes all custom parameters to the utility function
+
+        Given: Custom PBS configuration including job_extra, dashboard settings, and optimization parameters
+        When: run_hyperparameter_optimization_and_evaluation_pbs is called with custom values
+        Then: PBS utility function is called with all specified custom parameters
+
+        Test type: unit
+        """
+        from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
+        from POMDPPlanners.core.belief import get_initial_belief
+        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+            HyperParameterOptimizationDirection,
+        )
+
+        # Mock results
+        mock_results = {"optimization_results": [], "evaluation_results": {}}
+        mock_optimize_and_evaluate_pbs.return_value = mock_results
+
+        # Create test data
+        initial_belief = get_initial_belief(tiger_environment, n_particles=10)
+        planner_configs = [
+            HyperParamPlannerConfig(
+                policy_cls=POMCP, hyper_parameters=[], constant_parameters={"name": "TestPOMCP"}
+            )
+        ]
+
+        # Custom parameters
+        job_extra = ["#PBS -A project123", "#PBS -q gpu"]
+
+        api = SimulationsAPI()
+        results = api.run_hyperparameter_optimization_and_evaluation_pbs(
+            environment=tiger_environment,
+            initial_belief=initial_belief,
+            planner_configs=planner_configs,
+            queue="gpu_queue",
+            cache_dir=temp_cache_dir,
+            optimization_direction=HyperParameterOptimizationDirection.MINIMIZE,
+            parameter_to_optimize="average_cost",
+            experiment_name="CustomPBSExperiment",
+            optimization_episodes=5,
+            optimization_steps=10,
+            n_trials=7,
+            n_workers=16,
+            cores=8,
+            memory="32GB",
+            processes=4,
+            walltime="08:00:00",
+            job_extra=job_extra,
+            optimization_n_jobs=8,
+            enable_dashboard=False,
+            dashboard_address="127.0.0.1",
+            dashboard_port=8888,
+            dashboard_prefix="/custom",
+            evaluation_episodes=20,
+            evaluation_steps=15,
+            evaluation_n_jobs=4,
+            confidence_interval_level=0.9,
+            alpha=0.01,
+            debug=True,
+            verbose=False,
+        )
+
+        # Verify PBS utility function was called
+        mock_optimize_and_evaluate_pbs.assert_called_once()
+
+        # Verify all custom parameters
+        call_kwargs = mock_optimize_and_evaluate_pbs.call_args[1]
+        assert call_kwargs["queue"] == "gpu_queue"
+        assert call_kwargs["optimization_direction"] == HyperParameterOptimizationDirection.MINIMIZE
+        assert call_kwargs["parameter_to_optimize"] == "average_cost"
+        assert call_kwargs["experiment_name"] == "CustomPBSExperiment"
+        assert call_kwargs["optimization_episodes"] == 5
+        assert call_kwargs["optimization_steps"] == 10
+        assert call_kwargs["n_trials"] == 7
+        assert call_kwargs["n_workers"] == 16
+        assert call_kwargs["cores"] == 8
+        assert call_kwargs["memory"] == "32GB"
+        assert call_kwargs["processes"] == 4
+        assert call_kwargs["walltime"] == "08:00:00"
+        assert call_kwargs["job_extra"] == job_extra
+        assert call_kwargs["optimization_n_jobs"] == 8
+        assert call_kwargs["enable_dashboard"] == False
+        assert call_kwargs["dashboard_address"] == "127.0.0.1"
+        assert call_kwargs["dashboard_port"] == 8888
+        assert call_kwargs["dashboard_prefix"] == "/custom"
+        assert call_kwargs["evaluation_episodes"] == 20
+        assert call_kwargs["evaluation_steps"] == 15
+        assert call_kwargs["evaluation_n_jobs"] == 4
+        assert call_kwargs["confidence_interval_level"] == 0.9
+        assert call_kwargs["alpha"] == 0.01
+        assert call_kwargs["debug"] == True
+        assert call_kwargs["verbose"] == False
+
+        # Verify results are returned
+        assert results == mock_results
+
+    def test_run_hyperparameter_optimization_and_evaluation_pbs_missing_queue(
+        self, temp_cache_dir, tiger_environment
+    ):
+        """Test PBS hyperparameter optimization with missing queue parameter.
+
+        Purpose: Validates that PBS API method properly validates required queue parameter
+
+        Given: Missing required queue parameter
+        When: run_hyperparameter_optimization_and_evaluation_pbs is called without queue
+        Then: TypeError is raised for missing required parameter
+
+        Test type: unit
+        """
+        from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
+        from POMDPPlanners.core.belief import get_initial_belief
+
+        # Create test data
+        initial_belief = get_initial_belief(tiger_environment, n_particles=10)
+        planner_configs = [
+            HyperParamPlannerConfig(
+                policy_cls=POMCP, hyper_parameters=[], constant_parameters={"name": "TestPOMCP"}
+            )
+        ]
+
+        api = SimulationsAPI()
+
+        # Test with missing queue parameter
+        with pytest.raises(TypeError, match="missing 1 required positional argument: 'queue'"):
+            api.run_hyperparameter_optimization_and_evaluation_pbs(  # type: ignore[call-arg]
+                environment=tiger_environment,
+                initial_belief=initial_belief,
+                planner_configs=planner_configs,
+                # Missing queue parameter
+                cache_dir=temp_cache_dir,
+            )
+
+    @patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_and_evaluate_planners_pbs")
+    def test_run_hyperparameter_optimization_and_evaluation_pbs_cache_dir_creation(
+        self,
+        mock_optimize_and_evaluate_pbs,
+        tiger_environment,
+    ):
+        """Test PBS hyperparameter optimization with automatic cache directory creation.
+
+        Purpose: Validates that PBS API method creates cache directory with proper naming when not provided
+
+        Given: No cache_dir parameter provided
+        When: run_hyperparameter_optimization_and_evaluation_pbs is called without cache_dir
+        Then: Cache directory is created with name based on experiment_name
+
+        Test type: unit
+        """
+        from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
+        from POMDPPlanners.core.belief import get_initial_belief
+
+        # Mock results
+        mock_results = {"optimization_results": [], "evaluation_results": {}}
+        mock_optimize_and_evaluate_pbs.return_value = mock_results
+
+        # Create test data
+        initial_belief = get_initial_belief(tiger_environment, n_particles=10)
+        planner_configs = [
+            HyperParamPlannerConfig(
+                policy_cls=POMCP, hyper_parameters=[], constant_parameters={"name": "TestPOMCP"}
+            )
+        ]
+
+        api = SimulationsAPI()
+        results = api.run_hyperparameter_optimization_and_evaluation_pbs(
+            environment=tiger_environment,
+            initial_belief=initial_belief,
+            planner_configs=planner_configs,
+            queue="test_queue",
+            experiment_name="My Custom Experiment Name",
+            # No cache_dir provided
+        )
+
+        # Verify PBS utility function was called
+        mock_optimize_and_evaluate_pbs.assert_called_once()
+
+        # Verify cache directory was created with proper naming
+        call_kwargs = mock_optimize_and_evaluate_pbs.call_args[1]
+        expected_cache_dir = Path("./my_custom_experiment_name_results")
+        assert call_kwargs["cache_dir"] == expected_cache_dir
+
+        # Verify results are returned
+        assert results == mock_results
+
+    def test_run_hyperparameter_optimization_and_evaluation_pbs_docstring_example(
+        self, temp_cache_dir
+    ):
+        """Test the PBS hyperparameter optimization docstring example.
+
+        Purpose: Validates that the usage example from the PBS API function docstring executes correctly
+
+        Given: TigerPOMDP environment and POMCP planner with PBS configuration from docstring
+        When: Example code from function docstring is executed
+        Then: Example runs without errors and demonstrates proper PBS usage
+
+        Test type: example
+        """
+        # Mock the PBS computation to avoid actual cluster submission
+        with patch(
+            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_and_evaluate_planners_pbs"
+        ) as mock_pbs:
+            from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
+            from POMDPPlanners.core.belief import get_initial_belief
+            from POMDPPlanners.core.simulation import NumericalHyperParameter
+
+            # Setup mocks to return valid results
+            mock_results = {
+                "optimization_results": [],
+                "evaluation_results": {},
+                "summary": {"pbs_configuration": {"queue": "short"}},
+            }
+            mock_pbs.return_value = mock_results
+
+            # Execute the example code from docstring
+            api = SimulationsAPI(debug=False)
+            tiger = TigerPOMDP(discount_factor=0.95)
+            initial_belief = get_initial_belief(tiger, n_particles=100)
+            planner_configs = [
+                HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=[NumericalHyperParameter(0.1, 5.0, "exploration_constant")],
+                    constant_parameters={"discount_factor": 0.95, "name": "POMCP"},
+                )
+            ]
+
+            # This would normally submit to PBS cluster
+            results = api.run_hyperparameter_optimization_and_evaluation_pbs(
+                environment=tiger,
+                initial_belief=initial_belief,
+                planner_configs=planner_configs,
+                queue="short",
+                n_workers=8,
+                cores=2,
+                memory="8GB",
+                walltime="02:00:00",
+            )
+
+            # Verify the example worked as expected
+            assert len(planner_configs) == 1  # Verify example setup
+            assert results == mock_results
+
+            # Verify PBS configuration was used correctly
+            mock_pbs.assert_called_once()
+            call_kwargs = mock_pbs.call_args[1]
+            assert call_kwargs["queue"] == "short"
+            assert call_kwargs["n_workers"] == 8
+            assert call_kwargs["cores"] == 2
+            assert call_kwargs["memory"] == "8GB"
+            assert call_kwargs["walltime"] == "02:00:00"
