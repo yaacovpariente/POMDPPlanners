@@ -634,7 +634,17 @@ def test_sequential_task_manager_cache(cache_db, environment, policy):
 
             warnings.warn("Could not clear cache due to file being in use, continuing with test")
 
-        result3, ids3 = task_manager.run_tasks([task], [task_identifier])
+        # Create a new task with identical parameters (since the previous task was cleaned up)
+        task3 = EpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=1,
+            seed=42,
+            console_output=False,
+        )
+        result3, ids3 = task_manager.run_tasks([task3], [task_identifier])
 
         # Compare main fields again
         assert result1[0].discount_factor == result3[0].discount_factor
