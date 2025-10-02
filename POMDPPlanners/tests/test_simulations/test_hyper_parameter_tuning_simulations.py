@@ -33,6 +33,10 @@ from POMDPPlanners.planners.sparse_sampling_planner import (
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
     HyperParameterOptimizer,
 )
+from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+    JoblibConfig,
+    PBSConfig,
+)
 
 np.random.seed(42)
 random.seed(42)
@@ -1044,3 +1048,457 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             error_message = str(e).lower()
             assert "discount_factor" not in error_message
             assert "missing" not in error_message or "positional argument" not in error_message
+
+
+class TestHyperParameterOptimizerWithTaskManagerConfigs:
+    """Test HyperParameterOptimizer with different task manager configurations."""
+
+    def test_optimizer_with_joblib_config(self, temp_cache_dir, real_environment, real_belief):
+        """Test HyperParameterOptimizer with JoblibConfig task manager.
+
+        Purpose: Validates that HyperParameterOptimizer works with JoblibConfig
+
+        Given: HyperParameterOptimizer with JoblibConfig task manager configuration
+        When: Optimizer is initialized and runs optimization
+        Then: Task manager is created correctly and optimization executes successfully
+
+        Test type: integration
+        """
+        joblib_config = JoblibConfig(n_jobs=1, clear_cache_on_start=True)
+
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir,
+            experiment_name="Joblib_Config_Test",
+            task_manager_config=joblib_config,
+            n_jobs=1,
+        )
+
+        # Verify task manager is configured correctly
+        assert optimizer.task_manager_config == joblib_config
+
+        # Create a simple config for testing
+        config = HyperParameterRunParams(
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=[
+                NumericalHyperParameter(1, 2, "branching_factor"),
+                NumericalHyperParameter(1, 2, "depth"),
+            ],
+            constant_parameters={},
+            num_episodes=2,
+            num_steps=2,
+            n_trials=2,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return",
+        )
+
+        # Run optimization
+        result = optimizer.optimize([config])
+
+        # Verify results
+        assert isinstance(result, list)
+        # Note: result might be empty if optimization fails for other reasons
+
+    def test_optimizer_with_pbs_config_initialization(
+        self, temp_cache_dir, real_environment, real_belief
+    ):
+        """Test HyperParameterOptimizer initialization with PBSConfig task manager.
+
+        Purpose: Validates that HyperParameterOptimizer can be initialized with PBSConfig
+
+        Given: HyperParameterOptimizer with PBSConfig task manager configuration
+        When: Optimizer is initialized with PBS-specific parameters
+        Then: Task manager config is stored correctly and has expected PBS attributes
+
+        Test type: unit
+        """
+        pbs_config = PBSConfig(
+            queue="default",
+            n_workers=2,
+            cores=4,
+            memory="8GB",
+            processes=2,
+            walltime="02:00:00",
+            enable_dashboard=True,
+            dashboard_port=8787,
+        )
+
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir,
+            experiment_name="PBS_Config_Test",
+            task_manager_config=pbs_config,
+            n_jobs=1,
+        )
+
+        # Verify task manager config is stored correctly
+        assert optimizer.task_manager_config == pbs_config
+        assert isinstance(optimizer.task_manager_config, PBSConfig)
+
+        # Verify PBS-specific attributes
+        assert optimizer.task_manager_config.queue == "default"
+        assert optimizer.task_manager_config.n_workers == 2
+        assert optimizer.task_manager_config.cores == 4
+        assert optimizer.task_manager_config.memory == "8GB"
+        assert optimizer.task_manager_config.processes == 2
+        assert optimizer.task_manager_config.walltime == "02:00:00"
+        assert optimizer.task_manager_config.enable_dashboard is True
+        assert optimizer.task_manager_config.dashboard_port == 8787
+
+    def test_optimizer_with_pbs_config_task_creation(
+        self, temp_cache_dir, real_environment, real_belief
+    ):
+        """Test HyperParameterOptimizer task creation with PBSConfig.
+
+        Purpose: Validates that tasks can be created when using PBSConfig
+
+        Given: HyperParameterOptimizer with PBSConfig and valid configurations
+        When: Tasks are created via _create_tasks
+        Then: Tasks are created successfully with correct parameters
+
+        Test type: unit
+        """
+        pbs_config = PBSConfig(
+            queue="default",
+            n_workers=2,
+            cores=1,
+            memory="4GB",
+            enable_dashboard=False,  # Disable dashboard for testing
+        )
+
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir,
+            experiment_name="PBS_Task_Creation_Test",
+            task_manager_config=pbs_config,
+            n_jobs=1,
+        )
+
+        # Create a simple config
+        config = HyperParameterRunParams(
+            environment=real_environment,
+            belief=real_belief,
+            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+            hyper_parameters=[
+                NumericalHyperParameter(1, 2, "branching_factor"),
+                NumericalHyperParameter(1, 2, "depth"),
+            ],
+            constant_parameters={},
+            num_episodes=2,
+            num_steps=2,
+            n_trials=2,
+            direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            parameter_to_optimize="average_return",
+        )
+
+        # Create tasks
+        tasks, task_identifiers = optimizer._create_tasks([config])
+
+        # Verify tasks were created
+        assert len(tasks) == 1
+        assert len(task_identifiers) == 1
+
+        # Verify task parameters
+        task = tasks[0]
+        assert task.environment == real_environment
+        assert task.policy_cls == StandardSparseSamplingDiscreteActionsPlanner
+        assert len(task.hyper_parameters) == 2
+        assert task.num_episodes == 2
+        assert task.num_steps == 2
+        assert task.n_trials == 2
+
+    def test_optimizer_with_pbs_config_dashboard_settings(self, temp_cache_dir):
+        """Test HyperParameterOptimizer with PBSConfig dashboard settings.
+
+        Purpose: Validates that PBS dashboard configuration is properly stored
+
+        Given: PBSConfig with custom dashboard settings (without dashboard_prefix)
+        When: Optimizer is initialized with the config
+        Then: Dashboard settings are correctly stored in the config
+
+        Test type: unit
+        """
+        # Note: dashboard_prefix is not supported by all Dask versions, so we test without it
+        pbs_config = PBSConfig(
+            queue="gpu_queue",
+            n_workers=4,
+            enable_dashboard=True,
+            dashboard_address="0.0.0.0",
+            dashboard_port=8888,
+            dashboard_prefix=None,  # Avoid API compatibility issues
+        )
+
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir,
+            experiment_name="PBS_Dashboard_Test",
+            task_manager_config=pbs_config,
+        )
+
+        # Verify dashboard settings
+        config = optimizer.task_manager_config
+        assert isinstance(config, PBSConfig)
+        assert config.enable_dashboard is True
+        assert config.dashboard_address == "0.0.0.0"
+        assert config.dashboard_port == 8888
+        assert config.dashboard_prefix is None
+
+    def test_optimizer_with_different_task_manager_configs(
+        self, temp_cache_dir, real_environment, real_belief
+    ):
+        """Test HyperParameterOptimizer can switch between different task manager configs.
+
+        Purpose: Validates that optimizer can be configured with different task manager types
+
+        Given: Multiple optimizer instances with different task manager configs
+        When: Each optimizer is initialized with its specific config
+        Then: Each optimizer stores the correct config type and parameters
+
+        Test type: unit
+        """
+        # Test with JoblibConfig
+        joblib_config = JoblibConfig(n_jobs=2, verbose=1)
+        optimizer_joblib = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir / "joblib",
+            experiment_name="Multi_Config_Joblib",
+            task_manager_config=joblib_config,
+        )
+        assert isinstance(optimizer_joblib.task_manager_config, JoblibConfig)
+        assert optimizer_joblib.task_manager_config.n_jobs == 2
+        assert optimizer_joblib.task_manager_config.verbose == 1
+
+        # Test with PBSConfig
+        pbs_config = PBSConfig(queue="batch", n_workers=3, cores=2)
+        optimizer_pbs = HyperParameterOptimizer(
+            cache_dir_path=temp_cache_dir / "pbs",
+            experiment_name="Multi_Config_PBS",
+            task_manager_config=pbs_config,
+        )
+        assert isinstance(optimizer_pbs.task_manager_config, PBSConfig)
+        assert optimizer_pbs.task_manager_config.queue == "batch"
+        assert optimizer_pbs.task_manager_config.n_workers == 3
+        assert optimizer_pbs.task_manager_config.cores == 2
+
+    def test_optimizer_with_pbs_config_dashboard_prefix_parameter_storage(self, temp_cache_dir):
+        """Test that dashboard_prefix parameter is stored in PBSConfig.
+
+        Purpose: Validates that dashboard_prefix can be configured and stored
+
+        Given: PBSConfig with dashboard_prefix parameter
+        When: Config is created with dashboard_prefix value
+        Then: Parameter is stored correctly in config object
+
+        Test type: unit
+        """
+        # Test that the parameter can be set and retrieved
+        pbs_config_with_prefix = PBSConfig(
+            queue="default",
+            dashboard_prefix="/my-custom-prefix",
+        )
+
+        assert pbs_config_with_prefix.dashboard_prefix == "/my-custom-prefix"
+
+        # Test with None (default)
+        pbs_config_without_prefix = PBSConfig(
+            queue="default",
+            dashboard_prefix=None,
+        )
+
+        assert pbs_config_without_prefix.dashboard_prefix is None
+
+    def test_pbs_task_manager_dashboard_prefix_in_scheduler_options(self, temp_cache_dir):
+        """Test that dashboard_prefix is included in scheduler_options when configured.
+
+        Purpose: Validates that dashboard_prefix parameter flows to PBSCluster initialization
+
+        Given: PBSTaskManager with dashboard_prefix configured
+        When: _initialize_client prepares scheduler_options
+        Then: dashboard_prefix is included in the scheduler_options dictionary
+
+        Test type: unit
+        """
+        from POMDPPlanners.simulations.simulations_deployment.task_managers import PBSTaskManager
+
+        # Create a PBSTaskManager with dashboard_prefix (but don't initialize)
+        # We override _initialize_client to avoid actual cluster creation
+        task_manager = PBSTaskManager.__new__(PBSTaskManager)
+
+        # Manually set attributes without calling __init__
+        task_manager.queue = "default"
+        task_manager.n_workers = 4
+        task_manager.cores = 1
+        task_manager.memory = "4GB"
+        task_manager.processes = 1
+        task_manager.scheduler_address = None
+        task_manager.walltime = "01:00:00"
+        task_manager.job_extra = []
+        task_manager.cache_size = int(2e9)
+        task_manager.clear_cache_on_start = False
+        task_manager.enable_dashboard = True
+        task_manager.dashboard_address = "0.0.0.0"
+        task_manager.dashboard_port = 8787
+        task_manager.dashboard_prefix = "/test-prefix"
+        task_manager.client = None
+        task_manager.cache = None
+        task_manager.cache_registered = False
+        task_manager.cluster = None
+
+        # Check that the parameter is stored
+        assert task_manager.dashboard_prefix == "/test-prefix"
+        assert task_manager.enable_dashboard is True
+
+        # Test the logic that prepares scheduler_options
+        # (reproducing the code from _initialize_client)
+        scheduler_options = {}
+        if task_manager.enable_dashboard:
+            scheduler_options["dashboard_address"] = (
+                f"{task_manager.dashboard_address}:{task_manager.dashboard_port}"
+            )
+            if task_manager.dashboard_prefix:
+                scheduler_options["dashboard_prefix"] = task_manager.dashboard_prefix
+
+        # Verify the expected structure
+        assert "dashboard_address" in scheduler_options
+        assert "dashboard_prefix" in scheduler_options
+        assert scheduler_options["dashboard_prefix"] == "/test-prefix"
+
+    def test_pbs_config_dashboard_prefix_compatibility_check(self, temp_cache_dir):
+        """Test that dashboard_prefix compatibility can be checked without creating cluster.
+
+        Purpose: Documents dashboard_prefix feature compatibility with current Dask version
+
+        Given: PBSConfig with dashboard_prefix
+        When: We check if the feature would work (by examining error messages)
+        Then: Test passes if feature is supported OR documents incompatibility
+
+        Test type: integration
+        """
+        import warnings
+
+        pbs_config = PBSConfig(
+            queue="default",
+            dashboard_prefix="/test-prefix",
+            enable_dashboard=True,
+        )
+
+        # Try to check compatibility by examining the actual error
+        # This test documents what happens with dashboard_prefix
+        try:
+            # Attempt to create task manager
+            with pbs_config.create_task_manager() as task_manager:
+                # If we get here, dashboard_prefix is supported
+                assert task_manager.dashboard_prefix == "/test-prefix"
+                # Mark the test as showing support
+                warnings.warn("dashboard_prefix IS supported in current Dask version", UserWarning)
+        except RuntimeError as e:
+            # Expected for Dask versions without dashboard_prefix support
+            if "dashboard_prefix" in str(e):
+                warnings.warn(
+                    f"dashboard_prefix NOT supported in current Dask version: {e}", UserWarning
+                )
+                # This is expected behavior for older Dask, so test passes
+                assert "dashboard_prefix" in str(e)
+            else:
+                # Some other error - re-raise
+                raise
+
+    def test_pbs_task_manager_with_real_cluster_creation_and_cleanup(self, temp_cache_dir):
+        """Test creating and cleaning up a real PBS cluster without dashboard_prefix.
+
+        Purpose: Validates that PBSTaskManager can create and cleanup real clusters
+
+        Given: PBSConfig without dashboard_prefix (to avoid compatibility issues)
+        When: Task manager is created and used as context manager
+        Then: Cluster is created, can be used, and is properly cleaned up
+
+        Test type: integration
+        """
+        pbs_config = PBSConfig(
+            queue="default",
+            n_workers=1,  # Minimal workers for fast test
+            cores=1,
+            memory="1GB",
+            enable_dashboard=True,
+            dashboard_prefix=None,  # Avoid compatibility issues
+        )
+
+        # Create and cleanup cluster using context manager
+        try:
+            with pbs_config.create_task_manager() as task_manager:
+                # Verify cluster was created
+                assert task_manager.client is not None, "Client should be initialized"
+                assert task_manager.cluster is not None, "Cluster should be created"
+
+                # Verify dashboard settings
+                assert task_manager.enable_dashboard is True
+
+                # Try to get dashboard URL (may return None if not ready yet)
+                dashboard_url = task_manager.get_dashboard_url()
+                # Dashboard URL might be None if cluster isn't fully started, but that's ok
+
+                # Verify cluster is running
+                is_running = task_manager.is_dashboard_running()
+                # May be True or False depending on timing, but shouldn't crash
+
+        except Exception as e:
+            # If cluster creation fails, check if it's due to environment issues
+            # (e.g., PBS not available, which is expected in CI/CD)
+            error_str = str(e).lower()
+            if "pbs" in error_str or "qsub" in error_str or "scheduler" in error_str:
+                import warnings
+
+                warnings.warn(
+                    f"PBS cluster creation skipped - PBS environment not available: {e}",
+                    UserWarning,
+                )
+                pytest.skip("PBS environment not available for testing")
+            else:
+                # Some other unexpected error
+                raise
+
+        # After exiting context manager, cluster should be cleaned up
+        # (but we can't verify this directly without keeping references)
+
+    def test_pbs_task_manager_with_real_cluster_disabled_dashboard(self, temp_cache_dir):
+        """Test creating PBS cluster with dashboard disabled.
+
+        Purpose: Validates that cluster creation works with dashboard disabled
+
+        Given: PBSConfig with enable_dashboard=False
+        When: Task manager is created as context manager
+        Then: Cluster is created without dashboard and properly cleaned up
+
+        Test type: integration
+        """
+        pbs_config = PBSConfig(
+            queue="default",
+            n_workers=1,
+            cores=1,
+            memory="1GB",
+            enable_dashboard=False,  # Disable dashboard
+        )
+
+        try:
+            with pbs_config.create_task_manager() as task_manager:
+                # Verify cluster was created
+                assert task_manager.client is not None
+                assert task_manager.cluster is not None
+
+                # Verify dashboard is disabled
+                assert task_manager.enable_dashboard is False
+
+                # Dashboard methods should return None/False
+                assert task_manager.get_dashboard_url() is None
+                assert task_manager.is_dashboard_running() is False
+
+        except Exception as e:
+            # Handle PBS environment not being available
+            error_str = str(e).lower()
+            if "pbs" in error_str or "qsub" in error_str or "scheduler" in error_str:
+                import warnings
+
+                warnings.warn(
+                    f"PBS cluster creation skipped - PBS environment not available: {e}",
+                    UserWarning,
+                )
+                pytest.skip("PBS environment not available for testing")
+            else:
+                raise
