@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, NamedTuple, Type, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Literal, NamedTuple, Sequence, Type, Union
 
 if TYPE_CHECKING:
     from POMDPPlanners.core.belief import Belief
@@ -28,12 +28,22 @@ class HyperParameterOptimizationDirection(Enum):
     MINIMIZE = "minimize"
 
 
+class HyperParamPlannerConfig:
+    def __init__(
+        self,
+        policy_cls: type,
+        hyper_parameters: Sequence[HyperParameterFeature],
+        constant_parameters: Dict[str, Any],
+    ):
+        self.policy_cls = policy_cls
+        self.hyper_parameters = hyper_parameters
+        self.constant_parameters = constant_parameters
+
+
 class HyperParameterRunParams(NamedTuple):
     environment: "Environment"
     belief: "Belief"
-    policy_cls: Type["Policy"]
-    hyper_parameters: List[HyperParameterFeature]
-    constant_parameters: Dict[str, Any]
+    hyper_param_planner_config: HyperParamPlannerConfig
     num_episodes: int
     num_steps: int
     n_trials: int

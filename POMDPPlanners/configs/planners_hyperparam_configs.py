@@ -17,8 +17,10 @@ from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
 )
-from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
+from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfig,
+)
+from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
     HyperParameterFeature,
 )
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler, UnitCircleActionSampler

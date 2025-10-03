@@ -1,7 +1,7 @@
 import logging
 import random
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Type, Union
+from typing import Any, Dict, List, Optional, Sequence, Type, Union
 
 import numpy as np
 
@@ -16,7 +16,6 @@ from POMDPPlanners.core.simulation import (
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
-    HyperParameterRunParams,
     OptimizedPolicyResult,
 )
 from POMDPPlanners.core.simulation.simulation_configs import EnvironmentRunParams
@@ -32,7 +31,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         environment: Environment,
         belief: Belief,
         policy_cls: Type[Policy],
-        hyper_parameters: List[HyperParameterFeature],
+        hyper_parameters: Sequence[HyperParameterFeature],
         constant_parameters: Dict[str, Any],
         num_episodes: int,
         num_steps: int,
@@ -187,7 +186,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.logger.info(f"Running optimization with {self.n_trials} trials")
 
     def _create_policy_parameter_suggestions(
-        self, trial, hyperparameters: List[HyperParameterFeature]
+        self, trial, hyperparameters: Sequence[HyperParameterFeature]
     ) -> dict:
         """Create policy parameters from Optuna trial suggestions.
 
