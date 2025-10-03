@@ -30,6 +30,8 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
     HyperParameterRunParams,
     OptimizedPolicyResult,
+    HyperParameterFeature,
+    HyperParamPlannerConfig,
 )
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
     HyperParameterOptimizer,
@@ -70,22 +72,6 @@ def configure_logging(debug: bool = False, verbose: bool = True) -> None:
     else:
         logger.setLevel(logging.WARNING)
         logger.debug("Warning-only logging enabled")
-
-
-# Type aliases for better code readability
-HyperParameterFeature = Union[NumericalHyperParameter, CategoricalHyperParameter]
-
-
-class HyperParamPlannerConfig:
-    def __init__(
-        self,
-        policy_cls: type,
-        hyper_parameters: Sequence[HyperParameterFeature],
-        constant_parameters: Dict[str, Any],
-    ):
-        self.policy_cls = policy_cls
-        self.hyper_parameters = hyper_parameters
-        self.constant_parameters = constant_parameters
 
 
 def optimize_and_evaluate_planners(
@@ -702,9 +688,7 @@ def optimize_planner_hyperparameters(
         config = HyperParameterRunParams(
             environment=environment,
             belief=initial_belief,
-            policy_cls=planner_config.policy_cls,
-            hyper_parameters=list(planner_config.hyper_parameters),
-            constant_parameters=planner_config.constant_parameters,
+            hyper_param_planner_config=planner_config,
             num_episodes=num_episodes,
             num_steps=num_steps,
             n_trials=n_trials,
@@ -912,9 +896,7 @@ def optimize_planner_hyperparameters_pbs(
         config = HyperParameterRunParams(
             environment=environment,
             belief=initial_belief,
-            policy_cls=planner_config.policy_cls,
-            hyper_parameters=list(planner_config.hyper_parameters),
-            constant_parameters=planner_config.constant_parameters,
+            hyper_param_planner_config=planner_config,
             num_episodes=num_episodes,
             num_steps=num_steps,
             n_trials=n_trials,

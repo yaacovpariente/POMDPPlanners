@@ -337,9 +337,9 @@ class HyperParameterOptimizer:
             task = HyperParameterTuningSimulationTask(
                 environment=config.environment,
                 belief=config.belief,
-                policy_cls=config.policy_cls,
-                hyper_parameters=config.hyper_parameters,
-                constant_parameters=config.constant_parameters,
+                policy_cls=config.hyper_param_planner_config.policy_cls,
+                hyper_parameters=config.hyper_param_planner_config.hyper_parameters,
+                constant_parameters=config.hyper_param_planner_config.constant_parameters,
                 num_episodes=config.num_episodes,
                 num_steps=config.num_steps,
                 direction=config.direction,
@@ -430,7 +430,9 @@ class HyperParameterOptimizer:
         # Log summary of all configurations
         config_summary = {
             "environments": [config.environment.__class__.__name__ for config in configs],
-            "policies": [config.policy_cls.__name__ for config in configs],
+            "policies": [
+                config.hyper_param_planner_config.policy_cls.__name__ for config in configs
+            ],
             "parameters_to_optimize": [config.parameter_to_optimize for config in configs],
             "directions": [config.direction.value for config in configs],
         }
@@ -465,7 +467,7 @@ class HyperParameterOptimizer:
         for original_index, config, task, task_result in successful_configs_with_index:
             logger.info(
                 f"Processing results for configuration {original_index+1}/{len(configs)}: "
-                f"{config.environment.__class__.__name__} with {config.policy_cls.__name__}"
+                f"{config.environment.__class__.__name__} with {config.hyper_param_planner_config.policy_cls.__name__}"
             )
 
             # Log this configuration's results to MLflow
@@ -498,7 +500,7 @@ class HyperParameterOptimizer:
 
         # Start nested run for this configuration
         with mlflow.start_run(
-            run_name=f"config_{original_index+1}_{config.environment.__class__.__name__}_{config.policy_cls.__name__}",
+            run_name=f"config_{original_index+1}_{config.environment.__class__.__name__}_{config.hyper_param_planner_config.policy_cls.__name__}",
             nested=True,
         ):
             try:
@@ -535,7 +537,7 @@ class HyperParameterOptimizer:
         config_params = {
             "config_index": original_index + 1,
             "environment_type": config.environment.__class__.__name__,
-            "policy_type": config.policy_cls.__name__,
+            "policy_type": config.hyper_param_planner_config.policy_cls.__name__,
             "num_episodes": config.num_episodes,
             "num_steps": config.num_steps,
             "direction": config.direction.value,
@@ -552,7 +554,7 @@ class HyperParameterOptimizer:
 
         # Log hyperparameter ranges
         param_ranges_info = {}
-        for param in config.hyper_parameters:
+        for param in config.hyper_param_planner_config.hyper_parameters:
             if isinstance(param, CategoricalHyperParameter):
                 param_ranges_info[f"param_range_{param.name}"] = f"choices: {param.choices}"
             elif isinstance(param, NumericalHyperParameter):
@@ -561,7 +563,7 @@ class HyperParameterOptimizer:
         # Log constant parameters (non-optimized policy parameters)
         constant_params = {
             f"constant_{key}": value
-            for key, value in config.constant_parameters.items()
+            for key, value in config.hyper_param_planner_config.constant_parameters.items()
             if isinstance(value, (int, float, str, bool))
         }
 
@@ -703,7 +705,9 @@ class HyperParameterOptimizer:
             "configuration_index": original_index + 1,
             "best_parameters": optimization_result.chosen_hyper_parameters,
             "best_value": task_metadata["best_value"] if task_metadata else "unknown",
-            "hyperparameter_ranges": [param._asdict() for param in config.hyper_parameters],
+            "hyperparameter_ranges": [
+                param._asdict() for param in config.hyper_param_planner_config.hyper_parameters
+            ],
             "final_statistics": [metric._asdict() for metric in final_statistics],
             "configuration_params": all_params,
             "optimization_metadata": task_metadata,
@@ -712,10 +716,12 @@ class HyperParameterOptimizer:
 
         # Log the planner's chosen configuration as a separate artifact
         planner_config = {
-            "planner_type": config.policy_cls.__name__,
+            "planner_type": config.hyper_param_planner_config.policy_cls.__name__,
             "chosen_hyper_parameters": optimization_result.chosen_hyper_parameters,
             "constant_parameters": (
-                config.constant_parameters if hasattr(config, "constant_parameters") else {}
+                config.hyper_param_planner_config.constant_parameters
+                if hasattr(config, "constant_parameters")
+                else {}
             ),
             "environment_type": config.environment.__class__.__name__,
             "optimization_direction": config.direction.value,
@@ -757,6 +763,8 @@ class HyperParameterOptimizer:
             "environment_types": list(
                 set(config.environment.__class__.__name__ for config in configs)
             ),
-            "policy_types": list(set(config.policy_cls.__name__ for config in configs)),
+            "policy_types": list(
+                set(config.hyper_param_planner_config.policy_cls.__name__ for config in configs)
+            ),
         }
         mlflow.log_dict(batch_summary, "batch_optimization_summary.json")

@@ -20,6 +20,7 @@ from POMDPPlanners.core.simulation import (
     NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParamPlannerConfig,
     HyperParameterFeature,
     HyperParameterOptimizationDirection,
     HyperParameterRunParams,
@@ -111,19 +112,21 @@ def sample_hyperparameter_run_params(tiger_environment, pomcp_policy):
         HyperParameterRunParams(
             environment=tiger_environment,
             belief=initial_belief,
-            policy_cls=POMCP,
-            hyper_parameters=cast(
-                List[HyperParameterFeature],
-                [
-                    NumericalHyperParameter(low=0.1, high=2.0, name="exploration_constant"),
-                    NumericalHyperParameter(low=50, high=200, name="n_simulations"),
-                    NumericalHyperParameter(low=5, high=15, name="depth"),
-                ],
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=cast(
+                    List[HyperParameterFeature],
+                    [
+                        NumericalHyperParameter(low=0.1, high=2.0, name="exploration_constant"),
+                        NumericalHyperParameter(low=50, high=200, name="n_simulations"),
+                        NumericalHyperParameter(low=5, high=15, name="depth"),
+                    ],
+                ),
+                constant_parameters={
+                    "discount_factor": 0.95,
+                    "name": "OptimizedPOMCP",
+                },
             ),
-            constant_parameters={
-                "discount_factor": 0.95,
-                "name": "OptimizedPOMCP",
-            },
             num_episodes=2,  # Small number for testing
             num_steps=5,  # Small number for testing
             n_trials=3,  # Small number for testing
@@ -747,15 +750,17 @@ class TestSimulationsAPI:
             HyperParameterRunParams(
                 environment=tiger_env,
                 belief=initial_belief,
-                policy_cls=POMCP,
-                hyper_parameters=cast(
-                    List[HyperParameterFeature],
-                    [
-                        NumericalHyperParameter(low=0.1, high=2.0, name="exploration_constant"),
-                        NumericalHyperParameter(low=50, high=200, name="n_simulations"),
-                    ],
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=cast(
+                        List[HyperParameterFeature],
+                        [
+                            NumericalHyperParameter(low=0.1, high=2.0, name="exploration_constant"),
+                            NumericalHyperParameter(low=50, high=200, name="n_simulations"),
+                        ],
+                    ),
+                    constant_parameters={"discount_factor": 0.95, "name": "POMCP_Config1"},
                 ),
-                constant_parameters={"discount_factor": 0.95, "name": "POMCP_Config1"},
                 num_episodes=2,
                 num_steps=5,
                 n_trials=3,
@@ -765,15 +770,17 @@ class TestSimulationsAPI:
             HyperParameterRunParams(
                 environment=tiger_env,
                 belief=initial_belief,
-                policy_cls=POMCP,
-                hyper_parameters=cast(
-                    List[HyperParameterFeature],
-                    [
-                        NumericalHyperParameter(low=5, high=15, name="depth"),
-                        CategoricalHyperParameter(choices=["tpe", "random"], name="algorithm"),
-                    ],
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=cast(
+                        List[HyperParameterFeature],
+                        [
+                            NumericalHyperParameter(low=5, high=15, name="depth"),
+                            CategoricalHyperParameter(choices=["tpe", "random"], name="algorithm"),
+                        ],
+                    ),
+                    constant_parameters={"discount_factor": 0.95, "name": "POMCP_Config2"},
                 ),
-                constant_parameters={"discount_factor": 0.95, "name": "POMCP_Config2"},
                 num_episodes=2,
                 num_steps=5,
                 n_trials=3,

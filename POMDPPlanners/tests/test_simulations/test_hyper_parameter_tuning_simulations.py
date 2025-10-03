@@ -21,6 +21,7 @@ from POMDPPlanners.core.simulation import (
     NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParamPlannerConfig,
     HyperParameterFeature,
     HyperParameterOptimizationDirection,
     HyperParameterRunParams,
@@ -86,16 +87,19 @@ def sample_hyperparameters():
 @pytest.fixture
 def sample_configs(real_environment, real_policy_class, real_belief):
     """Create sample HyperParameterRunParams configurations for testing."""
+    planner_config = HyperParamPlannerConfig(
+        policy_cls=real_policy_class,
+        hyper_parameters=[
+            NumericalHyperParameter(1, 2, "branching_factor"),
+            NumericalHyperParameter(1, 2, "depth"),
+        ],
+        constant_parameters={},  # No constant parameters needed for this planner
+    )
     return [
         HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=real_policy_class,
-            hyper_parameters=[
-                NumericalHyperParameter(1, 2, "branching_factor"),
-                NumericalHyperParameter(1, 2, "depth"),
-            ],
-            constant_parameters={},  # No constant parameters needed for this planner
+            hyper_param_planner_config=planner_config,
             num_episodes=2,  # Small for fast tests
             num_steps=3,  # Small for fast tests
             n_trials=2,  # Small for fast tests
@@ -105,12 +109,7 @@ def sample_configs(real_environment, real_policy_class, real_belief):
         HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=real_policy_class,
-            hyper_parameters=[
-                NumericalHyperParameter(1, 2, "branching_factor"),
-                NumericalHyperParameter(1, 2, "depth"),
-            ],
-            constant_parameters={},  # No constant parameters needed for this planner
+            hyper_param_planner_config=planner_config,
             num_episodes=2,  # Small for fast tests
             num_steps=3,  # Small for fast tests
             n_trials=2,  # Small for fast tests
@@ -222,9 +221,9 @@ class TestHyperParameterOptimizerTaskCreation:
         for i, task in enumerate(tasks):
             config = sample_configs[i]
             assert task.environment == config.environment
-            assert task.policy_cls == config.policy_cls
-            assert task.hyper_parameters == config.hyper_parameters
-            assert task.constant_parameters == config.constant_parameters
+            assert task.policy_cls == config.hyper_param_planner_config.policy_cls
+            assert task.hyper_parameters == config.hyper_param_planner_config.hyper_parameters
+            assert task.constant_parameters == config.hyper_param_planner_config.constant_parameters
             assert task.num_episodes == config.num_episodes
             assert task.num_steps == config.num_steps
             assert task.n_trials == config.n_trials
@@ -520,9 +519,11 @@ class TestHyperParameterOptimizerErrorHandling:
         minimal_config = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=real_policy_class,
-            hyper_parameters=[],  # Empty hyperparameters - this is the "invalid" aspect
-            constant_parameters={},  # No constant parameters needed for this planner
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=real_policy_class,
+                hyper_parameters=[],  # Empty hyperparameters - this is the "invalid" aspect
+                constant_parameters={},  # No constant parameters needed for this planner
+            ),
             num_episodes=1,  # Small for fast tests
             num_steps=1,  # Small for fast tests
             n_trials=1,  # Small for fast tests
@@ -549,16 +550,18 @@ class TestHyperParameterOptimizerEdgeCases:
         large_config = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=real_policy_class,
-            hyper_parameters=cast(
-                List[HyperParameterFeature],
-                [
-                    NumericalHyperParameter(
-                        low=1, high=100, name="branching_factor"
-                    )  # Large range but reasonable values
-                ],
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=real_policy_class,
+                hyper_parameters=cast(
+                    List[HyperParameterFeature],
+                    [
+                        NumericalHyperParameter(
+                            low=1, high=100, name="branching_factor"
+                        )  # Large range but reasonable values
+                    ],
+                ),
+                constant_parameters={},  # No constant parameters needed for this planner
             ),
-            constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=1,  # Small for fast tests
             num_steps=1,  # Small for fast tests
             n_trials=1,  # Small for fast tests
@@ -578,9 +581,11 @@ class TestHyperParameterOptimizerEdgeCases:
         zero_config = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=real_policy_class,
-            hyper_parameters=[],
-            constant_parameters={},  # No constant parameters needed for this planner
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=real_policy_class,
+                hyper_parameters=[],
+                constant_parameters={},  # No constant parameters needed for this planner
+            ),
             num_episodes=0,
             num_steps=0,
             n_trials=1,  # Small for fast tests
@@ -600,9 +605,11 @@ class TestHyperParameterOptimizerEdgeCases:
         empty_config = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=real_policy_class,
-            hyper_parameters=[],
-            constant_parameters={},  # No constant parameters needed for this planner
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=real_policy_class,
+                hyper_parameters=[],
+                constant_parameters={},  # No constant parameters needed for this planner
+            ),
             num_episodes=1,  # Small for fast tests
             num_steps=1,  # Small for fast tests
             n_trials=1,  # Small for fast tests
@@ -659,12 +666,14 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         config = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-            hyper_parameters=[
-                NumericalHyperParameter(1, 2, "branching_factor"),
-                NumericalHyperParameter(1, 2, "depth"),
-            ],
-            constant_parameters={},  # No constant parameters needed for this planner
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                hyper_parameters=[
+                    NumericalHyperParameter(1, 2, "branching_factor"),
+                    NumericalHyperParameter(1, 2, "depth"),
+                ],
+                constant_parameters={},  # No constant parameters needed for this planner
+            ),
             num_episodes=2,  # Small for fast tests
             num_steps=2,  # Small for fast tests
             n_trials=2,  # Small for fast tests
@@ -750,9 +759,11 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         correct_config = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-            hyper_parameters=correct_hyperparams,
-            constant_parameters={},
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                hyper_parameters=correct_hyperparams,
+                constant_parameters={},
+            ),
             num_episodes=1,
             num_steps=1,
             n_trials=1,
@@ -784,9 +795,11 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         incorrect_config = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-            hyper_parameters=cast(List[HyperParameterFeature], incorrect_hyperparams),
-            constant_parameters={},
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                hyper_parameters=cast(List[HyperParameterFeature], incorrect_hyperparams),
+                constant_parameters={},
+            ),
             num_episodes=1,
             num_steps=1,
             n_trials=1,
@@ -823,12 +836,14 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         config_missing_constants = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=PolicyRequiringConstants,
-            hyper_parameters=[
-                NumericalHyperParameter(1, 2, "branching_factor"),
-                NumericalHyperParameter(1, 2, "depth"),
-            ],
-            constant_parameters={},  # Missing required_constant
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PolicyRequiringConstants,
+                hyper_parameters=[
+                    NumericalHyperParameter(1, 2, "branching_factor"),
+                    NumericalHyperParameter(1, 2, "depth"),
+                ],
+                constant_parameters={},  # Missing required_constant
+            ),
             num_episodes=2,  # Need at least 2 for confidence intervals
             num_steps=1,
             n_trials=1,
@@ -853,12 +868,16 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         config_with_constants = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=PolicyRequiringConstants,
-            hyper_parameters=[
-                NumericalHyperParameter(1, 2, "branching_factor"),
-                NumericalHyperParameter(1, 2, "depth"),
-            ],
-            constant_parameters={"required_constant": "test_value"},  # Providing required parameter
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=PolicyRequiringConstants,
+                hyper_parameters=[
+                    NumericalHyperParameter(1, 2, "branching_factor"),
+                    NumericalHyperParameter(1, 2, "depth"),
+                ],
+                constant_parameters={
+                    "required_constant": "test_value"
+                },  # Providing required parameter
+            ),
             num_episodes=2,  # Need at least 2 for confidence intervals
             num_steps=1,
             n_trials=1,
@@ -892,12 +911,14 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         config = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-            hyper_parameters=[
-                NumericalHyperParameter(1, 2, "branching_factor"),
-                NumericalHyperParameter(1, 2, "depth"),
-            ],
-            constant_parameters={},
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                hyper_parameters=[
+                    NumericalHyperParameter(1, 2, "branching_factor"),
+                    NumericalHyperParameter(1, 2, "depth"),
+                ],
+                constant_parameters={},
+            ),
             num_episodes=2,  # Need multiple episodes for statistics
             num_steps=2,
             n_trials=2,  # Need multiple trials for optimization
@@ -1005,19 +1026,23 @@ class TestHyperParameterOptimizerMLFlowIntegration:
         fixed_config = HyperParameterRunParams(
             environment=env,
             belief=get_initial_belief(env, n_particles=10),  # Smaller for fast tests
-            policy_cls=POMCP,
-            hyper_parameters=[
-                # Correct order: low, high, name (original was wrong: low, high, name)
-                NumericalHyperParameter(
-                    0.1, 1.0, "exploration_constant"
-                ),  # Smaller range for fast tests
-                NumericalHyperParameter(10, 50, "n_simulations"),  # Smaller range for fast tests
-                NumericalHyperParameter(2, 5, "depth"),  # Smaller range for fast tests
-            ],
-            constant_parameters={
-                "discount_factor": env.discount_factor,  # This was missing in original
-                "name": "POMCP_Tiger_095",
-            },
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=[
+                    # Correct order: low, high, name (original was wrong: low, high, name)
+                    NumericalHyperParameter(
+                        0.1, 1.0, "exploration_constant"
+                    ),  # Smaller range for fast tests
+                    NumericalHyperParameter(
+                        10, 50, "n_simulations"
+                    ),  # Smaller range for fast tests
+                    NumericalHyperParameter(2, 5, "depth"),  # Smaller range for fast tests
+                ],
+                constant_parameters={
+                    "discount_factor": env.discount_factor,  # This was missing in original
+                    "name": "POMCP_Tiger_095",
+                },
+            ),
             num_episodes=2,  # Smaller for fast tests
             num_steps=3,  # Smaller for fast tests
             n_trials=2,  # Smaller for fast tests
@@ -1080,12 +1105,14 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
         config = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-            hyper_parameters=[
-                NumericalHyperParameter(1, 2, "branching_factor"),
-                NumericalHyperParameter(1, 2, "depth"),
-            ],
-            constant_parameters={},
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                hyper_parameters=[
+                    NumericalHyperParameter(1, 2, "branching_factor"),
+                    NumericalHyperParameter(1, 2, "depth"),
+                ],
+                constant_parameters={},
+            ),
             num_episodes=2,
             num_steps=2,
             n_trials=2,
@@ -1177,12 +1204,14 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
         config = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
-            policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-            hyper_parameters=[
-                NumericalHyperParameter(1, 2, "branching_factor"),
-                NumericalHyperParameter(1, 2, "depth"),
-            ],
-            constant_parameters={},
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                hyper_parameters=[
+                    NumericalHyperParameter(1, 2, "branching_factor"),
+                    NumericalHyperParameter(1, 2, "depth"),
+                ],
+                constant_parameters={},
+            ),
             num_episodes=2,
             num_steps=2,
             n_trials=2,
