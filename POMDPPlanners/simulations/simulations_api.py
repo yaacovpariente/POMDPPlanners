@@ -20,7 +20,12 @@ from POMDPPlanners.core.simulation import (
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
     HyperParameterRunParams,
+    HyperParamPlannerConfigGenerator,
     OptimizedPolicyResult,
+)
+from POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows import (
+    OptimizationEvaluationLocalWorkflow,
+    OptimizationEvaluationPBSWorkflow,
 )
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
     HyperParameterOptimizer,
@@ -848,250 +853,316 @@ class SimulationsAPI:
             except Exception as cleanup_error:
                 self.logger.warning(f"Error during optimizer cleanup: {cleanup_error}")
 
-    def run_hyperparameter_optimization_and_evaluation(
+    def run_hyperparameter_tuning_comprehensive_benchmark_local(
         self,
-        environment: Environment,
-        initial_belief: Belief,
-        planner_configs: List["HyperParamPlannerConfig"],
-        cache_dir: Optional[Path] = None,
-        optimization_direction: Optional["HyperParameterOptimizationDirection"] = None,
-        parameter_to_optimize: str = "average_return",
-        experiment_name: str = "POMDP_Hyperparameter_Optimization_And_Evaluation",
-        # Optimization parameters
-        optimization_episodes: int = 3,
-        optimization_steps: int = 6,
-        n_trials: int = 3,
-        optimization_n_jobs: int = -1,
-        # Evaluation parameters
-        evaluation_episodes: int = 10,
-        evaluation_steps: int = 8,
+        gen: HyperParamPlannerConfigGenerator,
+        particles: int = 30,
+        num_episodes: int = 10,
+        num_steps: int = 20,
+        n_trials: int = 100,
+        evaluation_episodes: int = 3,
+        evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
-        # General parameters
+        optimization_n_jobs: int = -1,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
+        cache_dir_path: Optional[Path] = None,
+        experiment_name: str = "Comprehensive_Benchmark",
         debug: bool = False,
-        verbose: bool = True,
-    ) -> Dict[str, Any]:
-        """Run hyperparameter optimization followed by comprehensive evaluation.
+        cache_visualizations: bool = True,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run comprehensive benchmark with hyperparameter optimization locally.
 
-        This method is a simple wrapper around the optimize_and_evaluate_planners utility function.
+        This method runs hyperparameter optimization followed by policy evaluation
+        using local Joblib parallelization. It optimizes for average return across
+        all configured environments and benchmark planners.
 
         Args:
-            environment: The POMDP environment to optimize and evaluate on
-            initial_belief: Initial belief state for the environment
-            planner_configs: List of HyperParamPlannerConfig objects
-            cache_dir: Directory for storing optimization and evaluation results
-            optimization_direction: Direction of optimization (MAXIMIZE or MINIMIZE)
-            parameter_to_optimize: Name of the metric to optimize
-            experiment_name: Name for the experiment
-            optimization_episodes: Number of episodes for optimization trials
-            optimization_steps: Number of steps per optimization episode
-            n_trials: Number of optimization trials per planner
-            optimization_n_jobs: Number of parallel jobs for optimization
-            evaluation_episodes: Number of episodes for evaluation
-            evaluation_steps: Number of steps per evaluation episode
-            evaluation_n_jobs: Number of parallel jobs for evaluation
-            confidence_interval_level: Confidence level for statistical analysis
-            alpha: Alpha value for risk metrics
-            debug: Whether to enable debug logging
-            verbose: Whether to print progress messages
+            gen: Hyperparameter configuration generator.
+            particles: Number of particles for belief representation.
+            num_episodes: Number of episodes for optimization.
+            num_steps: Maximum steps per episode for optimization.
+            n_trials: Number of optimization trials.
+            evaluation_episodes: Number of episodes for evaluation.
+            evaluation_steps: Maximum steps per episode for evaluation.
+            evaluation_n_jobs: Number of parallel jobs for evaluation.
+            optimization_n_jobs: Number of parallel jobs for optimization (-1 uses all cores).
+            confidence_interval_level: Confidence level for intervals.
+            alpha: Significance level for statistical tests.
+            cache_dir_path: Optional path for storing results.
+            experiment_name: Name for the experiment.
+            debug: Enable debug mode.
+            cache_visualizations: Whether to cache visualizations.
 
         Returns:
-            Results dictionary from optimize_and_evaluate_planners utility function
+            Tuple of results dictionary and DataFrame.
         """
-        from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
-            optimize_and_evaluate_planners,
-        )
-        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-            HyperParameterOptimizationDirection,
-        )
+        self.logger.info("Starting comprehensive benchmark with local execution")
 
-        if optimization_direction is None:
-            optimization_direction = HyperParameterOptimizationDirection.MAXIMIZE
+        if cache_dir_path is None:
+            cache_dir_path = Path("./comprehensive_benchmark_results")
 
-        if cache_dir is None:
-            cache_dir = Path(f"./{experiment_name.lower().replace(' ', '_')}_results")
-
-        return optimize_and_evaluate_planners(
-            environment=environment,
-            initial_belief=initial_belief,
-            planner_configs=planner_configs,
-            cache_dir=cache_dir,
-            optimization_direction=optimization_direction,
-            parameter_to_optimize=parameter_to_optimize,
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=cache_dir_path,
             experiment_name=experiment_name,
-            optimization_episodes=optimization_episodes,
-            optimization_steps=optimization_steps,
-            n_trials=n_trials,
             optimization_n_jobs=optimization_n_jobs,
+            particles=particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            n_trials=n_trials,
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
-            verbose=verbose,
+            verbose=True,
+            cache_visualizations=cache_visualizations,
         )
 
-    def run_hyperparameter_optimization_and_evaluation_pbs(
+        return workflow.run_comprehensive_benchmark(gen)
+
+    def run_hyperparameter_tuning_risk_averse_benchmark_local(
         self,
-        environment: Environment,
-        initial_belief: Belief,
-        planner_configs: List["HyperParamPlannerConfig"],
+        gen: HyperParamPlannerConfigGenerator,
+        particles: int = 30,
+        num_episodes: int = 10,
+        num_steps: int = 20,
+        n_trials: int = 100,
+        evaluation_episodes: int = 3,
+        evaluation_steps: int = 6,
+        evaluation_n_jobs: int = 1,
+        optimization_n_jobs: int = -1,
+        confidence_interval_level: float = 0.95,
+        alpha: float = 0.05,
+        cache_dir_path: Optional[Path] = None,
+        experiment_name: str = "Risk_Averse_Benchmark",
+        debug: bool = False,
+        cache_visualizations: bool = True,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run risk-averse benchmark with hyperparameter optimization locally.
+
+        This method runs hyperparameter optimization followed by policy evaluation
+        using local Joblib parallelization. It optimizes for risk-averse metrics such
+        as minimizing obstacle collisions, safety violations, or dangerous encounters,
+        depending on the specific environment.
+
+        Args:
+            gen: Hyperparameter configuration generator.
+            particles: Number of particles for belief representation.
+            num_episodes: Number of episodes for optimization.
+            num_steps: Maximum steps per episode for optimization.
+            n_trials: Number of optimization trials.
+            evaluation_episodes: Number of episodes for evaluation.
+            evaluation_steps: Maximum steps per episode for evaluation.
+            evaluation_n_jobs: Number of parallel jobs for evaluation.
+            optimization_n_jobs: Number of parallel jobs for optimization (-1 uses all cores).
+            confidence_interval_level: Confidence level for intervals.
+            alpha: Significance level for statistical tests.
+            cache_dir_path: Optional path for storing results.
+            experiment_name: Name for the experiment.
+            debug: Enable debug mode.
+            cache_visualizations: Whether to cache visualizations.
+
+        Returns:
+            Tuple of results dictionary and DataFrame.
+        """
+        self.logger.info("Starting risk-averse benchmark with local execution")
+
+        if cache_dir_path is None:
+            cache_dir_path = Path("./risk_averse_benchmark_results")
+
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=cache_dir_path,
+            experiment_name=experiment_name,
+            optimization_n_jobs=optimization_n_jobs,
+            particles=particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            n_trials=n_trials,
+            evaluation_episodes=evaluation_episodes,
+            evaluation_steps=evaluation_steps,
+            evaluation_n_jobs=evaluation_n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            debug=debug,
+            verbose=True,
+            cache_visualizations=cache_visualizations,
+        )
+
+        return workflow.run_risk_averse_benchmark(gen)
+
+    def run_hyperparameter_tuning_comprehensive_benchmark_pbs(
+        self,
+        gen: HyperParamPlannerConfigGenerator,
         queue: str,
-        cache_dir: Optional[Path] = None,
-        optimization_direction: Optional["HyperParameterOptimizationDirection"] = None,
-        parameter_to_optimize: str = "average_return",
-        experiment_name: str = "POMDP_Hyperparameter_Optimization_And_Evaluation_PBS",
-        # Optimization parameters
-        optimization_episodes: int = 3,
-        optimization_steps: int = 6,
-        n_trials: int = 3,
+        particles: int = 30,
+        num_episodes: int = 10,
+        num_steps: int = 20,
+        n_trials: int = 100,
+        evaluation_episodes: int = 3,
+        evaluation_steps: int = 6,
+        evaluation_n_jobs: int = 1,
         n_workers: int = 4,
         cores: int = 1,
         memory: str = "4GB",
         processes: int = 1,
-        walltime: str = "01:00:00",
+        walltime: str = "03:00:00",
         job_extra: Optional[List[str]] = None,
-        optimization_n_jobs: int = -1,
-        enable_dashboard: bool = True,
-        dashboard_address: str = "0.0.0.0",
-        dashboard_port: int = 8787,
-        dashboard_prefix: Optional[str] = None,
-        # Evaluation parameters
-        evaluation_episodes: int = 10,
-        evaluation_steps: int = 8,
-        evaluation_n_jobs: int = 1,
-        # General parameters
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
+        cache_dir_path: Optional[Path] = None,
+        experiment_name: str = "Comprehensive_Benchmark_PBS",
         debug: bool = False,
-        verbose: bool = True,
-    ) -> Dict[str, Any]:
-        """Run hyperparameter optimization followed by comprehensive evaluation using PBS cluster.
+        cache_visualizations: bool = True,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run comprehensive benchmark with hyperparameter optimization on PBS cluster.
 
-        This method is a simple wrapper around the optimize_and_evaluate_planners_pbs utility function,
-        providing PBS cluster computing for large-scale hyperparameter optimization experiments.
+        This method runs hyperparameter optimization followed by policy evaluation
+        using PBS cluster computing. It optimizes for average return across
+        all configured environments and benchmark planners.
 
         Args:
-            environment: The POMDP environment to optimize and evaluate on
-            initial_belief: Initial belief state for the environment
-            planner_configs: List of HyperParamPlannerConfig objects
-            queue: PBS queue name to submit jobs to
-            cache_dir: Directory for storing optimization and evaluation results
-            optimization_direction: Direction of optimization (MAXIMIZE or MINIMIZE)
-            parameter_to_optimize: Name of the metric to optimize
-            experiment_name: Name for the experiment
-            optimization_episodes: Number of episodes for optimization trials
-            optimization_steps: Number of steps per optimization episode
-            n_trials: Number of optimization trials per planner
-            n_workers: Number of PBS worker nodes to request
-            cores: Number of CPU cores per worker
-            memory: Memory per worker (e.g., "4GB", "8GB")
-            processes: Number of processes per worker
-            walltime: Maximum job runtime in HH:MM:SS format
-            job_extra: Additional PBS job directives
-            optimization_n_jobs: Number of parallel jobs for optimization
-            enable_dashboard: Whether to enable Dask dashboard
-            dashboard_address: Dashboard bind address
-            dashboard_port: Dashboard port
-            dashboard_prefix: Dashboard URL prefix
-            evaluation_episodes: Number of episodes for evaluation
-            evaluation_steps: Number of steps per evaluation episode
-            evaluation_n_jobs: Number of parallel jobs for evaluation
-            confidence_interval_level: Confidence level for statistical analysis
-            alpha: Alpha value for risk metrics
-            debug: Whether to enable debug logging
-            verbose: Whether to print progress messages
+            gen: Hyperparameter configuration generator.
+            queue: PBS queue name to submit jobs to.
+            particles: Number of particles for belief representation.
+            num_episodes: Number of episodes for optimization.
+            num_steps: Maximum steps per episode for optimization.
+            n_trials: Number of optimization trials.
+            evaluation_episodes: Number of episodes for evaluation.
+            evaluation_steps: Maximum steps per episode for evaluation.
+            evaluation_n_jobs: Number of parallel jobs for evaluation.
+            n_workers: Number of worker jobs to submit to PBS cluster.
+            cores: Number of CPU cores per PBS job.
+            memory: Memory allocation per PBS job (e.g., "4GB", "8GB").
+            processes: Number of processes per PBS job.
+            walltime: Maximum runtime per job in HH:MM:SS format.
+            job_extra: Additional PBS directives as list of strings.
+            confidence_interval_level: Confidence level for intervals.
+            alpha: Significance level for statistical tests.
+            cache_dir_path: Optional path for storing results.
+            experiment_name: Name for the experiment.
+            debug: Enable debug mode.
+            cache_visualizations: Whether to cache visualizations.
 
         Returns:
-            Results dictionary from optimize_and_evaluate_planners_pbs utility function
-
-        Example:
-            Running PBS hyperparameter optimization on Tiger POMDP::
-
-                >>> from pathlib import Path
-                >>> from POMDPPlanners.simulations.simulations_api import SimulationsAPI
-                >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-                >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-                >>> from POMDPPlanners.core.belief import get_initial_belief
-                >>> from POMDPPlanners.core.simulation import NumericalHyperParameter
-                >>> from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
-                >>> # Initialize the API
-                >>> api = SimulationsAPI(debug=False)
-                >>> # Create environment and belief
-                >>> tiger = TigerPOMDP(discount_factor=0.95)
-                >>> initial_belief = get_initial_belief(tiger, n_particles=100)
-                >>> # Configure planners
-                >>> planner_configs = [
-                ...     HyperParamPlannerConfig(
-                ...         policy_cls=POMCP,
-                ...         hyper_parameters=[
-                ...             NumericalHyperParameter(0.1, 5.0, "exploration_constant")
-                ...         ],
-                ...         constant_parameters={"discount_factor": 0.95, "name": "POMCP"}
-                ...     )
-                ... ]
-                >>> # Run PBS optimization (commented out for doctest)
-                >>> # results = api.run_hyperparameter_optimization_and_evaluation_pbs(
-                >>> #     environment=tiger,
-                >>> #     initial_belief=initial_belief,
-                >>> #     planner_configs=planner_configs,
-                >>> #     queue="short",
-                >>> #     n_workers=8,
-                >>> #     cores=2,
-                >>> #     memory="8GB",
-                >>> #     walltime="02:00:00"
-                >>> # )
-                >>> len(planner_configs) == 1  # Verify example setup
-                True
+            Tuple of results dictionary and DataFrame.
         """
-        from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
-            optimize_and_evaluate_planners_pbs,
-        )
-        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-            HyperParameterOptimizationDirection,
-        )
+        self.logger.info("Starting comprehensive benchmark with PBS cluster execution")
 
-        self.logger.info(f"Starting PBS hyperparameter optimization and evaluation")
-        self.logger.debug(
-            f"PBS Configuration: queue={queue}, workers={n_workers}, cores={cores}, memory={memory}"
-        )
+        if cache_dir_path is None:
+            cache_dir_path = Path("./comprehensive_benchmark_pbs_results")
 
-        if optimization_direction is None:
-            optimization_direction = HyperParameterOptimizationDirection.MAXIMIZE
-
-        if cache_dir is None:
-            cache_dir = Path(f"./{experiment_name.lower().replace(' ', '_')}_results")
-
-        return optimize_and_evaluate_planners_pbs(
-            environment=environment,
-            initial_belief=initial_belief,
-            planner_configs=planner_configs,
-            cache_dir=cache_dir,
-            queue=queue,
-            optimization_direction=optimization_direction,
-            parameter_to_optimize=parameter_to_optimize,
+        workflow = OptimizationEvaluationPBSWorkflow(
+            cache_dir=cache_dir_path,
             experiment_name=experiment_name,
-            optimization_episodes=optimization_episodes,
-            optimization_steps=optimization_steps,
-            n_trials=n_trials,
+            queue=queue,
             n_workers=n_workers,
             cores=cores,
             memory=memory,
             processes=processes,
             walltime=walltime,
             job_extra=job_extra,
-            optimization_n_jobs=optimization_n_jobs,
-            enable_dashboard=enable_dashboard,
-            dashboard_address=dashboard_address,
-            dashboard_port=dashboard_port,
-            dashboard_prefix=dashboard_prefix,
+            particles=particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            n_trials=n_trials,
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
-            verbose=verbose,
+            verbose=True,
+            cache_visualizations=cache_visualizations,
         )
+
+        return workflow.run_comprehensive_benchmark(gen)
+
+    def run_hyperparameter_tuning_risk_averse_benchmark_pbs(
+        self,
+        gen: HyperParamPlannerConfigGenerator,
+        queue: str,
+        particles: int = 30,
+        num_episodes: int = 10,
+        num_steps: int = 20,
+        n_trials: int = 100,
+        evaluation_episodes: int = 3,
+        evaluation_steps: int = 6,
+        evaluation_n_jobs: int = 1,
+        n_workers: int = 4,
+        cores: int = 1,
+        memory: str = "4GB",
+        processes: int = 1,
+        walltime: str = "03:00:00",
+        job_extra: Optional[List[str]] = None,
+        confidence_interval_level: float = 0.95,
+        alpha: float = 0.05,
+        cache_dir_path: Optional[Path] = None,
+        experiment_name: str = "Risk_Averse_Benchmark_PBS",
+        debug: bool = False,
+        cache_visualizations: bool = True,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run risk-averse benchmark with hyperparameter optimization on PBS cluster.
+
+        This method runs hyperparameter optimization followed by policy evaluation
+        using PBS cluster computing. It optimizes for risk-averse metrics such as
+        minimizing obstacle collisions, safety violations, or dangerous encounters,
+        depending on the specific environment.
+
+        Args:
+            gen: Hyperparameter configuration generator.
+            queue: PBS queue name to submit jobs to.
+            particles: Number of particles for belief representation.
+            num_episodes: Number of episodes for optimization.
+            num_steps: Maximum steps per episode for optimization.
+            n_trials: Number of optimization trials.
+            evaluation_episodes: Number of episodes for evaluation.
+            evaluation_steps: Maximum steps per episode for evaluation.
+            evaluation_n_jobs: Number of parallel jobs for evaluation.
+            n_workers: Number of worker jobs to submit to PBS cluster.
+            cores: Number of CPU cores per PBS job.
+            memory: Memory allocation per PBS job (e.g., "4GB", "8GB").
+            processes: Number of processes per PBS job.
+            walltime: Maximum runtime per job in HH:MM:SS format.
+            job_extra: Additional PBS directives as list of strings.
+            confidence_interval_level: Confidence level for intervals.
+            alpha: Significance level for statistical tests.
+            cache_dir_path: Optional path for storing results.
+            experiment_name: Name for the experiment.
+            debug: Enable debug mode.
+            cache_visualizations: Whether to cache visualizations.
+
+        Returns:
+            Tuple of results dictionary and DataFrame.
+        """
+        self.logger.info("Starting risk-averse benchmark with PBS cluster execution")
+
+        if cache_dir_path is None:
+            cache_dir_path = Path("./risk_averse_benchmark_pbs_results")
+
+        workflow = OptimizationEvaluationPBSWorkflow(
+            cache_dir=cache_dir_path,
+            experiment_name=experiment_name,
+            queue=queue,
+            n_workers=n_workers,
+            cores=cores,
+            memory=memory,
+            processes=processes,
+            walltime=walltime,
+            job_extra=job_extra,
+            particles=particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            n_trials=n_trials,
+            evaluation_episodes=evaluation_episodes,
+            evaluation_steps=evaluation_steps,
+            evaluation_n_jobs=evaluation_n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            debug=debug,
+            verbose=True,
+            cache_visualizations=cache_visualizations,
+        )
+
+        return workflow.run_risk_averse_benchmark(gen)
