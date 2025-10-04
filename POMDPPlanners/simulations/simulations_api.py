@@ -1166,3 +1166,269 @@ class SimulationsAPI:
         )
 
         return workflow.run_risk_averse_benchmark(gen)
+
+    def run_optimize_and_evaluate_local(
+        self,
+        configs: List[HyperParameterRunParams],
+        evaluation_episodes: int = 100,
+        evaluation_steps: int = 100,
+        evaluation_n_jobs: int = 1,
+        optimization_n_jobs: int = -1,
+        confidence_interval_level: float = 0.95,
+        alpha: float = 0.05,
+        cache_dir_path: Optional[Path] = None,
+        experiment_name: str = "Optimize_And_Evaluate",
+        debug: bool = False,
+        cache_visualizations: bool = True,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run hyperparameter optimization and evaluation locally.
+
+        This method runs hyperparameter optimization for the provided configurations,
+        then evaluates the optimized policies using local Joblib parallelization.
+
+        Args:
+            configs: List of hyperparameter run configurations.
+            evaluation_episodes: Number of episodes for evaluation.
+            evaluation_steps: Maximum steps per episode for evaluation.
+            evaluation_n_jobs: Number of parallel jobs for evaluation.
+            optimization_n_jobs: Number of parallel jobs for optimization (-1 uses all cores).
+            confidence_interval_level: Confidence level for intervals.
+            alpha: Significance level for statistical tests.
+            cache_dir_path: Optional path for storing results.
+            experiment_name: Name for the experiment.
+            debug: Enable debug mode.
+            cache_visualizations: Whether to cache visualizations.
+
+        Returns:
+            Tuple of results dictionary and DataFrame.
+
+        Example:
+            >>> from pathlib import Path
+            >>> from POMDPPlanners.simulations.simulations_api import SimulationsAPI
+            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+            >>> from POMDPPlanners.core.belief import get_initial_belief
+            >>> from POMDPPlanners.core.simulation import NumericalHyperParameter
+            >>> from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+            ...     HyperParameterRunParams,
+            ...     HyperParameterOptimizationDirection,
+            ... )
+            >>> # Initialize the API
+            >>> api = SimulationsAPI(debug=True)
+            >>> # Create environment and initial belief
+            >>> tiger = TigerPOMDP(discount_factor=0.95)
+            >>> initial_belief = get_initial_belief(tiger, n_particles=10)
+            >>> # Define hyperparameter optimization configurations
+            >>> optimization_configs = [
+            ...     HyperParameterRunParams(
+            ...         environment=tiger,
+            ...         belief=initial_belief,
+            ...         policy_cls=POMCP,
+            ...         hyper_parameters=[
+            ...             NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
+            ...             NumericalHyperParameter(10, 50, "n_simulations")
+            ...         ],
+            ...         constant_parameters={
+            ...             "discount_factor": 0.95,
+            ...             "name": "OptimizedPOMCP",
+            ...             "depth": 5
+            ...         },
+            ...         num_episodes=2,
+            ...         num_steps=3,
+            ...         n_trials=3,
+            ...         direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            ...         parameter_to_optimize="average_return"
+            ...     )
+            ... ]
+            >>> # Run optimization and evaluation
+            >>> results, stats_df = api.run_optimize_and_evaluate_local(
+            ...     configs=optimization_configs,
+            ...     evaluation_episodes=5,
+            ...     evaluation_steps=10,
+            ...     evaluation_n_jobs=1,
+            ...     optimization_n_jobs=1,
+            ...     debug=True
+            ... ) # doctest: +SKIP
+            >>> len(stats_df) >= 1  # doctest: +SKIP
+            True
+        """
+        self.logger.info("Starting optimize and evaluate workflow with local execution")
+
+        if cache_dir_path is None:
+            cache_dir_path = Path("./optimize_and_evaluate_results")
+
+        # Extract parameters from first config
+        if not configs:
+            raise ValueError("configs list cannot be empty")
+
+        first_config = configs[0]
+        # Get number of particles from belief
+        belief_particles = getattr(first_config.belief, "particles", None)
+        particles = len(belief_particles) if belief_particles is not None else 30
+        num_episodes = first_config.num_episodes
+        num_steps = first_config.num_steps
+        n_trials = first_config.n_trials
+
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=cache_dir_path,
+            experiment_name=experiment_name,
+            optimization_n_jobs=optimization_n_jobs,
+            particles=particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            n_trials=n_trials,
+            evaluation_episodes=evaluation_episodes,
+            evaluation_steps=evaluation_steps,
+            evaluation_n_jobs=evaluation_n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            debug=debug,
+            verbose=True,
+            cache_visualizations=cache_visualizations,
+        )
+
+        return workflow.optimize_and_evaluate(configs)
+
+    def run_optimize_and_evaluate_pbs(
+        self,
+        configs: List[HyperParameterRunParams],
+        queue: str,
+        evaluation_episodes: int = 100,
+        evaluation_steps: int = 100,
+        evaluation_n_jobs: int = 1,
+        n_workers: int = 4,
+        cores: int = 1,
+        memory: str = "4GB",
+        processes: int = 1,
+        walltime: str = "03:00:00",
+        job_extra: Optional[List[str]] = None,
+        confidence_interval_level: float = 0.95,
+        alpha: float = 0.05,
+        cache_dir_path: Optional[Path] = None,
+        experiment_name: str = "Optimize_And_Evaluate_PBS",
+        debug: bool = False,
+        cache_visualizations: bool = True,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run hyperparameter optimization and evaluation on PBS cluster.
+
+        This method runs hyperparameter optimization for the provided configurations,
+        then evaluates the optimized policies using PBS cluster computing.
+
+        Args:
+            configs: List of hyperparameter run configurations.
+            queue: PBS queue name to submit jobs to.
+            evaluation_episodes: Number of episodes for evaluation.
+            evaluation_steps: Maximum steps per episode for evaluation.
+            evaluation_n_jobs: Number of parallel jobs for evaluation.
+            n_workers: Number of worker jobs to submit to PBS cluster.
+            cores: Number of CPU cores per PBS job.
+            memory: Memory allocation per PBS job (e.g., "4GB", "8GB").
+            processes: Number of processes per PBS job.
+            walltime: Maximum runtime per job in HH:MM:SS format.
+            job_extra: Additional PBS directives as list of strings.
+            confidence_interval_level: Confidence level for intervals.
+            alpha: Significance level for statistical tests.
+            cache_dir_path: Optional path for storing results.
+            experiment_name: Name for the experiment.
+            debug: Enable debug mode.
+            cache_visualizations: Whether to cache visualizations.
+
+        Returns:
+            Tuple of results dictionary and DataFrame.
+
+        Example:
+            >>> from pathlib import Path
+            >>> from POMDPPlanners.simulations.simulations_api import SimulationsAPI
+            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+            >>> from POMDPPlanners.core.belief import get_initial_belief
+            >>> from POMDPPlanners.core.simulation import NumericalHyperParameter
+            >>> from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+            ...     HyperParameterRunParams,
+            ...     HyperParameterOptimizationDirection,
+            ... )
+            >>> # Initialize the API
+            >>> api = SimulationsAPI(debug=False)
+            >>> # Create environment and initial belief
+            >>> tiger = TigerPOMDP(discount_factor=0.95)
+            >>> initial_belief = get_initial_belief(tiger, n_particles=10)
+            >>> # Define hyperparameter optimization configurations
+            >>> optimization_configs = [
+            ...     HyperParameterRunParams(
+            ...         environment=tiger,
+            ...         belief=initial_belief,
+            ...         policy_cls=POMCP,
+            ...         hyper_parameters=[
+            ...             NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
+            ...             NumericalHyperParameter(10, 50, "n_simulations")
+            ...         ],
+            ...         constant_parameters={
+            ...             "discount_factor": 0.95,
+            ...             "name": "OptimizedPOMCP",
+            ...             "depth": 5
+            ...         },
+            ...         num_episodes=2,
+            ...         num_steps=3,
+            ...         n_trials=3,
+            ...         direction=HyperParameterOptimizationDirection.MAXIMIZE,
+            ...         parameter_to_optimize="average_return"
+            ...     )
+            ... ]
+            >>> # Run optimization and evaluation on PBS cluster
+            >>> results, stats_df = api.run_optimize_and_evaluate_pbs(
+            ...     configs=optimization_configs,
+            ...     queue="test_queue",
+            ...     evaluation_episodes=5,
+            ...     evaluation_steps=10,
+            ...     evaluation_n_jobs=1,
+            ...     n_workers=2,
+            ...     cores=1,
+            ...     memory="4GB",
+            ...     walltime="01:00:00",
+            ...     debug=False
+            ... ) # doctest: +SKIP
+            >>> len(stats_df) >= 1  # doctest: +SKIP
+            True
+        """
+        self.logger.info("Starting optimize and evaluate workflow with PBS cluster execution")
+
+        if cache_dir_path is None:
+            cache_dir_path = Path("./optimize_and_evaluate_pbs_results")
+
+        # Extract parameters from first config
+        if not configs:
+            raise ValueError("configs list cannot be empty")
+
+        first_config = configs[0]
+        # Get number of particles from belief
+        belief_particles = getattr(first_config.belief, "particles", None)
+        particles = len(belief_particles) if belief_particles is not None else 30
+        num_episodes = first_config.num_episodes
+        num_steps = first_config.num_steps
+        n_trials = first_config.n_trials
+
+        workflow = OptimizationEvaluationPBSWorkflow(
+            cache_dir=cache_dir_path,
+            experiment_name=experiment_name,
+            queue=queue,
+            n_workers=n_workers,
+            cores=cores,
+            memory=memory,
+            processes=processes,
+            walltime=walltime,
+            job_extra=job_extra,
+            particles=particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            n_trials=n_trials,
+            evaluation_episodes=evaluation_episodes,
+            evaluation_steps=evaluation_steps,
+            evaluation_n_jobs=evaluation_n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            debug=debug,
+            verbose=True,
+            cache_visualizations=cache_visualizations,
+        )
+
+        return workflow.optimize_and_evaluate(configs)
