@@ -165,11 +165,11 @@ class TestPlannersHyperparamConfigs:
     def test_sparse_sampling_config(self):
         """Test StandardSparseSampling configuration creation.
 
-        Purpose: Validates that StandardSparseSampling configuration is created correctly with mixed parameter types
+        Purpose: Validates that StandardSparseSampling configuration is created correctly with numerical parameters
 
         Given: A mock environment and planner name
         When: sparse_sampling_config is called
-        Then: Returns valid HyperParamPlannerConfig with numerical and categorical parameters
+        Then: Returns valid HyperParamPlannerConfig with branching_factor and depth parameters
 
         Test type: unit
         """
@@ -177,17 +177,16 @@ class TestPlannersHyperparamConfigs:
 
         assert isinstance(config, HyperParamPlannerConfig)
         assert config.policy_cls == StandardSparseSamplingDiscreteActionsPlanner
-        assert len(config.hyper_parameters) == 3
+        assert len(config.hyper_parameters) == 2
 
         # Check parameter types
         param_dict = {param.name: param for param in config.hyper_parameters}
         assert isinstance(param_dict["branching_factor"], NumericalHyperParameter)
         assert isinstance(param_dict["depth"], NumericalHyperParameter)
-        assert isinstance(param_dict["resampling"], CategoricalHyperParameter)
 
-        # Check categorical parameter values
-        resampling_param = param_dict["resampling"]
-        assert resampling_param.choices == [True, False]
+        # Check that time_out_in_seconds is not in constant parameters
+        # (StandardSparseSamplingDiscreteActionsPlanner doesn't accept it)
+        assert "time_out_in_seconds" not in config.constant_parameters
 
     def test_pomcp_config(self):
         """Test POMCP configuration creation.

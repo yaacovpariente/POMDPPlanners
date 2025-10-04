@@ -739,7 +739,8 @@ class SimulationsAPI:
             ...     NumericalHyperParameter, CategoricalHyperParameter
             ... )
             >>> from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-            ...     HyperParameterRunParams, HyperParameterOptimizationDirection
+            ...     HyperParameterRunParams, HyperParameterOptimizationDirection,
+            ...     HyperParamPlannerConfig
             ... )
             >>> # Initialize the API
             >>> api = SimulationsAPI(debug=True)
@@ -747,20 +748,23 @@ class SimulationsAPI:
             >>> tiger = TigerPOMDP(discount_factor=0.95)
             >>> initial_belief = get_initial_belief(tiger, n_particles=10)
             >>> # Define hyperparameter optimization configurations
+            >>> planner_config = HyperParamPlannerConfig(
+            ...     policy_cls=POMCP,
+            ...     hyper_parameters=[
+            ...         NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
+            ...         NumericalHyperParameter(10, 50, "n_simulations")
+            ...     ],
+            ...     constant_parameters={
+            ...         "discount_factor": 0.95,
+            ...         "name": "OptimizedPOMCP",
+            ...         "depth": 5
+            ...     }
+            ... )
             >>> optimization_configs = [
             ...     HyperParameterRunParams(
             ...         environment=tiger,
             ...         belief=initial_belief,
-            ...         policy_cls=POMCP,
-            ...         hyper_parameters=[
-            ...             NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
-            ...             NumericalHyperParameter(10, 50, "n_simulations")
-            ...         ],
-            ...         constant_parameters={
-            ...             "discount_factor": 0.95,
-            ...             "name": "OptimizedPOMCP",
-            ...             "depth": 5
-            ...         },
+            ...         hyper_param_planner_config=planner_config,
             ...         num_episodes=2,       # Small for testing
             ...         num_steps=3,          # Small for testing
             ...         n_trials=3,          # Small number for testing
@@ -1212,6 +1216,7 @@ class SimulationsAPI:
             >>> from POMDPPlanners.core.simulation.hyperparameter_tuning import (
             ...     HyperParameterRunParams,
             ...     HyperParameterOptimizationDirection,
+            ...     HyperParamPlannerConfig
             ... )
             >>> # Initialize the API
             >>> api = SimulationsAPI(debug=True)
@@ -1219,20 +1224,23 @@ class SimulationsAPI:
             >>> tiger = TigerPOMDP(discount_factor=0.95)
             >>> initial_belief = get_initial_belief(tiger, n_particles=10)
             >>> # Define hyperparameter optimization configurations
+            >>> planner_config = HyperParamPlannerConfig(
+            ...     policy_cls=POMCP,
+            ...     hyper_parameters=[
+            ...         NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
+            ...         NumericalHyperParameter(10, 50, "n_simulations")
+            ...     ],
+            ...     constant_parameters={
+            ...         "discount_factor": 0.95,
+            ...         "name": "OptimizedPOMCP",
+            ...         "depth": 5
+            ...     }
+            ... )
             >>> optimization_configs = [
             ...     HyperParameterRunParams(
             ...         environment=tiger,
             ...         belief=initial_belief,
-            ...         policy_cls=POMCP,
-            ...         hyper_parameters=[
-            ...             NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
-            ...             NumericalHyperParameter(10, 50, "n_simulations")
-            ...         ],
-            ...         constant_parameters={
-            ...             "discount_factor": 0.95,
-            ...             "name": "OptimizedPOMCP",
-            ...             "depth": 5
-            ...         },
+            ...         hyper_param_planner_config=planner_config,
             ...         num_episodes=2,
             ...         num_steps=3,
             ...         n_trials=3,
@@ -1346,6 +1354,7 @@ class SimulationsAPI:
             >>> from POMDPPlanners.core.simulation.hyperparameter_tuning import (
             ...     HyperParameterRunParams,
             ...     HyperParameterOptimizationDirection,
+            ...     HyperParamPlannerConfig
             ... )
             >>> # Initialize the API
             >>> api = SimulationsAPI(debug=False)
@@ -1353,20 +1362,23 @@ class SimulationsAPI:
             >>> tiger = TigerPOMDP(discount_factor=0.95)
             >>> initial_belief = get_initial_belief(tiger, n_particles=10)
             >>> # Define hyperparameter optimization configurations
+            >>> planner_config = HyperParamPlannerConfig(
+            ...     policy_cls=POMCP,
+            ...     hyper_parameters=[
+            ...         NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
+            ...         NumericalHyperParameter(10, 50, "n_simulations")
+            ...     ],
+            ...     constant_parameters={
+            ...         "discount_factor": 0.95,
+            ...         "name": "OptimizedPOMCP",
+            ...         "depth": 5
+            ...     }
+            ... )
             >>> optimization_configs = [
             ...     HyperParameterRunParams(
             ...         environment=tiger,
             ...         belief=initial_belief,
-            ...         policy_cls=POMCP,
-            ...         hyper_parameters=[
-            ...             NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
-            ...             NumericalHyperParameter(10, 50, "n_simulations")
-            ...         ],
-            ...         constant_parameters={
-            ...             "discount_factor": 0.95,
-            ...             "name": "OptimizedPOMCP",
-            ...             "depth": 5
-            ...         },
+            ...         hyper_param_planner_config=planner_config,
             ...         num_episodes=2,
             ...         num_steps=3,
             ...         n_trials=3,

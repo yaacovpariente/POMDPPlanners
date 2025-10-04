@@ -80,12 +80,16 @@ Example:
     2
 
     >>> # Test configuration creation (simplified for testing)
+    >>> from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParamPlannerConfig
+    >>> planner_config = HyperParamPlannerConfig(
+    ...     policy_cls=POMCP,
+    ...     hyper_parameters=[numerical_param],
+    ...     constant_parameters={"depth": 5}
+    ... )
     >>> config = HyperParameterRunParams(
     ...     environment=tiger_env,
     ...     belief=initial_belief,
-    ...     policy_cls=POMCP,
-    ...     hyper_parameters=[numerical_param],
-    ...     constant_parameters={"depth": 5},  # Required parameter
+    ...     hyper_param_planner_config=planner_config,
     ...     num_episodes=2,        # Reduced for testing
     ...     num_steps=5,           # Reduced for testing
     ...     n_trials=3,            # Reduced for testing
@@ -199,23 +203,27 @@ class HyperParameterOptimizer:
         >>> initial_belief = get_initial_belief(env, n_particles=10)  # Reduced for testing
 
         >>> # Test configuration creation
-        >>> config = HyperParameterRunParams(
-        ...     environment=env,
-        ...     belief=initial_belief,
+        >>> from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParamPlannerConfig
+        >>> planner_config = HyperParamPlannerConfig(
         ...     policy_cls=POMCP,
         ...     hyper_parameters=[
         ...         NumericalHyperParameter(0.1, 10.0, "exploration_constant"),
         ...     ],
-        ...     constant_parameters={"depth": 5, "n_simulations": 200},  # Required parameter
+        ...     constant_parameters={"depth": 5, "n_simulations": 200}
+        ... )
+        >>> config = HyperParameterRunParams(
+        ...     environment=env,
+        ...     belief=initial_belief,
+        ...     hyper_param_planner_config=planner_config,
         ...     num_episodes=50,          # Reduced for testing
         ...     num_steps=5,             # Reduced for testing
         ...     n_trials=2,              # Reduced for testing
         ...     direction=HyperParameterOptimizationDirection.MAXIMIZE,
         ...     parameter_to_optimize="average_return"
         ... )
-        >>> len(config.hyper_parameters)
+        >>> len(config.hyper_param_planner_config.hyper_parameters)
         1
-        >>> config.hyper_parameters[0].name
+        >>> config.hyper_param_planner_config.hyper_parameters[0].name
         'exploration_constant'
         >>> config.parameter_to_optimize
         'average_return'

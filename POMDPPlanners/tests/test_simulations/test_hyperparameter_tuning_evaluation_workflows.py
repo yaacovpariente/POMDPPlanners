@@ -8,9 +8,11 @@ import random
 import shutil
 import tempfile
 from pathlib import Path
+from typing import Optional
 from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows import (
@@ -22,6 +24,17 @@ from POMDPPlanners.simulations.simulations_deployment.task_manager_configs impor
     JoblibConfig,
     PBSConfig,
 )
+from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParamPlannerConfigGenerator,
+    HyperParamPlannerConfig,
+    NumericalHyperParameter,
+)
+from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.core.policy import PolicySpaceInfo
+from POMDPPlanners.core.environment import SpaceType
+from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
+from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 
 np.random.seed(42)
 random.seed(42)
@@ -510,3 +523,73 @@ class TestWorkflowParameterPropagation:
         assert call_kwargs["num_episodes"] == 15
         assert call_kwargs["num_steps"] == 25
         assert call_kwargs["n_trials"] == 200
+
+
+class IntegerActionSampler(ActionSampler):
+    """Action sampler that returns integer actions for compatibility with environments."""
+
+    def __init__(self, actions):
+        self.actions = actions
+
+    def sample(self, belief_node=None):
+        import random
+
+        # Return integer index instead of string action
+        return random.randint(0, len(self.actions) - 1)
+
+
+class PFT_DPW_TestGenerator(HyperParamPlannerConfigGenerator):
+    """Test generator for PFT_DPW planner configuration."""
+
+    def __init__(
+        self,
+        discount_factor: float,
+        depth: int,
+        name: str,
+        action_sampler: ActionSampler,
+        max_exploration_constant: float = 1.0,
+        time_out_in_seconds: Optional[int] = None,
+        n_simulations: Optional[int] = None,
+        min_samples_per_node: int = 10,
+        min_visit_count_per_action: int = 1,
+        log_path: Optional[Path] = None,
+        debug: bool = False,
+        use_queue_logger: bool = False,
+    ):
+        self.discount_factor = discount_factor
+        self.depth = depth
+        self.name = name
+        self.action_sampler = action_sampler
+        self.max_exploration_constant = max_exploration_constant
+        self.time_out_in_seconds = time_out_in_seconds
+        self.n_simulations = n_simulations
+        self.min_samples_per_node = min_samples_per_node
+        self.min_visit_count_per_action = min_visit_count_per_action
+
+    def generate(self, environment) -> HyperParamPlannerConfig:
+        hyper_parameters = [
+            NumericalHyperParameter(0, self.max_exploration_constant, "exploration_constant"),
+            NumericalHyperParameter(1, 10, "k_o"),
+            NumericalHyperParameter(0.01, 0.5, "alpha_o"),
+        ]
+
+        constant_parameters = {
+            "discount_factor": self.discount_factor,
+            "environment": environment,
+            "name": self.name,
+            "depth": self.depth,
+            "action_sampler": self.action_sampler,
+            "n_simulations": self.n_simulations,
+        }
+
+        return HyperParamPlannerConfig(
+            policy_cls=PFT_DPW,
+            hyper_parameters=hyper_parameters,
+            constant_parameters=constant_parameters,
+        )
+
+    def get_planner_space_info(self):
+        return PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.DISCRETE,
+        )

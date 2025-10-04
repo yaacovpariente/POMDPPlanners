@@ -141,13 +141,11 @@ class PlannersHyperparamConfigs:
         hyper_parameters = [
             NumericalHyperParameter(3, 10, "branching_factor"),  # Number of samples at each node
             NumericalHyperParameter(2, 3, "depth"),  # Search depth
-            CategoricalHyperParameter([True, False], "resampling"),  # Whether to resample particles
         ]
 
         constant_parameters = {
             "environment": env,
             "name": name,
-            "time_out_in_seconds": time_out_in_seconds,
         }
 
         return HyperParamPlannerConfig(
