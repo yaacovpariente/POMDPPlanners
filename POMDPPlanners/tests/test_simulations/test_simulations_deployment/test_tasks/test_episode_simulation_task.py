@@ -533,3 +533,70 @@ def test_episode_simulation_task_logging_includes_traceback(caplog, environment,
 
         # Verify that traceback information was logged
         assert "Full exception details:" in caplog.text
+
+
+def test_episode_simulation_task_error_written_to_log_file(tmp_path, environment, policy):
+    """Test that EpisodeSimulationTask errors are written to the actual log file on disk.
+
+    Purpose: Validates that error messages are persisted to log files, not just captured in memory
+
+    Given: A EpisodeSimulationTask configured with a temporary log directory that encounters an error
+    When: Task execution raises an exception
+    Then: Error message and traceback are written to the log file on disk
+
+    Test type: integration
+    """
+    from POMDPPlanners.simulations.simulations_deployment.tasks import (
+        EpisodeSimulationTask,
+    )
+
+    belief = create_test_belief()
+
+    # Create a temporary cache directory
+    cache_dir = tmp_path / "test_cache"
+    cache_dir.mkdir()
+
+    # Create environment and patch it to cause an exception
+    test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
+
+    with patch.object(
+        test_env,
+        "state_transition_model",
+        side_effect=ValueError("Test error for log file verification"),
+    ):
+        # Create task with cache_dir to enable file logging
+        task = EpisodeSimulationTask(
+            environment=test_env,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=1,
+            seed=42,
+            discount_factor=0.95,
+            episode_number=1,
+            cache_dir=cache_dir,
+            console_output=False,
+        )
+
+        # Run the task - it should handle the error gracefully
+        result = task.run()
+
+        # Verify task failed
+        assert result is None
+
+    # Find log files in the cache directory
+    log_files = list(cache_dir.rglob("*.log"))
+    assert len(log_files) > 0, f"No log files were created in {cache_dir}"
+
+    # Read all log files and check if error is in any of them
+    error_found = False
+    for log_file in log_files:
+        log_content = log_file.read_text()
+        if "[EPISODE_001] Error running episode:" in log_content:
+            error_found = True
+            # Verify all expected content is in the log
+            assert "Test error for log file verification" in log_content
+            assert "Full exception details:" in log_content
+            break
+
+    assert error_found, f"Error message not found in any log file. Checked {len(log_files)} files."
