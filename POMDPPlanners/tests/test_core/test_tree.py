@@ -26,10 +26,10 @@ random.seed(42)
 
 
 # Create a simple test environment for belief updates
-class TestEnvironment(Environment):
+class MockEnvironment(Environment):
     def __init__(self):
         space_info = SpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE)
-        super().__init__(discount_factor=0.95, name="TestEnvironment", space_info=space_info)
+        super().__init__(discount_factor=0.95, name="MockEnvironment", space_info=space_info)
 
     def state_transition(self, state, action):
         return state
@@ -89,15 +89,15 @@ def test_belief():
 def test_env():
     """Test env.
 
-    Purpose: Provides TestEnvironment fixture for tree node testing with POMDP interface
+    Purpose: Provides MockEnvironment fixture for tree node testing with POMDP interface
 
-    Given: TestEnvironment implementation with discrete spaces, dummy models, and deterministic transitions
+    Given: MockEnvironment implementation with discrete spaces, dummy models, and deterministic transitions
     When: Fixture is used in tree structure tests
-    Then: Returns TestEnvironment instance with proper POMDP interface methods for belief updates
+    Then: Returns MockEnvironment instance with proper POMDP interface methods for belief updates
 
     Test type: unit
     """
-    return TestEnvironment()
+    return MockEnvironment()
 
 
 def test_action_node_initialization_creates_mcts_tree_node():

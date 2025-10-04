@@ -217,7 +217,7 @@ class MockDatabase(DataBaseInterface):
         self._cache.clear()
 
 
-class TestTaskManagerExternalDB(TaskManagerExternalDB):
+class MockTaskManagerExternalDB(TaskManagerExternalDB):
     def _run_tasks(self, tasks: List[SimulationTask]) -> List[Any]:
         return [task.run() for task in tasks]
 
@@ -235,7 +235,7 @@ def test_task_manager_external_db():
     """
     # Create mock database and task manager
     mock_db = MockDatabase()
-    task_manager = TestTaskManagerExternalDB(mock_db)
+    task_manager = MockTaskManagerExternalDB(mock_db)
 
     # Create test tasks
     tasks = [
@@ -286,7 +286,7 @@ def test_task_manager_external_db_all_failed():
     Test type: unit
     """
     mock_db = MockDatabase()
-    task_manager = TestTaskManagerExternalDB(mock_db)
+    task_manager = MockTaskManagerExternalDB(mock_db)
 
     # Create all failing tasks
     tasks = [
@@ -317,7 +317,7 @@ def test_task_manager_external_db_all_cached():
     Test type: unit
     """
     mock_db = MockDatabase()
-    task_manager = TestTaskManagerExternalDB(mock_db)
+    task_manager = MockTaskManagerExternalDB(mock_db)
 
     # Create tasks and cache their results
     tasks = [
