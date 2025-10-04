@@ -980,3 +980,334 @@ class TestSimulationsAPI:
 
         assert isinstance(results, list)
         assert len(results) == 0
+
+    @patch("POMDPPlanners.simulations.simulations_api.OptimizationEvaluationLocalWorkflow")
+    def test_run_optimize_and_evaluate_local_success(
+        self,
+        mock_workflow_class,
+        temp_cache_dir,
+        sample_hyperparameter_run_params,
+    ):
+        """Test successful execution of run_optimize_and_evaluate_local.
+
+        Purpose: Validates that optimize and evaluate workflow completes successfully with local execution
+
+        Given: TigerPOMDP environment, POMCP policy class, hyperparameter configs, and mocked workflow
+        When: run_optimize_and_evaluate_local is executed with valid parameters
+        Then: OptimizationEvaluationLocalWorkflow is called with correct config and returns expected results
+
+        Test type: unit
+        """
+        # Mock the workflow instance and its methods
+        mock_workflow_instance = MagicMock()
+        mock_results = (
+            {"test_tiger": {"OptimizedPOMCP": ["mock_history_1", "mock_history_2"]}},
+            pd.DataFrame(
+                {
+                    "environment": ["test_tiger"],
+                    "policy": ["OptimizedPOMCP"],
+                    "average_return": [10.5],
+                }
+            ),
+        )
+        mock_workflow_instance.optimize_and_evaluate.return_value = mock_results
+        mock_workflow_class.return_value = mock_workflow_instance
+
+        api = SimulationsAPI()
+        results, stats_df = api.run_optimize_and_evaluate_local(
+            configs=sample_hyperparameter_run_params,
+            evaluation_episodes=100,
+            evaluation_steps=100,
+            evaluation_n_jobs=1,
+            optimization_n_jobs=2,
+            confidence_interval_level=0.95,
+            alpha=0.05,
+            cache_dir_path=temp_cache_dir,
+            experiment_name="test_optimize_evaluate",
+            debug=True,
+            cache_visualizations=True,
+        )
+
+        # Verify OptimizationEvaluationLocalWorkflow was called with correct parameters
+        mock_workflow_class.assert_called_once()
+        call_args = mock_workflow_class.call_args
+
+        assert call_args[1]["cache_dir"] == temp_cache_dir
+        assert call_args[1]["experiment_name"] == "test_optimize_evaluate"
+        assert call_args[1]["optimization_n_jobs"] == 2
+        assert call_args[1]["particles"] == 100  # From fixture belief
+        assert call_args[1]["num_episodes"] == 2  # From fixture
+        assert call_args[1]["num_steps"] == 5  # From fixture
+        assert call_args[1]["n_trials"] == 3  # From fixture
+        assert call_args[1]["evaluation_episodes"] == 100
+        assert call_args[1]["evaluation_steps"] == 100
+        assert call_args[1]["evaluation_n_jobs"] == 1
+        assert call_args[1]["confidence_interval_level"] == 0.95
+        assert call_args[1]["alpha"] == 0.05
+        assert call_args[1]["debug"] is True
+        assert call_args[1]["verbose"] is True
+        assert call_args[1]["cache_visualizations"] is True
+
+        # Verify optimize_and_evaluate was called with correct configs
+        mock_workflow_instance.optimize_and_evaluate.assert_called_once_with(
+            sample_hyperparameter_run_params
+        )
+
+        # Verify results
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+
+    @patch("POMDPPlanners.simulations.simulations_api.OptimizationEvaluationLocalWorkflow")
+    def test_run_optimize_and_evaluate_local_default_parameters(
+        self,
+        mock_workflow_class,
+        sample_hyperparameter_run_params,
+    ):
+        """Test run_optimize_and_evaluate_local with default parameters.
+
+        Purpose: Validates that optimize and evaluate uses correct default values when optional parameters are not provided
+
+        Given: Only required parameters (configs)
+        When: run_optimize_and_evaluate_local is called with minimal parameters
+        Then: OptimizationEvaluationLocalWorkflow is created with correct default values
+
+        Test type: unit
+        """
+        # Mock the workflow instance
+        mock_workflow_instance = MagicMock()
+        mock_results = ({}, pd.DataFrame())
+        mock_workflow_instance.optimize_and_evaluate.return_value = mock_results
+        mock_workflow_class.return_value = mock_workflow_instance
+
+        api = SimulationsAPI()
+        results, stats_df = api.run_optimize_and_evaluate_local(
+            configs=sample_hyperparameter_run_params,
+        )
+
+        # Verify default parameters
+        call_args = mock_workflow_class.call_args
+
+        assert call_args[1]["experiment_name"] == "Optimize_And_Evaluate"  # Default
+        assert call_args[1]["optimization_n_jobs"] == -1  # Default
+        assert call_args[1]["evaluation_episodes"] == 100  # Default
+        assert call_args[1]["evaluation_steps"] == 100  # Default
+        assert call_args[1]["evaluation_n_jobs"] == 1  # Default
+        assert call_args[1]["confidence_interval_level"] == 0.95  # Default
+        assert call_args[1]["alpha"] == 0.05  # Default
+        assert call_args[1]["debug"] is False  # Default
+        assert call_args[1]["cache_visualizations"] is True  # Default
+
+        # Verify cache directory was created with default name
+        expected_cache_dir = Path("./optimize_and_evaluate_results")
+        assert call_args[1]["cache_dir"] == expected_cache_dir
+
+    @patch("POMDPPlanners.simulations.simulations_api.OptimizationEvaluationLocalWorkflow")
+    def test_run_optimize_and_evaluate_local_empty_configs(
+        self,
+        mock_workflow_class,
+        temp_cache_dir,
+    ):
+        """Test run_optimize_and_evaluate_local with empty configurations list.
+
+        Purpose: Validates that optimize and evaluate handles empty configurations with appropriate error
+
+        Given: Empty list of HyperParameterRunParams
+        When: run_optimize_and_evaluate_local is called with empty configurations
+        Then: ValueError is raised with descriptive error message
+
+        Test type: unit
+        """
+        api = SimulationsAPI()
+
+        with pytest.raises(ValueError, match="configs list cannot be empty"):
+            api.run_optimize_and_evaluate_local(
+                configs=[],  # Empty list
+                cache_dir_path=temp_cache_dir,
+            )
+
+    @patch("POMDPPlanners.simulations.simulations_api.OptimizationEvaluationPBSWorkflow")
+    def test_run_optimize_and_evaluate_pbs_success(
+        self,
+        mock_workflow_class,
+        temp_cache_dir,
+        sample_hyperparameter_run_params,
+    ):
+        """Test successful execution of run_optimize_and_evaluate_pbs.
+
+        Purpose: Validates that optimize and evaluate workflow completes successfully with PBS cluster execution
+
+        Given: TigerPOMDP environment, POMCP policy class, hyperparameter configs, PBS settings, and mocked workflow
+        When: run_optimize_and_evaluate_pbs is executed with valid parameters
+        Then: OptimizationEvaluationPBSWorkflow is called with correct config and returns expected results
+
+        Test type: unit
+        """
+        # Mock the workflow instance and its methods
+        mock_workflow_instance = MagicMock()
+        mock_results = (
+            {"test_tiger": {"OptimizedPOMCP": ["mock_history_1", "mock_history_2"]}},
+            pd.DataFrame(
+                {
+                    "environment": ["test_tiger"],
+                    "policy": ["OptimizedPOMCP"],
+                    "average_return": [10.5],
+                }
+            ),
+        )
+        mock_workflow_instance.optimize_and_evaluate.return_value = mock_results
+        mock_workflow_class.return_value = mock_workflow_instance
+
+        api = SimulationsAPI()
+        results, stats_df = api.run_optimize_and_evaluate_pbs(
+            configs=sample_hyperparameter_run_params,
+            queue="test_queue",
+            evaluation_episodes=100,
+            evaluation_steps=100,
+            evaluation_n_jobs=1,
+            n_workers=4,
+            cores=2,
+            memory="8GB",
+            processes=1,
+            walltime="02:00:00",
+            job_extra=["#PBS -l feature=gpu"],
+            confidence_interval_level=0.95,
+            alpha=0.05,
+            cache_dir_path=temp_cache_dir,
+            experiment_name="test_optimize_evaluate_pbs",
+            debug=True,
+            cache_visualizations=True,
+        )
+
+        # Verify OptimizationEvaluationPBSWorkflow was called with correct parameters
+        mock_workflow_class.assert_called_once()
+        call_args = mock_workflow_class.call_args
+
+        assert call_args[1]["cache_dir"] == temp_cache_dir
+        assert call_args[1]["experiment_name"] == "test_optimize_evaluate_pbs"
+        assert call_args[1]["queue"] == "test_queue"
+        assert call_args[1]["n_workers"] == 4
+        assert call_args[1]["cores"] == 2
+        assert call_args[1]["memory"] == "8GB"
+        assert call_args[1]["processes"] == 1
+        assert call_args[1]["walltime"] == "02:00:00"
+        assert call_args[1]["job_extra"] == ["#PBS -l feature=gpu"]
+        assert call_args[1]["particles"] == 100  # From fixture belief
+        assert call_args[1]["num_episodes"] == 2  # From fixture
+        assert call_args[1]["num_steps"] == 5  # From fixture
+        assert call_args[1]["n_trials"] == 3  # From fixture
+        assert call_args[1]["evaluation_episodes"] == 100
+        assert call_args[1]["evaluation_steps"] == 100
+        assert call_args[1]["evaluation_n_jobs"] == 1
+        assert call_args[1]["confidence_interval_level"] == 0.95
+        assert call_args[1]["alpha"] == 0.05
+        assert call_args[1]["debug"] is True
+        assert call_args[1]["verbose"] is True
+        assert call_args[1]["cache_visualizations"] is True
+
+        # Verify optimize_and_evaluate was called with correct configs
+        mock_workflow_instance.optimize_and_evaluate.assert_called_once_with(
+            sample_hyperparameter_run_params
+        )
+
+        # Verify results
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+
+    @patch("POMDPPlanners.simulations.simulations_api.OptimizationEvaluationPBSWorkflow")
+    def test_run_optimize_and_evaluate_pbs_default_parameters(
+        self,
+        mock_workflow_class,
+        sample_hyperparameter_run_params,
+    ):
+        """Test run_optimize_and_evaluate_pbs with default parameters.
+
+        Purpose: Validates that optimize and evaluate PBS uses correct default values when optional parameters are not provided
+
+        Given: Only required parameters (configs, queue)
+        When: run_optimize_and_evaluate_pbs is called with minimal parameters
+        Then: OptimizationEvaluationPBSWorkflow is created with correct default values
+
+        Test type: unit
+        """
+        # Mock the workflow instance
+        mock_workflow_instance = MagicMock()
+        mock_results = ({}, pd.DataFrame())
+        mock_workflow_instance.optimize_and_evaluate.return_value = mock_results
+        mock_workflow_class.return_value = mock_workflow_instance
+
+        api = SimulationsAPI()
+        results, stats_df = api.run_optimize_and_evaluate_pbs(
+            configs=sample_hyperparameter_run_params,
+            queue="default_queue",
+        )
+
+        # Verify default parameters
+        call_args = mock_workflow_class.call_args
+
+        assert call_args[1]["experiment_name"] == "Optimize_And_Evaluate_PBS"  # Default
+        assert call_args[1]["queue"] == "default_queue"
+        assert call_args[1]["n_workers"] == 4  # Default
+        assert call_args[1]["cores"] == 1  # Default
+        assert call_args[1]["memory"] == "4GB"  # Default
+        assert call_args[1]["processes"] == 1  # Default
+        assert call_args[1]["walltime"] == "03:00:00"  # Default
+        assert call_args[1]["job_extra"] is None  # Default
+        assert call_args[1]["evaluation_episodes"] == 100  # Default
+        assert call_args[1]["evaluation_steps"] == 100  # Default
+        assert call_args[1]["evaluation_n_jobs"] == 1  # Default
+        assert call_args[1]["confidence_interval_level"] == 0.95  # Default
+        assert call_args[1]["alpha"] == 0.05  # Default
+        assert call_args[1]["debug"] is False  # Default
+        assert call_args[1]["cache_visualizations"] is True  # Default
+
+        # Verify cache directory was created with default name
+        expected_cache_dir = Path("./optimize_and_evaluate_pbs_results")
+        assert call_args[1]["cache_dir"] == expected_cache_dir
+
+    @patch("POMDPPlanners.simulations.simulations_api.OptimizationEvaluationPBSWorkflow")
+    def test_run_optimize_and_evaluate_pbs_empty_configs(
+        self,
+        mock_workflow_class,
+        temp_cache_dir,
+    ):
+        """Test run_optimize_and_evaluate_pbs with empty configurations list.
+
+        Purpose: Validates that optimize and evaluate PBS handles empty configurations with appropriate error
+
+        Given: Empty list of HyperParameterRunParams
+        When: run_optimize_and_evaluate_pbs is called with empty configurations
+        Then: ValueError is raised with descriptive error message
+
+        Test type: unit
+        """
+        api = SimulationsAPI()
+
+        with pytest.raises(ValueError, match="configs list cannot be empty"):
+            api.run_optimize_and_evaluate_pbs(
+                configs=[],  # Empty list
+                queue="test_queue",
+                cache_dir_path=temp_cache_dir,
+            )
+
+    def test_run_optimize_and_evaluate_pbs_missing_queue(
+        self,
+        sample_hyperparameter_run_params,
+    ):
+        """Test run_optimize_and_evaluate_pbs with missing queue parameter.
+
+        Purpose: Validates that optimize and evaluate PBS properly validates required queue parameter
+
+        Given: Missing queue parameter
+        When: run_optimize_and_evaluate_pbs is called
+        Then: TypeError is raised for missing required parameter
+
+        Test type: unit
+        """
+        api = SimulationsAPI()
+
+        # Test with missing queue
+        with pytest.raises(TypeError, match="missing 1 required positional argument: 'queue'"):
+            api.run_optimize_and_evaluate_pbs(  # type: ignore[call-arg]
+                configs=sample_hyperparameter_run_params,
+                # Missing queue parameter
+            )
