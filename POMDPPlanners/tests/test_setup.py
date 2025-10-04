@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from packaging import version
 
 np.random.seed(42)
 random.seed(42)
@@ -52,17 +53,17 @@ def test_required_packages():
         try:
             # Parse package name and version constraint
             if "==" in req:
-                package_name, version = req.split("==")
+                package_name, expected_version = req.split("==")
                 installed_version = importlib.metadata.version(package_name.strip())
-                if installed_version != version.strip():
+                if installed_version != expected_version.strip():
                     raise AssertionError(
-                        f"Package {package_name} version mismatch: expected {version}, got {installed_version}"
+                        f"Package {package_name} version mismatch: expected {expected_version}, got {installed_version}"
                     )
             elif ">=" in req:
                 package_name, min_version = req.split(">=")
                 installed_version = importlib.metadata.version(package_name.strip())
-                # Simple version comparison (could be improved with packaging.version)
-                if installed_version < min_version.strip():
+                # Proper semantic version comparison
+                if version.parse(installed_version) < version.parse(min_version.strip()):
                     raise AssertionError(
                         f"Package {package_name} version too old: expected >= {min_version}, got {installed_version}"
                     )
