@@ -755,6 +755,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         failed_tags_per_episode = []
         obstacle_collisions_per_episode = []
         dangerous_area_steps_per_episode = []
+        all_dangerous_encounters_per_episode = []
 
         # Action direction mappings (used multiple times)
         action_dirs = {0: (-1, 0), 1: (1, 0), 2: (0, 1), 3: (0, -1)}
@@ -815,7 +816,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             failed_tags_per_episode.append(episode_failed_tags)
             obstacle_collisions_per_episode.append(episode_obstacle_collisions)
             dangerous_area_steps_per_episode.append(episode_dangerous_area_steps)
-
+            all_dangerous_encounters_per_episode.append(
+                episode_obstacle_collisions + episode_dangerous_area_steps
+            )
         # Calculate aggregate statistics
         successful_tags = sum(success_indicators)
         success_rate = successful_tags / total_episodes
@@ -823,7 +826,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         avg_failed_tags = float(np.mean(failed_tags_per_episode))
         avg_obstacle_collisions = float(np.mean(obstacle_collisions_per_episode))
         avg_dangerous_area_steps = float(np.mean(dangerous_area_steps_per_episode))
-
+        avg_all_dangerous_encounters = float(np.mean(all_dangerous_encounters_per_episode))
         # Calculate confidence intervals (handle single episode case)
         if total_episodes >= 2:
             success_ci = confidence_interval(data=success_indicators, confidence=0.95)
@@ -835,7 +838,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             dangerous_area_steps_ci = confidence_interval(
                 data=dangerous_area_steps_per_episode, confidence=0.95
             )
-
+            all_dangerous_encounters_ci = confidence_interval(
+                data=all_dangerous_encounters_per_episode, confidence=0.95
+            )
         else:
             # For single episode, confidence bounds equal the value (no statistical inference)
             success_ci = (-np.inf, np.inf)
@@ -843,6 +848,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             failed_tags_ci = (-np.inf, np.inf)
             obstacle_collisions_ci = (-np.inf, np.inf)
             dangerous_area_steps_ci = (-np.inf, np.inf)
+            all_dangerous_encounters_ci = (-np.inf, np.inf)
 
         return [
             MetricValue(
@@ -874,6 +880,12 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 value=avg_dangerous_area_steps,
                 lower_confidence_bound=dangerous_area_steps_ci[0],
                 upper_confidence_bound=dangerous_area_steps_ci[1],
+            ),
+            MetricValue(
+                name="average_all_dangerous_encounters",
+                value=avg_all_dangerous_encounters,
+                lower_confidence_bound=all_dangerous_encounters_ci[0],
+                upper_confidence_bound=all_dangerous_encounters_ci[1],
             ),
         ]
 
