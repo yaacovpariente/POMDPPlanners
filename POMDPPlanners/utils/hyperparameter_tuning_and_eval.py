@@ -614,6 +614,158 @@ def optimize_and_evaluate_planners_pbs(
     return results
 
 
+def optimize_and_evaluate_multiple_environments_and_policies(
+    configs: List[HyperParameterRunParams],
+    num_episodes_evaluation: int,
+    num_steps_evaluation: int,
+    cache_dir: Path,
+    experiment_name: str,
+    task_manager_config: JoblibConfig,
+    n_jobs: int,
+    confidence_interval_level: float,
+    alpha: float,
+    debug: bool = False,
+    verbose: bool = True,
+    cache_visualizations: bool = True,
+) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+    """Optimize and evaluate multiple POMDP planners on multiple environments and policies."""
+    if verbose:
+        logger.info(f"Optimizing {len(configs)} environments and policies")
+
+    if debug:
+        logger.debug(f"Optimizing {len(configs)} environments and policies")
+
+    if cache_dir is None:
+        cache_dir = Path(f"./{experiment_name.lower().replace(' ', '_')}_results")
+
+    optimizer = HyperParameterOptimizer(
+        cache_dir_path=cache_dir,
+        experiment_name=experiment_name,
+        task_manager_config=task_manager_config,
+        n_jobs=n_jobs,
+        confidence_interval_level=confidence_interval_level,
+        alpha=alpha,
+    )
+
+    optimization_results: List[OptimizedPolicyResult] = optimizer.optimize(configs)
+    optimization_results_organized: List[Tuple[Environment, Belief, List[Policy]]] = [
+        (result.environment, configs[i].belief, [result.policy])
+        for i, result in enumerate(optimization_results)
+    ]
+
+    chosen_planners_eval_configs = [
+        EnvironmentRunParams(
+            environment=env,
+            belief=belief,
+            policies=policies,
+            num_episodes=num_episodes_evaluation,
+            num_steps=num_steps_evaluation,
+        )
+        for env, belief, policies in optimization_results_organized
+    ]
+
+    with POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=n_jobs),
+        cache_dir_path=cache_dir,
+        experiment_name=experiment_name,
+        debug=debug,
+    ) as simulator:
+        results = simulator.compare_multiple_environments_policies(
+            environment_run_params=chosen_planners_eval_configs,
+            alpha=alpha,
+            confidence_interval_level=confidence_interval_level,
+            n_jobs=n_jobs,
+            cache_visualizations=cache_visualizations,
+        )
+
+    return results
+
+
+def optimize_and_evaluate_multiple_environments_and_policies_pbs(
+    configs: List[HyperParameterRunParams],
+    num_episodes_evaluation: int,
+    num_steps_evaluation: int,
+    cache_dir: Path,
+    experiment_name: str,
+    queue: str,
+    n_workers: int,
+    cores: int,
+    memory: str,
+    processes: int,
+    walltime: str,
+    job_extra: Optional[List[str]],
+    n_jobs: int,
+    confidence_interval_level: float,
+    alpha: float,
+    debug: bool = False,
+    verbose: bool = True,
+    cache_visualizations: bool = True,
+) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+    """Optimize and evaluate multiple POMDP planners on multiple environments and policies."""
+    if verbose:
+        logger.info(f"Optimizing {len(configs)} environments and policies")
+
+    if debug:
+        logger.debug(f"Optimizing {len(configs)} environments and policies")
+
+    if cache_dir is None:
+        cache_dir = Path(f"./{experiment_name.lower().replace(' ', '_')}_results")
+
+    n_workers = min(n_workers, len(configs))
+
+    task_manager_config = PBSConfig(
+        queue=queue,
+        n_workers=n_workers,
+        cores=cores,
+        memory=memory,
+        processes=processes,
+        walltime=walltime,
+        job_extra=job_extra,
+    )
+
+    optimizer = HyperParameterOptimizer(
+        cache_dir_path=cache_dir,
+        experiment_name=experiment_name,
+        task_manager_config=task_manager_config,
+        n_jobs=n_jobs,
+        confidence_interval_level=confidence_interval_level,
+        alpha=alpha,
+    )
+
+    optimization_results: List[OptimizedPolicyResult] = optimizer.optimize(configs)
+    optimization_results_organized: List[Tuple[Environment, Belief, List[Policy]]] = [
+        (result.environment, configs[i].belief, [result.policy])
+        for i, result in enumerate(optimization_results)
+    ]
+
+    chosen_planners_eval_configs = [
+        EnvironmentRunParams(
+            environment=env,
+            belief=belief,
+            policies=policies,
+            num_episodes=num_episodes_evaluation,
+            num_steps=num_steps_evaluation,
+        )
+        for env, belief, policies in optimization_results_organized
+    ]
+
+    with POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=-1),
+        cache_dir_path=cache_dir,
+        experiment_name=experiment_name,
+        debug=debug,
+    ) as simulator:
+        results = simulator.compare_multiple_environments_policies(
+            environment_run_params=chosen_planners_eval_configs,
+            alpha=alpha,
+            confidence_interval_level=confidence_interval_level,
+            n_jobs=n_jobs,
+            cache_visualizations=cache_visualizations,
+        )
+
+    return results
+
+
 def optimize_planner_hyperparameters(
     environment: Environment,
     initial_belief: Belief,

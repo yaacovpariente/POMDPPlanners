@@ -1280,14 +1280,20 @@ class TestOptimizePlannerHyperparameters:
         assert len(run_params_list) == 2  # Two configs from test_multiple_planner_configs
 
         # Verify first config
-        assert run_params_list[0].policy_cls == POMCP
-        assert len(run_params_list[0].hyper_parameters) == 2
-        assert run_params_list[0].constant_parameters["name"] == "TestPOMCP1"
+        assert run_params_list[0].hyper_param_planner_config.policy_cls == POMCP
+        assert len(run_params_list[0].hyper_param_planner_config.hyper_parameters) == 2
+        assert (
+            run_params_list[0].hyper_param_planner_config.constant_parameters["name"]
+            == "TestPOMCP1"
+        )
 
         # Verify second config
-        assert run_params_list[1].policy_cls == POMCP
-        assert len(run_params_list[1].hyper_parameters) == 2
-        assert run_params_list[1].constant_parameters["name"] == "TestPOMCP2"
+        assert run_params_list[1].hyper_param_planner_config.policy_cls == POMCP
+        assert len(run_params_list[1].hyper_param_planner_config.hyper_parameters) == 2
+        assert (
+            run_params_list[1].hyper_param_planner_config.constant_parameters["name"]
+            == "TestPOMCP2"
+        )
 
         # Verify results
         assert len(results) == 2
@@ -1556,14 +1562,20 @@ class TestOptimizePlannerHyperparametersPBS:
         assert len(run_params_list) == 2
 
         # Verify first config
-        assert run_params_list[0].policy_cls == POMCP
-        assert len(run_params_list[0].hyper_parameters) == 2
-        assert run_params_list[0].constant_parameters["name"] == "TestPOMCP1"
+        assert run_params_list[0].hyper_param_planner_config.policy_cls == POMCP
+        assert len(run_params_list[0].hyper_param_planner_config.hyper_parameters) == 2
+        assert (
+            run_params_list[0].hyper_param_planner_config.constant_parameters["name"]
+            == "TestPOMCP1"
+        )
 
         # Verify second config
-        assert run_params_list[1].policy_cls == POMCP
-        assert len(run_params_list[1].hyper_parameters) == 2
-        assert run_params_list[1].constant_parameters["name"] == "TestPOMCP2"
+        assert run_params_list[1].hyper_param_planner_config.policy_cls == POMCP
+        assert len(run_params_list[1].hyper_param_planner_config.hyper_parameters) == 2
+        assert (
+            run_params_list[1].hyper_param_planner_config.constant_parameters["name"]
+            == "TestPOMCP2"
+        )
 
         # Verify PBS config
         call_kwargs = mock_optimizer_class.call_args[1]
