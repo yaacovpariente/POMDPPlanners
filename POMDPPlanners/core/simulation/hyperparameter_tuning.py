@@ -1,12 +1,26 @@
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Literal, NamedTuple, Sequence, Type, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Literal,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    Union,
+)
 
 if TYPE_CHECKING:
     from POMDPPlanners.core.belief import Belief
     from POMDPPlanners.core.environment import Environment
     from POMDPPlanners.core.policy import Policy
+    from POMDPPlanners.core.policy import PolicySpaceInfo
 
 
 class CategoricalHyperParameter(NamedTuple):
@@ -28,16 +42,19 @@ class HyperParameterOptimizationDirection(Enum):
     MINIMIZE = "minimize"
 
 
+@dataclass(frozen=True)
 class HyperParamPlannerConfig:
-    def __init__(
-        self,
-        policy_cls: type,
-        hyper_parameters: Sequence[HyperParameterFeature],
-        constant_parameters: Dict[str, Any],
-    ):
-        self.policy_cls = policy_cls
-        self.hyper_parameters = hyper_parameters
-        self.constant_parameters = constant_parameters
+    policy_cls: Type["Policy"]
+    hyper_parameters: Sequence[HyperParameterFeature]
+    constant_parameters: Dict[str, Any]
+
+
+class ParameterToOptimizeMapper(ABC):
+    @abstractmethod
+    def generate(
+        self, environment: "Environment", policy_cls: Optional[Type["Policy"]] = None
+    ) -> Tuple[str, HyperParameterOptimizationDirection]:
+        pass
 
 
 class HyperParameterRunParams(NamedTuple):
@@ -59,3 +76,13 @@ class OptimizedPolicyResult(NamedTuple):
     num_steps: int
     direction: HyperParameterOptimizationDirection
     parameter_to_optimize: str
+
+
+class HyperParamPlannerConfigGenerator(ABC):
+    @abstractmethod
+    def generate(self, environment: "Environment") -> HyperParamPlannerConfig:
+        pass
+
+    @abstractmethod
+    def get_planner_space_info(self) -> "PolicySpaceInfo":
+        pass

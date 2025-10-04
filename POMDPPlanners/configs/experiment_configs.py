@@ -1,0 +1,163 @@
+from typing import List, Tuple, Optional, Type
+from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+    HyperParameterOptimizationDirection,
+    HyperParameterRunParams,
+    ParameterToOptimizeMapper,
+)
+from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
+from POMDPPlanners.core.policy import PolicySpaceInfo
+from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
+from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
+from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParamPlannerConfigGenerator
+
+from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDP,
+)
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
+)
+from POMDPPlanners.environments.push_pomdp import PushPOMDP
+from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.environments.rock_sample_pomdp import RockSamplePOMDP
+from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
+
+
+class AverageReturnParameterToOptimizeMapper(ParameterToOptimizeMapper):
+    def generate(
+        self, environment: Environment, policy_cls: Optional[Type[Policy]] = None
+    ) -> Tuple[str, HyperParameterOptimizationDirection]:
+        return "average_return", HyperParameterOptimizationDirection.MAXIMIZE
+
+
+class RiskAverseParameterToOptimizeMapper(ParameterToOptimizeMapper):
+    def generate(
+        self, environment: Environment, policy_cls: Optional[Type[Policy]] = None
+    ) -> Tuple[str, HyperParameterOptimizationDirection]:
+        if isinstance(environment, CartPolePOMDP):
+            raise NotImplementedError("Risk-averse optimization is not supported for CartPolePOMDP")
+        elif isinstance(environment, MountainCarPOMDP):
+            raise NotImplementedError(
+                "Risk-averse optimization is not supported for MountainCarPOMDP"
+            )
+        elif isinstance(environment, ContinuousLightDarkPOMDP):
+            return "avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE
+        elif isinstance(environment, DiscreteLightDarkPOMDP):
+            return "avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE
+        elif isinstance(environment, PushPOMDP):
+            return "total_all_obstacle_collisions", HyperParameterOptimizationDirection.MINIMIZE
+        elif isinstance(environment, SafeAntVelocityPOMDP):
+            return "total_safety_violations", HyperParameterOptimizationDirection.MINIMIZE
+        elif isinstance(environment, TigerPOMDP):
+            raise NotImplementedError("Risk-averse optimization is not supported for TigerPOMDP")
+        elif isinstance(environment, RockSamplePOMDP):
+            return "average_dangerous_area_steps", HyperParameterOptimizationDirection.MINIMIZE
+        elif isinstance(environment, LaserTagPOMDP):
+            return "average_all_dangerous_encounters", HyperParameterOptimizationDirection.MINIMIZE
+        elif isinstance(environment, PacManPOMDP):
+            return "average_return", HyperParameterOptimizationDirection.MAXIMIZE
+        else:
+            raise ValueError(f"Environment {environment.__class__.__name__} is not supported")
+
+
+def get_hyperparameter_benchmarks(
+    policy_space_info: PolicySpaceInfo, particle_count: int = 30, time_out_in_seconds: float = 3.0
+) -> List[Tuple[Environment, Belief, List[HyperParamPlannerConfig]]]:
+    env_configs = EnvironmentConfigsAPI(discount_factor=0.95)
+    planners_hyperparam_configs = PlannersHyperparamConfigs(discount_factor=0.95)
+
+    envs = env_configs.get_compatible_environments(
+        policy_space_info=policy_space_info, n_particles=particle_count
+    )
+    benchmarks = []
+    for env, belief in envs:
+        planner_confs = planners_hyperparam_configs.get_compatible_planners(
+            env=env, time_out_in_seconds=time_out_in_seconds
+        )
+        planner_configs = [
+            HyperParamPlannerConfig(
+                policy_cls=planner_conf.policy_cls,
+                hyper_parameters=planner_conf.hyper_parameters,
+                constant_parameters=planner_conf.constant_parameters,
+            )
+            for planner_conf in planner_confs
+        ]
+        benchmarks.append((env, belief, planner_configs))
+
+    return benchmarks
+
+
+def complete_environments_and_benchmarks_hyperparameter_optimization_configs(
+    gen: HyperParamPlannerConfigGenerator,
+    parameter_to_optimize_mapper: ParameterToOptimizeMapper,
+    particles: int = 30,
+    num_episodes: int = 10,
+    num_steps: int = 20,
+    n_trials: int = 500,
+    parameter_to_optimize: str = "average_return",
+) -> List[HyperParameterRunParams]:
+    env_configs = EnvironmentConfigsAPI(discount_factor=0.95)
+    planners_hyperparam_configs = PlannersHyperparamConfigs(discount_factor=0.95)
+
+    envs = env_configs.get_compatible_environments(
+        policy_space_info=gen.get_planner_space_info(), n_particles=particles
+    )
+    envs, beliefs = zip(*envs)
+    planner_configs_for_each_environment: List[HyperParamPlannerConfig] = [
+        gen.generate(env) for env in envs
+    ]
+
+    planner_run_params_for_each_environment: List[HyperParameterRunParams] = []
+    for env, belief, planner_config in zip(envs, beliefs, planner_configs_for_each_environment):
+        parameter_to_optimize, direction = parameter_to_optimize_mapper.generate(
+            env, planner_config.policy_cls
+        )
+        planner_run_params_for_each_environment.append(
+            HyperParameterRunParams(
+                environment=env,
+                belief=belief,
+                hyper_param_planner_config=planner_config,
+                num_episodes=num_episodes,
+                num_steps=num_steps,
+                n_trials=n_trials,
+                direction=direction,
+                parameter_to_optimize=parameter_to_optimize,
+            )
+        )
+
+    all_configs = []
+    for run_param in planner_run_params_for_each_environment:
+        all_configs.append(run_param)
+        all_configs += get_benchmarks_hyperparameter_optimization_configs(
+            conf=run_param, discount_factor=0.95, time_out_in_seconds=3.0
+        )
+
+    return all_configs
+
+
+def get_benchmarks_hyperparameter_optimization_configs(
+    conf: HyperParameterRunParams, discount_factor: float, time_out_in_seconds: float = 3.0
+) -> List[HyperParameterRunParams]:
+    planners_hyperparam_configs = PlannersHyperparamConfigs(discount_factor=discount_factor)
+    planner_configs = planners_hyperparam_configs.get_compatible_planners(
+        env=conf.environment, time_out_in_seconds=time_out_in_seconds
+    )
+    return [
+        HyperParameterRunParams(
+            environment=conf.environment,
+            belief=conf.belief,
+            hyper_param_planner_config=bench_planner_config,
+            num_episodes=conf.num_episodes,
+            num_steps=conf.num_steps,
+            n_trials=conf.n_trials,
+            direction=conf.direction,
+            parameter_to_optimize=conf.parameter_to_optimize,
+        )
+        for bench_planner_config in planner_configs
+    ]
