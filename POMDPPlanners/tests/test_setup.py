@@ -1,12 +1,12 @@
 """Tests to verify package installation and basic functionality."""
 
 import importlib
+import importlib.metadata
 import random
 import sys
 from pathlib import Path
 
 import numpy as np
-import pkg_resources
 
 np.random.seed(42)
 random.seed(42)
@@ -37,8 +37,8 @@ def test_required_packages():
     Purpose: Validates that all dependencies listed in requirements.txt are properly installed with compatible versions
 
     Given: requirements.txt file containing package dependencies with version constraints
-    When: Each required package is checked against installed packages using pkg_resources
-    Then: All requirements are satisfied without DistributionNotFound or VersionConflict errors
+    When: Each required package is checked against installed packages using importlib.metadata
+    Then: All requirements are satisfied without PackageNotFoundError or version conflicts
 
     Test type: unit
     """
@@ -47,15 +47,30 @@ def test_required_packages():
     with open(requirements_file) as f:
         requirements = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
-    # Convert requirements to pkg_resources.Requirement objects
-    required_packages = [pkg_resources.Requirement.parse(req) for req in requirements]
-
     # Check each requirement
-    for requirement in required_packages:
+    for req in requirements:
         try:
-            pkg_resources.require(str(requirement))
-        except (pkg_resources.DistributionNotFound, pkg_resources.VersionConflict) as e:
-            raise AssertionError(f"Package requirement not met: {requirement} - {e}")
+            # Parse package name and version constraint
+            if "==" in req:
+                package_name, version = req.split("==")
+                installed_version = importlib.metadata.version(package_name.strip())
+                if installed_version != version.strip():
+                    raise AssertionError(
+                        f"Package {package_name} version mismatch: expected {version}, got {installed_version}"
+                    )
+            elif ">=" in req:
+                package_name, min_version = req.split(">=")
+                installed_version = importlib.metadata.version(package_name.strip())
+                # Simple version comparison (could be improved with packaging.version)
+                if installed_version < min_version.strip():
+                    raise AssertionError(
+                        f"Package {package_name} version too old: expected >= {min_version}, got {installed_version}"
+                    )
+            else:
+                # Just check if package is installed
+                importlib.metadata.version(req.strip())
+        except importlib.metadata.PackageNotFoundError as e:
+            raise AssertionError(f"Package requirement not met: {req} - {e}")
 
 
 def test_imports():

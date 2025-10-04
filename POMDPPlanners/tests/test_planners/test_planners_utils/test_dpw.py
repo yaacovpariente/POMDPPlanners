@@ -26,7 +26,7 @@ from POMDPPlanners.planners.planners_utils.dpw import (
 )
 
 
-class TestActionSampler(ActionSampler):
+class MockActionSampler(ActionSampler):
     """Concrete implementation of ActionSampler for testing."""
 
     def __init__(self, actions=None):
@@ -40,7 +40,7 @@ class TestActionSampler(ActionSampler):
         return np.random.choice(self.actions)
 
 
-class TestContinuousActionSampler(ActionSampler):
+class MockContinuousActionSampler(ActionSampler):
     """Concrete implementation for continuous action sampling."""
 
     def __init__(self, action_bounds=(-1.0, 1.0), action_dim=2):
@@ -56,13 +56,13 @@ class TestContinuousActionSampler(ActionSampler):
 @pytest.fixture
 def discrete_action_sampler():
     """Fixture for discrete action sampler."""
-    return TestActionSampler(actions=[0, 1, 2])
+    return MockActionSampler(actions=[0, 1, 2])
 
 
 @pytest.fixture
 def continuous_action_sampler():
     """Fixture for continuous action sampler."""
-    return TestContinuousActionSampler(action_bounds=(-1.0, 1.0), action_dim=2)
+    return MockContinuousActionSampler(action_bounds=(-1.0, 1.0), action_dim=2)
 
 
 @pytest.fixture
@@ -114,9 +114,9 @@ def test_action_sampler_abstract_class():
 def test_concrete_action_sampler_implementation(discrete_action_sampler):
     """Test that concrete ActionSampler implementation works correctly.
 
-    Purpose: Validates that TestActionSampler concrete implementation correctly samples from discrete action space
+    Purpose: Validates that MockActionSampler concrete implementation correctly samples from discrete action space
 
-    Given: TestActionSampler with actions=[0,1,2], multiple sampling operations
+    Given: MockActionSampler with actions=[0,1,2], multiple sampling operations
     When: sample method is called repeatedly to test distribution
     Then: All sampled actions are from the valid action set [0,1,2]
 
@@ -153,7 +153,7 @@ def test_action_progressive_widening_new_action(belief_node, discrete_action_sam
 
     Purpose: Validates that action_progressive_widening creates new ActionNode when progressive widening criteria are met
 
-    Given: Leaf BeliefNode with visit_count=0, TestActionSampler, progressive widening parameters (alpha_a=0.5, k_a=3.0)
+    Given: Leaf BeliefNode with visit_count=0, MockActionSampler, progressive widening parameters (alpha_a=0.5, k_a=3.0)
     When: action_progressive_widening determines new action should be created and sampled
     Then: Creates new ActionNode with valid action from sampler, proper parent-child relationship, belief_node gains 1 child
 
@@ -214,7 +214,7 @@ def test_action_progressive_widening_progressive_expansion(belief_node, discrete
 
     Purpose: Validates that action_progressive_widening progressively expands action space by creating multiple distinct actions
 
-    Given: BeliefNode with visit_count=0, TestActionSampler, progressive widening parameters for expansion
+    Given: BeliefNode with visit_count=0, MockActionSampler, progressive widening parameters for expansion
     When: action_progressive_widening is called multiple times to test progressive behavior
     Then: Creates distinct ActionNodes with each call, expanding belief_node children from 1 to 2 nodes
 
@@ -462,7 +462,7 @@ def test_action_sampler_with_belief_node_context(discrete_action_sampler, belief
 
     Purpose: Validates that ActionSampler interface supports optional belief_node parameter for context-aware sampling
 
-    Given: TestActionSampler with actions=[0,1,2], BeliefNode with belief context
+    Given: MockActionSampler with actions=[0,1,2], BeliefNode with belief context
     When: sample method is called with and without belief_node parameter
     Then: Both calls return valid actions from action set, demonstrating optional context support
 
@@ -1137,7 +1137,7 @@ def test_progressive_widening_parameter_tuning_example():
 
 
 # Test classes for serialization testing
-class TestContinuousSampler(ActionSampler):
+class MockContinuousSampler(ActionSampler):
     """Test sampler for continuous action spaces."""
 
     def __init__(self, bounds=(-1.0, 1.0), dim=2):
@@ -1149,7 +1149,7 @@ class TestContinuousSampler(ActionSampler):
         return np.random.uniform(low, high, size=self.dim)
 
 
-class TestDiscreteSampler(ActionSampler):
+class MockDiscreteSampler(ActionSampler):
     """Test sampler for discrete action spaces."""
 
     def __init__(self, actions=None, probs=None):
@@ -1164,7 +1164,7 @@ class TestDiscreteSampler(ActionSampler):
         return np.random.choice(self.actions, p=self.probabilities)
 
 
-class TestComplexSampler(ActionSampler):
+class MockComplexSampler(ActionSampler):
     """Test sampler with complex state including numpy arrays."""
 
     def __init__(self, goal=None, noise_level=0.1):
@@ -1200,9 +1200,9 @@ def test_action_sampler_serialization():
     import pickle
 
     # Create test instances
-    continuous_sampler = TestContinuousSampler((-1.0, 1.0), 3)
-    discrete_sampler = TestDiscreteSampler(["a", "b", "c"], [0.5, 0.3, 0.2])
-    complex_sampler = TestComplexSampler([1.0, 2.0, 3.0], 0.1)
+    continuous_sampler = MockContinuousSampler((-1.0, 1.0), 3)
+    discrete_sampler = MockDiscreteSampler(["a", "b", "c"], [0.5, 0.3, 0.2])
+    complex_sampler = MockComplexSampler([1.0, 2.0, 3.0], 0.1)
 
     samplers = [continuous_sampler, discrete_sampler, complex_sampler]
 
@@ -1271,7 +1271,7 @@ def test_action_sampler_serialization_edge_cases():
     assert empty_sampler.__getstate__() == restored_empty.__getstate__()
 
     # Test with numpy random state (should be handled gracefully)
-    continuous_sampler = TestContinuousSampler((-1.0, 1.0), 2)
+    continuous_sampler = MockContinuousSampler((-1.0, 1.0), 2)
     np.random.seed(42)
     test_sample = continuous_sampler.sample()
     np.random.seed(42)
@@ -1295,18 +1295,18 @@ def test_action_sampler_equality_and_hashing():
     Test type: unit
     """
     # Test identical samplers
-    sampler1 = TestContinuousSampler((-1.0, 1.0), 2)
-    sampler2 = TestContinuousSampler((-1.0, 1.0), 2)
+    sampler1 = MockContinuousSampler((-1.0, 1.0), 2)
+    sampler2 = MockContinuousSampler((-1.0, 1.0), 2)
 
     assert sampler1 == sampler2, "Identical samplers should be equal"
     assert hash(sampler1) == hash(sampler2), "Identical samplers should have same hash"
 
     # Test different samplers
-    sampler3 = TestContinuousSampler((-2.0, 2.0), 2)
+    sampler3 = MockContinuousSampler((-2.0, 2.0), 2)
     assert sampler1 != sampler3, "Different samplers should not be equal"
 
     # Test different types
-    discrete_sampler = TestDiscreteSampler(["a", "b"], [0.5, 0.5])
+    discrete_sampler = MockDiscreteSampler(["a", "b"], [0.5, 0.5])
     assert sampler1 != discrete_sampler, "Different sampler types should not be equal"
 
 
@@ -1323,7 +1323,7 @@ def test_action_sampler_getstate_setstate():
     Test type: unit
     """
     # Test continuous sampler state
-    continuous_sampler = TestContinuousSampler((-1.0, 1.0), 3)
+    continuous_sampler = MockContinuousSampler((-1.0, 1.0), 3)
     state = continuous_sampler.__getstate__()
 
     # Verify state contains expected attributes
@@ -1333,14 +1333,14 @@ def test_action_sampler_getstate_setstate():
     assert state["dim"] == 3
 
     # Test state restoration
-    new_sampler = TestContinuousSampler((0, 0), 1)
+    new_sampler = MockContinuousSampler((0, 0), 1)
     new_sampler.__setstate__(state)
 
     assert new_sampler.bounds == (-1.0, 1.0)
     assert new_sampler.dim == 3
 
     # Test discrete sampler state
-    discrete_sampler = TestDiscreteSampler(["x", "y"], [0.7, 0.3])
+    discrete_sampler = MockDiscreteSampler(["x", "y"], [0.7, 0.3])
     state = discrete_sampler.__getstate__()
 
     assert "actions" in state

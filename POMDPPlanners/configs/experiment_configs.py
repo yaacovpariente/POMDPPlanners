@@ -4,8 +4,8 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
     HyperParameterRunParams,
     ParameterToOptimizeMapper,
+    HyperParamPlannerConfig,
 )
-from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
 from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
