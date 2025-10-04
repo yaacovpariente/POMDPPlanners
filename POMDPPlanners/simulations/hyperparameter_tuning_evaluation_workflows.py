@@ -193,13 +193,12 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
 
     Example:
         >>> from pathlib import Path
-        >>> workflow = LocalWorkflow(
+        >>> workflow = OptimizationEvaluationLocalWorkflow(
         ...     cache_dir=Path("./results"),
         ...     experiment_name="My_Experiment",
         ...     particles=50,
         ...     optimization_n_jobs=-1,
         ... )
-        >>> results = workflow.run_comprehensive_benchmark(gen)
     """
 
     def __init__(
@@ -337,7 +336,7 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
 
     Example:
         >>> from pathlib import Path
-        >>> workflow = PBSWorkflow(
+        >>> workflow = OptimizationEvaluationPBSWorkflow(
         ...     cache_dir=Path("./results"),
         ...     experiment_name="Cluster_Experiment",
         ...     queue="short",
@@ -345,7 +344,8 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
         ...     cores=4,
         ...     memory="8GB",
         ... )
-        >>> results = workflow.run_comprehensive_benchmark(gen)
+        >>> workflow.n_workers
+        10
     """
 
     def __init__(
