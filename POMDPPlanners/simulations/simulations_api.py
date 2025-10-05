@@ -36,6 +36,9 @@ from POMDPPlanners.simulations.simulations_deployment.task_manager_configs impor
     PBSConfig,
 )
 from POMDPPlanners.simulations.simulator import POMDPSimulator
+from POMDPPlanners.configs.experiment_configs import (
+    PolicyHyperparameterOptimizationExperimentConfigCreator,
+)
 from POMDPPlanners.utils.logger import get_logger
 
 
@@ -857,13 +860,15 @@ class SimulationsAPI:
             except Exception as cleanup_error:
                 self.logger.warning(f"Error during optimizer cleanup: {cleanup_error}")
 
-    def run_hyperparameter_tuning_comprehensive_benchmark_local(
+    def run_hyperparameter_tuning_experiment_with_benchmarks_local(
         self,
         generators: Sequence[HyperParamPlannerConfigGenerator],
         particles: int = 30,
         num_episodes: int = 10,
         num_steps: int = 20,
         n_trials: int = 100,
+        discount_factor: float = 0.95,
+        time_out_in_seconds: float = 3.0,
         evaluation_episodes: int = 3,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
@@ -908,18 +913,25 @@ class SimulationsAPI:
         if cache_dir_path is None:
             cache_dir_path = Path("./comprehensive_benchmark_results")
 
-        workflow = OptimizationEvaluationLocalWorkflow(
-            cache_dir=cache_dir_path,
-            experiment_name=experiment_name,
-            optimization_n_jobs=optimization_n_jobs,
+        creator = PolicyHyperparameterOptimizationExperimentConfigCreator(
+            generators=generators,
             particles=particles,
             num_episodes=num_episodes,
             num_steps=num_steps,
             n_trials=n_trials,
+            discount_factor=discount_factor,
+            time_out_in_seconds=time_out_in_seconds,
+            is_risk_averse=is_risk_averse,
+        )
+        configs = creator.get_experiment_configs()
+
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=cache_dir_path,
+            experiment_name=experiment_name,
+            optimization_n_jobs=optimization_n_jobs,
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
-            is_risk_averse=is_risk_averse,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
@@ -927,9 +939,9 @@ class SimulationsAPI:
             cache_visualizations=cache_visualizations,
         )
 
-        return workflow.run_comprehensive_benchmark(generators)
+        return workflow.optimize_and_evaluate(configs)
 
-    def run_hyperparameter_tuning_comprehensive_benchmark_pbs(
+    def run_hyperparameter_tuning_experiment_with_benchmarks_pbs(
         self,
         generators: Sequence[HyperParamPlannerConfigGenerator],
         queue: str,
@@ -937,10 +949,12 @@ class SimulationsAPI:
         num_episodes: int = 10,
         num_steps: int = 20,
         n_trials: int = 100,
+        is_risk_averse: bool = False,
+        discount_factor: float = 0.95,
+        time_out_in_seconds: float = 3.0,
         evaluation_episodes: int = 3,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
-        is_risk_averse: bool = False,
         n_workers: int = 4,
         cores: int = 1,
         memory: str = "4GB",
@@ -963,21 +977,16 @@ class SimulationsAPI:
         Args:
             generators: Hyperparameter configuration generators list.
             queue: PBS queue name to submit jobs to.
-            particles: Number of particles for belief representation.
-            num_episodes: Number of episodes for optimization.
-            num_steps: Maximum steps per episode for optimization.
-            n_trials: Number of optimization trials.
+            is_risk_averse: Whether to run risk-averse benchmark.
             evaluation_episodes: Number of episodes for evaluation.
             evaluation_steps: Maximum steps per episode for evaluation.
             evaluation_n_jobs: Number of parallel jobs for evaluation.
-            is_risk_averse: Whether to run risk-averse benchmark.
             n_workers: Number of worker jobs to submit to PBS cluster.
             cores: Number of CPU cores per PBS job.
             memory: Memory allocation per PBS job (e.g., "4GB", "8GB").
             processes: Number of processes per PBS job.
             walltime: Maximum runtime per job in HH:MM:SS format.
             job_extra: Additional PBS directives as list of strings.
-            is_risk_averse: Whether to run risk-averse benchmark.
             confidence_interval_level: Confidence level for intervals.
             alpha: Significance level for statistical tests.
             cache_dir_path: Optional path for storing results.
@@ -993,6 +1002,18 @@ class SimulationsAPI:
         if cache_dir_path is None:
             cache_dir_path = Path("./comprehensive_benchmark_pbs_results")
 
+        creator = PolicyHyperparameterOptimizationExperimentConfigCreator(
+            generators=generators,
+            particles=particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            n_trials=n_trials,
+            is_risk_averse=is_risk_averse,
+            discount_factor=discount_factor,
+            time_out_in_seconds=time_out_in_seconds,
+        )
+        configs = creator.get_experiment_configs()
+
         workflow = OptimizationEvaluationPBSWorkflow(
             cache_dir=cache_dir_path,
             experiment_name=experiment_name,
@@ -1003,14 +1024,9 @@ class SimulationsAPI:
             processes=processes,
             walltime=walltime,
             job_extra=job_extra,
-            particles=particles,
-            num_episodes=num_episodes,
-            num_steps=num_steps,
-            n_trials=n_trials,
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
-            is_risk_averse=is_risk_averse,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
@@ -1018,7 +1034,7 @@ class SimulationsAPI:
             cache_visualizations=cache_visualizations,
         )
 
-        return workflow.run_comprehensive_benchmark(generators)
+        return workflow.optimize_and_evaluate(configs)
 
     def run_optimize_and_evaluate_local(
         self,
@@ -1027,7 +1043,6 @@ class SimulationsAPI:
         evaluation_steps: int = 100,
         evaluation_n_jobs: int = 1,
         optimization_n_jobs: int = -1,
-        is_risk_averse: bool = False,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         cache_dir_path: Optional[Path] = None,
@@ -1046,7 +1061,6 @@ class SimulationsAPI:
             evaluation_steps: Maximum steps per episode for evaluation.
             evaluation_n_jobs: Number of parallel jobs for evaluation.
             optimization_n_jobs: Number of parallel jobs for optimization (-1 uses all cores).
-            is_risk_averse: Whether to run risk-averse benchmark.
             confidence_interval_level: Confidence level for intervals.
             alpha: Significance level for statistical tests.
             cache_dir_path: Optional path for storing results.
@@ -1120,26 +1134,13 @@ class SimulationsAPI:
         if not configs:
             raise ValueError("configs list cannot be empty")
 
-        first_config = configs[0]
-        # Get number of particles from belief
-        belief_particles = getattr(first_config.belief, "particles", None)
-        particles = len(belief_particles) if belief_particles is not None else 30
-        num_episodes = first_config.num_episodes
-        num_steps = first_config.num_steps
-        n_trials = first_config.n_trials
-
         workflow = OptimizationEvaluationLocalWorkflow(
             cache_dir=cache_dir_path,
             experiment_name=experiment_name,
             optimization_n_jobs=optimization_n_jobs,
-            particles=particles,
-            num_episodes=num_episodes,
-            num_steps=num_steps,
-            n_trials=n_trials,
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
-            is_risk_averse=is_risk_averse,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
@@ -1162,7 +1163,6 @@ class SimulationsAPI:
         processes: int = 1,
         walltime: str = "03:00:00",
         job_extra: Optional[List[str]] = None,
-        is_risk_averse: bool = False,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         cache_dir_path: Optional[Path] = None,
@@ -1187,7 +1187,6 @@ class SimulationsAPI:
             processes: Number of processes per PBS job.
             walltime: Maximum runtime per job in HH:MM:SS format.
             job_extra: Additional PBS directives as list of strings.
-            is_risk_averse: Whether to run risk-averse benchmark.
             confidence_interval_level: Confidence level for intervals.
             alpha: Significance level for statistical tests.
             cache_dir_path: Optional path for storing results.
@@ -1265,14 +1264,6 @@ class SimulationsAPI:
         if not configs:
             raise ValueError("configs list cannot be empty")
 
-        first_config = configs[0]
-        # Get number of particles from belief
-        belief_particles = getattr(first_config.belief, "particles", None)
-        particles = len(belief_particles) if belief_particles is not None else 30
-        num_episodes = first_config.num_episodes
-        num_steps = first_config.num_steps
-        n_trials = first_config.n_trials
-
         workflow = OptimizationEvaluationPBSWorkflow(
             cache_dir=cache_dir_path,
             experiment_name=experiment_name,
@@ -1283,14 +1274,9 @@ class SimulationsAPI:
             processes=processes,
             walltime=walltime,
             job_extra=job_extra,
-            particles=particles,
-            num_episodes=num_episodes,
-            num_steps=num_steps,
-            n_trials=n_trials,
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
-            is_risk_averse=is_risk_averse,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
