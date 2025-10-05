@@ -266,7 +266,7 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
 
     def run_comprehensive_benchmark(
         self,
-        gen: HyperParamPlannerConfigGenerator,
+        generators: List[HyperParamPlannerConfigGenerator],
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         """Run comprehensive benchmark with hyperparameter optimization.
 
@@ -279,7 +279,7 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
         parameter_to_optimize_mapper = AverageReturnParameterToOptimizeMapper()
         optimization_configs = (
             complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-                gen=gen,
+                generators=generators,
                 parameter_to_optimize_mapper=parameter_to_optimize_mapper,
                 particles=self.particles,
                 num_episodes=self.num_episodes,
@@ -290,9 +290,9 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
 
         return self.optimize_and_evaluate(configs=optimization_configs)
 
-    def run_risk_averse_benchmark(
+    def run_comprehensive_risk_averse_benchmark(
         self,
-        gen: HyperParamPlannerConfigGenerator,
+        generators: List[HyperParamPlannerConfigGenerator],
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         """Run comprehensive benchmark with risk-averse hyperparameter optimization.
 
@@ -309,12 +309,13 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
         parameter_to_optimize_mapper = RiskAverseParameterToOptimizeMapper()
         optimization_configs = (
             complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-                gen=gen,
+                generators=generators,
                 parameter_to_optimize_mapper=parameter_to_optimize_mapper,
                 particles=self.particles,
                 num_episodes=self.num_episodes,
                 num_steps=self.num_steps,
                 n_trials=self.n_trials,
+                is_risk_averse=True,
             )
         )
 
@@ -447,7 +448,7 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
 
     def run_comprehensive_benchmark(
         self,
-        gen: HyperParamPlannerConfigGenerator,
+        generators: List[HyperParamPlannerConfigGenerator],
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         """Run comprehensive benchmark with hyperparameter optimization.
 
@@ -460,7 +461,7 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
         parameter_to_optimize_mapper = AverageReturnParameterToOptimizeMapper()
         optimization_configs = (
             complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-                gen=gen,
+                generators=generators,
                 parameter_to_optimize_mapper=parameter_to_optimize_mapper,
                 particles=self.particles,
                 num_episodes=self.num_episodes,
@@ -473,7 +474,7 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
 
     def run_risk_averse_benchmark(
         self,
-        gen: HyperParamPlannerConfigGenerator,
+        generators: List[HyperParamPlannerConfigGenerator],
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         """Run comprehensive benchmark with risk-averse hyperparameter optimization.
 
@@ -490,12 +491,13 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
         parameter_to_optimize_mapper = RiskAverseParameterToOptimizeMapper()
         optimization_configs = (
             complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-                gen=gen,
+                generators=generators,
                 parameter_to_optimize_mapper=parameter_to_optimize_mapper,
                 particles=self.particles,
                 num_episodes=self.num_episodes,
                 num_steps=self.num_steps,
                 n_trials=self.n_trials,
+                is_risk_averse=True,
             )
         )
 
