@@ -11,7 +11,7 @@ import pandas as pd
 
 from POMDPPlanners.core.belief import Belief, get_initial_belief
 from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
 from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
     EnvironmentRunParams,
@@ -38,6 +38,7 @@ from POMDPPlanners.simulations.simulations_deployment.task_manager_configs impor
 from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.configs.experiment_configs import (
     PolicyHyperparameterOptimizationExperimentConfigCreator,
+    AllHyperparameterBenchmarksExperimentConfigCreator,
 )
 from POMDPPlanners.utils.logger import get_logger
 
@@ -1263,6 +1264,192 @@ class SimulationsAPI:
         # Extract parameters from first config
         if not configs:
             raise ValueError("configs list cannot be empty")
+
+        workflow = OptimizationEvaluationPBSWorkflow(
+            cache_dir=cache_dir_path,
+            experiment_name=experiment_name,
+            queue=queue,
+            n_workers=n_workers,
+            cores=cores,
+            memory=memory,
+            processes=processes,
+            walltime=walltime,
+            job_extra=job_extra,
+            evaluation_episodes=evaluation_episodes,
+            evaluation_steps=evaluation_steps,
+            evaluation_n_jobs=evaluation_n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            debug=debug,
+            verbose=True,
+            cache_visualizations=cache_visualizations,
+        )
+
+        return workflow.optimize_and_evaluate(configs)
+
+    def run_all_hyperparameter_benchmarks_local(
+        self,
+        policy_space_info: PolicySpaceInfo,
+        particles: int = 30,
+        num_episodes: int = 10,
+        num_steps: int = 20,
+        n_trials: int = 100,
+        discount_factor: float = 0.95,
+        time_out_in_seconds: float = 3.0,
+        evaluation_episodes: int = 3,
+        evaluation_steps: int = 6,
+        evaluation_n_jobs: int = 1,
+        optimization_n_jobs: int = -1,
+        is_risk_averse: bool = False,
+        confidence_interval_level: float = 0.95,
+        alpha: float = 0.05,
+        cache_dir_path: Optional[Path] = None,
+        experiment_name: str = "All_Hyperparameter_Benchmarks",
+        debug: bool = False,
+        cache_visualizations: bool = True,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run all hyperparameter benchmarks with optimization locally.
+
+        This method runs hyperparameter optimization for all compatible environments
+        and planners for a given policy space, followed by evaluation using local
+        Joblib parallelization.
+
+        Args:
+            policy_space_info: Policy space information specifying action and observation
+                space types for compatibility matching.
+            particles: Number of particles for belief representation.
+            num_episodes: Number of episodes for optimization.
+            num_steps: Maximum steps per episode for optimization.
+            n_trials: Number of optimization trials.
+            discount_factor: Discount factor for the MDP.
+            time_out_in_seconds: Timeout for planner execution.
+            evaluation_episodes: Number of episodes for evaluation.
+            evaluation_steps: Maximum steps per episode for evaluation.
+            evaluation_n_jobs: Number of parallel jobs for evaluation.
+            optimization_n_jobs: Number of parallel jobs for optimization (-1 uses all cores).
+            is_risk_averse: Whether to run risk-averse benchmark.
+            confidence_interval_level: Confidence level for intervals.
+            alpha: Significance level for statistical tests.
+            cache_dir_path: Optional path for storing results.
+            experiment_name: Name for the experiment.
+            debug: Enable debug mode.
+            cache_visualizations: Whether to cache visualizations.
+
+        Returns:
+            Tuple of results dictionary and DataFrame.
+        """
+        self.logger.info("Starting all hyperparameter benchmarks with local execution")
+
+        if cache_dir_path is None:
+            cache_dir_path = Path("./all_hyperparameter_benchmarks_results")
+
+        creator = AllHyperparameterBenchmarksExperimentConfigCreator(
+            policy_space_info=policy_space_info,
+            particles=particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            n_trials=n_trials,
+            discount_factor=discount_factor,
+            time_out_in_seconds=time_out_in_seconds,
+            is_risk_averse=is_risk_averse,
+        )
+        configs = creator.get_experiment_configs()
+
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=cache_dir_path,
+            experiment_name=experiment_name,
+            optimization_n_jobs=optimization_n_jobs,
+            evaluation_episodes=evaluation_episodes,
+            evaluation_steps=evaluation_steps,
+            evaluation_n_jobs=evaluation_n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            debug=debug,
+            verbose=True,
+            cache_visualizations=cache_visualizations,
+        )
+
+        return workflow.optimize_and_evaluate(configs)
+
+    def run_all_hyperparameter_benchmarks_pbs(
+        self,
+        policy_space_info: PolicySpaceInfo,
+        queue: str,
+        particles: int = 30,
+        num_episodes: int = 10,
+        num_steps: int = 20,
+        n_trials: int = 100,
+        discount_factor: float = 0.95,
+        time_out_in_seconds: float = 3.0,
+        evaluation_episodes: int = 3,
+        evaluation_steps: int = 6,
+        evaluation_n_jobs: int = 1,
+        n_workers: int = 4,
+        cores: int = 1,
+        memory: str = "4GB",
+        processes: int = 1,
+        walltime: str = "03:00:00",
+        job_extra: Optional[List[str]] = None,
+        is_risk_averse: bool = False,
+        confidence_interval_level: float = 0.95,
+        alpha: float = 0.05,
+        cache_dir_path: Optional[Path] = None,
+        experiment_name: str = "All_Hyperparameter_Benchmarks_PBS",
+        debug: bool = False,
+        cache_visualizations: bool = True,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run all hyperparameter benchmarks with optimization on PBS cluster.
+
+        This method runs hyperparameter optimization for all compatible environments
+        and planners for a given policy space, followed by evaluation using PBS
+        cluster computing.
+
+        Args:
+            policy_space_info: Policy space information specifying action and observation
+                space types for compatibility matching.
+            queue: PBS queue name to submit jobs to.
+            particles: Number of particles for belief representation.
+            num_episodes: Number of episodes for optimization.
+            num_steps: Maximum steps per episode for optimization.
+            n_trials: Number of optimization trials.
+            discount_factor: Discount factor for the MDP.
+            time_out_in_seconds: Timeout for planner execution.
+            evaluation_episodes: Number of episodes for evaluation.
+            evaluation_steps: Maximum steps per episode for evaluation.
+            evaluation_n_jobs: Number of parallel jobs for evaluation.
+            n_workers: Number of worker jobs to submit to PBS cluster.
+            cores: Number of CPU cores per PBS job.
+            memory: Memory allocation per PBS job (e.g., "4GB", "8GB").
+            processes: Number of processes per PBS job.
+            walltime: Maximum runtime per job in HH:MM:SS format.
+            job_extra: Additional PBS directives as list of strings.
+            is_risk_averse: Whether to run risk-averse benchmark.
+            confidence_interval_level: Confidence level for intervals.
+            alpha: Significance level for statistical tests.
+            cache_dir_path: Optional path for storing results.
+            experiment_name: Name for the experiment.
+            debug: Enable debug mode.
+            cache_visualizations: Whether to cache visualizations.
+
+        Returns:
+            Tuple of results dictionary and DataFrame.
+        """
+        self.logger.info("Starting all hyperparameter benchmarks with PBS cluster execution")
+
+        if cache_dir_path is None:
+            cache_dir_path = Path("./all_hyperparameter_benchmarks_pbs_results")
+
+        creator = AllHyperparameterBenchmarksExperimentConfigCreator(
+            policy_space_info=policy_space_info,
+            particles=particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            n_trials=n_trials,
+            discount_factor=discount_factor,
+            time_out_in_seconds=time_out_in_seconds,
+            is_risk_averse=is_risk_averse,
+        )
+        configs = creator.get_experiment_configs()
 
         workflow = OptimizationEvaluationPBSWorkflow(
             cache_dir=cache_dir_path,
