@@ -29,10 +29,6 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfig,
     NumericalHyperParameter,
 )
-from POMDPPlanners.configs.experiment_configs import (
-    AverageReturnParameterToOptimizeMapper,
-    RiskAverseParameterToOptimizeMapper,
-)
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.core.policy import PolicySpaceInfo
@@ -81,10 +77,6 @@ def sample_workflow_params(temp_cache_dir):
     return {
         "cache_dir": temp_cache_dir,
         "experiment_name": "Test_Experiment",
-        "particles": 30,
-        "num_episodes": 10,
-        "num_steps": 20,
-        "n_trials": 100,
         "evaluation_episodes": 3,
         "evaluation_steps": 6,
         "evaluation_n_jobs": 1,
@@ -117,10 +109,6 @@ class TestOptimizationEvaluationLocalWorkflow:
 
         assert workflow.cache_dir == temp_cache_dir
         assert workflow.experiment_name == "Test_Experiment"
-        assert workflow.particles == 30
-        assert workflow.num_episodes == 10
-        assert workflow.num_steps == 20
-        assert workflow.n_trials == 100
         assert workflow.evaluation_episodes == 3
         assert workflow.evaluation_steps == 6
         assert workflow.evaluation_n_jobs == 1
@@ -130,49 +118,6 @@ class TestOptimizationEvaluationLocalWorkflow:
         assert workflow.debug is False
         assert workflow.verbose is True
         assert workflow.cache_visualizations is True
-
-    def test_initialization_with_risk_averse_parameter(self, temp_cache_dir):
-        """Test initialization with is_risk_averse parameter.
-
-        Purpose: Validates that LocalWorkflow accepts is_risk_averse parameter
-
-        Given: Custom workflow parameters including is_risk_averse=True
-        When: Creating LocalWorkflow instance with is_risk_averse=True
-        Then: is_risk_averse attribute is set correctly
-
-        Test type: unit
-        """
-        workflow = OptimizationEvaluationLocalWorkflow(
-            cache_dir=temp_cache_dir,
-            experiment_name="Test",
-            is_risk_averse=True,
-        )
-
-        assert workflow.is_risk_averse is True
-        assert isinstance(
-            workflow.parameter_to_optimize_mapper, RiskAverseParameterToOptimizeMapper
-        )
-
-    def test_initialization_without_risk_averse_parameter(self, temp_cache_dir):
-        """Test initialization without is_risk_averse parameter (default False).
-
-        Purpose: Validates that LocalWorkflow uses default is_risk_averse=False
-
-        Given: Default workflow parameters
-        When: Creating LocalWorkflow instance without is_risk_averse
-        Then: is_risk_averse attribute defaults to False
-
-        Test type: unit
-        """
-        workflow = OptimizationEvaluationLocalWorkflow(
-            cache_dir=temp_cache_dir,
-            experiment_name="Test",
-        )
-
-        assert workflow.is_risk_averse is False
-        assert isinstance(
-            workflow.parameter_to_optimize_mapper, AverageReturnParameterToOptimizeMapper
-        )
 
     def test_get_task_manager_config_hyperparameter_returns_joblib_config(
         self, sample_workflow_params
@@ -218,128 +163,6 @@ class TestOptimizationEvaluationLocalWorkflow:
         assert isinstance(config, JoblibConfig)
         assert config.n_jobs == 4
 
-    @patch(
-        "POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows.complete_environments_and_benchmarks_hyperparameter_optimization_configs"
-    )
-    @patch.object(OptimizationEvaluationLocalWorkflow, "optimize_and_evaluate")
-    def test_run_comprehensive_benchmark_calls_optimize_and_evaluate(
-        self, mock_optimize_and_evaluate, mock_config_generator, sample_workflow_params
-    ):
-        """Test run_comprehensive_benchmark calls optimize_and_evaluate.
-
-        Purpose: Validates that run_comprehensive_benchmark orchestrates optimization
-
-        Given: LocalWorkflow instance and mocked generator
-        When: Calling run_comprehensive_benchmark
-        Then: optimize_and_evaluate is called with generated configs
-
-        Test type: unit
-        """
-        workflow = OptimizationEvaluationLocalWorkflow(**sample_workflow_params)
-        mock_gen = Mock()
-        mock_configs = [Mock(), Mock()]
-        mock_config_generator.return_value = mock_configs
-        mock_optimize_and_evaluate.return_value = ({}, Mock())
-
-        workflow.run_comprehensive_benchmark(mock_gen)
-
-        mock_config_generator.assert_called_once()
-        mock_optimize_and_evaluate.assert_called_once_with(configs=mock_configs)
-
-    @patch(
-        "POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows.complete_environments_and_benchmarks_hyperparameter_optimization_configs"
-    )
-    @patch(
-        "POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows.AverageReturnParameterToOptimizeMapper"
-    )
-    @patch.object(OptimizationEvaluationLocalWorkflow, "optimize_and_evaluate")
-    def test_run_comprehensive_benchmark_uses_average_return_mapper(
-        self, mock_optimize, mock_mapper_class, mock_config_gen, sample_workflow_params
-    ):
-        """Test run_comprehensive_benchmark uses AverageReturnParameterToOptimizeMapper.
-
-        Purpose: Validates correct parameter mapper for comprehensive benchmark
-
-        Given: LocalWorkflow instance
-        When: Calling run_comprehensive_benchmark
-        Then: AverageReturnParameterToOptimizeMapper is instantiated and used
-
-        Test type: unit
-        """
-        workflow = OptimizationEvaluationLocalWorkflow(**sample_workflow_params)
-        mock_gen = Mock()
-        mock_config_gen.return_value = []
-        mock_optimize.return_value = ({}, Mock())
-
-        workflow.run_comprehensive_benchmark(mock_gen)
-
-        mock_mapper_class.assert_called_once()
-        call_args = mock_config_gen.call_args
-        assert call_args.kwargs["parameter_to_optimize_mapper"] == mock_mapper_class.return_value
-
-    @patch(
-        "POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows.complete_environments_and_benchmarks_hyperparameter_optimization_configs"
-    )
-    @patch(
-        "POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows.RiskAverseParameterToOptimizeMapper"
-    )
-    @patch.object(OptimizationEvaluationLocalWorkflow, "optimize_and_evaluate")
-    def test_run_comprehensive_benchmark_with_risk_averse_uses_risk_averse_mapper(
-        self, mock_optimize, mock_mapper_class, mock_config_gen, sample_workflow_params
-    ):
-        """Test run_comprehensive_benchmark with is_risk_averse=True uses RiskAverseParameterToOptimizeMapper.
-
-        Purpose: Validates correct parameter mapper for risk-averse benchmark
-
-        Given: LocalWorkflow instance with is_risk_averse=True
-        When: Calling run_comprehensive_benchmark
-        Then: RiskAverseParameterToOptimizeMapper is instantiated and used
-
-        Test type: unit
-        """
-        workflow = OptimizationEvaluationLocalWorkflow(
-            is_risk_averse=True, **sample_workflow_params
-        )
-        mock_gen = Mock()
-        mock_config_gen.return_value = []
-        mock_optimize.return_value = ({}, Mock())
-
-        workflow.run_comprehensive_benchmark(mock_gen)
-
-        mock_mapper_class.assert_called_once()
-        call_args = mock_config_gen.call_args
-        assert call_args.kwargs["parameter_to_optimize_mapper"] == mock_mapper_class.return_value
-
-    @patch(
-        "POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows.complete_environments_and_benchmarks_hyperparameter_optimization_configs"
-    )
-    @patch.object(OptimizationEvaluationLocalWorkflow, "optimize_and_evaluate")
-    def test_run_comprehensive_benchmark_with_risk_averse_calls_optimize_and_evaluate(
-        self, mock_optimize_and_evaluate, mock_config_generator, sample_workflow_params
-    ):
-        """Test run_comprehensive_benchmark with is_risk_averse=True calls optimize_and_evaluate.
-
-        Purpose: Validates that risk-averse benchmark orchestrates optimization
-
-        Given: LocalWorkflow instance with is_risk_averse=True and mocked generator
-        When: Calling run_comprehensive_benchmark
-        Then: optimize_and_evaluate is called with generated configs
-
-        Test type: unit
-        """
-        workflow = OptimizationEvaluationLocalWorkflow(
-            is_risk_averse=True, **sample_workflow_params
-        )
-        mock_gen = Mock()
-        mock_configs = [Mock(), Mock()]
-        mock_config_generator.return_value = mock_configs
-        mock_optimize_and_evaluate.return_value = ({}, Mock())
-
-        workflow.run_comprehensive_benchmark(mock_gen)
-
-        mock_config_generator.assert_called_once()
-        mock_optimize_and_evaluate.assert_called_once_with(configs=mock_configs)
-
 
 class TestOptimizationEvaluationPBSWorkflow:
     """Test OptimizationEvaluationPBSWorkflow for PBS cluster execution."""
@@ -369,49 +192,6 @@ class TestOptimizationEvaluationPBSWorkflow:
         assert workflow.processes == 1
         assert workflow.walltime == "03:00:00"
         assert workflow.job_extra is None
-
-    def test_initialization_with_risk_averse_parameter(self, temp_cache_dir):
-        """Test initialization with is_risk_averse parameter.
-
-        Purpose: Validates that PBSWorkflow accepts is_risk_averse parameter
-
-        Given: Custom PBS parameters including is_risk_averse=True
-        When: Creating PBSWorkflow instance with is_risk_averse=True
-        Then: is_risk_averse attribute is set correctly
-
-        Test type: unit
-        """
-        workflow = OptimizationEvaluationPBSWorkflow(
-            cache_dir=temp_cache_dir,
-            experiment_name="Test",
-            is_risk_averse=True,
-        )
-
-        assert workflow.is_risk_averse is True
-        assert isinstance(
-            workflow.parameter_to_optimize_mapper, RiskAverseParameterToOptimizeMapper
-        )
-
-    def test_initialization_without_risk_averse_parameter(self, temp_cache_dir):
-        """Test initialization without is_risk_averse parameter (default False).
-
-        Purpose: Validates that PBSWorkflow uses default is_risk_averse=False
-
-        Given: Default PBS parameters
-        When: Creating PBSWorkflow instance without is_risk_averse
-        Then: is_risk_averse attribute defaults to False
-
-        Test type: unit
-        """
-        workflow = OptimizationEvaluationPBSWorkflow(
-            cache_dir=temp_cache_dir,
-            experiment_name="Test",
-        )
-
-        assert workflow.is_risk_averse is False
-        assert isinstance(
-            workflow.parameter_to_optimize_mapper, AverageReturnParameterToOptimizeMapper
-        )
 
     def test_get_task_manager_config_hyperparameter_returns_pbs_config(self, temp_cache_dir):
         """Test that hyperparameter task manager config is PBSConfig.
@@ -462,110 +242,6 @@ class TestOptimizationEvaluationPBSWorkflow:
         assert isinstance(config, PBSConfig)
         assert config.memory == "32GB"
         assert config.walltime == "24:00:00"
-
-    @patch(
-        "POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows.complete_environments_and_benchmarks_hyperparameter_optimization_configs"
-    )
-    @patch.object(OptimizationEvaluationPBSWorkflow, "optimize_and_evaluate")
-    def test_run_comprehensive_benchmark_calls_optimize_and_evaluate(
-        self, mock_optimize_and_evaluate, mock_config_generator, temp_cache_dir
-    ):
-        """Test PBS run_comprehensive_benchmark calls optimize_and_evaluate.
-
-        Purpose: Validates that PBS workflow orchestrates optimization correctly
-
-        Given: PBSWorkflow instance and mocked generator
-        When: Calling run_comprehensive_benchmark
-        Then: optimize_and_evaluate is called with generated configs
-
-        Test type: unit
-        """
-        workflow = OptimizationEvaluationPBSWorkflow(
-            cache_dir=temp_cache_dir,
-            experiment_name="Test",
-        )
-        mock_gen = Mock()
-        mock_configs = [Mock(), Mock()]
-        mock_config_generator.return_value = mock_configs
-        mock_optimize_and_evaluate.return_value = ({}, Mock())
-
-        workflow.run_comprehensive_benchmark(mock_gen)
-
-        mock_config_generator.assert_called_once()
-        mock_optimize_and_evaluate.assert_called_once_with(configs=mock_configs)
-
-    @patch(
-        "POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows.complete_environments_and_benchmarks_hyperparameter_optimization_configs"
-    )
-    @patch.object(OptimizationEvaluationPBSWorkflow, "optimize_and_evaluate")
-    def test_run_comprehensive_benchmark_with_risk_averse_calls_optimize_and_evaluate(
-        self, mock_optimize_and_evaluate, mock_config_generator, temp_cache_dir
-    ):
-        """Test PBS run_comprehensive_benchmark with is_risk_averse=True calls optimize_and_evaluate.
-
-        Purpose: Validates that PBS risk-averse workflow orchestrates optimization
-
-        Given: PBSWorkflow instance with is_risk_averse=True and mocked generator
-        When: Calling run_comprehensive_benchmark
-        Then: optimize_and_evaluate is called with generated configs
-
-        Test type: unit
-        """
-        workflow = OptimizationEvaluationPBSWorkflow(
-            cache_dir=temp_cache_dir,
-            experiment_name="Test",
-            is_risk_averse=True,
-        )
-        mock_gen = Mock()
-        mock_configs = [Mock()]
-        mock_config_generator.return_value = mock_configs
-        mock_optimize_and_evaluate.return_value = ({}, Mock())
-
-        workflow.run_comprehensive_benchmark(mock_gen)
-
-        mock_config_generator.assert_called_once()
-        mock_optimize_and_evaluate.assert_called_once_with(configs=mock_configs)
-
-
-class TestWorkflowParameterPropagation:
-    """Test that workflow parameters are correctly propagated to internal methods."""
-
-    @patch(
-        "POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows.complete_environments_and_benchmarks_hyperparameter_optimization_configs"
-    )
-    @patch.object(OptimizationEvaluationLocalWorkflow, "optimize_and_evaluate")
-    def test_workflow_parameters_passed_to_config_generator(
-        self, mock_optimize, mock_config_gen, temp_cache_dir
-    ):
-        """Test that workflow parameters are passed to config generator.
-
-        Purpose: Validates parameter propagation from workflow to config generator
-
-        Given: LocalWorkflow with custom particles, episodes, steps, trials
-        When: Calling run_comprehensive_benchmark
-        Then: Config generator receives correct parameter values
-
-        Test type: unit
-        """
-        workflow = OptimizationEvaluationLocalWorkflow(
-            cache_dir=temp_cache_dir,
-            experiment_name="Test",
-            particles=50,
-            num_episodes=15,
-            num_steps=25,
-            n_trials=200,
-        )
-        mock_gen = Mock()
-        mock_config_gen.return_value = []
-        mock_optimize.return_value = ({}, Mock())
-
-        workflow.run_comprehensive_benchmark(mock_gen)
-
-        call_kwargs = mock_config_gen.call_args.kwargs
-        assert call_kwargs["particles"] == 50
-        assert call_kwargs["num_episodes"] == 15
-        assert call_kwargs["num_steps"] == 25
-        assert call_kwargs["n_trials"] == 200
 
 
 class IntegerActionSampler(ActionSampler):
