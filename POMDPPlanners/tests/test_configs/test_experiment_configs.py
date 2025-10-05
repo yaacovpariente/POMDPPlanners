@@ -16,6 +16,7 @@ from POMDPPlanners.configs.experiment_configs import (
     complete_environments_and_benchmarks_hyperparameter_optimization_configs,
     get_benchmarks_hyperparameter_optimization_configs,
     AverageReturnParameterToOptimizeMapper,
+    AllHyperparameterBenchmarksExperimentConfigCreator,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
@@ -770,3 +771,134 @@ class TestMockImplementations:
         # Test space info retrieval
         returned_space_info = gen.get_planner_space_info()
         assert returned_space_info == space_info
+
+
+class TestAllHyperparameterBenchmarksExperimentConfigCreator:
+    """Test cases for AllHyperparameterBenchmarksExperimentConfigCreator."""
+
+    def setup_method(self):
+        """Set up test fixtures for each test method."""
+        self.discrete_space_info = PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
+        )
+        self.continuous_space_info = PolicySpaceInfo(
+            action_space=SpaceType.CONTINUOUS, observation_space=SpaceType.CONTINUOUS
+        )
+
+    def test_initialization_basic(self):
+        """Test basic initialization of AllHyperparameterBenchmarksExperimentConfigCreator.
+
+        Purpose: Validates that the creator can be initialized with required parameters.
+
+        Given: Valid PolicySpaceInfo and basic configuration parameters
+        When: Creating AllHyperparameterBenchmarksExperimentConfigCreator instance
+        Then: Instance is created successfully with all attributes set correctly
+
+        Test type: unit
+        """
+        creator = AllHyperparameterBenchmarksExperimentConfigCreator(
+            policy_space_info=self.discrete_space_info,
+            particles=30,
+            num_episodes=10,
+            num_steps=20,
+            n_trials=100,
+            discount_factor=0.95,
+            time_out_in_seconds=3.0,
+            is_risk_averse=False,
+        )
+
+        assert creator.policy_space_info == self.discrete_space_info
+        assert creator.particles == 30
+        assert creator.num_episodes == 10
+        assert creator.num_steps == 20
+        assert creator.n_trials == 100
+        assert creator.discount_factor == 0.95
+        assert creator.time_out_in_seconds == 3.0
+        assert creator.is_risk_averse is False
+
+    def test_initialization_risk_averse(self):
+        """Test initialization with risk_averse=True.
+
+        Purpose: Validates that the creator initializes correctly with risk-averse mode.
+
+        Given: Valid PolicySpaceInfo and is_risk_averse=True
+        When: Creating AllHyperparameterBenchmarksExperimentConfigCreator instance
+        Then: Instance is created with risk-averse parameter mapper
+
+        Test type: unit
+        """
+        creator = AllHyperparameterBenchmarksExperimentConfigCreator(
+            policy_space_info=self.discrete_space_info,
+            particles=30,
+            num_episodes=10,
+            num_steps=20,
+            n_trials=100,
+            discount_factor=0.95,
+            time_out_in_seconds=3.0,
+            is_risk_averse=True,
+        )
+
+        assert creator.is_risk_averse is True
+        assert creator.parameter_to_optimize_mapper is not None
+
+    def test_get_experiment_configs_returns_non_empty_list(self):
+        """Test that get_experiment_configs returns a non-empty list.
+
+        Purpose: Validates that the creator generates experiment configurations.
+
+        Given: AllHyperparameterBenchmarksExperimentConfigCreator with discrete space info
+        When: Calling get_experiment_configs
+        Then: Returns a non-empty list of HyperParameterRunParams
+
+        Test type: unit
+        """
+        creator = AllHyperparameterBenchmarksExperimentConfigCreator(
+            policy_space_info=self.discrete_space_info,
+            particles=10,  # Small number for faster tests
+            num_episodes=2,
+            num_steps=3,
+            n_trials=5,
+            discount_factor=0.95,
+            time_out_in_seconds=3.0,
+            is_risk_averse=False,
+        )
+
+        configs = creator.get_experiment_configs()
+
+        assert isinstance(configs, list), "Should return a list"
+        assert len(configs) > 0, "Should return non-empty list of configurations"
+
+        # Verify structure of returned configs
+        for config in configs:
+            assert isinstance(
+                config, HyperParameterRunParams
+            ), "Each config should be HyperParameterRunParams"
+            assert config.num_episodes == 2
+            assert config.num_steps == 3
+            assert config.n_trials == 5
+
+    def test_get_experiment_configs_continuous_space(self):
+        """Test get_experiment_configs with continuous space info.
+
+        Purpose: Validates that the creator works with continuous space environments.
+
+        Given: AllHyperparameterBenchmarksExperimentConfigCreator with continuous space info
+        When: Calling get_experiment_configs
+        Then: Returns a list of configurations (may be empty if no compatible envs)
+
+        Test type: unit
+        """
+        creator = AllHyperparameterBenchmarksExperimentConfigCreator(
+            policy_space_info=self.continuous_space_info,
+            particles=10,
+            num_episodes=2,
+            num_steps=3,
+            n_trials=5,
+            discount_factor=0.95,
+            time_out_in_seconds=3.0,
+            is_risk_averse=False,
+        )
+
+        configs = creator.get_experiment_configs()
+
+        assert isinstance(configs, list), "Should return a list"
