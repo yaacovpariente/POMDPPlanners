@@ -2,7 +2,7 @@ import importlib
 import inspect
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
 
 if TYPE_CHECKING:
     from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
@@ -859,7 +859,7 @@ class SimulationsAPI:
 
     def run_hyperparameter_tuning_comprehensive_benchmark_local(
         self,
-        generators: List[HyperParamPlannerConfigGenerator],
+        generators: Sequence[HyperParamPlannerConfigGenerator],
         particles: int = 30,
         num_episodes: int = 10,
         num_steps: int = 20,
@@ -931,7 +931,7 @@ class SimulationsAPI:
 
     def run_hyperparameter_tuning_comprehensive_benchmark_pbs(
         self,
-        generators: List[HyperParamPlannerConfigGenerator],
+        generators: Sequence[HyperParamPlannerConfigGenerator],
         queue: str,
         particles: int = 30,
         num_episodes: int = 10,
