@@ -1,9 +1,12 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from ossaudiodev import SNDCTL_SEQ_SYNC
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence, List
 
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterFeature,
+    HyperParameterRunParams,
 )
 
 if TYPE_CHECKING:
@@ -21,18 +24,13 @@ class EnvironmentRunParams:
     num_steps: int
 
 
-@dataclass(frozen=True)
-class HyperParameterRunParams:
-    environment: "Environment"
-    belief: "Belief"
-    policies: Sequence["Policy"]
-    num_episodes: int
-    num_steps: int
-    hyper_parameters: list[HyperParameterFeature]
-    b_trials: int
-    n_jobs: int
-    cache_visualizations: bool
-    cache_dir_path: Path
-    experiment_name: str
-    mlflow_tracking_uri: Optional[str] = None
-    mlruns_path: Optional[Path] = None
+class EvaluationExperimentConfigCreator(ABC):
+    @abstractmethod
+    def get_experiment_configs(self) -> Sequence[EnvironmentRunParams]:
+        pass
+
+
+class HyperparameterOptimizationExperimentConfigCreator(ABC):
+    @abstractmethod
+    def get_experiment_configs(self) -> Sequence[HyperParameterRunParams]:
+        pass
