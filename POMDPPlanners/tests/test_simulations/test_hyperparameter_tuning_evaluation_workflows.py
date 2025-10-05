@@ -276,7 +276,7 @@ class TestOptimizationEvaluationLocalWorkflow:
         mock_config_gen.return_value = []
         mock_optimize.return_value = ({}, Mock())
 
-        workflow.run_risk_averse_benchmark(mock_gen)
+        workflow.run_comprehensive_risk_averse_benchmark(mock_gen)
 
         mock_mapper_class.assert_called_once()
         call_args = mock_config_gen.call_args
@@ -305,7 +305,7 @@ class TestOptimizationEvaluationLocalWorkflow:
         mock_config_generator.return_value = mock_configs
         mock_optimize_and_evaluate.return_value = ({}, Mock())
 
-        workflow.run_risk_averse_benchmark(mock_gen)
+        workflow.run_comprehensive_risk_averse_benchmark(mock_gen)
 
         mock_config_generator.assert_called_once()
         mock_optimize_and_evaluate.assert_called_once_with(configs=mock_configs)
