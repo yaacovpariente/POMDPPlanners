@@ -100,6 +100,74 @@ def get_hyperparameter_benchmarks(
     return benchmarks
 
 
+class AllHyperparameterBenchmarksExperimentConfigCreator(
+    HyperparameterOptimizationExperimentConfigCreator
+):
+    def __init__(
+        self,
+        policy_space_info: PolicySpaceInfo,
+        particles: int,
+        num_episodes: int,
+        num_steps: int,
+        n_trials: int,
+        discount_factor: float,
+        time_out_in_seconds: float,
+        is_risk_averse: bool,
+    ):
+        self.policy_space_info = policy_space_info
+        self.particles = particles
+        self.num_episodes = num_episodes
+        self.num_steps = num_steps
+        self.n_trials = n_trials
+        self.discount_factor = discount_factor
+        self.time_out_in_seconds = time_out_in_seconds
+        self.is_risk_averse = is_risk_averse
+
+        if self.is_risk_averse:
+            self.parameter_to_optimize_mapper = RiskAverseParameterToOptimizeMapper()
+        else:
+            self.parameter_to_optimize_mapper = AverageReturnParameterToOptimizeMapper()
+
+    def get_experiment_configs(self) -> List[HyperParameterRunParams]:
+        if self.is_risk_averse:
+            env_configs = RiskAverseEnvironmentConfigsAPI(discount_factor=self.discount_factor)
+        else:
+            env_configs = EnvironmentConfigsAPI(discount_factor=self.discount_factor)
+
+        envs = env_configs.get_compatible_environments(
+            policy_space_info=self.policy_space_info, n_particles=self.particles
+        )
+
+        planners_hyperparam_configs = PlannersHyperparamConfigs(
+            discount_factor=self.discount_factor
+        )
+
+        planner_run_params_for_each_environment: List[HyperParameterRunParams] = []
+        for env, belief in envs:
+            planners_configs = planners_hyperparam_configs.get_compatible_planners(
+                env=env, time_out_in_seconds=self.time_out_in_seconds
+            )
+            for planner_config in planners_configs:
+                planner_run_params_for_each_environment.append(
+                    HyperParameterRunParams(
+                        environment=env,
+                        belief=belief,
+                        hyper_param_planner_config=planner_config,
+                        num_episodes=self.num_episodes,
+                        num_steps=self.num_steps,
+                        n_trials=self.n_trials,
+                        direction=self.parameter_to_optimize_mapper.generate(
+                            env, planner_config.policy_cls
+                        )[1],
+                        parameter_to_optimize=self.parameter_to_optimize_mapper.generate(
+                            env, planner_config.policy_cls
+                        )[0],
+                    )
+                )
+
+        return planner_run_params_for_each_environment
+
+
 class PolicyHyperparameterOptimizationExperimentConfigCreator(
     HyperparameterOptimizationExperimentConfigCreator
 ):
@@ -123,7 +191,7 @@ class PolicyHyperparameterOptimizationExperimentConfigCreator(
         self.time_out_in_seconds = time_out_in_seconds
         self.is_risk_averse = is_risk_averse
 
-        if is_risk_averse:
+        if self.is_risk_averse:
             self.parameter_to_optimize_mapper = RiskAverseParameterToOptimizeMapper()
         else:
             self.parameter_to_optimize_mapper = AverageReturnParameterToOptimizeMapper()
