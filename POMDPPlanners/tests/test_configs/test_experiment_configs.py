@@ -160,7 +160,7 @@ class TestExperimentConfigs:
         Purpose: Validates that the function returns correctly structured
         HyperParameterRunParams list with both main and benchmark configurations.
 
-        Given: Mock HyperParamPlannerConfigGenerator with discrete space info
+        Given: List of Mock HyperParamPlannerConfigGenerator with discrete space info
         When: Calling complete_environments_and_benchmarks_hyperparameter_optimization_configs
         Then: Returns list of HyperParameterRunParams with correct structure
 
@@ -170,7 +170,7 @@ class TestExperimentConfigs:
         mapper = AverageReturnParameterToOptimizeMapper()
 
         configs = complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-            gen=gen,
+            generators=[gen],
             parameter_to_optimize_mapper=mapper,
             particles=self.particle_count,
             num_episodes=5,
@@ -216,7 +216,7 @@ class TestExperimentConfigs:
         mapper = AverageReturnParameterToOptimizeMapper()
 
         configs = complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-            gen=gen,
+            generators=[gen],
             parameter_to_optimize_mapper=mapper,
             particles=25,
             num_episodes=15,
@@ -237,7 +237,7 @@ class TestExperimentConfigs:
 
         Purpose: Validates that the function works correctly with default parameter values.
 
-        Given: Only required generator and mapper parameters
+        Given: Only required generator list and mapper parameters
         When: Calling the function with minimal parameters
         Then: Uses default values correctly for all optional parameters
 
@@ -247,7 +247,7 @@ class TestExperimentConfigs:
         mapper = AverageReturnParameterToOptimizeMapper()
 
         configs = complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-            gen=gen, parameter_to_optimize_mapper=mapper
+            generators=[gen], parameter_to_optimize_mapper=mapper
         )
 
         assert isinstance(configs, list)
@@ -490,7 +490,7 @@ class TestExperimentConfigs:
 
         # Test with a valid mapper (should work)
         configs = complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-            gen=gen, parameter_to_optimize_mapper=mapper
+            generators=[gen], parameter_to_optimize_mapper=mapper
         )
         assert isinstance(configs, list)
 
@@ -512,7 +512,7 @@ class TestExperimentConfigs:
 
         # Get full configs which includes both main and benchmark configs
         all_configs = complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-            gen=gen,
+            generators=[gen],
             parameter_to_optimize_mapper=mapper,
             particles=self.particle_count,
             num_episodes=3,
@@ -580,7 +580,7 @@ class TestExperimentConfigs:
 
         # Test default parameters are applied
         configs_default = complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-            gen=gen, parameter_to_optimize_mapper=mapper
+            generators=[gen], parameter_to_optimize_mapper=mapper
         )
 
         if configs_default:
@@ -610,7 +610,7 @@ class TestExperimentConfigs:
         # Test multiple calls don't accumulate memory improperly
         for i in range(3):
             configs = complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-                gen=gen,
+                generators=[gen],
                 parameter_to_optimize_mapper=mapper,
                 particles=self.particle_count,
                 num_episodes=2,  # Small values for performance test
@@ -620,6 +620,130 @@ class TestExperimentConfigs:
 
             # Should be able to handle multiple calls
             assert isinstance(configs, list)
+
+    def test_multiple_generators_basic(self):
+        """Test complete_environments_and_benchmarks_hyperparameter_optimization_configs with multiple generators.
+
+        Purpose: Validates that the function correctly handles multiple generators
+        and combines their outputs appropriately.
+
+        Given: List of multiple MockHyperParamPlannerConfigGenerator instances
+        When: Calling complete_environments_and_benchmarks_hyperparameter_optimization_configs
+        Then: Returns configurations from all generators combined
+
+        Test type: unit
+        """
+        # Create multiple generators with different space info
+        gen1 = MockHyperParamPlannerConfigGenerator(self.discrete_space_info)
+        gen2 = MockHyperParamPlannerConfigGenerator(self.continuous_space_info)
+        mapper = AverageReturnParameterToOptimizeMapper()
+
+        configs = complete_environments_and_benchmarks_hyperparameter_optimization_configs(
+            generators=[gen1, gen2],
+            parameter_to_optimize_mapper=mapper,
+            particles=self.particle_count,
+            num_episodes=3,
+            num_steps=5,
+            n_trials=10,
+        )
+
+        # Verify return type and structure
+        assert isinstance(configs, list), "Should return a list of configurations"
+
+        # Should have configurations from both generators
+        if configs:
+            for config in configs:
+                assert isinstance(
+                    config, HyperParameterRunParams
+                ), "Should contain HyperParameterRunParams"
+                assert isinstance(config.environment, Environment), "Config should have Environment"
+                assert isinstance(config.belief, Belief), "Config should have Belief"
+                assert isinstance(
+                    config.hyper_param_planner_config, HyperParamPlannerConfig
+                ), "Config should have HyperParamPlannerConfig"
+
+    def test_multiple_generators_same_space_info(self):
+        """Test multiple generators with the same space info.
+
+        Purpose: Validates that multiple generators with identical space info
+        are handled correctly and don't cause conflicts.
+
+        Given: Multiple generators with same PolicySpaceInfo
+        When: Calling the function with these generators
+        Then: Returns configurations from all generators
+
+        Test type: unit
+        """
+        # Create multiple generators with same space info
+        gen1 = MockHyperParamPlannerConfigGenerator(self.discrete_space_info)
+        gen2 = MockHyperParamPlannerConfigGenerator(self.discrete_space_info)
+        gen3 = MockHyperParamPlannerConfigGenerator(self.discrete_space_info)
+        mapper = AverageReturnParameterToOptimizeMapper()
+
+        configs = complete_environments_and_benchmarks_hyperparameter_optimization_configs(
+            generators=[gen1, gen2, gen3],
+            parameter_to_optimize_mapper=mapper,
+            particles=self.particle_count,
+            num_episodes=2,
+            num_steps=3,
+            n_trials=5,
+        )
+
+        assert isinstance(configs, list), "Should return a list"
+
+    def test_empty_generators_list(self):
+        """Test handling of empty generators list.
+
+        Purpose: Validates that the function handles empty generators list gracefully.
+
+        Given: Empty list of generators
+        When: Calling the function with empty list
+        Then: Returns empty list or handles gracefully
+
+        Test type: edge case
+        """
+        mapper = AverageReturnParameterToOptimizeMapper()
+
+        configs = complete_environments_and_benchmarks_hyperparameter_optimization_configs(
+            generators=[],
+            parameter_to_optimize_mapper=mapper,
+            particles=self.particle_count,
+        )
+
+        # Should return empty list, not crash
+        assert isinstance(configs, list), "Should return list even if empty"
+        assert len(configs) == 0, "Should return empty list for empty generators"
+
+    def test_mixed_space_info_generators(self):
+        """Test generators with mixed space info types.
+
+        Purpose: Validates that generators with different space info types
+        (discrete, continuous, mixed) work together correctly.
+
+        Given: Generators with different PolicySpaceInfo types
+        When: Calling the function with mixed generators
+        Then: Returns configurations from all generators
+
+        Test type: unit
+        """
+        # Create generators with different space info
+        discrete_gen = MockHyperParamPlannerConfigGenerator(self.discrete_space_info)
+        continuous_gen = MockHyperParamPlannerConfigGenerator(self.continuous_space_info)
+        mixed_gen = MockHyperParamPlannerConfigGenerator(
+            PolicySpaceInfo(action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED)
+        )
+        mapper = AverageReturnParameterToOptimizeMapper()
+
+        configs = complete_environments_and_benchmarks_hyperparameter_optimization_configs(
+            generators=[discrete_gen, continuous_gen, mixed_gen],
+            parameter_to_optimize_mapper=mapper,
+            particles=self.particle_count,
+            num_episodes=2,
+            num_steps=3,
+            n_trials=5,
+        )
+
+        assert isinstance(configs, list), "Should handle mixed space info generators"
 
 
 # Additional helper test class for testing mock implementations

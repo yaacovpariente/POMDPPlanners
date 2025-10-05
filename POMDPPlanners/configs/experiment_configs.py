@@ -7,7 +7,10 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfig,
 )
 from POMDPPlanners.core.policy import PolicySpaceInfo
-from POMDPPlanners.configs.environment_configs import EnvironmentConfigsAPI
+from POMDPPlanners.configs.environment_configs import (
+    EnvironmentConfigsAPI,
+    RiskAverseEnvironmentConfigsAPI,
+)
 from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.belief import Belief
@@ -94,27 +97,41 @@ def get_hyperparameter_benchmarks(
 
 
 def complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-    gen: HyperParamPlannerConfigGenerator,
+    generators: List[HyperParamPlannerConfigGenerator],
     parameter_to_optimize_mapper: ParameterToOptimizeMapper,
     particles: int = 30,
     num_episodes: int = 10,
     num_steps: int = 20,
     n_trials: int = 500,
-    parameter_to_optimize: str = "average_return",
+    discount_factor: float = 0.95,
+    time_out_in_seconds: float = 3.0,
+    is_risk_averse: bool = False,
 ) -> List[HyperParameterRunParams]:
-    env_configs = EnvironmentConfigsAPI(discount_factor=0.95)
-    planners_hyperparam_configs = PlannersHyperparamConfigs(discount_factor=0.95)
+    if is_risk_averse:
+        env_configs = RiskAverseEnvironmentConfigsAPI(discount_factor=discount_factor)
+    else:
+        env_configs = EnvironmentConfigsAPI(discount_factor=discount_factor)
 
-    envs = env_configs.get_compatible_environments(
-        policy_space_info=gen.get_planner_space_info(), n_particles=particles
-    )
-    envs, beliefs = zip(*envs)
-    planner_configs_for_each_environment: List[HyperParamPlannerConfig] = [
-        gen.generate(env) for env in envs
-    ]
+    planners_hyperparam_configs = PlannersHyperparamConfigs(discount_factor=discount_factor)
+
+    planner_configs_for_each_environment: List[HyperParamPlannerConfig] = []
+    all_envs = []
+    all_beliefs = []
+
+    for gen in generators:
+        envs = env_configs.get_compatible_environments(
+            policy_space_info=gen.get_planner_space_info(), n_particles=particles
+        )
+        envs, beliefs = zip(*envs)
+        all_envs.extend(envs)
+        all_beliefs.extend(beliefs)
+        configs: List[HyperParamPlannerConfig] = [gen.generate(env) for env in envs]
+        planner_configs_for_each_environment += configs
 
     planner_run_params_for_each_environment: List[HyperParameterRunParams] = []
-    for env, belief, planner_config in zip(envs, beliefs, planner_configs_for_each_environment):
+    for env, belief, planner_config in zip(
+        all_envs, all_beliefs, planner_configs_for_each_environment
+    ):
         parameter_to_optimize, direction = parameter_to_optimize_mapper.generate(
             env, planner_config.policy_cls
         )
@@ -135,7 +152,7 @@ def complete_environments_and_benchmarks_hyperparameter_optimization_configs(
     for run_param in planner_run_params_for_each_environment:
         all_configs.append(run_param)
         all_configs += get_benchmarks_hyperparameter_optimization_configs(
-            conf=run_param, discount_factor=0.95, time_out_in_seconds=3.0
+            conf=run_param, discount_factor=discount_factor, time_out_in_seconds=time_out_in_seconds
         )
 
     return all_configs
