@@ -859,7 +859,7 @@ class SimulationsAPI:
 
     def run_hyperparameter_tuning_comprehensive_benchmark_local(
         self,
-        gen: HyperParamPlannerConfigGenerator,
+        generators: List[HyperParamPlannerConfigGenerator],
         particles: int = 30,
         num_episodes: int = 10,
         num_steps: int = 20,
@@ -882,7 +882,7 @@ class SimulationsAPI:
         all configured environments and benchmark planners.
 
         Args:
-            gen: Hyperparameter configuration generator.
+            generators: Hyperparameter configuration generators list.
             particles: Number of particles for belief representation.
             num_episodes: Number of episodes for optimization.
             num_steps: Maximum steps per episode for optimization.
@@ -924,11 +924,11 @@ class SimulationsAPI:
             cache_visualizations=cache_visualizations,
         )
 
-        return workflow.run_comprehensive_benchmark(gen)
+        return workflow.run_comprehensive_benchmark(generators)
 
     def run_hyperparameter_tuning_risk_averse_benchmark_local(
         self,
-        gen: HyperParamPlannerConfigGenerator,
+        generators: List[HyperParamPlannerConfigGenerator],
         particles: int = 30,
         num_episodes: int = 10,
         num_steps: int = 20,
@@ -952,7 +952,7 @@ class SimulationsAPI:
         depending on the specific environment.
 
         Args:
-            gen: Hyperparameter configuration generator.
+            generators: Hyperparameter configuration generators list.
             particles: Number of particles for belief representation.
             num_episodes: Number of episodes for optimization.
             num_steps: Maximum steps per episode for optimization.
@@ -994,11 +994,11 @@ class SimulationsAPI:
             cache_visualizations=cache_visualizations,
         )
 
-        return workflow.run_risk_averse_benchmark(gen)
+        return workflow.run_comprehensive_risk_averse_benchmark(generators)
 
     def run_hyperparameter_tuning_comprehensive_benchmark_pbs(
         self,
-        gen: HyperParamPlannerConfigGenerator,
+        generators: List[HyperParamPlannerConfigGenerator],
         queue: str,
         particles: int = 30,
         num_episodes: int = 10,
@@ -1027,7 +1027,7 @@ class SimulationsAPI:
         all configured environments and benchmark planners.
 
         Args:
-            gen: Hyperparameter configuration generator.
+            generators: Hyperparameter configuration generators list.
             queue: PBS queue name to submit jobs to.
             particles: Number of particles for belief representation.
             num_episodes: Number of episodes for optimization.
@@ -1081,11 +1081,11 @@ class SimulationsAPI:
             cache_visualizations=cache_visualizations,
         )
 
-        return workflow.run_comprehensive_benchmark(gen)
+        return workflow.run_comprehensive_benchmark(generators)
 
     def run_hyperparameter_tuning_risk_averse_benchmark_pbs(
         self,
-        gen: HyperParamPlannerConfigGenerator,
+        generators: List[HyperParamPlannerConfigGenerator],
         queue: str,
         particles: int = 30,
         num_episodes: int = 10,
@@ -1115,7 +1115,7 @@ class SimulationsAPI:
         depending on the specific environment.
 
         Args:
-            gen: Hyperparameter configuration generator.
+            generators: Hyperparameter configuration generators list.
             queue: PBS queue name to submit jobs to.
             particles: Number of particles for belief representation.
             num_episodes: Number of episodes for optimization.
@@ -1169,7 +1169,7 @@ class SimulationsAPI:
             cache_visualizations=cache_visualizations,
         )
 
-        return workflow.run_risk_averse_benchmark(gen)
+        return workflow.run_risk_averse_benchmark(generators)
 
     def run_optimize_and_evaluate_local(
         self,
