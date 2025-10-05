@@ -15,6 +15,10 @@ from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparam
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParamPlannerConfigGenerator
+from POMDPPlanners.core.simulation.simulation_configs import (
+    EvaluationExperimentConfigCreator,
+    HyperparameterOptimizationExperimentConfigCreator,
+)
 
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
@@ -94,6 +98,48 @@ def get_hyperparameter_benchmarks(
         benchmarks.append((env, belief, planner_configs))
 
     return benchmarks
+
+
+class PolicyHyperparameterOptimizationExperimentConfigCreator(
+    HyperparameterOptimizationExperimentConfigCreator
+):
+    def __init__(
+        self,
+        generators: Sequence[HyperParamPlannerConfigGenerator],
+        particles: int,
+        num_episodes: int,
+        num_steps: int,
+        n_trials: int,
+        discount_factor: float,
+        time_out_in_seconds: float,
+        is_risk_averse: bool,
+    ):
+        self.generators = generators
+        self.particles = particles
+        self.num_episodes = num_episodes
+        self.num_steps = num_steps
+        self.n_trials = n_trials
+        self.discount_factor = discount_factor
+        self.time_out_in_seconds = time_out_in_seconds
+        self.is_risk_averse = is_risk_averse
+
+        if is_risk_averse:
+            self.parameter_to_optimize_mapper = RiskAverseParameterToOptimizeMapper()
+        else:
+            self.parameter_to_optimize_mapper = AverageReturnParameterToOptimizeMapper()
+
+    def get_experiment_configs(self) -> List[HyperParameterRunParams]:
+        return complete_environments_and_benchmarks_hyperparameter_optimization_configs(
+            generators=self.generators,
+            parameter_to_optimize_mapper=self.parameter_to_optimize_mapper,
+            particles=self.particles,
+            num_episodes=self.num_episodes,
+            num_steps=self.num_steps,
+            n_trials=self.n_trials,
+            discount_factor=self.discount_factor,
+            time_out_in_seconds=self.time_out_in_seconds,
+            is_risk_averse=self.is_risk_averse,
+        )
 
 
 def complete_environments_and_benchmarks_hyperparameter_optimization_configs(

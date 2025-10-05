@@ -5,12 +5,11 @@ followed by policy evaluation in different execution environments.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Tuple
 from abc import ABC, abstractmethod
 import pandas as pd
 
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-    HyperParamPlannerConfigGenerator,
     HyperParameterRunParams,
     OptimizedPolicyResult,
 )
@@ -23,8 +22,6 @@ from POMDPPlanners.simulations.simulations_deployment.task_manager_configs impor
     TaskManagerConfig,
 )
 from POMDPPlanners.configs.experiment_configs import (
-    AverageReturnParameterToOptimizeMapper,
-    RiskAverseParameterToOptimizeMapper,
     complete_environments_and_benchmarks_hyperparameter_optimization_configs,
 )
 from POMDPPlanners.utils.logger import get_logger
@@ -41,10 +38,6 @@ class OptimizationEvaluationWorkflow(ABC):
     Attributes:
         cache_dir: Directory for caching results.
         experiment_name: Name of the experiment.
-        particles: Number of particles for belief representation.
-        num_episodes: Number of episodes for optimization.
-        num_steps: Maximum steps per episode for optimization.
-        n_trials: Number of optimization trials.
         evaluation_episodes: Number of episodes for evaluation.
         evaluation_steps: Maximum steps per episode for evaluation.
         evaluation_n_jobs: Number of parallel jobs for evaluation.
@@ -59,14 +52,9 @@ class OptimizationEvaluationWorkflow(ABC):
         self,
         cache_dir: Path,
         experiment_name: str,
-        particles: int = 30,
-        num_episodes: int = 10,
-        num_steps: int = 20,
-        n_trials: int = 100,
         evaluation_episodes: int = 3,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
-        is_risk_averse: bool = False,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         debug: bool = False,
@@ -78,10 +66,6 @@ class OptimizationEvaluationWorkflow(ABC):
         Args:
             cache_dir: Directory for caching results.
             experiment_name: Name of the experiment.
-            particles: Number of particles for belief representation.
-            num_episodes: Number of episodes for optimization.
-            num_steps: Maximum steps per episode for optimization.
-            n_trials: Number of optimization trials.
             evaluation_episodes: Number of episodes for evaluation.
             evaluation_steps: Maximum steps per episode for evaluation.
             evaluation_n_jobs: Number of parallel jobs for evaluation.
@@ -93,24 +77,14 @@ class OptimizationEvaluationWorkflow(ABC):
         """
         self.cache_dir = cache_dir
         self.experiment_name = experiment_name
-        self.particles = particles
-        self.num_episodes = num_episodes
-        self.num_steps = num_steps
-        self.n_trials = n_trials
         self.evaluation_episodes = evaluation_episodes
         self.evaluation_steps = evaluation_steps
         self.evaluation_n_jobs = evaluation_n_jobs
-        self.is_risk_averse = is_risk_averse
         self.confidence_interval_level = confidence_interval_level
         self.alpha = alpha
         self.debug = debug
         self.verbose = verbose
         self.cache_visualizations = cache_visualizations
-
-        if is_risk_averse:
-            self.parameter_to_optimize_mapper = RiskAverseParameterToOptimizeMapper()
-        else:
-            self.parameter_to_optimize_mapper = AverageReturnParameterToOptimizeMapper()
 
     @abstractmethod
     def _get_task_manager_config_hyperparameter(self) -> TaskManagerConfig:
@@ -190,32 +164,6 @@ class OptimizationEvaluationWorkflow(ABC):
 
         return results
 
-    def run_comprehensive_benchmark(
-        self,
-        generators: Sequence[HyperParamPlannerConfigGenerator],
-    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
-        """Run comprehensive benchmark with hyperparameter optimization.
-
-        Args:
-            generators: Hyperparameter configuration generators list.
-
-        Returns:
-            Tuple of results dictionary and DataFrame.
-        """
-        optimization_configs = (
-            complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-                generators=generators,
-                parameter_to_optimize_mapper=self.parameter_to_optimize_mapper,
-                particles=self.particles,
-                num_episodes=self.num_episodes,
-                num_steps=self.num_steps,
-                n_trials=self.n_trials,
-                is_risk_averse=self.is_risk_averse,
-            )
-        )
-
-        return self.optimize_and_evaluate(configs=optimization_configs)
-
 
 class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
     """Workflow for local execution using Joblib parallelization.
@@ -239,14 +187,9 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
         cache_dir: Path,
         experiment_name: str,
         optimization_n_jobs: int = -1,
-        particles: int = 30,
-        num_episodes: int = 10,
-        num_steps: int = 20,
-        n_trials: int = 100,
         evaluation_episodes: int = 3,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
-        is_risk_averse: bool = False,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         debug: bool = False,
@@ -259,14 +202,9 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
             cache_dir: Directory for caching results.
             experiment_name: Name of the experiment.
             optimization_n_jobs: Number of parallel jobs for optimization.
-            particles: Number of particles for belief representation.
-            num_episodes: Number of episodes for optimization.
-            num_steps: Maximum steps per episode for optimization.
-            n_trials: Number of optimization trials.
             evaluation_episodes: Number of episodes for evaluation.
             evaluation_steps: Maximum steps per episode for evaluation.
             evaluation_n_jobs: Number of parallel jobs for evaluation.
-            is_risk_averse: Whether to run risk-averse benchmark.
             confidence_interval_level: Confidence level for intervals.
             alpha: Significance level for statistical tests.
             debug: Enable debug mode.
@@ -276,14 +214,9 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
         super().__init__(
             cache_dir=cache_dir,
             experiment_name=experiment_name,
-            particles=particles,
-            num_episodes=num_episodes,
-            num_steps=num_steps,
-            n_trials=n_trials,
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
-            is_risk_averse=is_risk_averse,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
@@ -339,10 +272,6 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
         processes: int = 1,
         walltime: str = "03:00:00",
         job_extra: Optional[List[str]] = None,
-        particles: int = 30,
-        num_episodes: int = 10,
-        num_steps: int = 20,
-        n_trials: int = 100,
         evaluation_episodes: int = 3,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
@@ -365,10 +294,6 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
             processes: Processes per worker.
             walltime: Maximum walltime.
             job_extra: Additional PBS job parameters.
-            particles: Number of particles for belief representation.
-            num_episodes: Number of episodes for optimization.
-            num_steps: Maximum steps per episode for optimization.
-            n_trials: Number of optimization trials.
             evaluation_episodes: Number of episodes for evaluation.
             evaluation_steps: Maximum steps per episode for evaluation.
             evaluation_n_jobs: Number of parallel jobs for evaluation.
@@ -382,14 +307,9 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
         super().__init__(
             cache_dir=cache_dir,
             experiment_name=experiment_name,
-            particles=particles,
-            num_episodes=num_episodes,
-            num_steps=num_steps,
-            n_trials=n_trials,
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
-            is_risk_averse=is_risk_averse,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
