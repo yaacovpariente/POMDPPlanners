@@ -868,6 +868,7 @@ class SimulationsAPI:
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
         optimization_n_jobs: int = -1,
+        is_risk_averse: bool = False,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         cache_dir_path: Optional[Path] = None,
@@ -891,6 +892,7 @@ class SimulationsAPI:
             evaluation_steps: Maximum steps per episode for evaluation.
             evaluation_n_jobs: Number of parallel jobs for evaluation.
             optimization_n_jobs: Number of parallel jobs for optimization (-1 uses all cores).
+            is_risk_averse: Whether to run risk-averse benchmark.
             confidence_interval_level: Confidence level for intervals.
             alpha: Significance level for statistical tests.
             cache_dir_path: Optional path for storing results.
@@ -917,6 +919,7 @@ class SimulationsAPI:
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
+            is_risk_averse=is_risk_averse,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
@@ -925,76 +928,6 @@ class SimulationsAPI:
         )
 
         return workflow.run_comprehensive_benchmark(generators)
-
-    def run_hyperparameter_tuning_risk_averse_benchmark_local(
-        self,
-        generators: List[HyperParamPlannerConfigGenerator],
-        particles: int = 30,
-        num_episodes: int = 10,
-        num_steps: int = 20,
-        n_trials: int = 100,
-        evaluation_episodes: int = 3,
-        evaluation_steps: int = 6,
-        evaluation_n_jobs: int = 1,
-        optimization_n_jobs: int = -1,
-        confidence_interval_level: float = 0.95,
-        alpha: float = 0.05,
-        cache_dir_path: Optional[Path] = None,
-        experiment_name: str = "Risk_Averse_Benchmark",
-        debug: bool = False,
-        cache_visualizations: bool = True,
-    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
-        """Run risk-averse benchmark with hyperparameter optimization locally.
-
-        This method runs hyperparameter optimization followed by policy evaluation
-        using local Joblib parallelization. It optimizes for risk-averse metrics such
-        as minimizing obstacle collisions, safety violations, or dangerous encounters,
-        depending on the specific environment.
-
-        Args:
-            generators: Hyperparameter configuration generators list.
-            particles: Number of particles for belief representation.
-            num_episodes: Number of episodes for optimization.
-            num_steps: Maximum steps per episode for optimization.
-            n_trials: Number of optimization trials.
-            evaluation_episodes: Number of episodes for evaluation.
-            evaluation_steps: Maximum steps per episode for evaluation.
-            evaluation_n_jobs: Number of parallel jobs for evaluation.
-            optimization_n_jobs: Number of parallel jobs for optimization (-1 uses all cores).
-            confidence_interval_level: Confidence level for intervals.
-            alpha: Significance level for statistical tests.
-            cache_dir_path: Optional path for storing results.
-            experiment_name: Name for the experiment.
-            debug: Enable debug mode.
-            cache_visualizations: Whether to cache visualizations.
-
-        Returns:
-            Tuple of results dictionary and DataFrame.
-        """
-        self.logger.info("Starting risk-averse benchmark with local execution")
-
-        if cache_dir_path is None:
-            cache_dir_path = Path("./risk_averse_benchmark_results")
-
-        workflow = OptimizationEvaluationLocalWorkflow(
-            cache_dir=cache_dir_path,
-            experiment_name=experiment_name,
-            optimization_n_jobs=optimization_n_jobs,
-            particles=particles,
-            num_episodes=num_episodes,
-            num_steps=num_steps,
-            n_trials=n_trials,
-            evaluation_episodes=evaluation_episodes,
-            evaluation_steps=evaluation_steps,
-            evaluation_n_jobs=evaluation_n_jobs,
-            confidence_interval_level=confidence_interval_level,
-            alpha=alpha,
-            debug=debug,
-            verbose=True,
-            cache_visualizations=cache_visualizations,
-        )
-
-        return workflow.run_comprehensive_risk_averse_benchmark(generators)
 
     def run_hyperparameter_tuning_comprehensive_benchmark_pbs(
         self,
@@ -1007,6 +940,7 @@ class SimulationsAPI:
         evaluation_episodes: int = 3,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
+        is_risk_averse: bool = False,
         n_workers: int = 4,
         cores: int = 1,
         memory: str = "4GB",
@@ -1036,12 +970,14 @@ class SimulationsAPI:
             evaluation_episodes: Number of episodes for evaluation.
             evaluation_steps: Maximum steps per episode for evaluation.
             evaluation_n_jobs: Number of parallel jobs for evaluation.
+            is_risk_averse: Whether to run risk-averse benchmark.
             n_workers: Number of worker jobs to submit to PBS cluster.
             cores: Number of CPU cores per PBS job.
             memory: Memory allocation per PBS job (e.g., "4GB", "8GB").
             processes: Number of processes per PBS job.
             walltime: Maximum runtime per job in HH:MM:SS format.
             job_extra: Additional PBS directives as list of strings.
+            is_risk_averse: Whether to run risk-averse benchmark.
             confidence_interval_level: Confidence level for intervals.
             alpha: Significance level for statistical tests.
             cache_dir_path: Optional path for storing results.
@@ -1074,6 +1010,7 @@ class SimulationsAPI:
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
+            is_risk_averse=is_risk_averse,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
@@ -1083,94 +1020,6 @@ class SimulationsAPI:
 
         return workflow.run_comprehensive_benchmark(generators)
 
-    def run_hyperparameter_tuning_risk_averse_benchmark_pbs(
-        self,
-        generators: List[HyperParamPlannerConfigGenerator],
-        queue: str,
-        particles: int = 30,
-        num_episodes: int = 10,
-        num_steps: int = 20,
-        n_trials: int = 100,
-        evaluation_episodes: int = 3,
-        evaluation_steps: int = 6,
-        evaluation_n_jobs: int = 1,
-        n_workers: int = 4,
-        cores: int = 1,
-        memory: str = "4GB",
-        processes: int = 1,
-        walltime: str = "03:00:00",
-        job_extra: Optional[List[str]] = None,
-        confidence_interval_level: float = 0.95,
-        alpha: float = 0.05,
-        cache_dir_path: Optional[Path] = None,
-        experiment_name: str = "Risk_Averse_Benchmark_PBS",
-        debug: bool = False,
-        cache_visualizations: bool = True,
-    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
-        """Run risk-averse benchmark with hyperparameter optimization on PBS cluster.
-
-        This method runs hyperparameter optimization followed by policy evaluation
-        using PBS cluster computing. It optimizes for risk-averse metrics such as
-        minimizing obstacle collisions, safety violations, or dangerous encounters,
-        depending on the specific environment.
-
-        Args:
-            generators: Hyperparameter configuration generators list.
-            queue: PBS queue name to submit jobs to.
-            particles: Number of particles for belief representation.
-            num_episodes: Number of episodes for optimization.
-            num_steps: Maximum steps per episode for optimization.
-            n_trials: Number of optimization trials.
-            evaluation_episodes: Number of episodes for evaluation.
-            evaluation_steps: Maximum steps per episode for evaluation.
-            evaluation_n_jobs: Number of parallel jobs for evaluation.
-            n_workers: Number of worker jobs to submit to PBS cluster.
-            cores: Number of CPU cores per PBS job.
-            memory: Memory allocation per PBS job (e.g., "4GB", "8GB").
-            processes: Number of processes per PBS job.
-            walltime: Maximum runtime per job in HH:MM:SS format.
-            job_extra: Additional PBS directives as list of strings.
-            confidence_interval_level: Confidence level for intervals.
-            alpha: Significance level for statistical tests.
-            cache_dir_path: Optional path for storing results.
-            experiment_name: Name for the experiment.
-            debug: Enable debug mode.
-            cache_visualizations: Whether to cache visualizations.
-
-        Returns:
-            Tuple of results dictionary and DataFrame.
-        """
-        self.logger.info("Starting risk-averse benchmark with PBS cluster execution")
-
-        if cache_dir_path is None:
-            cache_dir_path = Path("./risk_averse_benchmark_pbs_results")
-
-        workflow = OptimizationEvaluationPBSWorkflow(
-            cache_dir=cache_dir_path,
-            experiment_name=experiment_name,
-            queue=queue,
-            n_workers=n_workers,
-            cores=cores,
-            memory=memory,
-            processes=processes,
-            walltime=walltime,
-            job_extra=job_extra,
-            particles=particles,
-            num_episodes=num_episodes,
-            num_steps=num_steps,
-            n_trials=n_trials,
-            evaluation_episodes=evaluation_episodes,
-            evaluation_steps=evaluation_steps,
-            evaluation_n_jobs=evaluation_n_jobs,
-            confidence_interval_level=confidence_interval_level,
-            alpha=alpha,
-            debug=debug,
-            verbose=True,
-            cache_visualizations=cache_visualizations,
-        )
-
-        return workflow.run_risk_averse_benchmark(generators)
-
     def run_optimize_and_evaluate_local(
         self,
         configs: List[HyperParameterRunParams],
@@ -1178,6 +1027,7 @@ class SimulationsAPI:
         evaluation_steps: int = 100,
         evaluation_n_jobs: int = 1,
         optimization_n_jobs: int = -1,
+        is_risk_averse: bool = False,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         cache_dir_path: Optional[Path] = None,
@@ -1196,6 +1046,7 @@ class SimulationsAPI:
             evaluation_steps: Maximum steps per episode for evaluation.
             evaluation_n_jobs: Number of parallel jobs for evaluation.
             optimization_n_jobs: Number of parallel jobs for optimization (-1 uses all cores).
+            is_risk_averse: Whether to run risk-averse benchmark.
             confidence_interval_level: Confidence level for intervals.
             alpha: Significance level for statistical tests.
             cache_dir_path: Optional path for storing results.
@@ -1288,6 +1139,7 @@ class SimulationsAPI:
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
+            is_risk_averse=is_risk_averse,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
@@ -1310,6 +1162,7 @@ class SimulationsAPI:
         processes: int = 1,
         walltime: str = "03:00:00",
         job_extra: Optional[List[str]] = None,
+        is_risk_averse: bool = False,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         cache_dir_path: Optional[Path] = None,
@@ -1334,6 +1187,7 @@ class SimulationsAPI:
             processes: Number of processes per PBS job.
             walltime: Maximum runtime per job in HH:MM:SS format.
             job_extra: Additional PBS directives as list of strings.
+            is_risk_averse: Whether to run risk-averse benchmark.
             confidence_interval_level: Confidence level for intervals.
             alpha: Significance level for statistical tests.
             cache_dir_path: Optional path for storing results.
@@ -1436,6 +1290,7 @@ class SimulationsAPI:
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
+            is_risk_averse=is_risk_averse,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,

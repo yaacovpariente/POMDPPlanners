@@ -4,7 +4,7 @@ import tempfile
 import time
 from pathlib import Path
 from typing import Dict, List, cast
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
 import pandas as pd
@@ -1289,25 +1289,283 @@ class TestSimulationsAPI:
                 cache_dir_path=temp_cache_dir,
             )
 
-    def test_run_optimize_and_evaluate_pbs_missing_queue(
+    @patch("POMDPPlanners.simulations.simulations_api.OptimizationEvaluationLocalWorkflow")
+    def test_run_hyperparameter_tuning_comprehensive_benchmark_local_success(
         self,
-        sample_hyperparameter_run_params,
+        mock_workflow_class,
+        temp_cache_dir,
     ):
-        """Test run_optimize_and_evaluate_pbs with missing queue parameter.
+        """Test successful execution of run_hyperparameter_tuning_comprehensive_benchmark_local.
 
-        Purpose: Validates that optimize and evaluate PBS properly validates required queue parameter
+        Purpose: Validates that comprehensive benchmark with local execution completes successfully
 
-        Given: Missing queue parameter
-        When: run_optimize_and_evaluate_pbs is called
-        Then: TypeError is raised for missing required parameter
+        Given: Mocked workflow and generators
+        When: run_hyperparameter_tuning_comprehensive_benchmark_local is executed
+        Then: OptimizationEvaluationLocalWorkflow is called with correct config and returns expected results
 
         Test type: unit
         """
-        api = SimulationsAPI()
+        # Mock the workflow instance and its methods
+        mock_workflow_instance = MagicMock()
+        mock_results = (
+            {"test_tiger": {"OptimizedPOMCP": ["mock_history_1", "mock_history_2"]}},
+            pd.DataFrame(
+                {
+                    "environment": ["test_tiger"],
+                    "policy": ["OptimizedPOMCP"],
+                    "average_return": [10.5],
+                }
+            ),
+        )
+        mock_workflow_instance.run_comprehensive_benchmark.return_value = mock_results
+        mock_workflow_class.return_value = mock_workflow_instance
 
-        # Test with missing queue
-        with pytest.raises(TypeError, match="missing 1 required positional argument: 'queue'"):
-            api.run_optimize_and_evaluate_pbs(  # type: ignore[call-arg]
-                configs=sample_hyperparameter_run_params,
-                # Missing queue parameter
-            )
+        # Mock generators
+        mock_generators = [Mock(), Mock()]
+
+        api = SimulationsAPI()
+        results, stats_df = api.run_hyperparameter_tuning_comprehensive_benchmark_local(
+            generators=mock_generators,
+            particles=50,
+            num_episodes=15,
+            num_steps=25,
+            n_trials=200,
+            evaluation_episodes=5,
+            evaluation_steps=10,
+            evaluation_n_jobs=2,
+            optimization_n_jobs=4,
+            is_risk_averse=True,
+            confidence_interval_level=0.95,
+            alpha=0.05,
+            cache_dir_path=temp_cache_dir,
+            experiment_name="test_comprehensive_benchmark",
+            debug=True,
+            cache_visualizations=True,
+        )
+
+        # Verify OptimizationEvaluationLocalWorkflow was called with correct parameters
+        mock_workflow_class.assert_called_once()
+        call_args = mock_workflow_class.call_args
+
+        assert call_args[1]["cache_dir"] == temp_cache_dir
+        assert call_args[1]["experiment_name"] == "test_comprehensive_benchmark"
+        assert call_args[1]["optimization_n_jobs"] == 4
+        assert call_args[1]["particles"] == 50
+        assert call_args[1]["num_episodes"] == 15
+        assert call_args[1]["num_steps"] == 25
+        assert call_args[1]["n_trials"] == 200
+        assert call_args[1]["evaluation_episodes"] == 5
+        assert call_args[1]["evaluation_steps"] == 10
+        assert call_args[1]["evaluation_n_jobs"] == 2
+        assert call_args[1]["is_risk_averse"] is True
+        assert call_args[1]["confidence_interval_level"] == 0.95
+        assert call_args[1]["alpha"] == 0.05
+        assert call_args[1]["debug"] is True
+        assert call_args[1]["verbose"] is True
+        assert call_args[1]["cache_visualizations"] is True
+
+        # Verify run_comprehensive_benchmark was called with correct generators
+        mock_workflow_instance.run_comprehensive_benchmark.assert_called_once_with(mock_generators)
+
+        # Verify results
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+
+    @patch("POMDPPlanners.simulations.simulations_api.OptimizationEvaluationLocalWorkflow")
+    def test_run_hyperparameter_tuning_comprehensive_benchmark_local_default_parameters(
+        self,
+        mock_workflow_class,
+    ):
+        """Test comprehensive benchmark local with default parameters.
+
+        Purpose: Validates that comprehensive benchmark uses correct default values when optional parameters are not provided
+
+        Given: Only required parameters (generators)
+        When: run_hyperparameter_tuning_comprehensive_benchmark_local is called with minimal parameters
+        Then: OptimizationEvaluationLocalWorkflow is created with correct default values
+
+        Test type: unit
+        """
+        # Mock the workflow instance
+        mock_workflow_instance = MagicMock()
+        mock_results = ({}, pd.DataFrame())
+        mock_workflow_instance.run_comprehensive_benchmark.return_value = mock_results
+        mock_workflow_class.return_value = mock_workflow_instance
+
+        # Mock generators
+        mock_generators = [Mock()]
+
+        api = SimulationsAPI()
+        results, stats_df = api.run_hyperparameter_tuning_comprehensive_benchmark_local(
+            generators=mock_generators,
+        )
+
+        # Verify default parameters
+        call_args = mock_workflow_class.call_args
+
+        assert call_args[1]["experiment_name"] == "Comprehensive_Benchmark"  # Default
+        assert call_args[1]["optimization_n_jobs"] == -1  # Default
+        assert call_args[1]["particles"] == 30  # Default
+        assert call_args[1]["num_episodes"] == 10  # Default
+        assert call_args[1]["num_steps"] == 20  # Default
+        assert call_args[1]["n_trials"] == 100  # Default
+        assert call_args[1]["evaluation_episodes"] == 3  # Default
+        assert call_args[1]["evaluation_steps"] == 6  # Default
+        assert call_args[1]["evaluation_n_jobs"] == 1  # Default
+        assert call_args[1]["is_risk_averse"] is False  # Default
+        assert call_args[1]["confidence_interval_level"] == 0.95  # Default
+        assert call_args[1]["alpha"] == 0.05  # Default
+        assert call_args[1]["debug"] is False  # Default
+        assert call_args[1]["cache_visualizations"] is True  # Default
+
+    @patch("POMDPPlanners.simulations.simulations_api.OptimizationEvaluationPBSWorkflow")
+    def test_run_hyperparameter_tuning_comprehensive_benchmark_pbs_success(
+        self,
+        mock_workflow_class,
+        temp_cache_dir,
+    ):
+        """Test successful execution of run_hyperparameter_tuning_comprehensive_benchmark_pbs.
+
+        Purpose: Validates that comprehensive benchmark with PBS execution completes successfully
+
+        Given: Mocked workflow, generators, and PBS settings
+        When: run_hyperparameter_tuning_comprehensive_benchmark_pbs is executed
+        Then: OptimizationEvaluationPBSWorkflow is called with correct config and returns expected results
+
+        Test type: unit
+        """
+        # Mock the workflow instance and its methods
+        mock_workflow_instance = MagicMock()
+        mock_results = (
+            {"test_tiger": {"OptimizedPOMCP": ["mock_history_1", "mock_history_2"]}},
+            pd.DataFrame(
+                {
+                    "environment": ["test_tiger"],
+                    "policy": ["OptimizedPOMCP"],
+                    "average_return": [10.5],
+                }
+            ),
+        )
+        mock_workflow_instance.run_comprehensive_benchmark.return_value = mock_results
+        mock_workflow_class.return_value = mock_workflow_instance
+
+        # Mock generators
+        mock_generators = [Mock(), Mock()]
+
+        api = SimulationsAPI()
+        results, stats_df = api.run_hyperparameter_tuning_comprehensive_benchmark_pbs(
+            generators=mock_generators,
+            queue="test_queue",
+            particles=50,
+            num_episodes=15,
+            num_steps=25,
+            n_trials=200,
+            evaluation_episodes=5,
+            evaluation_steps=10,
+            evaluation_n_jobs=2,
+            is_risk_averse=True,
+            n_workers=8,
+            cores=2,
+            memory="16GB",
+            processes=2,
+            walltime="06:00:00",
+            job_extra=["#PBS -l feature=gpu"],
+            confidence_interval_level=0.95,
+            alpha=0.05,
+            cache_dir_path=temp_cache_dir,
+            experiment_name="test_comprehensive_benchmark_pbs",
+            debug=True,
+            cache_visualizations=True,
+        )
+
+        # Verify OptimizationEvaluationPBSWorkflow was called with correct parameters
+        mock_workflow_class.assert_called_once()
+        call_args = mock_workflow_class.call_args
+
+        assert call_args[1]["cache_dir"] == temp_cache_dir
+        assert call_args[1]["experiment_name"] == "test_comprehensive_benchmark_pbs"
+        assert call_args[1]["queue"] == "test_queue"
+        assert call_args[1]["n_workers"] == 8
+        assert call_args[1]["cores"] == 2
+        assert call_args[1]["memory"] == "16GB"
+        assert call_args[1]["processes"] == 2
+        assert call_args[1]["walltime"] == "06:00:00"
+        assert call_args[1]["job_extra"] == ["#PBS -l feature=gpu"]
+        assert call_args[1]["particles"] == 50
+        assert call_args[1]["num_episodes"] == 15
+        assert call_args[1]["num_steps"] == 25
+        assert call_args[1]["n_trials"] == 200
+        assert call_args[1]["evaluation_episodes"] == 5
+        assert call_args[1]["evaluation_steps"] == 10
+        assert call_args[1]["evaluation_n_jobs"] == 2
+        assert call_args[1]["is_risk_averse"] is True
+        assert call_args[1]["confidence_interval_level"] == 0.95
+        assert call_args[1]["alpha"] == 0.05
+        assert call_args[1]["debug"] is True
+        assert call_args[1]["verbose"] is True
+        assert call_args[1]["cache_visualizations"] is True
+
+        # Verify run_comprehensive_benchmark was called with correct generators
+        mock_workflow_instance.run_comprehensive_benchmark.assert_called_once_with(mock_generators)
+
+        # Verify results
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+
+    @patch("POMDPPlanners.simulations.simulations_api.OptimizationEvaluationPBSWorkflow")
+    def test_run_hyperparameter_tuning_comprehensive_benchmark_pbs_default_parameters(
+        self,
+        mock_workflow_class,
+    ):
+        """Test comprehensive benchmark PBS with default parameters.
+
+        Purpose: Validates that comprehensive benchmark PBS uses correct default values when optional parameters are not provided
+
+        Given: Only required parameters (generators, queue)
+        When: run_hyperparameter_tuning_comprehensive_benchmark_pbs is called with minimal parameters
+        Then: OptimizationEvaluationPBSWorkflow is created with correct default values
+
+        Test type: unit
+        """
+        # Mock the workflow instance
+        mock_workflow_instance = MagicMock()
+        mock_results = ({}, pd.DataFrame())
+        mock_workflow_instance.run_comprehensive_benchmark.return_value = mock_results
+        mock_workflow_class.return_value = mock_workflow_instance
+
+        # Mock generators
+        mock_generators = [Mock()]
+
+        api = SimulationsAPI()
+        results, stats_df = api.run_hyperparameter_tuning_comprehensive_benchmark_pbs(
+            generators=mock_generators,
+            queue="default_queue",
+        )
+
+        # Verify default parameters
+        call_args = mock_workflow_class.call_args
+
+        assert call_args[1]["experiment_name"] == "Comprehensive_Benchmark_PBS"  # Default
+        assert call_args[1]["queue"] == "default_queue"
+        assert call_args[1]["n_workers"] == 4  # Default
+        assert call_args[1]["cores"] == 1  # Default
+        assert call_args[1]["memory"] == "4GB"  # Default
+        assert call_args[1]["processes"] == 1  # Default
+        assert call_args[1]["walltime"] == "03:00:00"  # Default
+        assert call_args[1]["job_extra"] is None  # Default
+        assert call_args[1]["particles"] == 30  # Default
+        assert call_args[1]["num_episodes"] == 10  # Default
+        assert call_args[1]["num_steps"] == 20  # Default
+        assert call_args[1]["n_trials"] == 100  # Default
+        assert call_args[1]["evaluation_episodes"] == 3  # Default
+        assert call_args[1]["evaluation_steps"] == 6  # Default
+        assert call_args[1]["evaluation_n_jobs"] == 1  # Default
+        assert call_args[1]["is_risk_averse"] is False  # Default
+        assert call_args[1]["confidence_interval_level"] == 0.95  # Default
+        assert call_args[1]["alpha"] == 0.05  # Default
+        assert call_args[1]["debug"] is False  # Default
+        assert call_args[1]["cache_visualizations"] is True  # Default
+
+        # Verify cache directory was created with default name
+        expected_cache_dir = Path("./comprehensive_benchmark_pbs_results")
+        assert call_args[1]["cache_dir"] == expected_cache_dir
