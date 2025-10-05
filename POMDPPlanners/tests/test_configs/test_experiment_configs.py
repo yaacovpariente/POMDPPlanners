@@ -902,3 +902,46 @@ class TestAllHyperparameterBenchmarksExperimentConfigCreator:
         configs = creator.get_experiment_configs()
 
         assert isinstance(configs, list), "Should return a list"
+
+    def test_doctest_example(self):
+        """Test the usage example from AllHyperparameterBenchmarksExperimentConfigCreator docstring.
+
+        Purpose: Validates that the doctest example in the class docstring works correctly.
+
+        Given: Example code from the class docstring
+        When: Executing the example code
+        Then: All assertions pass and example works as documented
+
+        Test type: example
+        """
+        from POMDPPlanners.core.policy import PolicySpaceInfo
+        from POMDPPlanners.core.environment import SpaceType
+        from POMDPPlanners.configs.experiment_configs import (
+            AllHyperparameterBenchmarksExperimentConfigCreator,
+        )
+
+        # Create policy space info for discrete environments
+        space_info = PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
+        )
+
+        # Create experiment config creator
+        creator = AllHyperparameterBenchmarksExperimentConfigCreator(
+            policy_space_info=space_info,
+            particles=10,
+            num_episodes=2,
+            num_steps=3,
+            n_trials=5,
+            discount_factor=0.95,
+            time_out_in_seconds=3.0,
+            is_risk_averse=False,
+        )
+
+        # Get experiment configurations
+        configs = creator.get_experiment_configs()
+
+        # Verify configurations
+        assert len(configs) > 0
+        assert all(config.num_episodes == 2 for config in configs)
+        assert all(config.num_steps == 3 for config in configs)
+        assert all(config.n_trials == 5 for config in configs)
