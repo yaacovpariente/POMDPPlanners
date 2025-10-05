@@ -5,7 +5,7 @@ followed by policy evaluation in different execution environments.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 from abc import ABC, abstractmethod
 import pandas as pd
 
@@ -192,7 +192,7 @@ class OptimizationEvaluationWorkflow(ABC):
 
     def run_comprehensive_benchmark(
         self,
-        generators: List[HyperParamPlannerConfigGenerator],
+        generators: Sequence[HyperParamPlannerConfigGenerator],
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         """Run comprehensive benchmark with hyperparameter optimization.
 

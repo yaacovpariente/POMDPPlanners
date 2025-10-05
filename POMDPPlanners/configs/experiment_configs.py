@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional, Type
+from typing import List, Tuple, Optional, Sequence, Type
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
@@ -97,7 +97,7 @@ def get_hyperparameter_benchmarks(
 
 
 def complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-    generators: List[HyperParamPlannerConfigGenerator],
+    generators: Sequence[HyperParamPlannerConfigGenerator],
     parameter_to_optimize_mapper: ParameterToOptimizeMapper,
     particles: int = 30,
     num_episodes: int = 10,
