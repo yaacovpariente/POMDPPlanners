@@ -66,6 +66,7 @@ class OptimizationEvaluationWorkflow(ABC):
         evaluation_episodes: int = 3,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
+        is_risk_averse: bool = False,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         debug: bool = False,
@@ -99,11 +100,17 @@ class OptimizationEvaluationWorkflow(ABC):
         self.evaluation_episodes = evaluation_episodes
         self.evaluation_steps = evaluation_steps
         self.evaluation_n_jobs = evaluation_n_jobs
+        self.is_risk_averse = is_risk_averse
         self.confidence_interval_level = confidence_interval_level
         self.alpha = alpha
         self.debug = debug
         self.verbose = verbose
         self.cache_visualizations = cache_visualizations
+
+        if is_risk_averse:
+            self.parameter_to_optimize_mapper = RiskAverseParameterToOptimizeMapper()
+        else:
+            self.parameter_to_optimize_mapper = AverageReturnParameterToOptimizeMapper()
 
     @abstractmethod
     def _get_task_manager_config_hyperparameter(self) -> TaskManagerConfig:
@@ -183,6 +190,32 @@ class OptimizationEvaluationWorkflow(ABC):
 
         return results
 
+    def run_comprehensive_benchmark(
+        self,
+        generators: List[HyperParamPlannerConfigGenerator],
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run comprehensive benchmark with hyperparameter optimization.
+
+        Args:
+            generators: Hyperparameter configuration generators list.
+
+        Returns:
+            Tuple of results dictionary and DataFrame.
+        """
+        optimization_configs = (
+            complete_environments_and_benchmarks_hyperparameter_optimization_configs(
+                generators=generators,
+                parameter_to_optimize_mapper=self.parameter_to_optimize_mapper,
+                particles=self.particles,
+                num_episodes=self.num_episodes,
+                num_steps=self.num_steps,
+                n_trials=self.n_trials,
+                is_risk_averse=self.is_risk_averse,
+            )
+        )
+
+        return self.optimize_and_evaluate(configs=optimization_configs)
+
 
 class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
     """Workflow for local execution using Joblib parallelization.
@@ -213,6 +246,7 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
         evaluation_episodes: int = 3,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
+        is_risk_averse: bool = False,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         debug: bool = False,
@@ -232,6 +266,7 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
             evaluation_episodes: Number of episodes for evaluation.
             evaluation_steps: Maximum steps per episode for evaluation.
             evaluation_n_jobs: Number of parallel jobs for evaluation.
+            is_risk_averse: Whether to run risk-averse benchmark.
             confidence_interval_level: Confidence level for intervals.
             alpha: Significance level for statistical tests.
             debug: Enable debug mode.
@@ -248,6 +283,7 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
+            is_risk_averse=is_risk_averse,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
@@ -263,63 +299,6 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
     def _get_task_manager_config_evaluation(self) -> TaskManagerConfig:
         """Get Joblib task manager for evaluation."""
         return JoblibConfig(n_jobs=self.evaluation_n_jobs)
-
-    def run_comprehensive_benchmark(
-        self,
-        generators: List[HyperParamPlannerConfigGenerator],
-    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
-        """Run comprehensive benchmark with hyperparameter optimization.
-
-        Args:
-            gen: Hyperparameter configuration generator.
-
-        Returns:
-            Tuple of results dictionary and DataFrame.
-        """
-        parameter_to_optimize_mapper = AverageReturnParameterToOptimizeMapper()
-        optimization_configs = (
-            complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-                generators=generators,
-                parameter_to_optimize_mapper=parameter_to_optimize_mapper,
-                particles=self.particles,
-                num_episodes=self.num_episodes,
-                num_steps=self.num_steps,
-                n_trials=self.n_trials,
-            )
-        )
-
-        return self.optimize_and_evaluate(configs=optimization_configs)
-
-    def run_comprehensive_risk_averse_benchmark(
-        self,
-        generators: List[HyperParamPlannerConfigGenerator],
-    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
-        """Run comprehensive benchmark with risk-averse hyperparameter optimization.
-
-        This method optimizes for risk-averse metrics such as minimizing
-        obstacle collisions, safety violations, or dangerous encounters,
-        depending on the specific environment.
-
-        Args:
-            gen: Hyperparameter configuration generator.
-
-        Returns:
-            Tuple of results dictionary and DataFrame.
-        """
-        parameter_to_optimize_mapper = RiskAverseParameterToOptimizeMapper()
-        optimization_configs = (
-            complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-                generators=generators,
-                parameter_to_optimize_mapper=parameter_to_optimize_mapper,
-                particles=self.particles,
-                num_episodes=self.num_episodes,
-                num_steps=self.num_steps,
-                n_trials=self.n_trials,
-                is_risk_averse=True,
-            )
-        )
-
-        return self.optimize_and_evaluate(configs=optimization_configs)
 
 
 class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
@@ -367,6 +346,7 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
         evaluation_episodes: int = 3,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
+        is_risk_averse: bool = False,
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         debug: bool = False,
@@ -392,6 +372,7 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
             evaluation_episodes: Number of episodes for evaluation.
             evaluation_steps: Maximum steps per episode for evaluation.
             evaluation_n_jobs: Number of parallel jobs for evaluation.
+            is_risk_averse: Whether to run risk-averse benchmark.
             confidence_interval_level: Confidence level for intervals.
             alpha: Significance level for statistical tests.
             debug: Enable debug mode.
@@ -408,6 +389,7 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
+            is_risk_averse=is_risk_averse,
             confidence_interval_level=confidence_interval_level,
             alpha=alpha,
             debug=debug,
@@ -445,60 +427,3 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
             walltime=self.walltime,
             job_extra=self.job_extra,
         )
-
-    def run_comprehensive_benchmark(
-        self,
-        generators: List[HyperParamPlannerConfigGenerator],
-    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
-        """Run comprehensive benchmark with hyperparameter optimization.
-
-        Args:
-            gen: Hyperparameter configuration generator.
-
-        Returns:
-            Tuple of results dictionary and DataFrame.
-        """
-        parameter_to_optimize_mapper = AverageReturnParameterToOptimizeMapper()
-        optimization_configs = (
-            complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-                generators=generators,
-                parameter_to_optimize_mapper=parameter_to_optimize_mapper,
-                particles=self.particles,
-                num_episodes=self.num_episodes,
-                num_steps=self.num_steps,
-                n_trials=self.n_trials,
-            )
-        )
-
-        return self.optimize_and_evaluate(configs=optimization_configs)
-
-    def run_risk_averse_benchmark(
-        self,
-        generators: List[HyperParamPlannerConfigGenerator],
-    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
-        """Run comprehensive benchmark with risk-averse hyperparameter optimization.
-
-        This method optimizes for risk-averse metrics such as minimizing
-        obstacle collisions, safety violations, or dangerous encounters,
-        depending on the specific environment.
-
-        Args:
-            gen: Hyperparameter configuration generator.
-
-        Returns:
-            Tuple of results dictionary and DataFrame.
-        """
-        parameter_to_optimize_mapper = RiskAverseParameterToOptimizeMapper()
-        optimization_configs = (
-            complete_environments_and_benchmarks_hyperparameter_optimization_configs(
-                generators=generators,
-                parameter_to_optimize_mapper=parameter_to_optimize_mapper,
-                particles=self.particles,
-                num_episodes=self.num_episodes,
-                num_steps=self.num_steps,
-                n_trials=self.n_trials,
-                is_risk_averse=True,
-            )
-        )
-
-        return self.optimize_and_evaluate(configs=optimization_configs)
