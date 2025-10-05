@@ -103,6 +103,65 @@ def get_hyperparameter_benchmarks(
 class AllHyperparameterBenchmarksExperimentConfigCreator(
     HyperparameterOptimizationExperimentConfigCreator
 ):
+    """Experiment configuration creator for all hyperparameter benchmarks.
+
+    This class creates hyperparameter optimization experiment configurations for all
+    compatible environments and planners based on a given policy space. It automatically
+    finds all environments that match the specified action and observation space types,
+    and generates configurations for hyperparameter tuning experiments.
+
+    Attributes:
+        policy_space_info: Policy space information specifying action and observation
+            space types for compatibility matching.
+        particles: Number of particles for belief representation.
+        num_episodes: Number of episodes for optimization.
+        num_steps: Maximum steps per episode for optimization.
+        n_trials: Number of optimization trials.
+        discount_factor: Discount factor for the MDP.
+        time_out_in_seconds: Timeout for planner execution.
+        is_risk_averse: Whether to use risk-averse optimization metrics.
+        parameter_to_optimize_mapper: Mapper for determining optimization parameters
+            based on environment and risk-averse settings.
+
+    Example:
+        >>> from POMDPPlanners.core.policy import PolicySpaceInfo
+        >>> from POMDPPlanners.core.environment import SpaceType
+        >>> from POMDPPlanners.configs.experiment_configs import (
+        ...     AllHyperparameterBenchmarksExperimentConfigCreator
+        ... )
+        >>>
+        >>> # Create policy space info for discrete environments
+        >>> space_info = PolicySpaceInfo(
+        ...     action_space=SpaceType.DISCRETE,
+        ...     observation_space=SpaceType.DISCRETE
+        ... )
+        >>>
+        >>> # Create experiment config creator
+        >>> creator = AllHyperparameterBenchmarksExperimentConfigCreator(
+        ...     policy_space_info=space_info,
+        ...     particles=10,
+        ...     num_episodes=2,
+        ...     num_steps=3,
+        ...     n_trials=5,
+        ...     discount_factor=0.95,
+        ...     time_out_in_seconds=3.0,
+        ...     is_risk_averse=False
+        ... )
+        >>>
+        >>> # Get experiment configurations
+        >>> configs = creator.get_experiment_configs()
+        >>>
+        >>> # Verify configurations
+        >>> len(configs) > 0
+        True
+        >>> all(config.num_episodes == 2 for config in configs)
+        True
+        >>> all(config.num_steps == 3 for config in configs)
+        True
+        >>> all(config.n_trials == 5 for config in configs)
+        True
+    """
+
     def __init__(
         self,
         policy_space_info: PolicySpaceInfo,
@@ -129,6 +188,12 @@ class AllHyperparameterBenchmarksExperimentConfigCreator(
             self.parameter_to_optimize_mapper = AverageReturnParameterToOptimizeMapper()
 
     def get_experiment_configs(self) -> List[HyperParameterRunParams]:
+        """Generate hyperparameter optimization configurations for all compatible environments.
+
+        Returns:
+            List of HyperParameterRunParams configurations, one for each compatible
+            environment-planner combination.
+        """
         if self.is_risk_averse:
             env_configs = RiskAverseEnvironmentConfigsAPI(discount_factor=self.discount_factor)
         else:
