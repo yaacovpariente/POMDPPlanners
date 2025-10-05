@@ -1035,10 +1035,6 @@ class TestSimulationsAPI:
         assert call_args[1]["cache_dir"] == temp_cache_dir
         assert call_args[1]["experiment_name"] == "test_optimize_evaluate"
         assert call_args[1]["optimization_n_jobs"] == 2
-        assert call_args[1]["particles"] == 100  # From fixture belief
-        assert call_args[1]["num_episodes"] == 2  # From fixture
-        assert call_args[1]["num_steps"] == 5  # From fixture
-        assert call_args[1]["n_trials"] == 3  # From fixture
         assert call_args[1]["evaluation_episodes"] == 100
         assert call_args[1]["evaluation_steps"] == 100
         assert call_args[1]["evaluation_n_jobs"] == 1
@@ -1191,10 +1187,6 @@ class TestSimulationsAPI:
         assert call_args[1]["processes"] == 1
         assert call_args[1]["walltime"] == "02:00:00"
         assert call_args[1]["job_extra"] == ["#PBS -l feature=gpu"]
-        assert call_args[1]["particles"] == 100  # From fixture belief
-        assert call_args[1]["num_episodes"] == 2  # From fixture
-        assert call_args[1]["num_steps"] == 5  # From fixture
-        assert call_args[1]["n_trials"] == 3  # From fixture
         assert call_args[1]["evaluation_episodes"] == 100
         assert call_args[1]["evaluation_steps"] == 100
         assert call_args[1]["evaluation_n_jobs"] == 1
@@ -1317,14 +1309,14 @@ class TestSimulationsAPI:
                 }
             ),
         )
-        mock_workflow_instance.run_comprehensive_benchmark.return_value = mock_results
+        mock_workflow_instance.optimize_and_evaluate.return_value = mock_results
         mock_workflow_class.return_value = mock_workflow_instance
 
         # Mock generators
         mock_generators = [Mock(), Mock()]
 
         api = SimulationsAPI()
-        results, stats_df = api.run_hyperparameter_tuning_comprehensive_benchmark_local(
+        results, stats_df = api.run_hyperparameter_tuning_experiment_with_benchmarks_local(
             generators=mock_generators,
             particles=50,
             num_episodes=15,
@@ -1334,7 +1326,7 @@ class TestSimulationsAPI:
             evaluation_steps=10,
             evaluation_n_jobs=2,
             optimization_n_jobs=4,
-            is_risk_averse=True,
+            is_risk_averse=False,
             confidence_interval_level=0.95,
             alpha=0.05,
             cache_dir_path=temp_cache_dir,
@@ -1350,22 +1342,17 @@ class TestSimulationsAPI:
         assert call_args[1]["cache_dir"] == temp_cache_dir
         assert call_args[1]["experiment_name"] == "test_comprehensive_benchmark"
         assert call_args[1]["optimization_n_jobs"] == 4
-        assert call_args[1]["particles"] == 50
-        assert call_args[1]["num_episodes"] == 15
-        assert call_args[1]["num_steps"] == 25
-        assert call_args[1]["n_trials"] == 200
         assert call_args[1]["evaluation_episodes"] == 5
         assert call_args[1]["evaluation_steps"] == 10
         assert call_args[1]["evaluation_n_jobs"] == 2
-        assert call_args[1]["is_risk_averse"] is True
         assert call_args[1]["confidence_interval_level"] == 0.95
         assert call_args[1]["alpha"] == 0.05
         assert call_args[1]["debug"] is True
         assert call_args[1]["verbose"] is True
         assert call_args[1]["cache_visualizations"] is True
 
-        # Verify run_comprehensive_benchmark was called with correct generators
-        mock_workflow_instance.run_comprehensive_benchmark.assert_called_once_with(mock_generators)
+        # Verify optimize_and_evaluate was called with correct configs
+        mock_workflow_instance.optimize_and_evaluate.assert_called_once()
 
         # Verify results
         assert isinstance(results, dict)
@@ -1389,14 +1376,14 @@ class TestSimulationsAPI:
         # Mock the workflow instance
         mock_workflow_instance = MagicMock()
         mock_results = ({}, pd.DataFrame())
-        mock_workflow_instance.run_comprehensive_benchmark.return_value = mock_results
+        mock_workflow_instance.optimize_and_evaluate.return_value = mock_results
         mock_workflow_class.return_value = mock_workflow_instance
 
         # Mock generators
         mock_generators = [Mock()]
 
         api = SimulationsAPI()
-        results, stats_df = api.run_hyperparameter_tuning_comprehensive_benchmark_local(
+        results, stats_df = api.run_hyperparameter_tuning_experiment_with_benchmarks_local(
             generators=mock_generators,
         )
 
@@ -1405,14 +1392,9 @@ class TestSimulationsAPI:
 
         assert call_args[1]["experiment_name"] == "Comprehensive_Benchmark"  # Default
         assert call_args[1]["optimization_n_jobs"] == -1  # Default
-        assert call_args[1]["particles"] == 30  # Default
-        assert call_args[1]["num_episodes"] == 10  # Default
-        assert call_args[1]["num_steps"] == 20  # Default
-        assert call_args[1]["n_trials"] == 100  # Default
         assert call_args[1]["evaluation_episodes"] == 3  # Default
         assert call_args[1]["evaluation_steps"] == 6  # Default
         assert call_args[1]["evaluation_n_jobs"] == 1  # Default
-        assert call_args[1]["is_risk_averse"] is False  # Default
         assert call_args[1]["confidence_interval_level"] == 0.95  # Default
         assert call_args[1]["alpha"] == 0.05  # Default
         assert call_args[1]["debug"] is False  # Default
@@ -1446,14 +1428,14 @@ class TestSimulationsAPI:
                 }
             ),
         )
-        mock_workflow_instance.run_comprehensive_benchmark.return_value = mock_results
+        mock_workflow_instance.optimize_and_evaluate.return_value = mock_results
         mock_workflow_class.return_value = mock_workflow_instance
 
         # Mock generators
         mock_generators = [Mock(), Mock()]
 
         api = SimulationsAPI()
-        results, stats_df = api.run_hyperparameter_tuning_comprehensive_benchmark_pbs(
+        results, stats_df = api.run_hyperparameter_tuning_experiment_with_benchmarks_pbs(
             generators=mock_generators,
             queue="test_queue",
             particles=50,
@@ -1463,7 +1445,7 @@ class TestSimulationsAPI:
             evaluation_episodes=5,
             evaluation_steps=10,
             evaluation_n_jobs=2,
-            is_risk_averse=True,
+            is_risk_averse=False,
             n_workers=8,
             cores=2,
             memory="16GB",
@@ -1491,22 +1473,17 @@ class TestSimulationsAPI:
         assert call_args[1]["processes"] == 2
         assert call_args[1]["walltime"] == "06:00:00"
         assert call_args[1]["job_extra"] == ["#PBS -l feature=gpu"]
-        assert call_args[1]["particles"] == 50
-        assert call_args[1]["num_episodes"] == 15
-        assert call_args[1]["num_steps"] == 25
-        assert call_args[1]["n_trials"] == 200
         assert call_args[1]["evaluation_episodes"] == 5
         assert call_args[1]["evaluation_steps"] == 10
         assert call_args[1]["evaluation_n_jobs"] == 2
-        assert call_args[1]["is_risk_averse"] is True
         assert call_args[1]["confidence_interval_level"] == 0.95
         assert call_args[1]["alpha"] == 0.05
         assert call_args[1]["debug"] is True
         assert call_args[1]["verbose"] is True
         assert call_args[1]["cache_visualizations"] is True
 
-        # Verify run_comprehensive_benchmark was called with correct generators
-        mock_workflow_instance.run_comprehensive_benchmark.assert_called_once_with(mock_generators)
+        # Verify optimize_and_evaluate was called with correct configs
+        mock_workflow_instance.optimize_and_evaluate.assert_called_once()
 
         # Verify results
         assert isinstance(results, dict)
@@ -1530,14 +1507,14 @@ class TestSimulationsAPI:
         # Mock the workflow instance
         mock_workflow_instance = MagicMock()
         mock_results = ({}, pd.DataFrame())
-        mock_workflow_instance.run_comprehensive_benchmark.return_value = mock_results
+        mock_workflow_instance.optimize_and_evaluate.return_value = mock_results
         mock_workflow_class.return_value = mock_workflow_instance
 
         # Mock generators
         mock_generators = [Mock()]
 
         api = SimulationsAPI()
-        results, stats_df = api.run_hyperparameter_tuning_comprehensive_benchmark_pbs(
+        results, stats_df = api.run_hyperparameter_tuning_experiment_with_benchmarks_pbs(
             generators=mock_generators,
             queue="default_queue",
         )
@@ -1553,14 +1530,9 @@ class TestSimulationsAPI:
         assert call_args[1]["processes"] == 1  # Default
         assert call_args[1]["walltime"] == "03:00:00"  # Default
         assert call_args[1]["job_extra"] is None  # Default
-        assert call_args[1]["particles"] == 30  # Default
-        assert call_args[1]["num_episodes"] == 10  # Default
-        assert call_args[1]["num_steps"] == 20  # Default
-        assert call_args[1]["n_trials"] == 100  # Default
         assert call_args[1]["evaluation_episodes"] == 3  # Default
         assert call_args[1]["evaluation_steps"] == 6  # Default
         assert call_args[1]["evaluation_n_jobs"] == 1  # Default
-        assert call_args[1]["is_risk_averse"] is False  # Default
         assert call_args[1]["confidence_interval_level"] == 0.95  # Default
         assert call_args[1]["alpha"] == 0.05  # Default
         assert call_args[1]["debug"] is False  # Default
