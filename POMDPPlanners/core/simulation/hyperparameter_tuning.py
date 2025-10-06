@@ -73,8 +73,10 @@ class OptimizedPolicyResult(NamedTuple):
     chosen_hyper_parameters: dict
     num_episodes: int
     num_steps: int
-    direction: HyperParameterOptimizationDirection
-    parameter_to_optimize: str
+    parameters_to_optimize: List[Tuple[str, HyperParameterOptimizationDirection]]
+    optimized_metric_values: Dict[
+        str, Optional[float]
+    ]  # Actual metric values achieved (None if not found)
 
 
 class HyperParamPlannerConfigGenerator(ABC):
