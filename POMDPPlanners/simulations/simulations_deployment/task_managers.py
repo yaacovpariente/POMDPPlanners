@@ -553,7 +553,7 @@ class PBSTaskManager(DaskTaskManager):
                 memory=self.memory,
                 processes=self.processes,
                 walltime=self.walltime,
-                job_extra=self.job_extra,
+                job_extra_directives=self.job_extra,
                 local_directory="./dask-pbs-space",
                 scheduler_options=scheduler_options if scheduler_options else None,
             )

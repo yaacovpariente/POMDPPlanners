@@ -177,7 +177,6 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
         >>> workflow = OptimizationEvaluationLocalWorkflow(
         ...     cache_dir=Path("./results"),
         ...     experiment_name="My_Experiment",
-        ...     particles=50,
         ...     optimization_n_jobs=-1,
         ... )
     """
