@@ -103,8 +103,7 @@ def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters):
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         cache_dir=Path("/tmp/test_cache"),
         debug=False,
         console_output=False,
@@ -120,8 +119,9 @@ def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters):
     assert task.hyper_parameters == hyper_parameters
     assert task.num_episodes == 2
     assert task.num_steps == 3
-    assert task.direction == HyperParameterOptimizationDirection.MAXIMIZE
-    assert task.parameter_to_optimize == "average_return"
+    assert task.parameters_to_optimize == [
+        ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+    ]
     assert task.cache_dir == Path("/tmp/test_cache")
     assert task.debug == False
     assert task.console_output == False
@@ -158,8 +158,7 @@ def test_hyper_parameter_tuning_task_creation_with_default_seed(environment, hyp
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
     )
 
@@ -188,8 +187,7 @@ def test_hyper_parameter_tuning_task_creation_with_custom_seed(environment, hype
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         seed=custom_seed,
     )
@@ -219,8 +217,7 @@ def test_hyper_parameter_tuning_task_equality(environment, hyper_parameters):
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         seed=42,
     )
@@ -233,8 +230,7 @@ def test_hyper_parameter_tuning_task_equality(environment, hyper_parameters):
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         seed=42,
     )
@@ -248,8 +244,7 @@ def test_hyper_parameter_tuning_task_equality(environment, hyper_parameters):
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=3,  # Different, smaller for fast tests
         num_steps=10,
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         seed=42,
     )
@@ -263,8 +258,7 @@ def test_hyper_parameter_tuning_task_equality(environment, hyper_parameters):
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         seed=999,  # Different seed
     )
@@ -307,8 +301,7 @@ def test_hyper_parameter_tuning_task_to_dict(environment, hyper_parameters):
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         seed=42,
     )
@@ -321,8 +314,8 @@ def test_hyper_parameter_tuning_task_to_dict(environment, hyper_parameters):
     assert task_dict["hyper_parameters"] == hyper_parameters
     assert task_dict["num_episodes"] == 2
     assert task_dict["num_steps"] == 3
-    assert task_dict["direction"] == "maximize"
-    assert task_dict["parameter_to_optimize"] == "average_return"
+    assert "parameters_to_optimize" in task_dict
+    assert task_dict["parameters_to_optimize"] == [("average_return", "maximize")]
     assert task_dict["seed"] == 42  # Test seed is included in serialization
 
 
@@ -347,8 +340,7 @@ def test_hyper_parameter_tuning_task_to_dict_with_default_seed(environment, hype
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         # seed not specified, should use default
     )
@@ -380,8 +372,7 @@ def test_hyper_parameter_tuning_task_run_multiple_episodes_validation(
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         seed=42,
     )
@@ -474,8 +465,7 @@ def test_hyper_parameter_tuning_task_run_success(environment, hyper_parameters):
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
         num_steps=2,  # Very small for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         n_trials=2,  # Very small number of trials for fast execution
         seed=42,
@@ -498,6 +488,7 @@ def test_hyper_parameter_tuning_task_run_success(environment, hyper_parameters):
     assert result.environment == environment
     assert result.num_episodes == 2  # Updated to match the actual value used
     assert result.num_steps == 2
+    # Backward compatibility: result still has direction and parameter_to_optimize
     assert result.direction == HyperParameterOptimizationDirection.MAXIMIZE
     assert result.parameter_to_optimize == "average_return"
 
@@ -538,8 +529,7 @@ def test_hyper_parameter_tuning_task_run_with_categorical_params(
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
         num_steps=2,  # Very small for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         n_trials=2,  # Very small number of trials for fast execution
         seed=42,
@@ -576,8 +566,9 @@ def test_hyper_parameter_tuning_task_run_failure_logging(environment, hyper_para
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
         num_steps=2,  # Small for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="nonexistent_parameter",  # This will cause failure in evaluation
+        parameters_to_optimize=[
+            ("nonexistent_parameter", HyperParameterOptimizationDirection.MAXIMIZE)
+        ],  # This will cause failure in evaluation
         console_output=False,
         n_trials=1,  # Very small number for fast execution
         seed=42,
@@ -586,13 +577,12 @@ def test_hyper_parameter_tuning_task_run_failure_logging(environment, hyper_para
     # Run task and expect it to fail with clear error message
     with pytest.raises(
         ValueError,
-        match="Parameter nonexistent_parameter not found in computed statistics",
+        match="Parameters .* not found in computed statistics",
     ):
         task.run()
 
     # Verify error was logged appropriately
     assert "Error in evaluation function" in caplog.text
-    assert "Parameter nonexistent_parameter not found in computed statistics" in caplog.text
 
 
 def test_hyper_parameter_tuning_task_run_missing_parameter_logging(
@@ -618,22 +608,20 @@ def test_hyper_parameter_tuning_task_run_missing_parameter_logging(
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
         num_steps=2,  # Small for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="invalid_metric",  # This will cause a missing parameter error
+        parameters_to_optimize=[
+            ("invalid_metric", HyperParameterOptimizationDirection.MAXIMIZE)
+        ],  # This will cause a missing parameter error
         console_output=False,
         n_trials=1,  # Very small number for fast execution
         seed=42,
     )
 
     # Run task and expect it to fail with clear error message
-    with pytest.raises(
-        ValueError, match="Parameter invalid_metric not found in computed statistics"
-    ):
+    with pytest.raises(ValueError, match="Parameters .* not found in computed statistics"):
         task.run()
 
     # Verify error was logged appropriately
     assert "Error in evaluation function" in caplog.text
-    assert "Parameter invalid_metric not found in computed statistics" in caplog.text
 
 
 def test_hyper_parameter_tuning_task_custom_n_trials(environment, hyper_parameters):
@@ -657,8 +645,7 @@ def test_hyper_parameter_tuning_task_custom_n_trials(environment, hyper_paramete
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         n_trials=3,  # Custom value, small for fast tests
         seed=42,
@@ -689,8 +676,7 @@ def test_hyper_parameter_tuning_task_logger_property(environment, hyper_paramete
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         seed=42,
     )
@@ -726,8 +712,7 @@ def test_hyper_parameter_tuning_task_seed_in_config_id(environment, hyper_parame
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         seed=42,
     )
@@ -741,8 +726,7 @@ def test_hyper_parameter_tuning_task_seed_in_config_id(environment, hyper_parame
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         seed=999,
     )
@@ -774,8 +758,7 @@ def test_hyper_parameter_tuning_task_seed_in_optimization_results(environment, h
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
         num_steps=2,  # Very small for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         n_trials=2,  # Very small number for fast execution
         seed=42,
@@ -803,8 +786,7 @@ def test_run_function_return_type_explicitly(environment, hyper_parameters):
         constant_parameters={},  # No constant parameters needed for this planner
         num_episodes=2,  # Need at least 2 episodes for statistics computation
         num_steps=2,
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         n_trials=2,
         seed=42,
@@ -856,8 +838,7 @@ def test_hyper_parameter_tuning_task_with_constant_parameters(environment, hyper
         constant_parameters=constant_parameters,  # Use actual constant parameters
         num_episodes=2,  # Need at least 2 episodes for statistics computation
         num_steps=2,  # Very small for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         console_output=False,
         n_trials=2,  # Very small number for fast execution
         seed=42,
@@ -945,8 +926,9 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             constant_parameters={},  # Missing discount_factor, depth, name - this should cause failure
             num_episodes=2,
             num_steps=3,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
             cache_dir=temp_cache_dir,
             debug=False,
             console_output=False,
@@ -995,8 +977,9 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             },
             num_episodes=2,
             num_steps=3,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
             cache_dir=temp_cache_dir,
             debug=False,
             console_output=False,
@@ -1053,8 +1036,9 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             },
             num_episodes=2,
             num_steps=3,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
             cache_dir=temp_cache_dir,
             debug=False,
             console_output=False,
@@ -1122,8 +1106,9 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             constant_parameters=constant_parameters,  # FIXED: Include constant parameters
             num_episodes=5,  # Same as in hyper_param_runner.py but smaller for fast tests
             num_steps=10,  # Same as in hyper_param_runner.py but smaller for fast tests
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,  # Same as hyper_param_runner.py
-            parameter_to_optimize="average_return",  # Same as hyper_param_runner.py
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],  # Same as hyper_param_runner.py
             cache_dir=temp_cache_dir,
             debug=False,
             console_output=False,
@@ -1184,8 +1169,9 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=2,
             num_steps=3,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
             cache_dir=temp_cache_dir,
             debug=False,
             console_output=False,
@@ -1237,8 +1223,9 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
             constant_parameters={},
             num_episodes=2,
             num_steps=2,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
             cache_dir=temp_cache_dir,
             debug=False,
             console_output=False,
@@ -1257,13 +1244,15 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
         assert isinstance(metadata, dict)
 
         # Verify expected metadata fields
-        assert "best_value" in metadata
+        assert "best_pareto_score" in metadata
+        assert "best_trial_metrics" in metadata
         assert "optimization_time" in metadata
         assert "n_trials" in metadata
         assert "best_trial_number" in metadata
 
         # Verify metadata types and ranges
-        assert isinstance(metadata["best_value"], (int, float))
+        assert isinstance(metadata["best_pareto_score"], (int, float))
+        assert isinstance(metadata["best_trial_metrics"], dict)
         assert isinstance(metadata["optimization_time"], (int, float))
         assert isinstance(metadata["n_trials"], int)
         assert metadata["n_trials"] > 0

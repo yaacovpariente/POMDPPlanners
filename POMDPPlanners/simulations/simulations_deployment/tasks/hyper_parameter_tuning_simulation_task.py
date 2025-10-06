@@ -2,7 +2,7 @@ import logging
 import random
 from copy import deepcopy
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Type, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
 
@@ -36,8 +36,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         constant_parameters: Dict[str, Any],
         num_episodes: int,
         num_steps: int,
-        direction: HyperParameterOptimizationDirection,
-        parameter_to_optimize: str,
+        parameters_to_optimize: List[Tuple[str, HyperParameterOptimizationDirection]],
         experiment_name: str = "hyperparameter_optimization",
         n_trials: int = 50,
         cache_dir: Optional[Path] = None,
@@ -56,8 +55,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.constant_parameters = constant_parameters
         self.num_episodes = num_episodes
         self.num_steps = num_steps
-        self.direction = direction
-        self.parameter_to_optimize = parameter_to_optimize
+        self.parameters_to_optimize = parameters_to_optimize
         self.n_trials = n_trials
 
         self.cache_dir = cache_dir
@@ -161,15 +159,23 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
     def _initialize_optimization_session(self) -> None:
         """Initialize and log optimization session configuration."""
-        self.logger.info("Starting hyperparameter optimization task")
+        self.logger.info("Starting hyperparameter optimization task with Pareto selection")
 
         # Log task configuration details
         self.logger.info(
             f"Environment: {self.environment.name} (config_id: {self.environment.config_id})"
         )
         self.logger.info(f"Policy class: {self.policy_cls.__name__}")
-        self.logger.info(f"Parameter to optimize: {self.parameter_to_optimize}")
-        self.logger.info(f"Optimization direction: {self.direction.value}")
+
+        # Log all parameters to optimize
+        params_str = ", ".join(
+            [
+                f"{param_name} ({direction.value})"
+                for param_name, direction in self.parameters_to_optimize
+            ]
+        )
+        self.logger.info(f"Parameters to optimize: {params_str}")
+
         self.logger.info(f"Hyperparameters: {[param.name for param in self.hyper_parameters]}")
         self.logger.info(
             f"Configuration: num_episodes={self.num_episodes}, num_steps={self.num_steps}"
@@ -217,20 +223,19 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
         return policy_params
 
-    def _evaluate_policy_configuration(self, policy: Policy, trial) -> float:
-        """Evaluate a policy configuration by running episodes and computing statistics.
-        s
+    def _evaluate_policy_configuration(self, policy: Policy, trial) -> Dict[str, float]:
+        """Evaluate a policy configuration and return multiple metrics.
+
         Args:
             policy: Policy instance to evaluate
             trial: Optuna trial object for storing metadata
 
         Returns:
-            float: Objective value for this policy configuration
+            Dict[str, float]: Dictionary mapping metric names to their values
 
         Raises:
-            ValueError: If target optimization parameter not found in statistics
+            ValueError: If target optimization parameters not found in statistics
         """
-        from POMDPPlanners.core.belief import get_initial_belief
         from POMDPPlanners.simulations.simulation_statistics import (
             compute_statistics_environment_policy_pair,
         )
@@ -258,29 +263,105 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             trial.set_user_attr("histories", histories)
             trial.set_user_attr("statistics", [stat._asdict() for stat in statistics])
 
-            # Extract the target metric value
-            for metric in statistics:
-                if metric.name == self.parameter_to_optimize:
-                    return metric.value
+            # Extract all target metric values
+            metric_values = {}
+            parameter_names = {param_name for param_name, _ in self.parameters_to_optimize}
 
-            raise ValueError(
-                f"Parameter {self.parameter_to_optimize} not found in computed statistics"
-            )
+            for metric in statistics:
+                if metric.name in parameter_names:
+                    metric_values[metric.name] = metric.value
+
+            # Verify all required parameters were found
+            missing_params = parameter_names - set(metric_values.keys())
+            if missing_params:
+                raise ValueError(f"Parameters {missing_params} not found in computed statistics")
+
+            # Store individual metric values as trial attributes
+            for metric_name, metric_value in metric_values.items():
+                trial.set_user_attr(f"metric_{metric_name}", metric_value)
+
+            return metric_values
 
         except Exception as e:
             self.logger.error(f"Error in evaluation function for trial {trial.number}: {e}")
-            # Return a very poor value to signal failure
             raise e
 
-    def _create_optuna_objective_function(self):
-        """Create the Optuna objective function for hyperparameter optimization.
+    def _compute_pareto_scores(self, study) -> Dict[int, float]:
+        """Compute normalized Pareto scores for all trials.
+
+        Args:
+            study: Completed Optuna study with trial data
 
         Returns:
-            Callable: Objective function that takes an Optuna trial and returns float objective value
+            Dict mapping trial number to aggregated Pareto score
+        """
+        import optuna
+
+        # Collect all metric values across trials
+        trial_metrics = {}
+        for trial in study.trials:
+            if trial.state != optuna.trial.TrialState.COMPLETE:
+                continue
+
+            metrics = {}
+            for param_name, direction in self.parameters_to_optimize:
+                metric_key = f"metric_{param_name}"
+                if metric_key not in trial.user_attrs:
+                    continue
+                metrics[param_name] = trial.user_attrs[metric_key]
+
+            if len(metrics) == len(self.parameters_to_optimize):
+                trial_metrics[trial.number] = metrics
+
+        if not trial_metrics:
+            raise ValueError("No completed trials with all required metrics found")
+
+        # Compute mean and std for each metric across all trials
+        metric_stats = {}
+        for param_name, _ in self.parameters_to_optimize:
+            values = [trial_metrics[trial_num][param_name] for trial_num in trial_metrics.keys()]
+            metric_stats[param_name] = {
+                "mean": np.mean(values),
+                "std": np.std(values) if np.std(values) > 0 else 1.0,  # Avoid division by zero
+            }
+
+        # Compute normalized scores for each trial
+        pareto_scores = {}
+        for trial_num, metrics in trial_metrics.items():
+            normalized_metrics = []
+
+            for param_name, direction in self.parameters_to_optimize:
+                value = metrics[param_name]
+                mean = metric_stats[param_name]["mean"]
+                std = metric_stats[param_name]["std"]
+
+                # Normalize to z-score
+                normalized = (value - mean) / std
+
+                # Flip sign for minimization objectives
+                if direction == HyperParameterOptimizationDirection.MINIMIZE:
+                    normalized = -normalized
+
+                normalized_metrics.append(normalized)
+
+            # Average normalized metrics to get final score
+            pareto_scores[trial_num] = np.mean(normalized_metrics)
+
+        return pareto_scores
+
+    def _create_optuna_objective_function(self):
+        """Create the Optuna objective function for multi-objective optimization.
+
+        Returns:
+            Callable: Objective function that evaluates and stores multiple metrics
         """
 
         def objective(trial) -> float:
-            """Optuna objective function for a single optimization trial."""
+            """Optuna objective function for a single optimization trial.
+
+            Note: Returns dummy value (0.0) since actual selection happens in
+            _build_optimization_results using Pareto analysis.
+            """
             try:
                 # Create parameters dictionary from hyperparameters
                 policy_params = self._create_policy_parameter_suggestions(
@@ -292,17 +373,18 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 # Create policy instance with suggested parameters
                 policy = self.policy_cls(**policy_params)
 
-                # Evaluate policy and return objective value
-                result = self._evaluate_policy_configuration(policy, trial)
-                self.logger.info(f"Trial {trial.number} completed with value: {result}")
-                return result
+                # Evaluate and store metrics - actual values stored in trial.user_attrs
+                metric_values = self._evaluate_policy_configuration(policy, trial)
+
+                self.logger.info(f"Trial {trial.number} completed with metrics: {metric_values}")
+
+                # Return dummy value - actual selection done via Pareto analysis
+                return 0.0
 
             except Exception as e:
                 self.logger.error(f"Error in objective function for trial {trial.number}: {e}")
                 self.logger.exception("Full exception details:")
-                # Return a very poor value to signal failure
                 raise e
-                # return float('-inf') if self.direction.value == "maximize" else float('inf')
 
         return objective
 
@@ -319,23 +401,20 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         import optuna
 
         # Create and run the optimization study
-        self.logger.info("Creating Optuna study...")
-        study = optuna.create_study(direction=self.direction.value)
+        self.logger.info("Creating Optuna study for multi-objective optimization...")
+        # Use maximize since we return dummy values - actual selection via Pareto
+        study = optuna.create_study(direction="maximize")
 
         self.logger.info("Starting optimization trials...")
-        study.optimize(
-            objective_function, n_trials=n_trials, n_jobs=n_jobs
-        )  # Use single job to avoid nested parallelism
+        study.optimize(objective_function, n_trials=n_trials, n_jobs=n_jobs)
 
         # Log optimization completion
         self.logger.info("Optimization completed successfully!")
-        self.logger.info(f"Best parameters: {study.best_params}")
-        self.logger.info(f"Best objective value: {study.best_value}")
 
         return study
 
     def _build_optimization_results(self, study, optimization_time: float) -> OptimizedPolicyResult:
-        """Build OptimizedPolicyResult from completed optimization study.
+        """Build OptimizedPolicyResult using Pareto-optimal policy selection.
 
         Args:
             study: Completed Optuna study
@@ -346,51 +425,63 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         """
         self.logger.info(f"Total optimization time: {optimization_time:.4f} seconds")
 
+        # Compute Pareto scores for all trials
+        pareto_scores = self._compute_pareto_scores(study)
+
+        # Find trial with highest Pareto score
+        best_trial_num = max(pareto_scores.keys(), key=lambda k: pareto_scores[k])
+        best_trial = study.trials[best_trial_num]
+        best_score = pareto_scores[best_trial_num]
+
+        self.logger.info(f"Best trial: {best_trial_num} with Pareto score: {best_score:.4f}")
+
+        # Log individual metrics for best trial
+        for param_name, direction in self.parameters_to_optimize:
+            metric_key = f"metric_{param_name}"
+            metric_value = best_trial.user_attrs.get(metric_key)
+            self.logger.info(f"  {param_name} ({direction.value}): {metric_value}")
+
         # Create the optimized policy with best parameters
         best_policy_params = {
             "environment": self.environment,
             "name": f"{self.policy_cls.__name__}_{self.environment.name}_optimized",
         }
-
         best_policy_params.update(self.constant_parameters)
 
-        # Add the best hyperparameters found during optimization
-        for param_name, param_value in study.best_params.items():
+        for param_name, param_value in best_trial.params.items():
             best_policy_params[param_name] = param_value
 
-        # Create the optimized policy instance
-        optimized_policy = self.policy_cls(**best_policy_params)  # type: ignore[arg-type]
+        optimized_policy = self.policy_cls(**best_policy_params)
 
-        # Log optimization completion details
-        self.logger.info(f"Best parameters: {study.best_params}")
-        self.logger.info(f"Best objective value: {study.best_value}")
-
-        # Store additional metadata for backward compatibility
+        # Store metadata
         self._last_optimization_metadata = {
-            "best_value": study.best_value,
+            "best_pareto_score": best_score,
+            "best_trial_metrics": {
+                param_name: best_trial.user_attrs.get(f"metric_{param_name}")
+                for param_name, _ in self.parameters_to_optimize
+            },
             "n_trials": self.n_trials,
             "optimization_time": optimization_time,
             "config_id": self.get_config_id(),
-            "best_trial_number": study.best_trial.number if study.best_trial else None,
-            "best_trial_statistics": (
-                study.best_trial.user_attrs.get("statistics") if study.best_trial else None
-            ),
+            "best_trial_number": best_trial_num,
+            "best_trial_statistics": best_trial.user_attrs.get("statistics"),
+            "all_pareto_scores": pareto_scores,
         }
 
-        # Create and return OptimizedPolicyResult
+        # Create result - use first parameter for backward compatibility
+        first_param_name, first_param_direction = self.parameters_to_optimize[0]
+
         result = OptimizedPolicyResult(
             environment=self.environment,
             policy=optimized_policy,
-            chosen_hyper_parameters=study.best_params,
+            chosen_hyper_parameters=best_trial.params,
             num_episodes=self.num_episodes,
             num_steps=self.num_steps,
-            direction=self.direction,
-            parameter_to_optimize=self.parameter_to_optimize,
+            direction=first_param_direction,  # For backward compatibility
+            parameter_to_optimize=first_param_name,  # For backward compatibility
         )
 
-        # Store the result for backward compatibility
         self._last_optimization_result = result
-
         return result
 
     def _handle_optimization_failure(self, exception: Exception, start_time: float) -> None:
@@ -453,7 +544,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         result = self._last_optimization_result
         return {
             "best_params": result.chosen_hyper_parameters,
-            "best_value": metadata["best_value"],
+            "best_pareto_score": metadata["best_pareto_score"],
+            "best_trial_metrics": metadata["best_trial_metrics"],
             "n_trials": metadata["n_trials"],
             "optimization_time": metadata["optimization_time"],
             "config_id": metadata["config_id"],
@@ -465,6 +557,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             "num_steps": result.num_steps,
             "best_trial_number": metadata["best_trial_number"],
             "best_trial_statistics": metadata["best_trial_statistics"],
+            "all_pareto_scores": metadata.get("all_pareto_scores"),
             "seed": self.seed,
         }
 
@@ -565,8 +658,10 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             "constant_parameters": self.constant_parameters,
             "num_episodes": self.num_episodes,
             "num_steps": self.num_steps,
-            "direction": self.direction.value,
-            "parameter_to_optimize": self.parameter_to_optimize,
+            "parameters_to_optimize": [
+                (param_name, direction.value)
+                for param_name, direction in self.parameters_to_optimize
+            ],
             "n_trials": self.n_trials,
             "seed": self.seed,
             "use_queue_logger": self.use_queue_logger,
