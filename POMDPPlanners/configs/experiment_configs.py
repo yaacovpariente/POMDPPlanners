@@ -39,14 +39,14 @@ from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
 class AverageReturnParameterToOptimizeMapper(ParameterToOptimizeMapper):
     def generate(
         self, environment: Environment, policy_cls: Optional[Type[Policy]] = None
-    ) -> Tuple[str, HyperParameterOptimizationDirection]:
-        return "average_return", HyperParameterOptimizationDirection.MAXIMIZE
+    ) -> List[Tuple[str, HyperParameterOptimizationDirection]]:
+        return [("average_return", HyperParameterOptimizationDirection.MAXIMIZE)]
 
 
 class RiskAverseParameterToOptimizeMapper(ParameterToOptimizeMapper):
     def generate(
         self, environment: Environment, policy_cls: Optional[Type[Policy]] = None
-    ) -> Tuple[str, HyperParameterOptimizationDirection]:
+    ) -> List[Tuple[str, HyperParameterOptimizationDirection]]:
         if isinstance(environment, CartPolePOMDP):
             raise NotImplementedError("Risk-averse optimization is not supported for CartPolePOMDP")
         elif isinstance(environment, MountainCarPOMDP):
@@ -54,21 +54,42 @@ class RiskAverseParameterToOptimizeMapper(ParameterToOptimizeMapper):
                 "Risk-averse optimization is not supported for MountainCarPOMDP"
             )
         elif isinstance(environment, ContinuousLightDarkPOMDP):
-            return "avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE
+            return [
+                ("avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE),
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ]
         elif isinstance(environment, DiscreteLightDarkPOMDP):
-            return "avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE
+            return [
+                ("avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE),
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ]
         elif isinstance(environment, PushPOMDP):
-            return "total_all_obstacle_collisions", HyperParameterOptimizationDirection.MINIMIZE
+            return [
+                ("total_all_obstacle_collisions", HyperParameterOptimizationDirection.MINIMIZE),
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ]
         elif isinstance(environment, SafeAntVelocityPOMDP):
-            return "total_safety_violations", HyperParameterOptimizationDirection.MINIMIZE
+            return [
+                ("total_safety_violations", HyperParameterOptimizationDirection.MINIMIZE),
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ]
         elif isinstance(environment, TigerPOMDP):
             raise NotImplementedError("Risk-averse optimization is not supported for TigerPOMDP")
         elif isinstance(environment, RockSamplePOMDP):
-            return "average_dangerous_area_steps", HyperParameterOptimizationDirection.MINIMIZE
+            return [
+                ("average_dangerous_area_steps", HyperParameterOptimizationDirection.MINIMIZE),
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ]
         elif isinstance(environment, LaserTagPOMDP):
-            return "average_all_dangerous_encounters", HyperParameterOptimizationDirection.MINIMIZE
+            return [
+                ("average_all_dangerous_encounters", HyperParameterOptimizationDirection.MINIMIZE),
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ]
         elif isinstance(environment, PacManPOMDP):
-            return "average_return", HyperParameterOptimizationDirection.MAXIMIZE
+            return [
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ]
         else:
             raise ValueError(f"Environment {environment.__class__.__name__} is not supported")
 
@@ -213,6 +234,9 @@ class AllHyperparameterBenchmarksExperimentConfigCreator(
                 env=env, time_out_in_seconds=self.time_out_in_seconds
             )
             for planner_config in planners_configs:
+                params_to_optimize = self.parameter_to_optimize_mapper.generate(
+                    env, planner_config.policy_cls
+                )
                 planner_run_params_for_each_environment.append(
                     HyperParameterRunParams(
                         environment=env,
@@ -221,12 +245,7 @@ class AllHyperparameterBenchmarksExperimentConfigCreator(
                         num_episodes=self.num_episodes,
                         num_steps=self.num_steps,
                         n_trials=self.n_trials,
-                        direction=self.parameter_to_optimize_mapper.generate(
-                            env, planner_config.policy_cls
-                        )[1],
-                        parameter_to_optimize=self.parameter_to_optimize_mapper.generate(
-                            env, planner_config.policy_cls
-                        )[0],
+                        parameters_to_optimize=params_to_optimize,
                     )
                 )
 
@@ -311,9 +330,7 @@ def complete_environments_and_benchmarks_hyperparameter_optimization_configs(
     for env, belief, planner_config in zip(
         all_envs, all_beliefs, planner_configs_for_each_environment
     ):
-        parameter_to_optimize, direction = parameter_to_optimize_mapper.generate(
-            env, planner_config.policy_cls
-        )
+        params_to_optimize = parameter_to_optimize_mapper.generate(env, planner_config.policy_cls)
         planner_run_params_for_each_environment.append(
             HyperParameterRunParams(
                 environment=env,
@@ -322,8 +339,7 @@ def complete_environments_and_benchmarks_hyperparameter_optimization_configs(
                 num_episodes=num_episodes,
                 num_steps=num_steps,
                 n_trials=n_trials,
-                direction=direction,
-                parameter_to_optimize=parameter_to_optimize,
+                parameters_to_optimize=params_to_optimize,
             )
         )
 
@@ -352,8 +368,7 @@ def get_benchmarks_hyperparameter_optimization_configs(
             num_episodes=conf.num_episodes,
             num_steps=conf.num_steps,
             n_trials=conf.n_trials,
-            direction=conf.direction,
-            parameter_to_optimize=conf.parameter_to_optimize,
+            parameters_to_optimize=conf.parameters_to_optimize,
         )
         for bench_planner_config in planner_configs
     ]

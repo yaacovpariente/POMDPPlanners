@@ -53,7 +53,7 @@ class ParameterToOptimizeMapper(ABC):
     @abstractmethod
     def generate(
         self, environment: "Environment", policy_cls: Optional[Type["Policy"]] = None
-    ) -> Tuple[str, HyperParameterOptimizationDirection]:
+    ) -> List[Tuple[str, HyperParameterOptimizationDirection]]:
         pass
 
 
@@ -64,8 +64,7 @@ class HyperParameterRunParams(NamedTuple):
     num_episodes: int
     num_steps: int
     n_trials: int
-    direction: HyperParameterOptimizationDirection
-    parameter_to_optimize: str
+    parameters_to_optimize: List[Tuple[str, HyperParameterOptimizationDirection]]
 
 
 class OptimizedPolicyResult(NamedTuple):
