@@ -468,17 +468,21 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             "all_pareto_scores": pareto_scores,
         }
 
-        # Create result - use first parameter for backward compatibility
-        first_param_name, first_param_direction = self.parameters_to_optimize[0]
+        # Extract actual metric values from best trial
+        optimized_metric_values = {
+            param_name: best_trial.user_attrs.get(f"metric_{param_name}")
+            for param_name, _ in self.parameters_to_optimize
+        }
 
+        # Create result
         result = OptimizedPolicyResult(
             environment=self.environment,
             policy=optimized_policy,
             chosen_hyper_parameters=best_trial.params,
             num_episodes=self.num_episodes,
             num_steps=self.num_steps,
-            direction=first_param_direction,  # For backward compatibility
-            parameter_to_optimize=first_param_name,  # For backward compatibility
+            parameters_to_optimize=self.parameters_to_optimize,
+            optimized_metric_values=optimized_metric_values,
         )
 
         self._last_optimization_result = result
@@ -551,8 +555,11 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             "config_id": metadata["config_id"],
             "environment_name": result.environment.name,
             "policy_class_name": result.policy.__class__.__name__,
-            "parameter_to_optimize": result.parameter_to_optimize,
-            "direction": result.direction.value,
+            "parameters_to_optimize": [
+                (param_name, direction.value)
+                for param_name, direction in result.parameters_to_optimize
+            ],
+            "optimized_metric_values": result.optimized_metric_values,
             "num_episodes": result.num_episodes,
             "num_steps": result.num_steps,
             "best_trial_number": metadata["best_trial_number"],

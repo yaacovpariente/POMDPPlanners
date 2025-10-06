@@ -481,16 +481,19 @@ def test_hyper_parameter_tuning_task_run_success(environment, hyper_parameters):
     assert hasattr(result, "chosen_hyper_parameters")
     assert hasattr(result, "num_episodes")
     assert hasattr(result, "num_steps")
-    assert hasattr(result, "direction")
-    assert hasattr(result, "parameter_to_optimize")
+    assert hasattr(result, "parameters_to_optimize")
+    assert hasattr(result, "optimized_metric_values")
 
     # Verify values
     assert result.environment == environment
     assert result.num_episodes == 2  # Updated to match the actual value used
     assert result.num_steps == 2
-    # Backward compatibility: result still has direction and parameter_to_optimize
-    assert result.direction == HyperParameterOptimizationDirection.MAXIMIZE
-    assert result.parameter_to_optimize == "average_return"
+    # New fields: parameters_to_optimize and optimized_metric_values
+    assert result.parameters_to_optimize == [
+        ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+    ]
+    assert "average_return" in result.optimized_metric_values
+    assert isinstance(result.optimized_metric_values["average_return"], float)
 
     # Verify the chosen hyperparameters are within expected ranges
     assert "branching_factor" in result.chosen_hyper_parameters
@@ -805,8 +808,8 @@ def test_run_function_return_type_explicitly(environment, hyper_parameters):
     assert isinstance(result.chosen_hyper_parameters, dict)
     assert isinstance(result.num_episodes, int)
     assert isinstance(result.num_steps, int)
-    assert isinstance(result.direction, HyperParameterOptimizationDirection)
-    assert isinstance(result.parameter_to_optimize, str)
+    assert isinstance(result.parameters_to_optimize, list)
+    assert isinstance(result.optimized_metric_values, dict)
 
 
 def test_hyper_parameter_tuning_task_with_constant_parameters(environment, hyper_parameters):
