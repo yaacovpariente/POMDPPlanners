@@ -1355,6 +1355,7 @@ class SimulationsAPI:
             discount_factor=discount_factor,
             time_out_in_seconds=time_out_in_seconds,
             is_risk_averse=is_risk_averse,
+            debug=debug,
         )
         configs = creator.get_experiment_configs()
 
@@ -1451,6 +1452,7 @@ class SimulationsAPI:
             discount_factor=discount_factor,
             time_out_in_seconds=time_out_in_seconds,
             is_risk_averse=is_risk_averse,
+            debug=debug,
         )
         configs = creator.get_experiment_configs()
 

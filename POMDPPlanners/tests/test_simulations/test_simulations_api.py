@@ -11,8 +11,8 @@ import pandas as pd
 import pytest
 
 from POMDPPlanners.core.belief import Belief, get_initial_belief
-from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.environment import Environment, SpaceType
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
 from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
     EnvironmentRunParams,
@@ -21,6 +21,7 @@ from POMDPPlanners.core.simulation import (
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfig,
+    HyperParamPlannerConfigGenerator,
     HyperParameterFeature,
     HyperParameterOptimizationDirection,
     HyperParameterRunParams,
@@ -1546,3 +1547,357 @@ class TestSimulationsAPI:
         # Verify cache directory was created with default name
         expected_cache_dir = Path("./comprehensive_benchmark_pbs_results")
         assert call_args[1]["cache_dir"] == expected_cache_dir
+
+    @patch("POMDPPlanners.simulations.simulations_api.OptimizationEvaluationLocalWorkflow")
+    def test_run_all_hyperparameter_benchmarks_local_debug_mode(
+        self,
+        mock_workflow_class,
+        temp_cache_dir,
+    ):
+        """Test run_all_hyperparameter_benchmarks_local with debug mode enabled.
+
+        Purpose: Validates that all hyperparameter benchmarks local runs correctly with debug settings
+
+        Given: Mocked workflow and policy space info for continuous action/observation spaces
+        When: run_all_hyperparameter_benchmarks_local is executed with debug=True and minimal settings
+        Then: OptimizationEvaluationLocalWorkflow is called with correct parameters and returns expected results
+
+        Test type: unit
+        """
+        # Mock the workflow instance
+        mock_workflow_instance = MagicMock()
+        mock_results = ({}, pd.DataFrame())
+        mock_workflow_instance.optimize_and_evaluate.return_value = mock_results
+        mock_workflow_class.return_value = mock_workflow_instance
+
+        api = SimulationsAPI()
+        # Use a real PolicySpaceInfo
+        policy_space_info = PolicySpaceInfo(
+            action_space=SpaceType.CONTINUOUS,
+            observation_space=SpaceType.CONTINUOUS,
+        )
+        results, stats_df = api.run_all_hyperparameter_benchmarks_local(
+            policy_space_info=policy_space_info,
+            particles=5,
+            num_episodes=1,
+            num_steps=3,
+            n_trials=1,
+            discount_factor=0.95,
+            time_out_in_seconds=1.0,
+            evaluation_episodes=1,
+            evaluation_steps=3,
+            evaluation_n_jobs=1,
+            optimization_n_jobs=1,
+            is_risk_averse=False,
+            confidence_interval_level=0.95,
+            alpha=0.05,
+            cache_dir_path=temp_cache_dir,
+            experiment_name="test_all_hparam_benchmarks_local_debug",
+            debug=True,
+            cache_visualizations=False,
+        )
+
+        # Verify OptimizationEvaluationLocalWorkflow was called with correct parameters
+        mock_workflow_class.assert_called_once()
+        call_args = mock_workflow_class.call_args
+
+        assert call_args[1]["cache_dir"] == temp_cache_dir
+        assert call_args[1]["experiment_name"] == "test_all_hparam_benchmarks_local_debug"
+        assert call_args[1]["optimization_n_jobs"] == 1
+        assert call_args[1]["evaluation_episodes"] == 1
+        assert call_args[1]["evaluation_steps"] == 3
+        assert call_args[1]["evaluation_n_jobs"] == 1
+        assert call_args[1]["confidence_interval_level"] == 0.95
+        assert call_args[1]["alpha"] == 0.05
+        assert call_args[1]["debug"] is True
+        assert call_args[1]["verbose"] is True
+        assert call_args[1]["cache_visualizations"] is False
+
+        # Verify optimize_and_evaluate was called
+        mock_workflow_instance.optimize_and_evaluate.assert_called_once()
+
+        # Verify results
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+
+
+# Integration Tests - using debug mode for fast execution
+class TestSimulationsAPIIntegration:
+    """Integration tests for SimulationsAPI with real execution using debug mode."""
+
+    def test_run_multiple_environments_and_policies_local_run_integration(
+        self, temp_cache_dir, tiger_environment, sparse_pft_policy
+    ):
+        """Test run_multiple_environments_and_policies_local_run integration with debug mode.
+
+        Purpose: Validates that local simulation executes end-to-end with real environment and policy
+
+        Given: TigerPOMDP environment, SparsePFT policy with minimal parameters (1 episode, 3 steps), debug=True
+        When: run_multiple_environments_and_policies_local_run is executed
+        Then: Returns results dict and DataFrame with actual simulation data
+
+        Test type: integration
+        """
+        api = SimulationsAPI()
+        initial_belief = get_initial_belief(tiger_environment, n_particles=5)
+
+        environment_run_params = [
+            EnvironmentRunParams(
+                environment=tiger_environment,
+                belief=initial_belief,
+                policies=[sparse_pft_policy],
+                num_episodes=1,
+                num_steps=3,
+            )
+        ]
+
+        results, stats_df = api.run_multiple_environments_and_policies_local_run(
+            environment_run_params=environment_run_params,
+            alpha=0.1,
+            confidence_interval_level=0.95,
+            experiment_name="integration_test_local",
+            debug=True,
+            n_jobs=1,
+            cache_dir_path=temp_cache_dir,
+        )
+
+        # Verify actual execution results
+        assert isinstance(results, dict)
+        assert "test_tiger" in results
+        assert "test_sparse_pft" in results["test_tiger"]
+        assert len(results["test_tiger"]["test_sparse_pft"]) == 1
+        assert isinstance(stats_df, pd.DataFrame)
+        assert len(stats_df) > 0
+
+    def test_run_hyperparameter_optimization_integration(self, temp_cache_dir, tiger_environment):
+        """Test run_hyperparameter_optimization integration with debug mode.
+
+        Purpose: Validates that hyperparameter optimization executes end-to-end with real environment
+
+        Given: TigerPOMDP environment with POMCP optimization config, minimal parameters (1 episode, 3 steps, 2 trials), debug=True
+        When: run_hyperparameter_optimization is executed
+        Then: Returns list of OptimizedPolicyResult with actual optimization results
+
+        Test type: integration
+        """
+        api = SimulationsAPI()
+        initial_belief = get_initial_belief(tiger_environment, n_particles=5)
+
+        planner_config = HyperParamPlannerConfig(
+            policy_cls=POMCP,
+            hyper_parameters=cast(
+                List[HyperParameterFeature],
+                [
+                    NumericalHyperParameter(low=0.5, high=1.5, name="exploration_constant"),
+                ],
+            ),
+            constant_parameters={
+                "discount_factor": 0.95,
+                "name": "IntegrationTestPOMCP",
+                "depth": 5,
+                "n_simulations": 20,
+            },
+        )
+
+        optimization_configs = [
+            HyperParameterRunParams(
+                environment=tiger_environment,
+                belief=initial_belief,
+                hyper_param_planner_config=planner_config,
+                num_episodes=1,
+                num_steps=3,
+                n_trials=2,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
+        ]
+
+        results = api.run_hyperparameter_optimization(
+            environment_run_params=optimization_configs,
+            experiment_name="integration_test_hyperparam",
+            n_jobs=1,
+            cache_dir_path=temp_cache_dir,
+            debug=True,
+        )
+
+        # Verify actual optimization results
+        assert isinstance(results, list)
+        assert len(results) == 1
+        assert isinstance(results[0], OptimizedPolicyResult)
+        assert "exploration_constant" in results[0].chosen_hyper_parameters
+        assert results[0].policy.name == "IntegrationTestPOMCP"
+
+    def test_run_optimize_and_evaluate_local_integration(self, temp_cache_dir, tiger_environment):
+        """Test run_optimize_and_evaluate_local integration with debug mode.
+
+        Purpose: Validates that optimize and evaluate workflow executes end-to-end with real environment
+
+        Given: TigerPOMDP with POMCP optimization config, minimal parameters (1 optimization episode, 1 evaluation episode, 2 trials), debug=True
+        When: run_optimize_and_evaluate_local is executed
+        Then: Returns results dict and DataFrame with actual optimization and evaluation data
+
+        Test type: integration
+        """
+        api = SimulationsAPI()
+        initial_belief = get_initial_belief(tiger_environment, n_particles=5)
+
+        planner_config = HyperParamPlannerConfig(
+            policy_cls=POMCP,
+            hyper_parameters=cast(
+                List[HyperParameterFeature],
+                [
+                    NumericalHyperParameter(low=0.5, high=1.5, name="exploration_constant"),
+                ],
+            ),
+            constant_parameters={
+                "discount_factor": 0.95,
+                "name": "IntegrationOptEvalPOMCP",
+                "depth": 5,
+                "n_simulations": 20,
+            },
+        )
+
+        configs = [
+            HyperParameterRunParams(
+                environment=tiger_environment,
+                belief=initial_belief,
+                hyper_param_planner_config=planner_config,
+                num_episodes=1,
+                num_steps=3,
+                n_trials=2,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
+        ]
+
+        results, stats_df = api.run_optimize_and_evaluate_local(
+            configs=configs,
+            evaluation_episodes=1,
+            evaluation_steps=3,
+            evaluation_n_jobs=1,
+            optimization_n_jobs=1,
+            cache_dir_path=temp_cache_dir,
+            experiment_name="integration_test_opt_eval",
+            debug=True,
+        )
+
+        # Verify actual workflow results
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+        assert len(stats_df) > 0
+
+    def test_run_all_hyperparameter_benchmarks_local_integration(self, temp_cache_dir):
+        """Test run_all_hyperparameter_benchmarks_local integration with debug mode.
+
+        Purpose: Validates that all hyperparameter benchmarks execute end-to-end with real environments
+
+        Given: PolicySpaceInfo for discrete action/observation spaces, minimal parameters (1 episode, 3 steps, 2 trials), debug=True
+        When: run_all_hyperparameter_benchmarks_local is executed
+        Then: Returns results dict and DataFrame with actual benchmark results
+
+        Test type: integration
+        """
+        api = SimulationsAPI()
+        policy_space_info = PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.DISCRETE,
+        )
+
+        results, stats_df = api.run_all_hyperparameter_benchmarks_local(
+            policy_space_info=policy_space_info,
+            particles=5,
+            num_episodes=1,
+            num_steps=3,
+            n_trials=2,
+            discount_factor=0.95,
+            time_out_in_seconds=0.1,
+            evaluation_episodes=1,
+            evaluation_steps=3,
+            evaluation_n_jobs=1,
+            optimization_n_jobs=1,
+            is_risk_averse=False,
+            confidence_interval_level=0.95,
+            alpha=0.05,
+            cache_dir_path=temp_cache_dir,
+            experiment_name="integration_test_all_benchmarks",
+            debug=True,
+            cache_visualizations=False,
+        )
+
+        # Verify actual benchmark results
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+        assert len(stats_df) > 0
+
+    def test_run_hyperparameter_tuning_experiment_with_benchmarks_local_integration(
+        self, temp_cache_dir, tiger_environment
+    ):
+        """Test run_hyperparameter_tuning_experiment_with_benchmarks_local integration with debug mode.
+
+        Purpose: Validates that comprehensive benchmark with hyperparameter tuning executes end-to-end
+
+        Given: Generator for TigerPOMDP with POMCP, minimal parameters (1 episode, 3 steps, 2 trials), debug=True
+        When: run_hyperparameter_tuning_experiment_with_benchmarks_local is executed
+        Then: Returns results dict and DataFrame with actual tuning and evaluation results
+
+        Test type: integration
+        """
+        api = SimulationsAPI()
+
+        # Create a simple generator for POMCP on Tiger
+        class SimplePOMCPGenerator(HyperParamPlannerConfigGenerator):
+            def __init__(self, environment):
+                self.environment = environment
+
+            def generate(self, environment: "Environment") -> HyperParamPlannerConfig:
+                return HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=cast(
+                        List[HyperParameterFeature],
+                        [
+                            NumericalHyperParameter(low=0.5, high=1.5, name="exploration_constant"),
+                        ],
+                    ),
+                    constant_parameters={
+                        "discount_factor": environment.discount_factor,
+                        "name": f"BenchmarkPOMCP_{environment.name}",
+                        "depth": 5,
+                        "n_simulations": 2,
+                    },
+                )
+
+            def get_planner_space_info(self) -> "PolicySpaceInfo":
+                return PolicySpaceInfo(
+                    action_space=self.environment.space_info.action_space,
+                    observation_space=self.environment.space_info.observation_space,
+                )
+
+        generator = SimplePOMCPGenerator(tiger_environment)
+
+        results, stats_df = api.run_hyperparameter_tuning_experiment_with_benchmarks_local(
+            generators=[generator],
+            particles=5,
+            num_episodes=2,
+            num_steps=2,
+            n_trials=2,
+            discount_factor=0.95,
+            time_out_in_seconds=0.1,
+            evaluation_episodes=2,
+            evaluation_steps=2,
+            evaluation_n_jobs=1,
+            optimization_n_jobs=1,
+            is_risk_averse=False,
+            confidence_interval_level=0.95,
+            alpha=0.05,
+            cache_dir_path=temp_cache_dir,
+            experiment_name="integration_test_comprehensive_benchmark",
+            debug=True,
+            cache_visualizations=False,
+        )
+
+        # Verify actual benchmark results
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+        assert len(stats_df) > 0
