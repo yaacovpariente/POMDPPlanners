@@ -296,15 +296,6 @@ class HyperParameterOptimizer:
         self.task_manager = self.task_manager_config.create_task_manager(
             cache_dir=str(self.cache_dir_path / "task_manager_cache")
         )
-        # Initialize cache database and task manager
-        # cache_db = DiskCacheDB(cache_dir=str(self.cache_dir_path / "task_manager_cache"))
-        # self.task_manager = SequentialTaskManager(
-        #     cache_db=cache_db,
-        #     cache_dir=str(self.cache_dir_path / "task_manager_cache"),
-        #     clear_cache_on_start=False,
-        #     verbose=0,
-        #     logger_debug=False,
-        # )
 
     def __enter__(self):
         """Context manager entry."""

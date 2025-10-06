@@ -13,6 +13,9 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     OptimizedPolicyResult,
 )
+from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import EnvironmentRunParams
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import HyperParameterOptimizer
 from POMDPPlanners.simulations.simulator import POMDPSimulator
@@ -135,10 +138,16 @@ class OptimizationEvaluationWorkflow(ABC):
         )
 
         optimization_results: List[OptimizedPolicyResult] = optimizer.optimize(configs)
-        optimization_results_organized = [
-            (result.environment, configs[i].belief, [result.policy])
-            for i, result in enumerate(optimization_results)
-        ]
+
+        # Aggregate policies by environment
+        env_to_results: Dict[str, Tuple[Environment, Belief, List[Policy]]] = {}
+        for i, result in enumerate(optimization_results):
+            env_id = result.environment.config_id
+            if env_id not in env_to_results:
+                env_to_results[env_id] = (result.environment, configs[i].belief, [])
+            env_to_results[env_id][2].append(result.policy)
+
+        optimization_results_organized = list(env_to_results.values())
 
         chosen_planners_eval_configs = [
             EnvironmentRunParams(
