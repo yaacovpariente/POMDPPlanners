@@ -159,8 +159,8 @@ def mock_optimized_policy_result(tiger_environment):
         },
         num_episodes=2,
         num_steps=5,
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
+        optimized_metric_values={"average_return": 10.5},
     )
 
 
@@ -806,8 +806,10 @@ class TestSimulationsAPI:
             chosen_hyper_parameters={"exploration_constant": 1.0, "n_simulations": 100},
             num_episodes=2,
             num_steps=5,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 10.5},
         )
 
         mock_result_2 = OptimizedPolicyResult(
@@ -823,8 +825,8 @@ class TestSimulationsAPI:
             chosen_hyper_parameters={"depth": 12, "algorithm": "tpe"},
             num_episodes=2,
             num_steps=5,
-            direction=HyperParameterOptimizationDirection.MINIMIZE,
-            parameter_to_optimize="total_cost",
+            parameters_to_optimize=[("total_cost", HyperParameterOptimizationDirection.MINIMIZE)],
+            optimized_metric_values={"total_cost": 5.0},
         )
 
         # Mock the optimizer instance
