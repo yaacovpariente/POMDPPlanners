@@ -279,39 +279,45 @@ class PlannersHyperparamConfigs:
         action_sampler = self._get_action_sampler_for_environment(env)
         if action_sampler is not None:
             compatible_planners.append(
-                self.pomcpow_config(env, action_sampler, "POMCPOW", time_out_in_seconds)
+                self.pomcpow_config(env, action_sampler, f"POMCPOW_{env.name}", time_out_in_seconds)
             )
 
             # POMCP_DPW - supports MIXED action and observation spaces
             compatible_planners.append(
-                self.pomcp_dpw_config(env, action_sampler, "POMCP_DPW", time_out_in_seconds)
+                self.pomcp_dpw_config(
+                    env, action_sampler, f"POMCP_DPW_{env.name}", time_out_in_seconds
+                )
             )
 
             # PFT_DPW - requires CONTINUOUS action space but supports MIXED observation
             if env_space_info.action_space in [SpaceType.CONTINUOUS, SpaceType.MIXED]:
                 compatible_planners.append(
-                    self.pft_dpw_config(env, action_sampler, "PFT_DPW", time_out_in_seconds)
+                    self.pft_dpw_config(
+                        env, action_sampler, f"PFT_DPW_{env.name}", time_out_in_seconds
+                    )
                 )
 
         # Discrete action space planners
         if env_space_info.action_space in [SpaceType.DISCRETE, SpaceType.MIXED]:
             # POMCP - requires DISCRETE actions and DISCRETE observations
             if env_space_info.observation_space in [SpaceType.DISCRETE, SpaceType.MIXED]:
-                compatible_planners.append(self.pomcp_config(env, "POMCP", time_out_in_seconds))
+                compatible_planners.append(
+                    self.pomcp_config(env, f"POMCP_{env.name}", time_out_in_seconds)
+                )
 
             # Sparse PFT - requires DISCRETE actions, supports MIXED observations
             compatible_planners.append(
-                self.sparse_pft_config(env, "SparsePFT", time_out_in_seconds)
+                self.sparse_pft_config(env, f"SparsePFT_{env.name}", time_out_in_seconds)
             )
 
             # Sparse Sampling - requires DISCRETE actions, supports MIXED observations
             compatible_planners.append(
-                self.sparse_sampling_config(env, "SparseSampling", time_out_in_seconds)
+                self.sparse_sampling_config(env, f"SparseSampling_{env.name}", time_out_in_seconds)
             )
 
             # Discrete Action Sequences - requires DISCRETE actions, supports MIXED observations
             compatible_planners.append(
-                self.discrete_action_sequences_config(env, "DiscreteActionSequences")
+                self.discrete_action_sequences_config(env, f"DiscreteActionSequences_{env.name}")
             )
 
         return compatible_planners
