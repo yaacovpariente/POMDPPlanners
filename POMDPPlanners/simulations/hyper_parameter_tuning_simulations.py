@@ -93,14 +93,15 @@ Example:
     ...     num_episodes=2,        # Reduced for testing
     ...     num_steps=5,           # Reduced for testing
     ...     n_trials=3,            # Reduced for testing
-    ...     direction=HyperParameterOptimizationDirection.MAXIMIZE,
-    ...     parameter_to_optimize="average_return"
+    ...     parameters_to_optimize=[
+    ...         ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+    ...     ]
     ... )
     >>> config.num_episodes
     2
     >>> config.n_trials
     3
-    >>> config.direction.value
+    >>> config.parameters_to_optimize[0][1].value
     'maximize'
 
 Note:
@@ -218,14 +219,15 @@ class HyperParameterOptimizer:
         ...     num_episodes=50,          # Reduced for testing
         ...     num_steps=5,             # Reduced for testing
         ...     n_trials=2,              # Reduced for testing
-        ...     direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        ...     parameter_to_optimize="average_return"
+        ...     parameters_to_optimize=[
+        ...         ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+        ...     ]
         ... )
         >>> len(config.hyper_param_planner_config.hyper_parameters)
         1
         >>> config.hyper_param_planner_config.hyper_parameters[0].name
         'exploration_constant'
-        >>> config.parameter_to_optimize
+        >>> config.parameters_to_optimize[0][0]
         'average_return'
     """
 
@@ -654,11 +656,17 @@ class HyperParameterOptimizer:
             # Get additional metadata from the task if available
             task_metadata = task.get_optimization_metadata()
             if task_metadata:
-                mlflow.log_metric("best_value", task_metadata["best_value"])
+                mlflow.log_metric("best_pareto_score", task_metadata["best_pareto_score"])
                 mlflow.log_metric("optimization_time", task_metadata["optimization_time"])
                 mlflow.log_metric("n_trials_executed", task_metadata["n_trials"])
                 if task_metadata["best_trial_number"] is not None:
                     mlflow.log_metric("best_trial_number", task_metadata["best_trial_number"])
+
+                # Log individual metric values from best trial
+                if "best_trial_metrics" in task_metadata:
+                    for metric_name, metric_value in task_metadata["best_trial_metrics"].items():
+                        if metric_value is not None:
+                            mlflow.log_metric(f"best_trial_{metric_name}", metric_value)
 
             mlflow.log_metric("optimization_success", 1.0)
         else:
@@ -726,7 +734,10 @@ class HyperParameterOptimizer:
         results_data = {
             "configuration_index": original_index + 1,
             "best_parameters": optimization_result.chosen_hyper_parameters,
-            "best_value": task_metadata["best_value"] if task_metadata else "unknown",
+            "best_pareto_score": task_metadata["best_pareto_score"] if task_metadata else "unknown",
+            "best_trial_metrics": (
+                task_metadata.get("best_trial_metrics", {}) if task_metadata else {}
+            ),
             "hyperparameter_ranges": [
                 param._asdict() for param in config.hyper_param_planner_config.hyper_parameters
             ],
@@ -768,7 +779,12 @@ class HyperParameterOptimizer:
 
     def _get_best_value_from_task(self, task: "HyperParameterTuningSimulationTask") -> str:
         task_metadata = task.get_optimization_metadata()
-        return str(task_metadata["best_value"]) if task_metadata else "unknown"
+        if task_metadata:
+            # Format as "pareto_score: X (metrics: {...})"
+            pareto_score = task_metadata.get("best_pareto_score", "unknown")
+            metrics = task_metadata.get("best_trial_metrics", {})
+            return f"pareto_score: {pareto_score}, metrics: {metrics}"
+        return "unknown"
 
     def _log_configuration_failure(self, original_index: int, exception: Exception) -> None:
         mlflow.log_metric("optimization_success", 0.0)

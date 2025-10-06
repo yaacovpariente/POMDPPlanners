@@ -389,8 +389,7 @@ class TestHyperParameterOptimizerHelperMethods:
         assert "policy_type" in params
         assert "num_episodes" in params
         assert "num_steps" in params
-        assert "direction" in params
-        assert "parameter_to_optimize" in params
+        assert "parameters_to_optimize" in params
         assert "n_trials" in params
 
         # Check specific values
@@ -399,8 +398,12 @@ class TestHyperParameterOptimizerHelperMethods:
         assert params["policy_type"] == "StandardSparseSamplingDiscreteActionsPlanner"
         assert params["num_episodes"] == config.num_episodes
         assert params["num_steps"] == config.num_steps
-        assert params["direction"] == config.direction.value
-        assert params["parameter_to_optimize"] == config.parameter_to_optimize
+        assert params["parameters_to_optimize"] == str(
+            [
+                (param_name, direction.value)
+                for param_name, direction in config.parameters_to_optimize
+            ]
+        )
         assert params["n_trials"] == config.n_trials
 
     def test_log_optimization_results_success(self, temp_cache_dir, real_optimized_policy_result):
@@ -735,7 +738,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
 
             # Verify optimization results were logged
             assert "metrics.optimization_success" in config_run
-            assert "metrics.best_value" in config_run
+            assert "metrics.best_pareto_score" in config_run
             assert "metrics.optimization_time" in config_run
 
             # Verify final evaluation metrics were logged
@@ -984,8 +987,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
                     "policy_type",
                     "num_episodes",
                     "num_steps",
-                    "direction",
-                    "parameter_to_optimize",
+                    "parameters_to_optimize",
                     "n_trials",
                 ]
                 for param in expected_config_params:
@@ -996,7 +998,7 @@ class TestHyperParameterOptimizerMLFlowIntegration:
                 # Optimization result metrics
                 expected_optimization_metrics = [
                     "optimization_success",
-                    "best_value",
+                    "best_pareto_score",
                     "optimization_time",
                 ]
                 for metric in expected_optimization_metrics:
