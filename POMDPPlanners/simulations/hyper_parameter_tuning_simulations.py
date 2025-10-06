@@ -350,8 +350,7 @@ class HyperParameterOptimizer:
                 constant_parameters=config.hyper_param_planner_config.constant_parameters,
                 num_episodes=config.num_episodes,
                 num_steps=config.num_steps,
-                direction=config.direction,
-                parameter_to_optimize=config.parameter_to_optimize,
+                parameters_to_optimize=config.parameters_to_optimize,
                 n_trials=config.n_trials,
                 cache_dir=self.cache_dir_path,
                 debug=False,
@@ -441,8 +440,13 @@ class HyperParameterOptimizer:
             "policies": [
                 config.hyper_param_planner_config.policy_cls.__name__ for config in configs
             ],
-            "parameters_to_optimize": [config.parameter_to_optimize for config in configs],
-            "directions": [config.direction.value for config in configs],
+            "parameters_to_optimize": [
+                [
+                    (param_name, direction.value)
+                    for param_name, direction in config.parameters_to_optimize
+                ]
+                for config in configs
+            ],
         }
         mlflow.log_dict(config_summary, "batch_configuration_summary.json")
 
@@ -504,7 +508,13 @@ class HyperParameterOptimizer:
         task: "HyperParameterTuningSimulationTask",
         task_result: "OptimizedPolicyResult",
     ) -> "OptimizedPolicyResult":  # type: ignore
-        direction_str = config.direction.value
+        # Get parameters as a string for logging
+        params_str = ", ".join(
+            [
+                f"{param_name}({direction.value})"
+                for param_name, direction in config.parameters_to_optimize
+            ]
+        )
 
         # Start nested run for this configuration
         with mlflow.start_run(
@@ -548,8 +558,12 @@ class HyperParameterOptimizer:
             "policy_type": config.hyper_param_planner_config.policy_cls.__name__,
             "num_episodes": config.num_episodes,
             "num_steps": config.num_steps,
-            "direction": config.direction.value,
-            "parameter_to_optimize": config.parameter_to_optimize,
+            "parameters_to_optimize": str(
+                [
+                    (param_name, direction.value)
+                    for param_name, direction in config.parameters_to_optimize
+                ]
+            ),
             "n_trials": config.n_trials,
         }
 
@@ -732,9 +746,16 @@ class HyperParameterOptimizer:
                 else {}
             ),
             "environment_type": config.environment.__class__.__name__,
-            "optimization_direction": config.direction.value,
-            "parameter_to_optimize": config.parameter_to_optimize,
-            "best_value": task_metadata["best_value"] if task_metadata else "unknown",
+            "parameters_to_optimize": [
+                (param_name, direction.value)
+                for param_name, direction in config.parameters_to_optimize
+            ],
+            "best_pareto_score": (
+                task_metadata.get("best_pareto_score") if task_metadata else "unknown"
+            ),
+            "best_trial_metrics": (
+                task_metadata.get("best_trial_metrics") if task_metadata else "unknown"
+            ),
             "all_policy_parameters": self._extract_all_policy_parameters(optimization_result),
             "policy_creation_params": {
                 "policy_name": getattr(optimization_result.policy, "name", "unnamed"),

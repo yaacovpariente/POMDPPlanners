@@ -103,8 +103,9 @@ def sample_configs(real_environment, real_policy_class, real_belief):
             num_episodes=2,  # Small for fast tests
             num_steps=3,  # Small for fast tests
             n_trials=2,  # Small for fast tests
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         ),
         HyperParameterRunParams(
             environment=real_environment,
@@ -113,8 +114,9 @@ def sample_configs(real_environment, real_policy_class, real_belief):
             num_episodes=2,  # Small for fast tests
             num_steps=3,  # Small for fast tests
             n_trials=2,  # Small for fast tests
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,  # Changed from MINIMIZE to work with average_return
-            parameter_to_optimize="average_return",  # Changed from total_cost to a valid metric
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],  # Changed from MINIMIZE to work with average_return
         ),
     ]
 
@@ -227,8 +229,7 @@ class TestHyperParameterOptimizerTaskCreation:
             assert task.num_episodes == config.num_episodes
             assert task.num_steps == config.num_steps
             assert task.n_trials == config.n_trials
-            assert task.direction == config.direction
-            assert task.parameter_to_optimize == config.parameter_to_optimize
+            assert task.parameters_to_optimize == config.parameters_to_optimize
 
     def test_create_tasks_returns_correct_type(self, temp_cache_dir, sample_configs):
         """Test that _create_tasks returns Tuple[List[HyperParameterTuningSimulationTask], List[str]]."""
@@ -419,8 +420,12 @@ class TestHyperParameterOptimizerHelperMethods:
             constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=1,
             num_steps=1,
-            direction=real_optimized_policy_result.direction,
-            parameter_to_optimize=real_optimized_policy_result.parameter_to_optimize,
+            parameters_to_optimize=[
+                (
+                    real_optimized_policy_result.parameter_to_optimize,
+                    real_optimized_policy_result.direction,
+                )
+            ],
             n_trials=1,
         )
 
@@ -448,8 +453,9 @@ class TestHyperParameterOptimizerHelperMethods:
             constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=1,
             num_steps=1,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
             n_trials=1,
         )
 
@@ -527,8 +533,9 @@ class TestHyperParameterOptimizerErrorHandling:
             num_episodes=1,  # Small for fast tests
             num_steps=1,  # Small for fast tests
             n_trials=1,  # Small for fast tests
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         # Should not crash during task creation even with empty hyperparameters
@@ -565,8 +572,9 @@ class TestHyperParameterOptimizerEdgeCases:
             num_episodes=1,  # Small for fast tests
             num_steps=1,  # Small for fast tests
             n_trials=1,  # Small for fast tests
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         # Should not crash during initialization
@@ -589,8 +597,9 @@ class TestHyperParameterOptimizerEdgeCases:
             num_episodes=0,
             num_steps=0,
             n_trials=1,  # Small for fast tests
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         # Should not crash during initialization
@@ -613,8 +622,9 @@ class TestHyperParameterOptimizerEdgeCases:
             num_episodes=1,  # Small for fast tests
             num_steps=1,  # Small for fast tests
             n_trials=1,  # Small for fast tests
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         # Should not crash during initialization
@@ -677,8 +687,9 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             num_episodes=2,  # Small for fast tests
             num_steps=2,  # Small for fast tests
             n_trials=2,  # Small for fast tests
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         # Run optimization
@@ -767,8 +778,9 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             num_episodes=1,
             num_steps=1,
             n_trials=1,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         # This should work
@@ -803,8 +815,9 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             num_episodes=1,
             num_steps=1,
             n_trials=1,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         # This should fail because the parameters are in wrong order
@@ -847,8 +860,9 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             num_episodes=2,  # Need at least 2 for confidence intervals
             num_steps=1,
             n_trials=1,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         # Task creation should succeed
@@ -881,8 +895,9 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             num_episodes=2,  # Need at least 2 for confidence intervals
             num_steps=1,
             n_trials=1,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         # This should work
@@ -922,8 +937,9 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             num_episodes=2,  # Need multiple episodes for statistics
             num_steps=2,
             n_trials=2,  # Need multiple trials for optimization
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         result = optimizer.optimize([config])
@@ -1046,8 +1062,9 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             num_episodes=2,  # Smaller for fast tests
             num_steps=3,  # Smaller for fast tests
             n_trials=2,  # Smaller for fast tests
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         # This should work now
@@ -1116,8 +1133,9 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
             num_episodes=2,
             num_steps=2,
             n_trials=2,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         # Run optimization
@@ -1215,8 +1233,9 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
             num_episodes=2,
             num_steps=2,
             n_trials=2,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
 
         # Create tasks
