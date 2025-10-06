@@ -52,6 +52,7 @@ class OptimizationEvaluationWorkflow(ABC):
         self,
         cache_dir: Path,
         experiment_name: str,
+        optimization_n_jobs: int = 1,
         evaluation_episodes: int = 3,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
@@ -66,6 +67,7 @@ class OptimizationEvaluationWorkflow(ABC):
         Args:
             cache_dir: Directory for caching results.
             experiment_name: Name of the experiment.
+            optimization_n_jobs: Number of parallel jobs for optimization.
             evaluation_episodes: Number of episodes for evaluation.
             evaluation_steps: Maximum steps per episode for evaluation.
             evaluation_n_jobs: Number of parallel jobs for evaluation.
@@ -79,6 +81,7 @@ class OptimizationEvaluationWorkflow(ABC):
         self.experiment_name = experiment_name
         self.evaluation_episodes = evaluation_episodes
         self.evaluation_steps = evaluation_steps
+        self.optimization_n_jobs = optimization_n_jobs
         self.evaluation_n_jobs = evaluation_n_jobs
         self.confidence_interval_level = confidence_interval_level
         self.alpha = alpha
@@ -126,7 +129,7 @@ class OptimizationEvaluationWorkflow(ABC):
             cache_dir_path=self.cache_dir,
             experiment_name=self.experiment_name,
             task_manager_config=self._get_task_manager_config_hyperparameter(),
-            n_jobs=self.evaluation_n_jobs,
+            n_jobs=self.optimization_n_jobs,
             confidence_interval_level=self.confidence_interval_level,
             alpha=self.alpha,
         )
@@ -186,7 +189,7 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
         cache_dir: Path,
         experiment_name: str,
         optimization_n_jobs: int = -1,
-        evaluation_episodes: int = 3,
+        evaluation_episodes: int = 2,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
         confidence_interval_level: float = 0.95,
@@ -213,6 +216,7 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
         super().__init__(
             cache_dir=cache_dir,
             experiment_name=experiment_name,
+            optimization_n_jobs=optimization_n_jobs,
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
@@ -222,11 +226,12 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
             verbose=verbose,
             cache_visualizations=cache_visualizations,
         )
-        self.optimization_n_jobs = optimization_n_jobs
 
     def _get_task_manager_config_hyperparameter(self) -> TaskManagerConfig:
         """Get Joblib task manager for hyperparameter optimization."""
-        return JoblibConfig(n_jobs=self.optimization_n_jobs)
+        # n_jobs of this config is responsible for the parallelization of multiple optimization tasks.
+        # In local execution, we only have one optimization task, as the parallelization is done by Optuna package using self.n_jobs
+        return JoblibConfig(n_jobs=1)
 
     def _get_task_manager_config_evaluation(self) -> TaskManagerConfig:
         """Get Joblib task manager for evaluation."""
@@ -271,7 +276,7 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
         processes: int = 1,
         walltime: str = "03:00:00",
         job_extra: Optional[List[str]] = None,
-        evaluation_episodes: int = 3,
+        evaluation_episodes: int = 2,
         evaluation_steps: int = 6,
         evaluation_n_jobs: int = 1,
         is_risk_averse: bool = False,
@@ -288,7 +293,7 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
             experiment_name: Name of the experiment.
             queue: PBS queue name.
             n_workers: Number of PBS workers.
-            cores: Cores per worker.
+            cores: Cores to allocate per worker.
             memory: Memory per worker.
             processes: Processes per worker.
             walltime: Maximum walltime.
@@ -303,9 +308,18 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
             verbose: Enable verbose logging.
             cache_visualizations: Whether to cache visualizations.
         """
+        self.queue = queue
+        self.n_workers = n_workers
+        self.cores = cores
+        self.memory = memory
+        self.processes = processes
+        self.walltime = walltime
+        self.job_extra = job_extra
+
         super().__init__(
             cache_dir=cache_dir,
             experiment_name=experiment_name,
+            optimization_n_jobs=cores,
             evaluation_episodes=evaluation_episodes,
             evaluation_steps=evaluation_steps,
             evaluation_n_jobs=evaluation_n_jobs,
@@ -315,13 +329,6 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
             verbose=verbose,
             cache_visualizations=cache_visualizations,
         )
-        self.queue = queue
-        self.n_workers = n_workers
-        self.cores = cores
-        self.memory = memory
-        self.processes = processes
-        self.walltime = walltime
-        self.job_extra = job_extra
 
     def _get_task_manager_config_hyperparameter(self) -> TaskManagerConfig:
         """Get PBS task manager for hyperparameter optimization."""
@@ -330,7 +337,7 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
             n_workers=self.n_workers,
             cores=self.cores,
             memory=self.memory,
-            processes=self.processes,
+            processes=1,
             walltime=self.walltime,
             job_extra=self.job_extra,
         )
