@@ -1,5 +1,6 @@
 import logging
 import random
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Type, Union
 
@@ -235,14 +236,11 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         )
 
         try:
-            # Get initial belief for episode evaluation
-            initial_belief = get_initial_belief(pomdp=self.environment, n_particles=100)
-
             # Run multiple episodes to evaluate this parameter configuration
             histories = self.run_multiple_episodes(
                 environment=self.environment,
                 policy=policy,
-                initial_belief=initial_belief,
+                initial_belief=deepcopy(self.belief),
                 num_episodes=self.num_episodes,
                 num_steps=self.num_steps,
                 scheduler_address=None,
