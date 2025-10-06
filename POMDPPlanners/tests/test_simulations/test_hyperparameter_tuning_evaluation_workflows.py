@@ -77,7 +77,7 @@ def sample_workflow_params(temp_cache_dir):
     return {
         "cache_dir": temp_cache_dir,
         "experiment_name": "Test_Experiment",
-        "evaluation_episodes": 3,
+        "evaluation_episodes": 2,  # Match the default value
         "evaluation_steps": 6,
         "evaluation_n_jobs": 1,
         "confidence_interval_level": 0.95,
@@ -109,7 +109,7 @@ class TestOptimizationEvaluationLocalWorkflow:
 
         assert workflow.cache_dir == temp_cache_dir
         assert workflow.experiment_name == "Test_Experiment"
-        assert workflow.evaluation_episodes == 3
+        assert workflow.evaluation_episodes == 2  # Default changed to 2
         assert workflow.evaluation_steps == 6
         assert workflow.evaluation_n_jobs == 1
         assert workflow.optimization_n_jobs == -1
@@ -128,7 +128,7 @@ class TestOptimizationEvaluationLocalWorkflow:
 
         Given: LocalWorkflow instance with optimization_n_jobs=-1
         When: Calling _get_task_manager_config_hyperparameter
-        Then: Returns JoblibConfig with correct n_jobs value
+        Then: Returns JoblibConfig with n_jobs=1 (single task, parallelized by Optuna)
 
         Test type: unit
         """
@@ -139,7 +139,7 @@ class TestOptimizationEvaluationLocalWorkflow:
         config = workflow._get_task_manager_config_hyperparameter()
 
         assert isinstance(config, JoblibConfig)
-        assert config.n_jobs == -1
+        assert config.n_jobs == 1  # Always 1 for local, parallelization handled by Optuna
 
     def test_get_task_manager_config_evaluation_returns_joblib_config(self, temp_cache_dir):
         """Test that evaluation task manager config is JoblibConfig.
@@ -192,6 +192,7 @@ class TestOptimizationEvaluationPBSWorkflow:
         assert workflow.processes == 1
         assert workflow.walltime == "03:00:00"
         assert workflow.job_extra is None
+        assert workflow.optimization_n_jobs == 1  # Should equal cores
 
     def test_get_task_manager_config_hyperparameter_returns_pbs_config(self, temp_cache_dir):
         """Test that hyperparameter task manager config is PBSConfig.
@@ -200,7 +201,7 @@ class TestOptimizationEvaluationPBSWorkflow:
 
         Given: PBSWorkflow instance with custom PBS settings
         When: Calling _get_task_manager_config_hyperparameter
-        Then: Returns PBSConfig with correct PBS parameters
+        Then: Returns PBSConfig with correct PBS parameters and processes=1
 
         Test type: unit
         """
@@ -210,6 +211,7 @@ class TestOptimizationEvaluationPBSWorkflow:
             queue="long",
             n_workers=8,
             cores=2,
+            processes=4,
         )
 
         config = workflow._get_task_manager_config_hyperparameter()
@@ -218,6 +220,8 @@ class TestOptimizationEvaluationPBSWorkflow:
         assert config.queue == "long"
         assert config.n_workers == 8
         assert config.cores == 2
+        assert config.processes == 1  # Always 1 for hyperparameter optimization
+        assert workflow.optimization_n_jobs == 2  # Should equal cores
 
     def test_get_task_manager_config_evaluation_returns_pbs_config(self, temp_cache_dir):
         """Test that evaluation task manager config is PBSConfig.
@@ -226,7 +230,7 @@ class TestOptimizationEvaluationPBSWorkflow:
 
         Given: PBSWorkflow instance with custom PBS settings
         When: Calling _get_task_manager_config_evaluation
-        Then: Returns PBSConfig with correct PBS parameters
+        Then: Returns PBSConfig with correct PBS parameters including processes
 
         Test type: unit
         """
@@ -235,6 +239,7 @@ class TestOptimizationEvaluationPBSWorkflow:
             experiment_name="Test",
             memory="32GB",
             walltime="24:00:00",
+            processes=4,
         )
 
         config = workflow._get_task_manager_config_evaluation()
@@ -242,6 +247,7 @@ class TestOptimizationEvaluationPBSWorkflow:
         assert isinstance(config, PBSConfig)
         assert config.memory == "32GB"
         assert config.walltime == "24:00:00"
+        assert config.processes == 4  # Uses the configured processes value
 
 
 class IntegerActionSampler(ActionSampler):
