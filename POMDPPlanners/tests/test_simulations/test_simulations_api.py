@@ -130,8 +130,9 @@ def sample_hyperparameter_run_params(tiger_environment, pomcp_policy):
             num_episodes=2,  # Small number for testing
             num_steps=5,  # Small number for testing
             n_trials=3,  # Small number for testing
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
         )
     ]
 
@@ -764,8 +765,9 @@ class TestSimulationsAPI:
                 num_episodes=2,
                 num_steps=5,
                 n_trials=3,
-                direction=HyperParameterOptimizationDirection.MAXIMIZE,
-                parameter_to_optimize="average_return",
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
             ),
             HyperParameterRunParams(
                 environment=tiger_env,
@@ -784,8 +786,9 @@ class TestSimulationsAPI:
                 num_episodes=2,
                 num_steps=5,
                 n_trials=3,
-                direction=HyperParameterOptimizationDirection.MINIMIZE,
-                parameter_to_optimize="total_cost",
+                parameters_to_optimize=[
+                    ("total_cost", HyperParameterOptimizationDirection.MINIMIZE)
+                ],
             ),
         ]
 
