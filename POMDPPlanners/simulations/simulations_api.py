@@ -772,8 +772,9 @@ class SimulationsAPI:
             ...         num_episodes=2,       # Small for testing
             ...         num_steps=3,          # Small for testing
             ...         n_trials=3,          # Small number for testing
-            ...         direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            ...         parameter_to_optimize="average_return"
+            ...         parameters_to_optimize=[
+            ...             ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ...         ]
             ...     )
             ... ]
             >>> # Run hyperparameter optimization
@@ -1110,8 +1111,9 @@ class SimulationsAPI:
             ...         num_episodes=2,
             ...         num_steps=3,
             ...         n_trials=3,
-            ...         direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            ...         parameter_to_optimize="average_return"
+            ...         parameters_to_optimize=[
+            ...             ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ...         ]
             ...     )
             ... ]
             >>> # Run optimization and evaluation
@@ -1236,8 +1238,9 @@ class SimulationsAPI:
             ...         num_episodes=2,
             ...         num_steps=3,
             ...         n_trials=3,
-            ...         direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            ...         parameter_to_optimize="average_return"
+            ...         parameters_to_optimize=[
+            ...             ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ...         ]
             ...     )
             ... ]
             >>> # Run optimization and evaluation on PBS cluster
