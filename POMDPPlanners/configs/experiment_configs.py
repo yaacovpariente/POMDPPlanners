@@ -193,6 +193,7 @@ class AllHyperparameterBenchmarksExperimentConfigCreator(
         discount_factor: float,
         time_out_in_seconds: float,
         is_risk_averse: bool,
+        debug: bool = False,
     ):
         self.policy_space_info = policy_space_info
         self.particles = particles
@@ -202,11 +203,17 @@ class AllHyperparameterBenchmarksExperimentConfigCreator(
         self.discount_factor = discount_factor
         self.time_out_in_seconds = time_out_in_seconds
         self.is_risk_averse = is_risk_averse
+        self.debug = debug
 
         if self.is_risk_averse:
             self.parameter_to_optimize_mapper = RiskAverseParameterToOptimizeMapper()
         else:
             self.parameter_to_optimize_mapper = AverageReturnParameterToOptimizeMapper()
+
+        if self.debug:
+            self.num_episodes = 2
+            self.num_steps = 2
+            self.n_trials = 2
 
     def get_experiment_configs(self) -> List[HyperParameterRunParams]:
         """Generate hyperparameter optimization configurations for all compatible environments.
@@ -265,6 +272,7 @@ class PolicyHyperparameterOptimizationExperimentConfigCreator(
         discount_factor: float,
         time_out_in_seconds: float,
         is_risk_averse: bool,
+        debug: bool = False,
     ):
         self.generators = generators
         self.particles = particles
@@ -274,6 +282,12 @@ class PolicyHyperparameterOptimizationExperimentConfigCreator(
         self.discount_factor = discount_factor
         self.time_out_in_seconds = time_out_in_seconds
         self.is_risk_averse = is_risk_averse
+        self.debug = debug
+
+        if self.debug:
+            self.num_episodes = 2
+            self.num_steps = 2
+            self.n_trials = 2
 
         if self.is_risk_averse:
             self.parameter_to_optimize_mapper = RiskAverseParameterToOptimizeMapper()
