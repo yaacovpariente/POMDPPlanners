@@ -341,16 +341,18 @@ class TestOptimizeAndEvaluatePlanners:
                 initial_belief=test_initial_belief,
                 planner_configs=test_planner_configs,
                 cache_dir=temp_dir,
-                optimization_direction=HyperParameterOptimizationDirection.MINIMIZE,
-                parameter_to_optimize="average_cost",
+                parameters_to_optimize=[
+                    ("average_cost", HyperParameterOptimizationDirection.MINIMIZE)
+                ],
                 verbose=False,
             )
 
             # Verify optimization was called with correct parameters
             mock_opt.assert_called_once()
             args, kwargs = mock_opt.call_args
-            assert kwargs["optimization_direction"] == HyperParameterOptimizationDirection.MINIMIZE
-            assert kwargs["parameter_to_optimize"] == "average_cost"
+            assert kwargs["parameters_to_optimize"] == [
+                ("average_cost", HyperParameterOptimizationDirection.MINIMIZE)
+            ]
 
     @patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters")
     @patch(
@@ -645,8 +647,7 @@ class TestOptimizeAndEvaluatePlannersPBS:
             planner_configs=test_planner_configs,
             cache_dir=temp_dir,
             queue="gpu_queue",
-            optimization_direction=HyperParameterOptimizationDirection.MINIMIZE,
-            parameter_to_optimize="average_cost",
+            parameters_to_optimize=[("average_cost", HyperParameterOptimizationDirection.MINIMIZE)],
             experiment_name="CustomPBSExperiment",
             optimization_episodes=5,
             optimization_steps=10,
@@ -675,11 +676,9 @@ class TestOptimizeAndEvaluatePlannersPBS:
         mock_optimize_pbs.assert_called_once()
         pbs_call_kwargs = mock_optimize_pbs.call_args[1]
         assert pbs_call_kwargs["queue"] == "gpu_queue"
-        assert (
-            pbs_call_kwargs["optimization_direction"]
-            == HyperParameterOptimizationDirection.MINIMIZE
-        )
-        assert pbs_call_kwargs["parameter_to_optimize"] == "average_cost"
+        assert pbs_call_kwargs["parameters_to_optimize"] == [
+            ("average_cost", HyperParameterOptimizationDirection.MINIMIZE)
+        ]
         assert pbs_call_kwargs["experiment_name"] == "CustomPBSExperiment"
         assert pbs_call_kwargs["num_episodes"] == 5
         assert pbs_call_kwargs["num_steps"] == 10
@@ -2157,8 +2156,9 @@ class TestUsageExamples:
                 initial_belief=initial_belief,
                 planner_configs=[planner_config],
                 cache_dir=temp_dir,
-                optimization_direction=HyperParameterOptimizationDirection.MAXIMIZE,
-                parameter_to_optimize="average_return",
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
             )
 
             # Verify the example worked as expected
@@ -2354,8 +2354,9 @@ class TestHyperParamRunnerUseCases:
                 initial_belief=initial_belief,
                 planner_configs=[planner_config],
                 cache_dir=temp_dir,
-                optimization_direction=HyperParameterOptimizationDirection.MAXIMIZE,
-                parameter_to_optimize="average_return",
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
                 experiment_name="comprehensive_test",
                 optimization_episodes=5,
                 optimization_steps=10,

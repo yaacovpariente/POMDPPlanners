@@ -79,8 +79,7 @@ def optimize_and_evaluate_planners(
     initial_belief: Belief,
     planner_configs: List[HyperParamPlannerConfig],
     cache_dir: Path,
-    optimization_direction: HyperParameterOptimizationDirection = HyperParameterOptimizationDirection.MAXIMIZE,
-    parameter_to_optimize: str = "average_return",
+    parameters_to_optimize: Optional[List[Tuple[str, HyperParameterOptimizationDirection]]] = None,
     experiment_name: str = "planner_optimization",
     # Optimization parameters
     optimization_episodes: int = 3,
@@ -108,8 +107,8 @@ def optimize_and_evaluate_planners(
         planner_configs: List of HyperParamPlannerConfig objects, each containing
                         a policy class, hyperparameters, and constant parameters
         cache_dir: Directory for storing optimization and evaluation results
-        optimization_direction: Direction of optimization (MAXIMIZE or MINIMIZE)
-        parameter_to_optimize: Name of the metric to optimize (e.g., "average_return")
+        parameters_to_optimize: List of tuples (metric_name, direction) for multi-objective optimization.
+                               If None, defaults to [("average_return", MAXIMIZE)]
         experiment_name: Name for the experiment (used in MLflow tracking)
         optimization_episodes: Number of episodes for optimization trials
         optimization_steps: Number of steps per optimization episode
@@ -170,6 +169,10 @@ def optimize_and_evaluate_planners(
             >>> len(planner_configs) == 1  # Verify example setup
             True
     """
+    # Set default parameters if not provided
+    if parameters_to_optimize is None:
+        parameters_to_optimize = [("average_return", HyperParameterOptimizationDirection.MAXIMIZE)]
+
     # Configure logging based on parameters
     configure_logging(debug=debug, verbose=verbose)
 
@@ -203,8 +206,7 @@ def optimize_and_evaluate_planners(
         initial_belief=initial_belief,
         planner_configs=planner_configs,
         cache_dir=cache_dir,
-        optimization_direction=optimization_direction,
-        parameter_to_optimize=parameter_to_optimize,
+        parameters_to_optimize=parameters_to_optimize,
         experiment_name=experiment_name,
         num_episodes=optimization_episodes,
         num_steps=optimization_steps,
@@ -324,8 +326,7 @@ def optimize_and_evaluate_planners_pbs(
     planner_configs: List[HyperParamPlannerConfig],
     cache_dir: Path,
     queue: str,
-    optimization_direction: HyperParameterOptimizationDirection = HyperParameterOptimizationDirection.MAXIMIZE,
-    parameter_to_optimize: str = "average_return",
+    parameters_to_optimize: Optional[List[Tuple[str, HyperParameterOptimizationDirection]]] = None,
     experiment_name: str = "planner_optimization_pbs",
     # Optimization parameters
     optimization_episodes: int = 3,
@@ -366,8 +367,8 @@ def optimize_and_evaluate_planners_pbs(
                         a policy class, hyperparameters, and constant parameters
         cache_dir: Directory for storing optimization and evaluation results
         queue: PBS queue name to submit jobs to
-        optimization_direction: Direction of optimization (MAXIMIZE or MINIMIZE)
-        parameter_to_optimize: Name of the metric to optimize (e.g., "average_return")
+        parameters_to_optimize: List of tuples (metric_name, direction) for multi-objective optimization.
+                               If None, defaults to [("average_return", MAXIMIZE)]
         experiment_name: Name for the experiment (used in MLflow tracking)
         optimization_episodes: Number of episodes for optimization trials
         optimization_steps: Number of steps per optimization episode
@@ -442,6 +443,10 @@ def optimize_and_evaluate_planners_pbs(
             >>> len(planner_configs) == 1  # Verify example setup
             True
     """
+    # Set default parameters if not provided
+    if parameters_to_optimize is None:
+        parameters_to_optimize = [("average_return", HyperParameterOptimizationDirection.MAXIMIZE)]
+
     # Configure logging based on parameters
     configure_logging(debug=debug, verbose=verbose)
 
@@ -481,8 +486,7 @@ def optimize_and_evaluate_planners_pbs(
         planner_configs=planner_configs,
         cache_dir=cache_dir,
         queue=queue,
-        optimization_direction=optimization_direction,
-        parameter_to_optimize=parameter_to_optimize,
+        parameters_to_optimize=parameters_to_optimize,
         experiment_name=experiment_name,
         num_episodes=optimization_episodes,
         num_steps=optimization_steps,
@@ -771,8 +775,7 @@ def optimize_planner_hyperparameters(
     initial_belief: Belief,
     planner_configs: List[HyperParamPlannerConfig],
     cache_dir: Path,
-    optimization_direction: HyperParameterOptimizationDirection = HyperParameterOptimizationDirection.MAXIMIZE,
-    parameter_to_optimize: str = "average_return",
+    parameters_to_optimize: Optional[List[Tuple[str, HyperParameterOptimizationDirection]]] = None,
     experiment_name: str = "planner_optimization",
     num_episodes: int = 3,
     num_steps: int = 6,
@@ -790,8 +793,8 @@ def optimize_planner_hyperparameters(
         initial_belief: Initial belief state for the environment
         planner_configs: List of HyperParamPlannerConfig objects containing planner configurations
         cache_dir: Directory for storing optimization results
-        optimization_direction: Direction of optimization (MAXIMIZE or MINIMIZE)
-        parameter_to_optimize: Name of the metric to optimize
+        parameters_to_optimize: List of tuples (metric_name, direction) for multi-objective optimization.
+                               If None, defaults to [("average_return", MAXIMIZE)]
         experiment_name: Name for the optimization experiment
         num_episodes: Number of episodes per optimization trial
         num_steps: Number of steps per episode
@@ -805,6 +808,10 @@ def optimize_planner_hyperparameters(
     Returns:
         List of OptimizedPolicyResult objects, one for each planner configuration
     """
+    # Set default parameters if not provided
+    if parameters_to_optimize is None:
+        parameters_to_optimize = [("average_return", HyperParameterOptimizationDirection.MAXIMIZE)]
+
     if verbose:
         total_hyperparams = sum(len(config.hyper_parameters) for config in planner_configs)
         planner_names = [config.policy_cls.__name__ for config in planner_configs]
@@ -844,8 +851,7 @@ def optimize_planner_hyperparameters(
             num_episodes=num_episodes,
             num_steps=num_steps,
             n_trials=n_trials,
-            direction=optimization_direction,
-            parameter_to_optimize=parameter_to_optimize,
+            parameters_to_optimize=parameters_to_optimize,
         )
         optimization_configs.append(config)
 
@@ -896,8 +902,7 @@ def optimize_planner_hyperparameters_pbs(
     planner_configs: List[HyperParamPlannerConfig],
     cache_dir: Path,
     queue: str,
-    optimization_direction: HyperParameterOptimizationDirection = HyperParameterOptimizationDirection.MAXIMIZE,
-    parameter_to_optimize: str = "average_return",
+    parameters_to_optimize: Optional[List[Tuple[str, HyperParameterOptimizationDirection]]] = None,
     experiment_name: str = "planner_optimization_pbs",
     num_episodes: int = 3,
     num_steps: int = 6,
@@ -930,8 +935,8 @@ def optimize_planner_hyperparameters_pbs(
         planner_configs: List of HyperParamPlannerConfig objects containing planner configurations
         cache_dir: Directory for storing optimization results
         queue: PBS queue name to submit jobs to
-        optimization_direction: Direction of optimization (MAXIMIZE or MINIMIZE)
-        parameter_to_optimize: Name of the metric to optimize
+        parameters_to_optimize: List of tuples (metric_name, direction) for multi-objective optimization.
+                               If None, defaults to [("average_return", MAXIMIZE)]
         experiment_name: Name for the optimization experiment
         num_episodes: Number of episodes per optimization trial
         num_steps: Number of steps per episode
@@ -994,6 +999,10 @@ def optimize_planner_hyperparameters_pbs(
             >>> len(planner_configs) == 1  # Verify example setup
             True
     """
+    # Set default parameters if not provided
+    if parameters_to_optimize is None:
+        parameters_to_optimize = [("average_return", HyperParameterOptimizationDirection.MAXIMIZE)]
+
     if verbose:
         total_hyperparams = sum(len(config.hyper_parameters) for config in planner_configs)
         planner_names = [config.policy_cls.__name__ for config in planner_configs]
@@ -1052,8 +1061,7 @@ def optimize_planner_hyperparameters_pbs(
             num_episodes=num_episodes,
             num_steps=num_steps,
             n_trials=n_trials,
-            direction=optimization_direction,
-            parameter_to_optimize=parameter_to_optimize,
+            parameters_to_optimize=parameters_to_optimize,
         )
         optimization_configs.append(config)
 
