@@ -207,8 +207,10 @@ class TestOptimizeAndEvaluatePlanners:
             chosen_hyper_parameters={"exploration_constant": 1.5, "n_simulations": 15},
             num_episodes=3,
             num_steps=6,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 10.5},
         )
         mock_optimize.return_value = [mock_optimization_result]
 
@@ -329,8 +331,10 @@ class TestOptimizeAndEvaluatePlanners:
                     chosen_hyper_parameters={},
                     num_episodes=3,
                     num_steps=6,
-                    direction=HyperParameterOptimizationDirection.MINIMIZE,
-                    parameter_to_optimize="average_cost",
+                    parameters_to_optimize=[
+                        ("average_cost", HyperParameterOptimizationDirection.MINIMIZE)
+                    ],
+                    optimized_metric_values={"average_cost": 5.0},
                 )
             ]
             mock_eval.return_value = ({}, pd.DataFrame())
@@ -389,8 +393,10 @@ class TestOptimizeAndEvaluatePlanners:
             chosen_hyper_parameters={"exploration_constant": 1.2, "n_simulations": 15},
             num_episodes=3,
             num_steps=6,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 12.0},
         )
         mock_result_2 = OptimizedPolicyResult(
             environment=test_environment,
@@ -398,8 +404,10 @@ class TestOptimizeAndEvaluatePlanners:
             chosen_hyper_parameters={"exploration_constant": 2.1, "n_simulations": 25},
             num_episodes=3,
             num_steps=6,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 15.0},
         )
 
         # Mock optimize to return list of results from single call
@@ -500,8 +508,10 @@ class TestOptimizeAndEvaluatePlannersPBS:
             chosen_hyper_parameters={"exploration_constant": 1.5, "n_simulations": 15},
             num_episodes=3,
             num_steps=6,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 10.5},
         )
         mock_optimize_pbs.return_value = [mock_optimization_result]
 
@@ -631,8 +641,10 @@ class TestOptimizeAndEvaluatePlannersPBS:
                 chosen_hyper_parameters={},
                 num_episodes=5,
                 num_steps=10,
-                direction=HyperParameterOptimizationDirection.MINIMIZE,
-                parameter_to_optimize="average_cost",
+                parameters_to_optimize=[
+                    ("average_cost", HyperParameterOptimizationDirection.MINIMIZE)
+                ],
+                optimized_metric_values={"average_cost": 5.0},
             )
         ]
         mock_evaluate.return_value = ({}, pd.DataFrame())
@@ -754,8 +766,10 @@ class TestOptimizeAndEvaluatePlannersPBS:
             chosen_hyper_parameters={"exploration_constant": 1.2, "n_simulations": 15},
             num_episodes=3,
             num_steps=6,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 12.0},
         )
         mock_result_2 = OptimizedPolicyResult(
             environment=test_environment,
@@ -763,8 +777,10 @@ class TestOptimizeAndEvaluatePlannersPBS:
             chosen_hyper_parameters={"exploration_constant": 2.1, "n_simulations": 25},
             num_episodes=3,
             num_steps=6,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 15.0},
         )
 
         # Mock PBS optimize to return list of results from single call
@@ -866,8 +882,10 @@ class TestOptimizeAndEvaluatePlannersPBS:
                 chosen_hyper_parameters={"exploration_constant": 1.5},
                 num_episodes=3,
                 num_steps=6,
-                direction=HyperParameterOptimizationDirection.MAXIMIZE,
-                parameter_to_optimize="average_return",
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"average_return": 10.5},
             )
             mock_opt_pbs.return_value = [mock_optimization_result]
 
@@ -1098,8 +1116,10 @@ class TestOptimizePlannerHyperparameters:
             chosen_hyper_parameters={"exploration_constant": 2.1},
             num_episodes=3,
             num_steps=6,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 10.5},
         )
         mock_optimizer.optimize.return_value = [mock_result]
 
@@ -1250,8 +1270,10 @@ class TestOptimizePlannerHyperparameters:
             chosen_hyper_parameters={"exploration_constant": 1.2},
             num_episodes=3,
             num_steps=6,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 12.0},
         )
         mock_result_2 = OptimizedPolicyResult(
             environment=test_environment,
@@ -1259,8 +1281,10 @@ class TestOptimizePlannerHyperparameters:
             chosen_hyper_parameters={"exploration_constant": 2.1},
             num_episodes=3,
             num_steps=6,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 15.0},
         )
 
         mock_optimizer.optimize.return_value = [mock_result_1, mock_result_2]
@@ -1334,8 +1358,10 @@ class TestOptimizePlannerHyperparametersPBS:
             chosen_hyper_parameters={"exploration_constant": 2.1},
             num_episodes=3,
             num_steps=6,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 10.5},
         )
         mock_optimizer.optimize.return_value = [mock_result]
 
@@ -1529,8 +1555,10 @@ class TestOptimizePlannerHyperparametersPBS:
             chosen_hyper_parameters={"exploration_constant": 1.2},
             num_episodes=3,
             num_steps=6,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 12.0},
         )
         mock_result_2 = OptimizedPolicyResult(
             environment=test_environment,
@@ -1538,8 +1566,10 @@ class TestOptimizePlannerHyperparametersPBS:
             chosen_hyper_parameters={"exploration_constant": 2.5},
             num_episodes=3,
             num_steps=6,
-            direction=HyperParameterOptimizationDirection.MAXIMIZE,
-            parameter_to_optimize="average_return",
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 15.0},
         )
 
         mock_optimizer.optimize.return_value = [mock_result_1, mock_result_2]
@@ -1667,8 +1697,10 @@ class TestOptimizePlannerHyperparametersPBS:
                 chosen_hyper_parameters={"exploration_constant": 1.5},
                 num_episodes=3,
                 num_steps=6,
-                direction=HyperParameterOptimizationDirection.MAXIMIZE,
-                parameter_to_optimize="average_return",
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"average_return": 10.5},
             )
 
             mock_optimizer = Mock()
@@ -2119,8 +2151,10 @@ class TestUsageExamples:
                 },
                 num_episodes=3,
                 num_steps=6,
-                direction=HyperParameterOptimizationDirection.MAXIMIZE,
-                parameter_to_optimize="average_return",
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"average_return": 10.5},
             )
             mock_opt.return_value = [mock_optimization_result]
 
@@ -2325,8 +2359,10 @@ class TestHyperParamRunnerUseCases:
                     },
                     num_episodes=3,
                     num_steps=6,
-                    direction=HyperParameterOptimizationDirection.MAXIMIZE,
-                    parameter_to_optimize="average_return",
+                    parameters_to_optimize=[
+                        ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                    ],
+                    optimized_metric_values={"average_return": 10.5},
                 )
             ]
 
@@ -2449,8 +2485,10 @@ class TestHyperParamRunnerUseCases:
                 chosen_hyper_parameters={"exploration_constant": 2.0},
                 num_episodes=3,
                 num_steps=6,
-                direction=HyperParameterOptimizationDirection.MAXIMIZE,
-                parameter_to_optimize="average_return",
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"average_return": 10.5},
             )
             mock_optimizer.optimize.return_value = [mock_result]
 
@@ -2907,8 +2945,10 @@ class TestHyperParamRunnerUseCases:
                     chosen_hyper_parameters={"exploration_constant": 1.5},
                     num_episodes=3,
                     num_steps=6,
-                    direction=HyperParameterOptimizationDirection.MAXIMIZE,
-                    parameter_to_optimize="average_return",
+                    parameters_to_optimize=[
+                        ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                    ],
+                    optimized_metric_values={"average_return": 10.5},
                 )
             ]
 

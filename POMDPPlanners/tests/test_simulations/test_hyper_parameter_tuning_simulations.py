@@ -133,8 +133,8 @@ def real_optimized_policy_result(real_environment, real_policy_class):
         chosen_hyper_parameters={"branching_factor": 2, "depth": 2},
         num_episodes=2,  # Small for fast tests
         num_steps=3,  # Small for fast tests
-        direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        parameter_to_optimize="average_return",
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
+        optimized_metric_values={"average_return": 10.5},
     )
 
 
@@ -330,8 +330,8 @@ class TestHyperParameterOptimizerOptimizeMethod:
             assert hasattr(optimized_result, "environment")
             assert hasattr(optimized_result, "policy")
             assert hasattr(optimized_result, "chosen_hyper_parameters")
-            assert hasattr(optimized_result, "direction")
-            assert hasattr(optimized_result, "parameter_to_optimize")
+            assert hasattr(optimized_result, "parameters_to_optimize")
+            assert hasattr(optimized_result, "optimized_metric_values")
 
     def test_optimize_creates_mlflow_experiment(self, temp_cache_dir, sample_configs):
         """Test optimize creates MLflow experiment."""
@@ -423,12 +423,7 @@ class TestHyperParameterOptimizerHelperMethods:
             constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=1,
             num_steps=1,
-            parameters_to_optimize=[
-                (
-                    real_optimized_policy_result.parameter_to_optimize,
-                    real_optimized_policy_result.direction,
-                )
-            ],
+            parameters_to_optimize=real_optimized_policy_result.parameters_to_optimize,
             n_trials=1,
         )
 
