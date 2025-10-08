@@ -575,3 +575,34 @@ class TestTaskManagerConfigIntegration:
                 clear_cache_on_start=False,
                 verbose=0,
             )
+
+
+class TestPBSConfigIntegration:
+    """Test PBS configuration integration tests."""
+
+    @pytest.mark.pbs_cluster
+    def test_pbs_config_creation_integration(self):
+        """Test PBS configuration creation with integration test.
+
+        Purpose: Validates that PBS configuration can be created with proper parameters
+        and default values are correctly set.
+
+        Given: PBS configuration parameters
+        When: Creating a PBSConfig instance
+        Then: All parameters are correctly set and defaults are applied
+
+        Test type: integration
+        """
+        config = PBSConfig(
+            queue="test_queue", n_workers=2, cores=1, memory="2GB", walltime="00:30:00"
+        )
+
+        assert config.queue == "test_queue"
+        assert config.n_workers == 2
+        assert config.cores == 1
+        assert config.memory == "2GB"
+        assert config.walltime == "00:30:00"
+        assert config.enable_dashboard is True  # Default value
+        assert config.dashboard_address == "0.0.0.0"  # Default value
+        assert config.dashboard_port == 8787  # Default value
+        assert config.dashboard_prefix is None  # Default value

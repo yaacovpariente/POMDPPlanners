@@ -1565,3 +1565,102 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
                 pytest.skip("PBS environment not available for testing")
             else:
                 raise
+
+
+class TestHyperParameterOptimizationPBSIntegration:
+    """Test PBS hyperparameter optimization integration tests."""
+
+    @pytest.mark.pbs_cluster
+    def test_pbs_hyperparameter_optimization_integration(self, temp_cache_dir):
+        """Test PBS hyperparameter optimization with integration test.
+
+        Purpose: Validates that PBS hyperparameter optimization can be used with proper mocking
+        to test the PBS configuration and parameter passing.
+
+        Given: PBS optimization parameters and mocked HyperParameterOptimizer
+        When: Calling run_hyperparameter_optimization_pbs
+        Then: PBS configuration is correctly created and passed to optimizer
+
+        Test type: integration
+        """
+        from POMDPPlanners.simulations.workflows.optimization import (
+            run_hyperparameter_optimization_pbs,
+        )
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        from POMDPPlanners.core.belief import get_initial_belief
+        from POMDPPlanners.core.simulation import NumericalHyperParameter
+        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+            HyperParameterRunParams,
+            HyperParameterOptimizationDirection,
+            HyperParamPlannerConfig,
+        )
+        from unittest.mock import patch, Mock
+
+        # Create test environment
+        tiger = TigerPOMDP(discount_factor=0.95)
+        initial_belief = get_initial_belief(tiger, n_particles=5)
+
+        # Define optimization configuration using the correct structure
+        optimization_configs = [
+            HyperParameterRunParams(
+                environment=tiger,
+                belief=initial_belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=[
+                        NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
+                        NumericalHyperParameter(10, 50, "n_simulations"),
+                    ],
+                    constant_parameters={
+                        "discount_factor": 0.95,
+                        "name": "OptimizedPOMCP",
+                        "depth": 5,
+                    },
+                ),
+                num_episodes=2,
+                num_steps=3,
+                n_trials=2,  # Small number for testing
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
+        ]
+
+        # Mock the HyperParameterOptimizer
+        with patch(
+            "POMDPPlanners.simulations.workflows.optimization.HyperParameterOptimizer"
+        ) as mock_optimizer_class:
+            mock_optimizer = Mock()
+            mock_optimizer.optimize.return_value = []
+            mock_optimizer_class.return_value = mock_optimizer
+
+            # Test PBS optimization
+            results = run_hyperparameter_optimization_pbs(
+                environment_run_params=optimization_configs,
+                queue="test_queue",
+                experiment_name="PBS_Optimization_Test",
+                n_workers=1,
+                cores=1,
+                memory="1GB",
+                walltime="00:10:00",
+                n_jobs=1,
+                cache_dir_path=temp_cache_dir,
+            )
+
+            # Verify optimizer was called with correct PBS config
+            mock_optimizer_class.assert_called_once()
+            call_kwargs = mock_optimizer_class.call_args[1]
+
+            from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+                PBSConfig,
+            )
+
+            task_manager_config = call_kwargs["task_manager_config"]
+
+            assert isinstance(task_manager_config, PBSConfig)
+            assert task_manager_config.queue == "test_queue"
+            assert task_manager_config.n_workers == 1
+            assert task_manager_config.cores == 1
+            assert task_manager_config.memory == "1GB"
+            assert task_manager_config.walltime == "00:10:00"
