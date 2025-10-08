@@ -294,6 +294,10 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
         debug: bool = False,
         verbose: bool = True,
         cache_visualizations: bool = True,
+        enable_dashboard: bool = True,
+        dashboard_address: str = "0.0.0.0",
+        dashboard_port: int = 8787,
+        dashboard_prefix: Optional[str] = None,
     ):
         """Initialize PBS workflow.
 
@@ -316,6 +320,10 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
             debug: Enable debug mode.
             verbose: Enable verbose logging.
             cache_visualizations: Whether to cache visualizations.
+            enable_dashboard: Whether to enable the Dask dashboard.
+            dashboard_address: Address to bind the dashboard to.
+            dashboard_port: Port for the Dask dashboard.
+            dashboard_prefix: URL prefix for dashboard (useful with reverse proxies).
         """
         self.queue = queue
         self.n_workers = n_workers
@@ -324,6 +332,10 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
         self.processes = processes
         self.walltime = walltime
         self.job_extra = job_extra
+        self.enable_dashboard = enable_dashboard
+        self.dashboard_address = dashboard_address
+        self.dashboard_port = dashboard_port
+        self.dashboard_prefix = dashboard_prefix
 
         super().__init__(
             cache_dir=cache_dir,
@@ -349,6 +361,10 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
             processes=1,
             walltime=self.walltime,
             job_extra=self.job_extra,
+            enable_dashboard=self.enable_dashboard,
+            dashboard_address=self.dashboard_address,
+            dashboard_port=self.dashboard_port,
+            dashboard_prefix=self.dashboard_prefix,
         )
 
     def _get_task_manager_config_evaluation(self) -> TaskManagerConfig:
@@ -361,4 +377,8 @@ class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):
             processes=self.processes,
             walltime=self.walltime,
             job_extra=self.job_extra,
+            enable_dashboard=self.enable_dashboard,
+            dashboard_address=self.dashboard_address,
+            dashboard_port=self.dashboard_port,
+            dashboard_prefix=self.dashboard_prefix,
         )
