@@ -1901,3 +1901,88 @@ class TestSimulationsAPIIntegration:
         assert isinstance(results, dict)
         assert isinstance(stats_df, pd.DataFrame)
         assert len(stats_df) > 0
+
+
+class TestSimulationsAPIPBSIntegration:
+    """Test PBS simulation API integration tests."""
+
+    @pytest.mark.pbs_cluster
+    def test_pbs_simulation_api_integration(self, temp_cache_dir):
+        """Test PBS simulation API with integration test.
+
+        Purpose: Validates that PBS simulation API can be used with proper mocking
+        to test the PBS configuration and parameter passing.
+
+        Given: PBS simulation parameters and mocked POMDPSimulator
+        When: Calling run_multiple_environments_and_policies_pbs_run
+        Then: PBS configuration is correctly created and passed to simulator
+
+        Test type: integration
+        """
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        from POMDPPlanners.core.belief import get_initial_belief
+        from POMDPPlanners.core.simulation import EnvironmentRunParams
+        from unittest.mock import patch, Mock
+
+        # Create test environment and policy
+        tiger = TigerPOMDP(discount_factor=0.95)
+        policy = POMCP(
+            environment=tiger,
+            discount_factor=0.95,
+            depth=3,
+            exploration_constant=1.0,
+            name="POMCP_Test",
+            n_simulations=10,
+        )
+
+        env_params = [
+            EnvironmentRunParams(
+                environment=tiger,
+                belief=get_initial_belief(tiger, n_particles=5),
+                policies=[policy],
+                num_episodes=2,
+                num_steps=3,
+            )
+        ]
+
+        # Mock the POMDPSimulator to avoid actual PBS execution
+        with patch("POMDPPlanners.simulations.simulations_api.POMDPSimulator") as mock_simulator:
+            mock_instance = Mock()
+            mock_instance.__enter__ = Mock(return_value=mock_instance)
+            mock_instance.__exit__ = Mock(return_value=None)
+            mock_instance.compare_multiple_environments_policies.return_value = ({}, Mock())
+            mock_simulator.return_value = mock_instance
+
+            api = SimulationsAPI()
+
+            # Test PBS run
+            results, stats = api.run_multiple_environments_and_policies_pbs_run(
+                environment_run_params=env_params,
+                alpha=0.05,
+                confidence_interval_level=0.95,
+                queue="test_queue",
+                experiment_name="PBS_Test",
+                n_workers=1,
+                cores=1,
+                memory="1GB",
+                walltime="00:05:00",
+                cache_dir_path=temp_cache_dir,
+            )
+
+            # Verify the simulator was called with correct PBS config
+            mock_simulator.assert_called_once()
+            call_args = mock_simulator.call_args[1]
+
+            from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+                PBSConfig,
+            )
+
+            task_manager_config = call_args["task_manager_config"]
+
+            assert isinstance(task_manager_config, PBSConfig)
+            assert task_manager_config.queue == "test_queue"
+            assert task_manager_config.n_workers == 1
+            assert task_manager_config.cores == 1
+            assert task_manager_config.memory == "1GB"
+            assert task_manager_config.walltime == "00:05:00"
