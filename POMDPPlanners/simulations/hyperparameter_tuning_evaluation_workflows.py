@@ -20,6 +20,7 @@ from POMDPPlanners.core.simulation import EnvironmentRunParams
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import HyperParameterOptimizer
 from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+    DaskConfig,
     JoblibConfig,
     PBSConfig,
     TaskManagerConfig,
@@ -245,6 +246,98 @@ class OptimizationEvaluationLocalWorkflow(OptimizationEvaluationWorkflow):
     def _get_task_manager_config_evaluation(self) -> TaskManagerConfig:
         """Get Joblib task manager for evaluation."""
         return JoblibConfig(n_jobs=self.evaluation_n_jobs)
+
+
+class OptimizationEvaluationDaskWorkflow(OptimizationEvaluationWorkflow):
+    """Workflow for Dask distributed execution.
+
+    Attributes:
+        n_workers: Number of Dask workers.
+        scheduler_address: Optional address of existing Dask scheduler.
+        cache_size: Size of cache in bytes.
+        clear_cache_on_start: Whether to clear cache at startup.
+        All other attributes inherited from OptimizationEvaluationWorkflow.
+
+    Example:
+        >>> from pathlib import Path
+        >>> workflow = OptimizationEvaluationDaskWorkflow(
+        ...     cache_dir=Path("./results"),
+        ...     experiment_name="Dask_Experiment",
+        ...     n_workers=4,
+        ... )
+    """
+
+    def __init__(
+        self,
+        cache_dir: Path,
+        experiment_name: str,
+        n_workers: int = 4,
+        scheduler_address: Optional[str] = None,
+        cache_size: int = int(2e9),
+        clear_cache_on_start: bool = False,
+        evaluation_episodes: int = 2,
+        evaluation_steps: int = 6,
+        evaluation_n_jobs: int = 1,
+        confidence_interval_level: float = 0.95,
+        alpha: float = 0.05,
+        debug: bool = False,
+        verbose: bool = True,
+        cache_visualizations: bool = True,
+    ):
+        """Initialize Dask workflow.
+
+        Args:
+            cache_dir: Directory for caching results.
+            experiment_name: Name of the experiment.
+            n_workers: Number of Dask worker processes.
+            scheduler_address: Address of existing Dask scheduler (None for local cluster).
+            cache_size: Size of cache in bytes.
+            clear_cache_on_start: Whether to clear cache at startup.
+            evaluation_episodes: Number of episodes for evaluation.
+            evaluation_steps: Maximum steps per episode for evaluation.
+            evaluation_n_jobs: Number of parallel jobs for evaluation.
+            confidence_interval_level: Confidence level for intervals.
+            alpha: Significance level for statistical tests.
+            debug: Enable debug mode.
+            verbose: Enable verbose logging.
+            cache_visualizations: Whether to cache visualizations.
+        """
+        self.n_workers = n_workers
+        self.scheduler_address = scheduler_address
+        self.cache_size = cache_size
+        self.clear_cache_on_start = clear_cache_on_start
+
+        super().__init__(
+            cache_dir=cache_dir,
+            experiment_name=experiment_name,
+            optimization_n_jobs=n_workers,
+            evaluation_episodes=evaluation_episodes,
+            evaluation_steps=evaluation_steps,
+            evaluation_n_jobs=evaluation_n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            debug=debug,
+            verbose=verbose,
+            cache_visualizations=cache_visualizations,
+        )
+
+    def _get_task_manager_config_hyperparameter(self) -> TaskManagerConfig:
+        """Get Dask task manager for hyperparameter optimization."""
+        return DaskConfig(
+            n_workers=self.n_workers,
+            scheduler_address=self.scheduler_address,
+            cache_size=self.cache_size,
+            clear_cache_on_start=self.clear_cache_on_start,
+        )
+
+    def _get_task_manager_config_evaluation(self) -> TaskManagerConfig:
+        """Get Dask task manager for evaluation."""
+        return DaskConfig(
+            n_workers=self.n_workers,
+            scheduler_address=self.scheduler_address,
+            cache_size=self.cache_size,
+            clear_cache_on_start=False,  # Don't clear cache during evaluation
+        )
 
 
 class OptimizationEvaluationPBSWorkflow(OptimizationEvaluationWorkflow):

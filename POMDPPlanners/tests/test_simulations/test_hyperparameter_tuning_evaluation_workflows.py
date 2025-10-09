@@ -18,9 +18,11 @@ import pytest
 from POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows import (
     OptimizationEvaluationWorkflow,
     OptimizationEvaluationLocalWorkflow,
+    OptimizationEvaluationDaskWorkflow,
     OptimizationEvaluationPBSWorkflow,
 )
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+    DaskConfig,
     JoblibConfig,
     PBSConfig,
 )
@@ -248,6 +250,141 @@ class TestOptimizationEvaluationPBSWorkflow:
         assert config.memory == "32GB"
         assert config.walltime == "24:00:00"
         assert config.processes == 4  # Uses the configured processes value
+
+
+class TestOptimizationEvaluationDaskWorkflow:
+    """Test OptimizationEvaluationDaskWorkflow for Dask distributed execution."""
+
+    def test_initialization_with_default_parameters(self, temp_cache_dir):
+        """Test initialization with default Dask parameters.
+
+        Purpose: Validates that DaskWorkflow initializes with default Dask values
+
+        Given: Minimum required parameters (cache_dir and experiment_name)
+        When: Creating DaskWorkflow instance
+        Then: All Dask-related attributes are set to expected defaults
+
+        Test type: unit
+        """
+        workflow = OptimizationEvaluationDaskWorkflow(
+            cache_dir=temp_cache_dir,
+            experiment_name="Dask_Test",
+        )
+
+        assert workflow.cache_dir == temp_cache_dir
+        assert workflow.experiment_name == "Dask_Test"
+        assert workflow.n_workers == 4
+        assert workflow.scheduler_address is None
+        assert workflow.cache_size == int(2e9)
+        assert workflow.clear_cache_on_start is False
+        assert workflow.optimization_n_jobs == 4  # Should equal n_workers
+
+    def test_initialization_with_custom_parameters(self, temp_cache_dir):
+        """Test initialization with custom Dask parameters.
+
+        Purpose: Validates that DaskWorkflow correctly stores custom parameters
+
+        Given: Custom Dask configuration parameters
+        When: Creating DaskWorkflow instance with custom values
+        Then: All attributes reflect the custom configuration
+
+        Test type: unit
+        """
+        workflow = OptimizationEvaluationDaskWorkflow(
+            cache_dir=temp_cache_dir,
+            experiment_name="Custom_Dask_Test",
+            n_workers=8,
+            scheduler_address="tcp://localhost:8786",
+            cache_size=int(4e9),
+            clear_cache_on_start=True,
+            evaluation_episodes=10,
+            evaluation_steps=20,
+        )
+
+        assert workflow.n_workers == 8
+        assert workflow.scheduler_address == "tcp://localhost:8786"
+        assert workflow.cache_size == int(4e9)
+        assert workflow.clear_cache_on_start is True
+        assert workflow.evaluation_episodes == 10
+        assert workflow.evaluation_steps == 20
+        assert workflow.optimization_n_jobs == 8
+
+    def test_get_task_manager_config_hyperparameter_returns_dask_config(self, temp_cache_dir):
+        """Test that hyperparameter task manager config is DaskConfig.
+
+        Purpose: Validates correct task manager type for Dask hyperparameter optimization
+
+        Given: DaskWorkflow instance with custom Dask settings
+        When: Calling _get_task_manager_config_hyperparameter
+        Then: Returns DaskConfig with correct Dask parameters
+
+        Test type: unit
+        """
+        workflow = OptimizationEvaluationDaskWorkflow(
+            cache_dir=temp_cache_dir,
+            experiment_name="Test",
+            n_workers=6,
+            scheduler_address="tcp://localhost:8786",
+            cache_size=int(3e9),
+            clear_cache_on_start=True,
+        )
+
+        config = workflow._get_task_manager_config_hyperparameter()
+
+        assert isinstance(config, DaskConfig)
+        assert config.n_workers == 6
+        assert config.scheduler_address == "tcp://localhost:8786"
+        assert config.cache_size == int(3e9)
+        assert config.clear_cache_on_start is True
+
+    def test_get_task_manager_config_evaluation_returns_dask_config(self, temp_cache_dir):
+        """Test that evaluation task manager config is DaskConfig.
+
+        Purpose: Validates correct task manager type for Dask evaluation phase
+
+        Given: DaskWorkflow instance with custom Dask settings
+        When: Calling _get_task_manager_config_evaluation
+        Then: Returns DaskConfig with correct parameters and clear_cache_on_start=False
+
+        Test type: unit
+        """
+        workflow = OptimizationEvaluationDaskWorkflow(
+            cache_dir=temp_cache_dir,
+            experiment_name="Test",
+            n_workers=8,
+            cache_size=int(5e9),
+            clear_cache_on_start=True,  # Should be overridden for evaluation
+        )
+
+        config = workflow._get_task_manager_config_evaluation()
+
+        assert isinstance(config, DaskConfig)
+        assert config.n_workers == 8
+        assert config.cache_size == int(5e9)
+        assert config.clear_cache_on_start is False  # Always False for evaluation
+
+    def test_get_task_manager_config_evaluation_preserves_scheduler_address(self, temp_cache_dir):
+        """Test that evaluation config preserves scheduler address.
+
+        Purpose: Validates that scheduler address is correctly passed to evaluation config
+
+        Given: DaskWorkflow instance with scheduler address
+        When: Calling _get_task_manager_config_evaluation
+        Then: Returns DaskConfig with same scheduler address
+
+        Test type: unit
+        """
+        scheduler_addr = "tcp://10.0.0.1:8786"
+        workflow = OptimizationEvaluationDaskWorkflow(
+            cache_dir=temp_cache_dir,
+            experiment_name="Test",
+            scheduler_address=scheduler_addr,
+        )
+
+        config = workflow._get_task_manager_config_evaluation()
+
+        assert isinstance(config, DaskConfig)
+        assert config.scheduler_address == scheduler_addr
 
 
 class IntegerActionSampler(ActionSampler):
