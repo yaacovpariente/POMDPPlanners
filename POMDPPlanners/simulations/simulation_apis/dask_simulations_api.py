@@ -10,10 +10,20 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfigGenerator,
     OptimizedPolicyResult,
 )
+from POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows import (
+    OptimizationEvaluationDaskWorkflow,
+)
+from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
+    HyperParameterOptimizer,
+)
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     DaskConfig,
 )
 from POMDPPlanners.simulations.simulator import POMDPSimulator
+from POMDPPlanners.configs.experiment_configs import (
+    PolicyHyperparameterOptimizationExperimentConfigCreator,
+    AllHyperparameterBenchmarksExperimentConfigCreator,
+)
 from POMDPPlanners.utils.logger import get_logger
 from POMDPPlanners.simulations.simulation_apis.simulations_api_interface import (
     SimulationsAPIInterface,
@@ -223,20 +233,94 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
         confidence_interval_level: float = 0.95,
         alpha: float = 0.05,
         use_queue_logger: bool = False,
+        scheduler_address: Optional[str] = None,
+        cache_size: int = int(2e9),
     ) -> List[OptimizedPolicyResult]:
-        """Run hyperparameter optimization for POMDP policies using Optuna.
+        """Run hyperparameter optimization for POMDP policies using Optuna with Dask.
 
-        Note:
-            This method is not yet implemented for Dask distributed execution.
-            Use LocalSimulationsAPI for hyperparameter optimization.
+        This method provides a high-level interface for hyperparameter optimization
+        using Dask for distributed execution. It wraps the HyperParameterOptimizer
+        class and supports optimization of multiple environment-policy configurations
+        with comprehensive MLflow tracking and statistical analysis.
+
+        Args:
+            environment_run_params: List of HyperParameterRunParams configurations.
+            experiment_name: Name for the MLflow experiment tracking.
+            n_jobs: Number of parallel workers for Dask execution.
+            cache_dir_path: Optional path for storing optimization results.
+            clear_cache_on_start: Whether to clear existing cache before starting.
+            debug: Whether to enable debug-level logging output.
+            confidence_interval_level: Confidence level for statistical analysis.
+            alpha: Significance level for statistical tests.
+            use_queue_logger: Whether to use queue-based logging.
+            scheduler_address: Address of existing Dask scheduler (None for local cluster).
+            cache_size: Size of Dask cache in bytes.
+
+        Returns:
+            List[OptimizedPolicyResult]: List of optimization results.
 
         Raises:
-            NotImplementedError: This method is not implemented for DaskSimulationsAPI.
+            ValueError: If any configuration contains invalid parameters.
+            RuntimeError: If optimization fails for any configuration.
         """
-        raise NotImplementedError(
-            "Hyperparameter optimization is not yet implemented for Dask distributed execution. "
-            "Use LocalSimulationsAPI for hyperparameter optimization."
+        self.logger.info(
+            f"Starting hyperparameter optimization for {len(environment_run_params)} configurations"
         )
+        self.logger.debug(
+            f"Parameters: experiment_name={experiment_name}, n_jobs={n_jobs}, "
+            f"confidence_interval={confidence_interval_level}, alpha={alpha}"
+        )
+
+        # Set up cache directory
+        if cache_dir_path is None:
+            cache_dir_path = Path("./hyperparameter_optimization_results")
+
+        cache_dir_path.mkdir(parents=True, exist_ok=True)
+
+        task_manager_config = DaskConfig(
+            n_workers=n_jobs,
+            scheduler_address=scheduler_address,
+            cache_size=cache_size,
+            clear_cache_on_start=clear_cache_on_start,
+        )
+
+        optimizer = HyperParameterOptimizer(
+            cache_dir_path=cache_dir_path,
+            experiment_name=experiment_name,
+            n_jobs=n_jobs,
+            task_manager_config=task_manager_config,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            use_queue_logger=use_queue_logger,
+        )
+
+        try:
+            self.logger.info("Running hyperparameter optimization with Dask")
+            results = optimizer.optimize(environment_run_params)
+
+            self.logger.info(
+                f"Hyperparameter optimization completed successfully. "
+                f"Optimized {len(results)} out of {len(environment_run_params)} configurations"
+            )
+
+            for i, result in enumerate(results):
+                self.logger.info(
+                    f"Configuration {i+1}: {result.environment.__class__.__name__} "
+                    f"with {result.policy.__class__.__name__} - "
+                    f"Best parameters: {result.chosen_hyper_parameters}"
+                )
+
+            return results
+
+        except Exception as e:
+            self.logger.error(f"Hyperparameter optimization failed: {e}")
+            raise RuntimeError(f"Hyperparameter optimization failed: {e}") from e
+
+        finally:
+            try:
+                optimizer.cleanup()
+            except Exception as cleanup_error:
+                self.logger.warning(f"Error during optimizer cleanup: {cleanup_error}")
 
     def run_hyperparameter_tuning_experiment_with_benchmarks(
         self,
@@ -258,20 +342,77 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
         experiment_name: str = "Comprehensive_Benchmark",
         debug: bool = False,
         cache_visualizations: bool = True,
+        scheduler_address: Optional[str] = None,
+        cache_size: int = int(2e9),
+        clear_cache_on_start: bool = False,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
-        """Run comprehensive benchmark with hyperparameter optimization.
+        """Run comprehensive benchmark with hyperparameter optimization using Dask.
 
-        Note:
-            This method is not yet implemented for Dask distributed execution.
-            Use LocalSimulationsAPI for hyperparameter tuning experiments.
+        This method runs hyperparameter optimization followed by policy evaluation
+        using Dask for distributed execution. It optimizes for average return across
+        all configured environments and benchmark planners.
 
-        Raises:
-            NotImplementedError: This method is not implemented for DaskSimulationsAPI.
+        Args:
+            generators: Hyperparameter configuration generators list.
+            particles: Number of particles for belief representation.
+            num_episodes: Number of episodes for optimization.
+            num_steps: Maximum steps per episode for optimization.
+            n_trials: Number of optimization trials.
+            discount_factor: Discount factor for the MDP.
+            time_out_in_seconds: Timeout for planner execution.
+            evaluation_episodes: Number of episodes for evaluation.
+            evaluation_steps: Maximum steps per episode for evaluation.
+            evaluation_n_jobs: Number of parallel jobs for evaluation.
+            optimization_n_jobs: Number of parallel workers for optimization.
+            is_risk_averse: Whether to run risk-averse benchmark.
+            confidence_interval_level: Confidence level for intervals.
+            alpha: Significance level for statistical tests.
+            cache_dir_path: Optional path for storing results.
+            experiment_name: Name for the experiment.
+            debug: Enable debug mode.
+            cache_visualizations: Whether to cache visualizations.
+            scheduler_address: Address of existing Dask scheduler (None for local cluster).
+            cache_size: Size of Dask cache in bytes.
+            clear_cache_on_start: Whether to clear cache at startup.
+
+        Returns:
+            Tuple of results dictionary and DataFrame.
         """
-        raise NotImplementedError(
-            "Hyperparameter tuning experiment with benchmarks is not yet implemented for Dask distributed execution. "
-            "Use LocalSimulationsAPI for hyperparameter tuning experiments."
+        self.logger.info("Starting comprehensive benchmark with Dask execution")
+
+        if cache_dir_path is None:
+            cache_dir_path = Path("./comprehensive_benchmark_results")
+
+        creator = PolicyHyperparameterOptimizationExperimentConfigCreator(
+            generators=generators,
+            particles=particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            n_trials=n_trials,
+            discount_factor=discount_factor,
+            time_out_in_seconds=time_out_in_seconds,
+            is_risk_averse=is_risk_averse,
         )
+        configs = creator.get_experiment_configs()
+
+        workflow = OptimizationEvaluationDaskWorkflow(
+            cache_dir=cache_dir_path,
+            experiment_name=experiment_name,
+            n_workers=optimization_n_jobs,
+            scheduler_address=scheduler_address,
+            cache_size=cache_size,
+            clear_cache_on_start=clear_cache_on_start,
+            evaluation_episodes=evaluation_episodes,
+            evaluation_steps=evaluation_steps,
+            evaluation_n_jobs=evaluation_n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            debug=debug,
+            verbose=True,
+            cache_visualizations=cache_visualizations,
+        )
+
+        return workflow.optimize_and_evaluate(configs)
 
     def run_optimize_and_evaluate(
         self,
@@ -286,20 +427,63 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
         experiment_name: str = "Optimize_And_Evaluate",
         debug: bool = False,
         cache_visualizations: bool = True,
+        scheduler_address: Optional[str] = None,
+        cache_size: int = int(2e9),
+        clear_cache_on_start: bool = False,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
-        """Run hyperparameter optimization and evaluation.
+        """Run hyperparameter optimization and evaluation using Dask.
 
-        Note:
-            This method is not yet implemented for Dask distributed execution.
-            Use LocalSimulationsAPI for optimize and evaluate workflows.
+        This method runs hyperparameter optimization for the provided configurations,
+        then evaluates the optimized policies using Dask for distributed execution.
+
+        Args:
+            configs: List of hyperparameter run configurations.
+            evaluation_episodes: Number of episodes for evaluation.
+            evaluation_steps: Maximum steps per episode for evaluation.
+            evaluation_n_jobs: Number of parallel jobs for evaluation.
+            optimization_n_jobs: Number of parallel workers for optimization.
+            confidence_interval_level: Confidence level for intervals.
+            alpha: Significance level for statistical tests.
+            cache_dir_path: Optional path for storing results.
+            experiment_name: Name for the experiment.
+            debug: Enable debug mode.
+            cache_visualizations: Whether to cache visualizations.
+            scheduler_address: Address of existing Dask scheduler (None for local cluster).
+            cache_size: Size of Dask cache in bytes.
+            clear_cache_on_start: Whether to clear cache at startup.
+
+        Returns:
+            Tuple of results dictionary and DataFrame.
 
         Raises:
-            NotImplementedError: This method is not implemented for DaskSimulationsAPI.
+            ValueError: If configs list is empty.
         """
-        raise NotImplementedError(
-            "Optimize and evaluate workflow is not yet implemented for Dask distributed execution. "
-            "Use LocalSimulationsAPI for optimize and evaluate workflows."
+        self.logger.info("Starting optimize and evaluate workflow with Dask execution")
+
+        if not configs:
+            raise ValueError("configs list cannot be empty")
+
+        if cache_dir_path is None:
+            cache_dir_path = Path("./optimize_and_evaluate_results")
+
+        workflow = OptimizationEvaluationDaskWorkflow(
+            cache_dir=cache_dir_path,
+            experiment_name=experiment_name,
+            n_workers=optimization_n_jobs,
+            scheduler_address=scheduler_address,
+            cache_size=cache_size,
+            clear_cache_on_start=clear_cache_on_start,
+            evaluation_episodes=evaluation_episodes,
+            evaluation_steps=evaluation_steps,
+            evaluation_n_jobs=evaluation_n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            debug=debug,
+            verbose=True,
+            cache_visualizations=cache_visualizations,
         )
+
+        return workflow.optimize_and_evaluate(configs)
 
     def run_all_hyperparameter_benchmarks(
         self,
@@ -321,17 +505,76 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
         experiment_name: str = "All_Hyperparameter_Benchmarks",
         debug: bool = False,
         cache_visualizations: bool = True,
+        scheduler_address: Optional[str] = None,
+        cache_size: int = int(2e9),
+        clear_cache_on_start: bool = False,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
-        """Run all hyperparameter benchmarks with optimization.
+        """Run all hyperparameter benchmarks with optimization using Dask.
 
-        Note:
-            This method is not yet implemented for Dask distributed execution.
-            Use LocalSimulationsAPI for all hyperparameter benchmarks.
+        This method runs hyperparameter optimization for all compatible environments
+        and planners for a given policy space, followed by evaluation using Dask
+        for distributed execution.
 
-        Raises:
-            NotImplementedError: This method is not implemented for DaskSimulationsAPI.
+        Args:
+            policy_space_info: Policy space information specifying action and observation
+                space types for compatibility matching.
+            particles: Number of particles for belief representation.
+            num_episodes: Number of episodes for optimization.
+            num_steps: Maximum steps per episode for optimization.
+            n_trials: Number of optimization trials.
+            discount_factor: Discount factor for the MDP.
+            time_out_in_seconds: Timeout for planner execution.
+            evaluation_episodes: Number of episodes for evaluation.
+            evaluation_steps: Maximum steps per episode for evaluation.
+            evaluation_n_jobs: Number of parallel jobs for evaluation.
+            optimization_n_jobs: Number of parallel workers for optimization.
+            is_risk_averse: Whether to run risk-averse benchmark.
+            confidence_interval_level: Confidence level for intervals.
+            alpha: Significance level for statistical tests.
+            cache_dir_path: Optional path for storing results.
+            experiment_name: Name for the experiment.
+            debug: Enable debug mode.
+            cache_visualizations: Whether to cache visualizations.
+            scheduler_address: Address of existing Dask scheduler (None for local cluster).
+            cache_size: Size of Dask cache in bytes.
+            clear_cache_on_start: Whether to clear cache at startup.
+
+        Returns:
+            Tuple of results dictionary and DataFrame.
         """
-        raise NotImplementedError(
-            "All hyperparameter benchmarks is not yet implemented for Dask distributed execution. "
-            "Use LocalSimulationsAPI for all hyperparameter benchmarks."
+        self.logger.info("Starting all hyperparameter benchmarks with Dask execution")
+
+        if cache_dir_path is None:
+            cache_dir_path = Path("./all_hyperparameter_benchmarks_results")
+
+        creator = AllHyperparameterBenchmarksExperimentConfigCreator(
+            policy_space_info=policy_space_info,
+            particles=particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            n_trials=n_trials,
+            discount_factor=discount_factor,
+            time_out_in_seconds=time_out_in_seconds,
+            is_risk_averse=is_risk_averse,
+            debug=debug,
         )
+        configs = creator.get_experiment_configs()
+
+        workflow = OptimizationEvaluationDaskWorkflow(
+            cache_dir=cache_dir_path,
+            experiment_name=experiment_name,
+            n_workers=optimization_n_jobs,
+            scheduler_address=scheduler_address,
+            cache_size=cache_size,
+            clear_cache_on_start=clear_cache_on_start,
+            evaluation_episodes=evaluation_episodes,
+            evaluation_steps=evaluation_steps,
+            evaluation_n_jobs=evaluation_n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            debug=debug,
+            verbose=True,
+            cache_visualizations=cache_visualizations,
+        )
+
+        return workflow.optimize_and_evaluate(configs)
