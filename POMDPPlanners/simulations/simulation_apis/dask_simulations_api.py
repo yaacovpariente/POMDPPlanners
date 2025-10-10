@@ -11,7 +11,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfigGenerator,
     OptimizedPolicyResult,
 )
-from POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows import (
+from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows import (
     OptimizationEvaluationDaskWorkflow,
 )
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
@@ -30,7 +30,7 @@ from POMDPPlanners.utils.logger import get_logger
 from POMDPPlanners.simulations.simulation_apis.simulations_api_interface import (
     SimulationsAPIInterface,
 )
-from POMDPPlanners.simulations.planner_evaluation_workflow import (
+from POMDPPlanners.simulations.workflows.planner_evaluation_workflow import (
     PlannerEvaluationDaskWorkflow,
 )
 
