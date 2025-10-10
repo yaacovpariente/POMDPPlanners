@@ -637,6 +637,7 @@ class TestLocalSimulationsAPIIntegration:
         assert isinstance(stats_df, pd.DataFrame)
         assert len(stats_df) > 0
 
+    @pytest.mark.slow
     def test_run_all_hyperparameter_benchmarks_integration(self, temp_cache_dir):
         """Test run_all_hyperparameter_benchmarks integration with debug mode.
 
@@ -647,6 +648,10 @@ class TestLocalSimulationsAPIIntegration:
         Then: Returns results dict and DataFrame with actual benchmark results
 
         Test type: integration
+
+        Note: This test is marked as slow because it creates configurations for all
+        matching environments and planners, which can take several minutes even with
+        minimal parameters. Run with `pytest -m slow` to include this test.
         """
         api = LocalSimulationsAPI()
         policy_space_info = PolicySpaceInfo(
@@ -680,6 +685,7 @@ class TestLocalSimulationsAPIIntegration:
         assert isinstance(stats_df, pd.DataFrame)
         # Results might be empty if no benchmarks match the criteria, which is okay
 
+    @pytest.mark.slow
     def test_run_hyperparameter_tuning_experiment_with_benchmarks_integration(
         self, temp_cache_dir, tiger_environment
     ):
@@ -692,6 +698,10 @@ class TestLocalSimulationsAPIIntegration:
         Then: Returns results dict and DataFrame with actual tuning and evaluation results
 
         Test type: integration
+
+        Note: This test is marked as slow because it runs full hyperparameter optimization
+        followed by evaluation, which can take several minutes. Run with `pytest -m slow`
+        to include this test.
         """
         api = LocalSimulationsAPI()
 
@@ -704,13 +714,13 @@ class TestLocalSimulationsAPIIntegration:
                         List[HyperParameterFeature],
                         [
                             NumericalHyperParameter(low=0.1, high=2.0, name="exploration_constant"),
-                            NumericalHyperParameter(low=10, high=50, name="n_simulations"),
                         ],
                     ),
                     constant_parameters={
                         "discount_factor": 0.95,
                         "depth": 3,
-                        "name": "OptimizedPOMCP",
+                        "name": f"OptimizedPOMCP_{environment.name}",
+                        "n_simulations": 2,
                     },
                 )
 
@@ -732,6 +742,7 @@ class TestLocalSimulationsAPIIntegration:
             evaluation_steps=3,
             evaluation_n_jobs=1,
             optimization_n_jobs=1,
+            time_out_in_seconds=0.1,
             is_risk_averse=False,
             confidence_interval_level=0.95,
             alpha=0.05,

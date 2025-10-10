@@ -209,15 +209,51 @@ class TestHyperParameterRunParamsIdUniqueness:
         """Test that HyperParameterRunParams has a config_id property."""
 
         # Create simple objects with config_id properties that return strings
-        class MockEnv:
+        class MockEnv(Environment):
+            def __init__(self):
+                from POMDPPlanners.core.environment import SpaceInfo, SpaceType
+
+                super().__init__(
+                    discount_factor=0.95,
+                    name="mock_env",
+                    space_info=SpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE),
+                )
+
             @property
             def config_id(self):
                 return "env1"
 
-        class MockBelief:
+            def state_transition_model(self, state, action):  # type: ignore[override]
+                pass
+
+            def observation_model(self, next_state, action):  # type: ignore[override]
+                pass
+
+            def reward(self, state, action):
+                return 0.0
+
+            def is_terminal(self, state):
+                return False
+
+            def initial_state_dist(self):  # type: ignore[override]
+                pass
+
+            def initial_observation_dist(self):  # type: ignore[override]
+                pass
+
+            def is_equal_observation(self, observation1, observation2):
+                return observation1 == observation2
+
+        class MockBelief(Belief):
             @property
             def config_id(self):
                 return "belief1"
+
+            def update(self, action, observation, pomdp, state=None):
+                return self
+
+            def sample(self):
+                return "state"
 
         class MockPolicy(Policy):
             pass
@@ -247,15 +283,51 @@ class TestHyperParameterRunParamsIdUniqueness:
     def test_config_id_consistency(self):
         """Test that config_id produces consistent results."""
 
-        class MockEnv:
+        class MockEnv(Environment):
+            def __init__(self):
+                from POMDPPlanners.core.environment import SpaceInfo, SpaceType
+
+                super().__init__(
+                    discount_factor=0.95,
+                    name="mock_env",
+                    space_info=SpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE),
+                )
+
             @property
             def config_id(self):
                 return "env1"
 
-        class MockBelief:
+            def state_transition_model(self, state, action):  # type: ignore[override]
+                pass
+
+            def observation_model(self, next_state, action):  # type: ignore[override]
+                pass
+
+            def reward(self, state, action):
+                return 0.0
+
+            def is_terminal(self, state):
+                return False
+
+            def initial_state_dist(self):  # type: ignore[override]
+                pass
+
+            def initial_observation_dist(self):  # type: ignore[override]
+                pass
+
+            def is_equal_observation(self, observation1, observation2):
+                return observation1 == observation2
+
+        class MockBelief(Belief):
             @property
             def config_id(self):
                 return "belief1"
+
+            def update(self, action, observation, pomdp, state=None):
+                return self
+
+            def sample(self):
+                return "state"
 
         class MockPolicy(Policy):
             pass
@@ -289,15 +361,51 @@ class TestHyperParameterRunParamsIdUniqueness:
     def test_different_numeric_parameters_produce_different_ids(self):
         """Test that run params with different numeric parameters produce different IDs."""
 
-        class MockEnv:
+        class MockEnv(Environment):
+            def __init__(self):
+                from POMDPPlanners.core.environment import SpaceInfo, SpaceType
+
+                super().__init__(
+                    discount_factor=0.95,
+                    name="mock_env",
+                    space_info=SpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE),
+                )
+
             @property
             def config_id(self):
                 return "env1"
 
-        class MockBelief:
+            def state_transition_model(self, state, action):  # type: ignore[override]
+                pass
+
+            def observation_model(self, next_state, action):  # type: ignore[override]
+                pass
+
+            def reward(self, state, action):
+                return 0.0
+
+            def is_terminal(self, state):
+                return False
+
+            def initial_state_dist(self):  # type: ignore[override]
+                pass
+
+            def initial_observation_dist(self):  # type: ignore[override]
+                pass
+
+            def is_equal_observation(self, observation1, observation2):
+                return observation1 == observation2
+
+        class MockBelief(Belief):
             @property
             def config_id(self):
                 return "belief1"
+
+            def update(self, action, observation, pomdp, state=None):
+                return self
+
+            def sample(self):
+                return "state"
 
         class MockPolicy(Policy):
             pass
@@ -333,15 +441,51 @@ class TestHyperParameterRunParamsIdUniqueness:
     def test_different_parameters_to_optimize_produce_different_ids(self):
         """Test that run params with different parameters to optimize produce different IDs."""
 
-        class MockEnv:
+        class MockEnv(Environment):
+            def __init__(self):
+                from POMDPPlanners.core.environment import SpaceInfo, SpaceType
+
+                super().__init__(
+                    discount_factor=0.95,
+                    name="mock_env",
+                    space_info=SpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE),
+                )
+
             @property
             def config_id(self):
                 return "env1"
 
-        class MockBelief:
+            def state_transition_model(self, state, action):  # type: ignore[override]
+                pass
+
+            def observation_model(self, next_state, action):  # type: ignore[override]
+                pass
+
+            def reward(self, state, action):
+                return 0.0
+
+            def is_terminal(self, state):
+                return False
+
+            def initial_state_dist(self):  # type: ignore[override]
+                pass
+
+            def initial_observation_dist(self):  # type: ignore[override]
+                pass
+
+            def is_equal_observation(self, observation1, observation2):
+                return observation1 == observation2
+
+        class MockBelief(Belief):
             @property
             def config_id(self):
                 return "belief1"
+
+            def update(self, action, observation, pomdp, state=None):
+                return self
+
+            def sample(self):
+                return "state"
 
         class MockPolicy(Policy):
             pass
