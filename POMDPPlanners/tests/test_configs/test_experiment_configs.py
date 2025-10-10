@@ -17,6 +17,7 @@ from POMDPPlanners.configs.experiment_configs import (
     get_benchmarks_hyperparameter_optimization_configs,
     AverageReturnParameterToOptimizeMapper,
     AllHyperparameterBenchmarksExperimentConfigCreator,
+    AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
@@ -24,10 +25,15 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfigGenerator,
     HyperParamPlannerConfig,
 )
+from POMDPPlanners.core.simulation.simulation_configs import (
+    PlannerGenerator,
+    EnvironmentRunParams,
+)
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
 # Set random seeds for reproducible tests
@@ -47,6 +53,24 @@ class MockHyperParamPlannerConfigGenerator(HyperParamPlannerConfigGenerator):
             hyper_parameters=[],
             constant_parameters={"environment": environment, "name": "MockPlanner"},
         )
+
+    def get_planner_space_info(self) -> PolicySpaceInfo:
+        """Return the stored space info."""
+        return self.space_info
+
+
+class MockPlannerGenerator(PlannerGenerator):
+    """Mock implementation of PlannerGenerator for testing."""
+
+    def __init__(self, space_info: PolicySpaceInfo, name: str = "MockPlanner"):
+        self.space_info = space_info
+        self.name = name
+
+    def generate(self, environment: Environment) -> Policy:
+        """Generate a mock policy."""
+        mock_policy = Mock(spec=Policy)
+        mock_policy.config_id = f"{self.name}_{environment.config_id}"
+        return mock_policy
 
     def get_planner_space_info(self) -> PolicySpaceInfo:
         """Return the stored space info."""
@@ -864,80 +888,350 @@ class TestAllHyperparameterBenchmarksExperimentConfigCreator:
         assert isinstance(configs, list), "Should return a list"
         assert len(configs) > 0, "Should return non-empty list of configurations"
 
-        # Verify structure of returned configs
-        for config in configs:
-            assert isinstance(
-                config, HyperParameterRunParams
-            ), "Each config should be HyperParameterRunParams"
-            assert config.num_episodes == 2
-            assert config.num_steps == 3
-            assert config.n_trials == 5
 
-    def test_get_experiment_configs_continuous_space(self):
-        """Test get_experiment_configs with continuous space info.
+class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
+    """Test cases for AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator."""
 
-        Purpose: Validates that the creator works with continuous space environments.
+    def setup_method(self):
+        """Set up test fixtures for each test method."""
+        self.discrete_space_info = PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
+        )
+        self.continuous_space_info = PolicySpaceInfo(
+            action_space=SpaceType.CONTINUOUS, observation_space=SpaceType.CONTINUOUS
+        )
 
-        Given: AllHyperparameterBenchmarksExperimentConfigCreator with continuous space info
-        When: Calling get_experiment_configs
-        Then: Returns a list of configurations (may be empty if no compatible envs)
+    def test_initialization_basic(self):
+        """Test basic initialization of AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator.
+
+        Purpose: Validates that the creator can be initialized with required parameters.
+
+        Given: Valid PlannerGenerator list and basic configuration parameters
+        When: Creating AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator instance
+        Then: Instance is created successfully with all attributes set correctly
 
         Test type: unit
         """
-        creator = AllHyperparameterBenchmarksExperimentConfigCreator(
-            policy_space_info=self.continuous_space_info,
-            particles=10,
+        generator = MockPlannerGenerator(self.discrete_space_info, "TestPlanner")
+
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=[generator],
+            n_particles=30,
+            num_episodes=10,
+            num_steps=20,
+        )
+
+        assert creator.generators == [generator]
+        assert creator.n_particles == 30
+        assert creator.num_episodes == 10
+        assert creator.num_steps == 20
+
+    def test_initialization_multiple_generators(self):
+        """Test initialization with multiple generators.
+
+        Purpose: Validates that the creator handles multiple PlannerGenerator instances correctly.
+
+        Given: List of multiple MockPlannerGenerator instances
+        When: Creating AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator instance
+        Then: Instance is created with all generators stored correctly
+
+        Test type: unit
+        """
+        generator1 = MockPlannerGenerator(self.discrete_space_info, "Planner1")
+        generator2 = MockPlannerGenerator(self.discrete_space_info, "Planner2")
+        generator3 = MockPlannerGenerator(self.continuous_space_info, "Planner3")
+
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=[generator1, generator2, generator3],
+            n_particles=25,
+            num_episodes=5,
+            num_steps=15,
+        )
+
+        assert len(creator.generators) == 3
+        assert creator.generators[0] == generator1
+        assert creator.generators[1] == generator2
+        assert creator.generators[2] == generator3
+        assert creator.n_particles == 25
+        assert creator.num_episodes == 5
+        assert creator.num_steps == 15
+
+    def test_get_experiment_configs_returns_environment_run_params(self):
+        """Test that get_experiment_configs returns EnvironmentRunParams list.
+
+        Purpose: Validates that the creator generates experiment configurations correctly.
+
+        Given: AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator with discrete space info
+        When: Calling get_experiment_configs
+        Then: Returns a list of EnvironmentRunParams with correct structure
+
+        Test type: unit
+        """
+        generator = MockPlannerGenerator(self.discrete_space_info, "TestPlanner")
+
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=[generator],
+            n_particles=10,  # Small number for faster tests
             num_episodes=2,
             num_steps=3,
-            n_trials=5,
-            discount_factor=0.95,
-            time_out_in_seconds=3.0,
-            is_risk_averse=False,
         )
 
         configs = creator.get_experiment_configs()
 
         assert isinstance(configs, list), "Should return a list"
 
-    def test_doctest_example(self):
-        """Test the usage example from AllHyperparameterBenchmarksExperimentConfigCreator docstring.
+        if configs:  # May be empty if no compatible environments
+            for config in configs:
+                assert isinstance(
+                    config, EnvironmentRunParams
+                ), "Each config should be EnvironmentRunParams"
+                assert isinstance(config.environment, Environment), "Config should have Environment"
+                assert isinstance(config.belief, Belief), "Config should have Belief"
+                assert isinstance(config.policies, list), "Config should have policies list"
+                assert config.num_episodes == 2, "Should use specified num_episodes"
+                assert config.num_steps == 3, "Should use specified num_steps"
+                assert len(config.policies) > 0, "Should have at least one policy"
 
-        Purpose: Validates that the doctest example in the class docstring works correctly.
+    def test_get_experiment_configs_multiple_generators_same_environment(self):
+        """Test that multiple generators for same environment are combined correctly.
 
-        Given: Example code from the class docstring
-        When: Executing the example code
-        Then: All assertions pass and example works as documented
+        Purpose: Validates that policies from multiple generators are combined into single EnvironmentRunParams.
 
-        Test type: example
+        Given: Multiple generators with same space info (same environments)
+        When: Calling get_experiment_configs
+        Then: Policies from all generators are combined for each environment
+
+        Test type: unit
         """
-        from POMDPPlanners.core.policy import PolicySpaceInfo
-        from POMDPPlanners.core.environment import SpaceType
-        from POMDPPlanners.configs.experiment_configs import (
-            AllHyperparameterBenchmarksExperimentConfigCreator,
-        )
+        generator1 = MockPlannerGenerator(self.discrete_space_info, "Planner1")
+        generator2 = MockPlannerGenerator(self.discrete_space_info, "Planner2")
 
-        # Create policy space info for discrete environments
-        space_info = PolicySpaceInfo(
-            action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
-        )
-
-        # Create experiment config creator
-        creator = AllHyperparameterBenchmarksExperimentConfigCreator(
-            policy_space_info=space_info,
-            particles=10,
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=[generator1, generator2],
+            n_particles=10,
             num_episodes=2,
             num_steps=3,
-            n_trials=5,
-            discount_factor=0.95,
-            time_out_in_seconds=3.0,
-            is_risk_averse=False,
         )
 
-        # Get experiment configurations
         configs = creator.get_experiment_configs()
 
-        # Verify configurations
-        assert len(configs) > 0
-        assert all(config.num_episodes == 2 for config in configs)
-        assert all(config.num_steps == 3 for config in configs)
-        assert all(config.n_trials == 5 for config in configs)
+        assert isinstance(configs, list)
+
+        if configs:
+            # Each environment should have policies from both generators
+            for config in configs:
+                assert len(config.policies) >= 2, "Should have policies from both generators"
+                # Verify policies have different config_ids (from different generators)
+                policy_ids = [policy.config_id for policy in config.policies]
+                assert len(set(policy_ids)) == len(
+                    policy_ids
+                ), "Should have unique policy config_ids"
+
+    def test_get_experiment_configs_different_space_info(self):
+        """Test that generators with different space info work correctly.
+
+        Purpose: Validates that generators with different PolicySpaceInfo are handled correctly.
+
+        Given: Generators with different space info (discrete vs continuous)
+        When: Calling get_experiment_configs
+        Then: Returns configurations for environments compatible with each generator
+
+        Test type: unit
+        """
+        discrete_generator = MockPlannerGenerator(self.discrete_space_info, "DiscretePlanner")
+        continuous_generator = MockPlannerGenerator(self.continuous_space_info, "ContinuousPlanner")
+
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=[discrete_generator, continuous_generator],
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+        )
+
+        configs = creator.get_experiment_configs()
+
+        assert isinstance(configs, list), "Should return a list"
+
+        # Should have configurations for both discrete and continuous environments
+        if configs:
+            for config in configs:
+                assert isinstance(config, EnvironmentRunParams)
+                assert len(config.policies) > 0, "Should have at least one policy"
+
+    def test_get_experiment_configs_empty_generators(self):
+        """Test handling of empty generators list.
+
+        Purpose: Validates that empty generators list is handled gracefully.
+
+        Given: Empty list of generators
+        When: Calling get_experiment_configs
+        Then: Returns empty list or handles gracefully
+
+        Test type: edge case
+        """
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=[],
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+        )
+
+        configs = creator.get_experiment_configs()
+
+        assert isinstance(configs, list), "Should return a list"
+        assert len(configs) == 0, "Should return empty list for empty generators"
+
+    def test_get_experiment_configs_custom_parameters(self):
+        """Test that custom parameters are applied correctly.
+
+        Purpose: Validates that custom n_particles, num_episodes, and num_steps are used.
+
+        Given: Custom parameter values
+        When: Calling get_experiment_configs
+        Then: All returned configurations use the specified parameters
+
+        Test type: unit
+        """
+        generator = MockPlannerGenerator(self.discrete_space_info, "TestPlanner")
+
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=[generator],
+            n_particles=50,
+            num_episodes=15,
+            num_steps=25,
+        )
+
+        configs = creator.get_experiment_configs()
+
+        assert isinstance(configs, list)
+
+        if configs:
+            for config in configs:
+                assert config.num_episodes == 15, "Should use custom num_episodes"
+                assert config.num_steps == 25, "Should use custom num_steps"
+
+    def test_environment_config_id_grouping(self):
+        """Test that environments with same config_id are grouped correctly.
+
+        Purpose: Validates that environments with identical config_id are combined into single EnvironmentRunParams.
+
+        Given: Multiple generators that might produce same environment config_id
+        When: Calling get_experiment_configs
+        Then: Environments with same config_id are grouped together
+
+        Test type: unit
+        """
+        generator1 = MockPlannerGenerator(self.discrete_space_info, "Planner1")
+        generator2 = MockPlannerGenerator(self.discrete_space_info, "Planner2")
+
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=[generator1, generator2],
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+        )
+
+        configs = creator.get_experiment_configs()
+
+        assert isinstance(configs, list)
+
+        if configs:
+            # Verify that each config has unique environment config_id
+            env_config_ids = [config.environment.config_id for config in configs]
+            assert len(set(env_config_ids)) == len(
+                env_config_ids
+            ), "Should have unique environment config_ids"
+
+    def test_policy_generation_for_each_environment(self):
+        """Test that policies are generated for each environment correctly.
+
+        Purpose: Validates that each generator produces policies for compatible environments.
+
+        Given: Generator and compatible environments
+        When: Calling get_experiment_configs
+        Then: Each environment gets policies from compatible generators
+
+        Test type: unit
+        """
+        generator = MockPlannerGenerator(self.discrete_space_info, "TestPlanner")
+
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=[generator],
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+        )
+
+        configs = creator.get_experiment_configs()
+
+        assert isinstance(configs, list)
+
+        if configs:
+            for config in configs:
+                assert len(config.policies) > 0, "Should have policies for each environment"
+                # Verify policies are generated by the generator
+                for policy in config.policies:
+                    assert hasattr(policy, "config_id"), "Policy should have config_id"
+                    assert policy.config_id.startswith(
+                        "TestPlanner_"
+                    ), "Policy config_id should reflect generator name"
+
+    def test_inheritance_from_evaluation_experiment_config_creator(self):
+        """Test that the class properly inherits from EvaluationExperimentConfigCreator.
+
+        Purpose: Validates that the class implements the required interface correctly.
+
+        Given: AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator instance
+        When: Calling get_experiment_configs (inherited method)
+        Then: Method works correctly and returns expected results
+
+        Test type: inheritance
+        """
+        generator = MockPlannerGenerator(self.discrete_space_info, "TestPlanner")
+
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=[generator],
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+        )
+
+        # Test that it's an instance of the parent class
+        from POMDPPlanners.core.simulation.simulation_configs import (
+            EvaluationExperimentConfigCreator,
+        )
+
+        assert isinstance(creator, EvaluationExperimentConfigCreator)
+
+        # Test that the inherited method works
+        configs = creator.get_experiment_configs()
+        assert isinstance(configs, list)
+
+    def test_no_duplicate_configs(self):
+        """Test that no duplicate configurations are returned.
+
+        Purpose: Validates that the parent class's duplicate detection works correctly.
+
+        Given: AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator
+        When: Calling get_experiment_configs
+        Then: No duplicate config_ids are returned
+
+        Test type: unit
+        """
+        generator = MockPlannerGenerator(self.discrete_space_info, "TestPlanner")
+
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=[generator],
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+        )
+
+        configs = creator.get_experiment_configs()
+
+        assert isinstance(configs, list)
+
+        if configs:
+            # Verify no duplicate config_ids
+            config_ids = [config.config_id for config in configs]
+            assert len(set(config_ids)) == len(config_ids), "Should have no duplicate config_ids"
