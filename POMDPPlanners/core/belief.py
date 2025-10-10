@@ -466,11 +466,6 @@ class WeightedParticleBelief(Belief):
         idx = np.random.choice(len(self.particles), p=self.normalized_weights)
         particle = self.particles[idx]
 
-        # Defensive programming: ensure particle is a numpy array if it's a list
-        # (fix for 'list' object has no attribute 'shape' error)
-        if isinstance(particle, list):
-            particle = np.array(particle)
-
         return particle
 
 
