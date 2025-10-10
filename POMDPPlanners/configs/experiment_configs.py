@@ -215,7 +215,7 @@ class AllHyperparameterBenchmarksExperimentConfigCreator(
             self.num_steps = 2
             self.n_trials = 2
 
-    def get_experiment_configs(self) -> List[HyperParameterRunParams]:
+    def _get_experiment_configs(self) -> List[HyperParameterRunParams]:
         """Generate hyperparameter optimization configurations for all compatible environments.
 
         Returns:
@@ -294,7 +294,7 @@ class PolicyHyperparameterOptimizationExperimentConfigCreator(
         else:
             self.parameter_to_optimize_mapper = AverageReturnParameterToOptimizeMapper()
 
-    def get_experiment_configs(self) -> List[HyperParameterRunParams]:
+    def _get_experiment_configs(self) -> List[HyperParameterRunParams]:
         return complete_environments_and_benchmarks_hyperparameter_optimization_configs(
             generators=self.generators,
             parameter_to_optimize_mapper=self.parameter_to_optimize_mapper,
