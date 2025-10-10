@@ -71,13 +71,13 @@ def run_multiple_environments_and_policies_local_run(
         Running a local simulation with multiple environments and policies:
 
         >>> from pathlib import Path
-        >>> from POMDPPlanners.simulations.simulations_api import SimulationsAPI
+        >>> from POMDPPlanners.simulations.simulation_apis.local_simulations_api import LocalSimulationsAPI
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
         >>> from POMDPPlanners.core.belief import get_initial_belief
         >>> from POMDPPlanners.core.simulation import EnvironmentRunParams
         >>> # Initialize the API
-        >>> api = SimulationsAPI(debug=True)
+        >>> api = LocalSimulationsAPI(debug=True)
         >>> # Create environment and policy
         >>> tiger = TigerPOMDP(discount_factor=0.95)
         >>> policy = POMCP(
@@ -203,13 +203,13 @@ def run_multiple_environments_and_policies_pbs_run(
         Running a large-scale simulation study on PBS cluster:
 
         >>> from pathlib import Path
-        >>> from POMDPPlanners.simulations.simulations_api import SimulationsAPI
+        >>> from POMDPPlanners.simulations.simulation_apis.pbs_simulations_api import PBSSimulationsAPI
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
         >>> from POMDPPlanners.core.belief import get_initial_belief
         >>> from POMDPPlanners.core.simulation import EnvironmentRunParams
         >>> # Initialize the API
-        >>> api = SimulationsAPI(debug=False)
+        >>> api = PBSSimulationsAPI(queue="test_queue", debug=False)
         >>> # Create environment and policy
         >>> tiger = TigerPOMDP(discount_factor=0.95)
         >>> policy = POMCP(

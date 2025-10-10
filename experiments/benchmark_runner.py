@@ -15,8 +15,10 @@ from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
+    HyperParameterRunParams,
 )
-from POMDPPlanners.simulations.simulations_api import SimulationsAPI
+from POMDPPlanners.configs.experiment_configs import AverageReturnParameterToOptimizeMapper
+from POMDPPlanners.simulations.simulation_apis.local_simulations_api import LocalSimulationsAPI
 from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
 from POMDPPlanners.utils.logger import get_logger
 
@@ -54,7 +56,7 @@ class BenchmarkRunner:
         self.include_risk_averse = include_risk_averse
 
         self.logger = get_logger(name="benchmark_runner", output_dir=cache_dir, debug=debug)
-        self.simulations_api = SimulationsAPI(cache_dir_path=cache_dir, debug=debug)
+        self.simulations_api = LocalSimulationsAPI(cache_dir_path=cache_dir, debug=debug)
         self.planner_configs_api = PlannersHyperparamConfigs(discount_factor=discount_factor)
 
     def _get_all_environments_with_beliefs(
@@ -175,26 +177,37 @@ class BenchmarkRunner:
                     f"with {len(planner_configs)} planners"
                 )
 
+                # Create hyperparameter run configurations
+                parameter_mapper = AverageReturnParameterToOptimizeMapper()
+                hyperparameter_configs = []
+
+                for planner_config in planner_configs:
+                    params_to_optimize = parameter_mapper.generate(env, planner_config.policy_cls)
+                    hyperparameter_configs.append(
+                        HyperParameterRunParams(
+                            environment=env,
+                            belief=initial_belief,
+                            hyper_param_planner_config=planner_config,
+                            num_episodes=optimization_episodes,
+                            num_steps=optimization_steps,
+                            n_trials=n_trials,
+                            parameters_to_optimize=params_to_optimize,
+                        )
+                    )
+
                 # Run hyperparameter optimization and evaluation
-                results = self.simulations_api.run_hyperparameter_optimization_and_evaluation(
-                    environment=env,
-                    initial_belief=initial_belief,
-                    planner_configs=planner_configs,
-                    cache_dir=env_cache_dir,
-                    optimization_direction=HyperParameterOptimizationDirection.MAXIMIZE,
-                    parameter_to_optimize="average_return",
-                    experiment_name=experiment_name,
-                    optimization_episodes=optimization_episodes,
-                    optimization_steps=optimization_steps,
-                    n_trials=n_trials,
-                    optimization_n_jobs=optimization_n_jobs,
+                results = self.simulations_api.run_optimize_and_evaluate(
+                    configs=hyperparameter_configs,
                     evaluation_episodes=evaluation_episodes,
                     evaluation_steps=evaluation_steps,
                     evaluation_n_jobs=evaluation_n_jobs,
+                    optimization_n_jobs=optimization_n_jobs,
                     confidence_interval_level=confidence_interval_level,
                     alpha=alpha,
+                    cache_dir_path=env_cache_dir,
+                    experiment_name=experiment_name,
                     debug=False,
-                    verbose=verbose,
+                    cache_visualizations=True,
                 )
 
                 total_benchmarks += 1

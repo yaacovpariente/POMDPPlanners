@@ -86,7 +86,7 @@ def run_hyperparameter_optimization_local_run(
         Running hyperparameter optimization for POMCP on Tiger POMDP:
 
         >>> from pathlib import Path
-        >>> from POMDPPlanners.simulations.simulations_api import SimulationsAPI
+        >>> from POMDPPlanners.simulations.simulation_apis.local_simulations_api import LocalSimulationsAPI
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
         >>> from POMDPPlanners.core.belief import get_initial_belief
@@ -94,10 +94,10 @@ def run_hyperparameter_optimization_local_run(
         ...     NumericalHyperParameter, CategoricalHyperParameter
         ... )
         >>> from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-        ...     HyperParameterRunParams, HyperParameterOptimizationDirection
+        ...     HyperParameterRunParams, HyperParameterOptimizationDirection, HyperParamPlannerConfig
         ... )
         >>> # Initialize the API
-        >>> api = SimulationsAPI(debug=True)
+        >>> api = LocalSimulationsAPI(debug=True)
         >>> # Create environment and initial belief
         >>> tiger = TigerPOMDP(discount_factor=0.95)
         >>> initial_belief = get_initial_belief(tiger, n_particles=10)
@@ -106,21 +106,24 @@ def run_hyperparameter_optimization_local_run(
         ...     HyperParameterRunParams(
         ...         environment=tiger,
         ...         belief=initial_belief,
-        ...         policy_cls=POMCP,
-        ...         hyper_parameters=[
-        ...             NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
-        ...             NumericalHyperParameter(10, 50, "n_simulations")
-        ...         ],
-        ...         constant_parameters={
-        ...             "discount_factor": 0.95,
-        ...             "name": "OptimizedPOMCP",
-        ...             "depth": 5
-        ...         },
+        ...         hyper_param_planner_config=HyperParamPlannerConfig(
+        ...             policy_cls=POMCP,
+        ...             hyper_parameters=[
+        ...                 NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
+        ...                 NumericalHyperParameter(10, 50, "n_simulations")
+        ...             ],
+        ...             constant_parameters={
+        ...                 "discount_factor": 0.95,
+        ...                 "name": "OptimizedPOMCP",
+        ...                 "depth": 5
+        ...             }
+        ...         ),
         ...         num_episodes=2,       # Small for testing
         ...         num_steps=3,          # Small for testing
         ...         n_trials=3,          # Small number for testing
-        ...         direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        ...         parameter_to_optimize="average_return"
+        ...         parameters_to_optimize=[
+        ...             ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+        ...         ]
         ...     )
         ... ]
         >>> # Run hyperparameter optimization
@@ -299,7 +302,7 @@ def run_hyperparameter_optimization_pbs(
         >>> from POMDPPlanners.core.belief import get_initial_belief
         >>> from POMDPPlanners.core.simulation import NumericalHyperParameter
         >>> from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-        ...     HyperParameterRunParams, HyperParameterOptimizationDirection
+        ...     HyperParameterRunParams, HyperParameterOptimizationDirection, HyperParamPlannerConfig
         ... )
         >>> # Create environment and initial belief
         >>> tiger = TigerPOMDP(discount_factor=0.95)
@@ -309,21 +312,24 @@ def run_hyperparameter_optimization_pbs(
         ...     HyperParameterRunParams(
         ...         environment=tiger,
         ...         belief=initial_belief,
-        ...         policy_cls=POMCP,
-        ...         hyper_parameters=[
-        ...             NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
-        ...             NumericalHyperParameter(10, 50, "n_simulations")
-        ...         ],
-        ...         constant_parameters={
-        ...             "discount_factor": 0.95,
-        ...             "name": "OptimizedPOMCP",
-        ...             "depth": 5
-        ...         },
+        ...         hyper_param_planner_config=HyperParamPlannerConfig(
+        ...             policy_cls=POMCP,
+        ...             hyper_parameters=[
+        ...                 NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
+        ...                 NumericalHyperParameter(10, 50, "n_simulations")
+        ...             ],
+        ...             constant_parameters={
+        ...                 "discount_factor": 0.95,
+        ...                 "name": "OptimizedPOMCP",
+        ...                 "depth": 5
+        ...             }
+        ...         ),
         ...         num_episodes=2,
         ...         num_steps=3,
         ...         n_trials=3,
-        ...         direction=HyperParameterOptimizationDirection.MAXIMIZE,
-        ...         parameter_to_optimize="average_return"
+        ...         parameters_to_optimize=[
+        ...             ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+        ...         ]
         ...     )
         ... ]
         >>> # Run PBS hyperparameter optimization (commented out for doctest)

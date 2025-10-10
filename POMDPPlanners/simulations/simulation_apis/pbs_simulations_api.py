@@ -50,7 +50,7 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
 
     Example:
         >>> from pathlib import Path
-        >>> from POMDPPlanners.simulations.pbs_simulations_api import PBSSimulationsAPI
+        >>> from POMDPPlanners.simulations.simulation_apis.pbs_simulations_api import PBSSimulationsAPI
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
         >>> from POMDPPlanners.core.belief import get_initial_belief
@@ -183,7 +183,7 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
             Running a large-scale simulation study on PBS cluster:
 
             >>> from pathlib import Path
-            >>> from POMDPPlanners.simulations.pbs_simulations_api import PBSSimulationsAPI
+            >>> from POMDPPlanners.simulations.simulation_apis.pbs_simulations_api import PBSSimulationsAPI
             >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
             >>> from POMDPPlanners.core.belief import get_initial_belief
@@ -551,7 +551,7 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
 
         Example:
             >>> from pathlib import Path
-            >>> from POMDPPlanners.simulations.pbs_simulations_api import PBSSimulationsAPI
+            >>> from POMDPPlanners.simulations.simulation_apis.pbs_simulations_api import PBSSimulationsAPI
             >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
             >>> from POMDPPlanners.core.belief import get_initial_belief
