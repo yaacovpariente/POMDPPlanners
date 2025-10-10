@@ -76,7 +76,9 @@ class TestLocalSimulationsAPI(
 
     # LocalSimulationsAPI-specific tests
 
-    def test_local_api_scheduler_address_parameter_ignored(self, sample_environment_params):
+    def test_local_api_scheduler_address_parameter_ignored(
+        self, sample_environment_params, tmp_path
+    ):
         """Test that scheduler_address parameter is ignored.
 
         Purpose: Validates that scheduler_address doesn't affect local execution
@@ -96,6 +98,7 @@ class TestLocalSimulationsAPI(
             confidence_interval_level=0.95,
             scheduler_address="tcp://fake:8786",  # Should be ignored
             n_jobs=1,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         assert results is not None
@@ -117,7 +120,7 @@ class TestLocalSimulationsAPI(
         assert hasattr(api, "run_multiple_environments_and_policies_with_initial_debug_run")
         assert callable(api.run_multiple_environments_and_policies_with_initial_debug_run)
 
-    def test_local_api_debug_run_method_execution(self, sample_environment_params):
+    def test_local_api_debug_run_method_execution(self, sample_environment_params, tmp_path):
         """Test execution of debug run method.
 
         Purpose: Validates debug run workflow executes successfully
@@ -135,12 +138,15 @@ class TestLocalSimulationsAPI(
             alpha=0.05,
             confidence_interval_level=0.95,
             n_jobs=1,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         assert results is not None
         assert stats_df is not None
 
-    def test_local_api_debug_run_with_custom_experiment_name(self, sample_environment_params):
+    def test_local_api_debug_run_with_custom_experiment_name(
+        self, sample_environment_params, tmp_path
+    ):
         """Test debug run with custom experiment name.
 
         Purpose: Validates experiment naming in debug run workflow
@@ -159,6 +165,7 @@ class TestLocalSimulationsAPI(
             confidence_interval_level=0.95,
             experiment_name="CustomDebugTest",
             n_jobs=1,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         assert results is not None
@@ -193,7 +200,7 @@ class TestLocalSimulationsAPI(
         assert api is not None
         assert hasattr(api, "logger")
 
-    def test_local_api_multiple_n_jobs_values(self, sample_environment_params):
+    def test_local_api_multiple_n_jobs_values(self, sample_environment_params, tmp_path):
         """Test different n_jobs values.
 
         Purpose: Validates n_jobs parameter flexibility
@@ -212,6 +219,7 @@ class TestLocalSimulationsAPI(
             alpha=0.05,
             confidence_interval_level=0.95,
             n_jobs=1,
+            cache_dir_path=tmp_path / "test_cache_1",
         )
         assert results1 is not None
 
@@ -221,6 +229,7 @@ class TestLocalSimulationsAPI(
             alpha=0.05,
             confidence_interval_level=0.95,
             n_jobs=2,
+            cache_dir_path=tmp_path / "test_cache_2",
         )
         assert results2 is not None
 
@@ -230,6 +239,7 @@ class TestLocalSimulationsAPI(
             alpha=0.05,
             confidence_interval_level=0.95,
             n_jobs=-1,
+            cache_dir_path=tmp_path / "test_cache_3",
         )
         assert results3 is not None
 
@@ -289,7 +299,7 @@ class TestLocalSimulationsAPI(
     def test_run_hyperparameter_optimization_default_parameters(
         self,
         mock_optimizer_class,
-        temp_cache_dir,
+        tmp_path,
         sample_hyperparameter_configs,
     ):
         """Test hyperparameter optimization with default parameters.
@@ -297,7 +307,7 @@ class TestLocalSimulationsAPI(
         Purpose: Validates that hyperparameter optimization uses correct default values when optional parameters are not provided
 
         Given: Only required parameters (environment_run_params)
-        When: run_hyperparameter_optimization is called with minimal parameters
+        When: run_hyperparameter_optimization is called with minimal parameters and temp cache
         Then: HyperParameterOptimizer is created with correct default values
 
         Test type: unit
@@ -317,6 +327,7 @@ class TestLocalSimulationsAPI(
         api = self.create_api()
         results = api.run_hyperparameter_optimization(
             environment_run_params=sample_hyperparameter_configs,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         # Verify default parameters
@@ -328,9 +339,8 @@ class TestLocalSimulationsAPI(
         assert call_args[1]["alpha"] == 0.05  # Default
         assert call_args[1]["use_queue_logger"] is False  # Default
 
-        # Verify cache directory was created with default name
-        expected_cache_dir = Path("./hyperparameter_optimization_results")
-        assert call_args[1]["cache_dir_path"] == expected_cache_dir
+        # Verify cache directory was set to provided temp path
+        assert call_args[1]["cache_dir_path"] == tmp_path / "test_cache"
 
         assert isinstance(results, list)
         assert len(results) == 1
