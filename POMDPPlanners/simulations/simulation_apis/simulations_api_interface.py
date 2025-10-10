@@ -124,6 +124,7 @@ class SimulationsAPIInterface(ABC):
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
         cache_visualizations: bool = True,
+        is_risk_averse: bool = False,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         """Run all benchmark environments on planner generators.
 
@@ -143,7 +144,7 @@ class SimulationsAPIInterface(ABC):
             enable_profiling: Whether to enable performance profiling.
             profiling_output_limit: Maximum number of profiling entries to display.
             cache_visualizations: Whether to cache visualizations.
-
+            is_risk_averse: Whether to run risk-averse benchmark.
         Returns:
             Tuple containing:
                 - Dict[str, Dict[str, list]]: Raw simulation results organized by environment

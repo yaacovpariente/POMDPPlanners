@@ -86,7 +86,13 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
         2
     """
 
-    def __init__(self, cache_dir_path: Optional[Path] = None, debug: bool = False):
+    def __init__(
+        self,
+        cache_dir_path: Optional[Path] = None,
+        debug: bool = False,
+        scheduler_address: Optional[str] = None,
+        cache_size: int = int(2e9),
+    ):
         """Initialize the DaskSimulationsAPI.
 
         Args:
@@ -97,6 +103,9 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
             name="dask_simulations_api", output_dir=cache_dir_path, debug=debug
         )
         self.logger.info("Initialized DaskSimulationsAPI")
+
+        self.scheduler_address = scheduler_address
+        self.cache_size = cache_size
 
     def run_multiple_environments_and_policies(
         self,
@@ -242,8 +251,7 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
         cache_visualizations: bool = True,
-        scheduler_address: Optional[str] = None,
-        cache_size: int = int(2e9),
+        is_risk_averse: bool = False,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         """Run all benchmark environments on planner generators using Dask.
 
@@ -266,7 +274,7 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
             cache_visualizations: Whether to cache visualizations.
             scheduler_address: Address of existing Dask scheduler (None for local cluster).
             cache_size: Size of Dask cache in bytes.
-
+            is_risk_averse: Whether to run risk-averse benchmark.
         Returns:
             Tuple of results dictionary and DataFrame.
 
@@ -287,14 +295,15 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
             n_particles=n_particles,
             num_episodes=num_episodes,
             num_steps=num_steps,
+            is_risk_averse=is_risk_averse,
         )
 
         workflow = PlannerEvaluationDaskWorkflow(
             cache_dir_path=cache_dir_path,
             experiment_name=experiment_name,
             n_workers=n_jobs,
-            scheduler_address=scheduler_address,
-            cache_size=cache_size,
+            scheduler_address=self.scheduler_address,
+            cache_size=self.cache_size,
             clear_cache_on_start=clear_cache_on_start,
             debug=False,
             n_jobs=n_jobs,
