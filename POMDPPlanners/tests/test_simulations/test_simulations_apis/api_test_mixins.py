@@ -726,7 +726,9 @@ class ErrorHandlingTestsMixin:
             # Expected if validation is implemented
             pass
 
-    def test_negative_n_jobs_interpretation(self: "APITestProtocol", sample_environment_params):
+    def test_negative_n_jobs_interpretation(
+        self: "APITestProtocol", sample_environment_params, temp_cache_dir
+    ):
         """Test n_jobs=-1 means use all cores.
 
         Purpose: Validates -1 interpretation for parallel jobs
@@ -744,6 +746,7 @@ class ErrorHandlingTestsMixin:
             alpha=0.05,
             confidence_interval_level=0.95,
             n_jobs=-1,  # Use all cores
+            cache_dir_path=temp_cache_dir,
         )
 
         assert isinstance(results, dict)
