@@ -514,6 +514,9 @@ def test_cartpole_observation_model_probability_shape_multiple_observations():
     # Check each probability density is a scalar and positive
     for i, prob in enumerate(probs):
         assert np.isscalar(prob), f"Individual probability[{i}] should be scalar, got {type(prob)}"
+        assert isinstance(
+            prob, (int, float, np.floating)
+        ), f"Probability density[{i}] should be numeric, got {type(prob)}"
         assert prob > 0.0, f"Probability density[{i}] should be positive, got {prob}"
 
 

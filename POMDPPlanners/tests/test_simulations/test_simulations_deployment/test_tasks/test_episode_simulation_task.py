@@ -600,3 +600,525 @@ def test_episode_simulation_task_error_written_to_log_file(tmp_path, environment
             break
 
     assert error_found, f"Error message not found in any log file. Checked {len(log_files)} files."
+
+
+# POMCPOW Integration Tests with All Compatible Environments
+
+
+def create_pomcpow_action_sampler(environment):
+    """Helper function to create appropriate action sampler based on environment type.
+
+    Args:
+        environment: The POMDP environment
+
+    Returns:
+        ActionSampler appropriate for the environment's action space
+    """
+    from POMDPPlanners.utils.action_samplers import DiscreteActionSampler, UnitCircleActionSampler
+    from POMDPPlanners.core.environment import DiscreteActionsEnvironment
+
+    # For discrete action environments, use DiscreteActionSampler
+    if isinstance(environment, DiscreteActionsEnvironment):
+        return DiscreteActionSampler(actions=environment.get_actions())
+
+    # For continuous action environments, use UnitCircleActionSampler
+    # This is a reasonable default for 2D continuous control
+    return UnitCircleActionSampler(max_action_magnitude=1.0)
+
+
+def test_episode_simulation_task_pomcpow_tiger():
+    """Test EpisodeSimulationTask with POMCPOW planner on Tiger POMDP.
+
+    Purpose: Validates that POMCPOW can successfully complete episode simulation on Tiger POMDP without returning None
+
+    Given: POMCPOW planner with TigerPOMDP environment, initial belief, and DiscreteActionSampler
+    When: EpisodeSimulationTask executes a 5-step episode with POMCPOW planning
+    Then: Task completes successfully and returns valid History object (not None)
+
+    Test type: integration
+    """
+    from experiments.configs.environments_configs import environment_instances, belief_instances
+    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+
+    # Get environment and belief
+    environment = environment_instances["tiger"]
+    initial_belief = belief_instances["tiger"]
+
+    # Create action sampler
+    action_sampler = create_pomcpow_action_sampler(environment)
+
+    # Create POMCPOW planner
+    policy = POMCPOW(
+        environment=environment,
+        discount_factor=environment.discount_factor,
+        depth=3,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        action_sampler=action_sampler,
+        n_simulations=10,
+        name="POMCPOW_Tiger_Test",
+    )
+
+    # Create and run task
+    task = EpisodeSimulationTask(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=5,
+        episode_id=1,
+        seed=42,
+        discount_factor=environment.discount_factor,
+        episode_number=1,
+        console_output=False,
+    )
+
+    result = task.run()
+
+    # Verify task succeeded
+    assert result is not None, "POMCPOW on Tiger POMDP returned None"
+    assert hasattr(result, "history")
+    assert hasattr(result, "reach_terminal_state")
+    assert hasattr(result, "actual_num_steps")
+
+
+def test_episode_simulation_task_pomcpow_cartpole():
+    """Test EpisodeSimulationTask with POMCPOW planner on CartPole POMDP.
+
+    Purpose: Validates that POMCPOW can successfully complete episode simulation on CartPole POMDP without returning None
+
+    Given: POMCPOW planner with CartPolePOMDP environment, initial belief, and DiscreteActionSampler
+    When: EpisodeSimulationTask executes a 5-step episode with POMCPOW planning
+    Then: Task completes successfully and returns valid History object (not None)
+
+    Test type: integration
+    """
+    from experiments.configs.environments_configs import environment_instances, belief_instances
+    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+
+    # Get environment and belief
+    environment = environment_instances["cartpole"]
+    initial_belief = belief_instances["cartpole"]
+
+    # Create action sampler
+    action_sampler = create_pomcpow_action_sampler(environment)
+
+    # Create POMCPOW planner
+    policy = POMCPOW(
+        environment=environment,
+        discount_factor=environment.discount_factor,
+        depth=3,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        action_sampler=action_sampler,
+        n_simulations=10,
+        name="POMCPOW_CartPole_Test",
+    )
+
+    # Create and run task
+    task = EpisodeSimulationTask(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=5,
+        episode_id=1,
+        seed=42,
+        discount_factor=environment.discount_factor,
+        episode_number=1,
+        console_output=False,
+    )
+
+    result = task.run()
+
+    # Verify task succeeded (this will fail due to the known bug)
+    assert result is not None, "POMCPOW on CartPole POMDP returned None"
+    assert hasattr(result, "history")
+    assert hasattr(result, "reach_terminal_state")
+    assert hasattr(result, "actual_num_steps")
+
+
+def test_episode_simulation_task_pomcpow_mountain_car():
+    """Test EpisodeSimulationTask with POMCPOW planner on MountainCar POMDP.
+
+    Purpose: Validates that POMCPOW can successfully complete episode simulation on MountainCar POMDP without returning None
+
+    Given: POMCPOW planner with MountainCarPOMDP environment, initial belief, and DiscreteActionSampler
+    When: EpisodeSimulationTask executes a 5-step episode with POMCPOW planning
+    Then: Task completes successfully and returns valid History object (not None)
+
+    Test type: integration
+    """
+    from experiments.configs.environments_configs import environment_instances, belief_instances
+    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+
+    # Get environment and belief
+    environment = environment_instances["mountain_car"]
+    initial_belief = belief_instances["mountain_car"]
+
+    # Create action sampler
+    action_sampler = create_pomcpow_action_sampler(environment)
+
+    # Create POMCPOW planner
+    policy = POMCPOW(
+        environment=environment,
+        discount_factor=environment.discount_factor,
+        depth=3,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        action_sampler=action_sampler,
+        n_simulations=10,
+        name="POMCPOW_MountainCar_Test",
+    )
+
+    # Create and run task
+    task = EpisodeSimulationTask(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=5,
+        episode_id=1,
+        seed=42,
+        discount_factor=environment.discount_factor,
+        episode_number=1,
+        console_output=False,
+    )
+
+    result = task.run()
+
+    # Verify task succeeded
+    assert result is not None, "POMCPOW on MountainCar POMDP returned None"
+    assert hasattr(result, "history")
+    assert hasattr(result, "reach_terminal_state")
+    assert hasattr(result, "actual_num_steps")
+
+
+def test_episode_simulation_task_pomcpow_push():
+    """Test EpisodeSimulationTask with POMCPOW planner on Push POMDP.
+
+    Purpose: Validates that POMCPOW can successfully complete episode simulation on Push POMDP without returning None
+
+    Given: POMCPOW planner with PushPOMDP environment, initial belief, and UnitCircleActionSampler
+    When: EpisodeSimulationTask executes a 5-step episode with POMCPOW planning
+    Then: Task completes successfully and returns valid History object (not None)
+
+    Test type: integration
+    """
+    from experiments.configs.environments_configs import environment_instances, belief_instances
+    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+
+    # Get environment and belief
+    environment = environment_instances["push"]
+    initial_belief = belief_instances["push"]
+
+    # Create action sampler
+    action_sampler = create_pomcpow_action_sampler(environment)
+
+    # Create POMCPOW planner
+    policy = POMCPOW(
+        environment=environment,
+        discount_factor=environment.discount_factor,
+        depth=3,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        action_sampler=action_sampler,
+        n_simulations=10,
+        name="POMCPOW_Push_Test",
+    )
+
+    # Create and run task
+    task = EpisodeSimulationTask(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=5,
+        episode_id=1,
+        seed=42,
+        discount_factor=environment.discount_factor,
+        episode_number=1,
+        console_output=False,
+    )
+
+    result = task.run()
+
+    # Verify task succeeded
+    assert result is not None, "POMCPOW on Push POMDP returned None"
+    assert hasattr(result, "history")
+    assert hasattr(result, "reach_terminal_state")
+    assert hasattr(result, "actual_num_steps")
+
+
+def test_episode_simulation_task_pomcpow_safety_ant_velocity():
+    """Test EpisodeSimulationTask with POMCPOW planner on SafetyAntVelocity POMDP.
+
+    Purpose: Validates that POMCPOW can successfully complete episode simulation on SafetyAntVelocity POMDP without returning None
+
+    Given: POMCPOW planner with SafetyAntVelocityPOMDP environment, initial belief, and UnitCircleActionSampler
+    When: EpisodeSimulationTask executes a 5-step episode with POMCPOW planning
+    Then: Task completes successfully and returns valid History object (not None)
+
+    Test type: integration
+    """
+    from experiments.configs.environments_configs import environment_instances, belief_instances
+    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+
+    # Get environment and belief
+    environment = environment_instances["safety_ant_velocity"]
+    initial_belief = belief_instances["safety_ant_velocity"]
+
+    # Create action sampler
+    action_sampler = create_pomcpow_action_sampler(environment)
+
+    # Create POMCPOW planner
+    policy = POMCPOW(
+        environment=environment,
+        discount_factor=environment.discount_factor,
+        depth=3,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        action_sampler=action_sampler,
+        n_simulations=10,
+        name="POMCPOW_SafetyAntVelocity_Test",
+    )
+
+    # Create and run task
+    task = EpisodeSimulationTask(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=5,
+        episode_id=1,
+        seed=42,
+        discount_factor=environment.discount_factor,
+        episode_number=1,
+        console_output=False,
+    )
+
+    result = task.run()
+
+    # Verify task succeeded
+    assert result is not None, "POMCPOW on SafetyAntVelocity POMDP returned None"
+    assert hasattr(result, "history")
+    assert hasattr(result, "reach_terminal_state")
+    assert hasattr(result, "actual_num_steps")
+
+
+def test_episode_simulation_task_pomcpow_discrete_light_dark():
+    """Test EpisodeSimulationTask with POMCPOW planner on DiscreteLightDark POMDP.
+
+    Purpose: Validates that POMCPOW can successfully complete episode simulation on DiscreteLightDark POMDP without returning None
+
+    Given: POMCPOW planner with DiscreteLightDarkPOMDP environment, initial belief, and DiscreteActionSampler
+    When: EpisodeSimulationTask executes a 5-step episode with POMCPOW planning
+    Then: Task completes successfully and returns valid History object (not None)
+
+    Test type: integration
+    """
+    from experiments.configs.environments_configs import environment_instances, belief_instances
+    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+
+    # Get environment and belief
+    environment = environment_instances["discrete_light_dark"]
+    initial_belief = belief_instances["discrete_light_dark"]
+
+    # Create action sampler
+    action_sampler = create_pomcpow_action_sampler(environment)
+
+    # Create POMCPOW planner
+    policy = POMCPOW(
+        environment=environment,
+        discount_factor=environment.discount_factor,
+        depth=3,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        action_sampler=action_sampler,
+        n_simulations=10,
+        name="POMCPOW_DiscreteLightDark_Test",
+    )
+
+    # Create and run task
+    task = EpisodeSimulationTask(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=5,
+        episode_id=1,
+        seed=42,
+        discount_factor=environment.discount_factor,
+        episode_number=1,
+        console_output=False,
+    )
+
+    result = task.run()
+
+    # Verify task succeeded
+    assert result is not None, "POMCPOW on DiscreteLightDark POMDP returned None"
+    assert hasattr(result, "history")
+    assert hasattr(result, "reach_terminal_state")
+    assert hasattr(result, "actual_num_steps")
+
+
+def test_episode_simulation_task_pomcpow_continuous_light_dark():
+    """Test EpisodeSimulationTask with POMCPOW planner on ContinuousLightDark POMDP.
+
+    Purpose: Validates that POMCPOW can successfully complete episode simulation on ContinuousLightDark POMDP without returning None
+
+    Given: POMCPOW planner with ContinuousLightDarkPOMDP environment, initial belief, and UnitCircleActionSampler
+    When: EpisodeSimulationTask executes a 5-step episode with POMCPOW planning
+    Then: Task completes successfully and returns valid History object (not None)
+
+    Test type: integration
+    """
+    from experiments.configs.environments_configs import environment_instances, belief_instances
+    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+
+    # Get environment and belief
+    environment = environment_instances["continuous_light_dark"]
+    initial_belief = belief_instances["continuous_light_dark"]
+
+    # Create action sampler
+    action_sampler = create_pomcpow_action_sampler(environment)
+
+    # Create POMCPOW planner
+    policy = POMCPOW(
+        environment=environment,
+        discount_factor=environment.discount_factor,
+        depth=3,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        action_sampler=action_sampler,
+        n_simulations=10,
+        name="POMCPOW_ContinuousLightDark_Test",
+    )
+
+    # Create and run task
+    task = EpisodeSimulationTask(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=5,
+        episode_id=1,
+        seed=42,
+        discount_factor=environment.discount_factor,
+        episode_number=1,
+        console_output=False,
+    )
+
+    result = task.run()
+
+    # Verify task succeeded
+    assert result is not None, "POMCPOW on ContinuousLightDark POMDP returned None"
+    assert hasattr(result, "history")
+    assert hasattr(result, "reach_terminal_state")
+    assert hasattr(result, "actual_num_steps")
+
+
+def test_episode_simulation_task_pomcpow_all_compatible_environments():
+    """Test EpisodeSimulationTask with POMCPOW on all compatible environments systematically.
+
+    Purpose: Validates that POMCPOW successfully completes episode simulation on ALL compatible environments without returning None
+
+    Given: POMCPOW planner configured for each compatible environment from EnvironmentConfigsAPI
+    When: EpisodeSimulationTask executes for each environment with appropriate action sampler
+    Then: All tasks complete successfully and return valid History objects (no None results)
+
+    Test type: integration
+    """
+    from experiments.configs.environments_configs import (
+        environment_instances,
+        belief_instances,
+        EnvironmentConfigsAPI,
+    )
+    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
+    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+
+    # Get all compatible environments
+    policy_space_info = POMCPOW.get_space_info()
+    compatible_envs = EnvironmentConfigsAPI.get_compatible_environments(policy_space_info)
+
+    # Track results
+    results = {}
+
+    for env_name in compatible_envs:
+        # Get environment and belief
+        environment = environment_instances[env_name]
+        initial_belief = belief_instances[env_name]
+
+        # Create action sampler
+        action_sampler = create_pomcpow_action_sampler(environment)
+
+        # Create POMCPOW planner
+        policy = POMCPOW(
+            environment=environment,
+            discount_factor=environment.discount_factor,
+            depth=3,
+            exploration_constant=1.0,
+            k_o=3.0,
+            k_a=3.0,
+            alpha_o=0.5,
+            alpha_a=0.5,
+            action_sampler=action_sampler,
+            n_simulations=10,
+            name=f"POMCPOW_{env_name}_Test",
+        )
+
+        # Create and run task
+        task = EpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=initial_belief,
+            num_steps=5,
+            episode_id=1,
+            seed=42,
+            discount_factor=environment.discount_factor,
+            episode_number=1,
+            console_output=False,
+        )
+
+        result = task.run()
+        results[env_name] = result
+
+        # Verify task succeeded
+        assert result is not None, f"POMCPOW on {env_name} POMDP returned None"
+        assert hasattr(result, "history"), f"Result for {env_name} missing 'history' attribute"
+        assert hasattr(
+            result, "reach_terminal_state"
+        ), f"Result for {env_name} missing 'reach_terminal_state' attribute"
+        assert hasattr(
+            result, "actual_num_steps"
+        ), f"Result for {env_name} missing 'actual_num_steps' attribute"
+
+    # Final verification: all environments returned non-None results
+    none_results = [env for env, res in results.items() if res is None]
+    assert len(none_results) == 0, f"The following environments returned None: {none_results}"
+
+    # Report success
+    print(f"\nSuccessfully tested POMCPOW on {len(compatible_envs)} compatible environments:")
+    for env_name in compatible_envs:
+        print(f"  ✓ {env_name}")
