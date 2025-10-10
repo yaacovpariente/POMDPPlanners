@@ -4,15 +4,23 @@ This package provides high-level workflow classes for hyperparameter optimizatio
 policy evaluation, and integrated experiment pipelines.
 """
 
-from POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows import (
-    OptimizationEvaluationWorkflow,
-    OptimizationEvaluationLocalWorkflow as LocalWorkflow,
-    OptimizationEvaluationPBSWorkflow as PBSWorkflow,
+from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows import (
+    OptimizationEvaluationLocalWorkflow,
+    OptimizationEvaluationDaskWorkflow,
+    OptimizationEvaluationPBSWorkflow,
+)
+from POMDPPlanners.simulations.workflows.planner_evaluation_workflow import (
+    PlannerEvaluationLocalWorkflow,
+    PlannerEvaluationDaskWorkflow,
+    PlannerEvaluationPBSWorkflow,
 )
 
 __all__ = [
     # Workflow classes (recommended for new code)
-    "LocalWorkflow",
-    "PBSWorkflow",
-    "OptimizationEvaluationWorkflow",
+    "OptimizationEvaluationLocalWorkflow",
+    "OptimizationEvaluationDaskWorkflow",
+    "OptimizationEvaluationPBSWorkflow",
+    "PlannerEvaluationLocalWorkflow",
+    "PlannerEvaluationDaskWorkflow",
+    "PlannerEvaluationPBSWorkflow",
 ]
