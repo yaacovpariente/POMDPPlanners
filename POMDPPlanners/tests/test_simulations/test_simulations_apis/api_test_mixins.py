@@ -88,7 +88,7 @@ class RunMultipleEnvironmentsTestsMixin:
     """Mixin with tests for run_multiple_environments_and_policies method."""
 
     def test_run_multiple_environments_returns_correct_types(
-        self: "APITestProtocol", sample_environment_params
+        self: "APITestProtocol", sample_environment_params, tmp_path
     ) -> None:
         """Test return types from run_multiple_environments_and_policies.
 
@@ -106,13 +106,14 @@ class RunMultipleEnvironmentsTestsMixin:
             alpha=0.05,
             confidence_interval_level=0.95,
             n_jobs=1,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         assert isinstance(results, dict)
         assert isinstance(stats_df, pd.DataFrame)
 
     def test_run_multiple_environments_result_structure(
-        self: "APITestProtocol", sample_environment_params
+        self: "APITestProtocol", sample_environment_params, tmp_path
     ):
         """Test result dictionary has expected nested structure.
 
@@ -130,6 +131,7 @@ class RunMultipleEnvironmentsTestsMixin:
             alpha=0.05,
             confidence_interval_level=0.95,
             n_jobs=1,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         # Verify nested structure
@@ -141,7 +143,7 @@ class RunMultipleEnvironmentsTestsMixin:
                 assert isinstance(history_list, list)
 
     def test_run_multiple_environments_dataframe_columns(
-        self: "APITestProtocol", sample_environment_params
+        self: "APITestProtocol", sample_environment_params, tmp_path
     ):
         """Test DataFrame contains expected columns.
 
@@ -159,6 +161,7 @@ class RunMultipleEnvironmentsTestsMixin:
             alpha=0.05,
             confidence_interval_level=0.95,
             n_jobs=1,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         # Verify DataFrame is not empty
@@ -167,7 +170,7 @@ class RunMultipleEnvironmentsTestsMixin:
         assert len(stats_df.columns) > 0
 
     def test_run_multiple_environments_with_profiling_enabled(
-        self: "APITestProtocol", sample_environment_params
+        self: "APITestProtocol", sample_environment_params, tmp_path
     ):
         """Test execution with profiling enabled.
 
@@ -187,6 +190,7 @@ class RunMultipleEnvironmentsTestsMixin:
             n_jobs=1,
             enable_profiling=True,
             profiling_output_limit=10,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         assert isinstance(results, dict)
@@ -224,7 +228,7 @@ class HyperparameterOptimizationTestsMixin:
     """Mixin with hyperparameter optimization tests."""
 
     def test_hyperparameter_optimization_returns_correct_type(
-        self: "APITestProtocol", sample_hyperparameter_configs
+        self: "APITestProtocol", sample_hyperparameter_configs, tmp_path
     ):
         """Test hyperparameter optimization return type.
 
@@ -241,13 +245,14 @@ class HyperparameterOptimizationTestsMixin:
             environment_run_params=sample_hyperparameter_configs,
             n_jobs=1,
             debug=True,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         assert isinstance(results, list)
         assert all(isinstance(r, OptimizedPolicyResult) for r in results)
 
     def test_hyperparameter_optimization_result_structure(
-        self: "APITestProtocol", sample_hyperparameter_configs
+        self: "APITestProtocol", sample_hyperparameter_configs, tmp_path
     ):
         """Test optimization results have expected attributes.
 
@@ -264,6 +269,7 @@ class HyperparameterOptimizationTestsMixin:
             environment_run_params=sample_hyperparameter_configs,
             n_jobs=1,
             debug=True,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         for result in results:
@@ -272,7 +278,7 @@ class HyperparameterOptimizationTestsMixin:
             assert hasattr(result, "chosen_hyper_parameters")
 
     def test_hyperparameter_optimization_with_custom_experiment_name(
-        self: "APITestProtocol", sample_hyperparameter_configs
+        self: "APITestProtocol", sample_hyperparameter_configs, tmp_path
     ):
         """Test optimization with custom experiment name.
 
@@ -290,6 +296,7 @@ class HyperparameterOptimizationTestsMixin:
             experiment_name="CustomOptimizationTest",
             n_jobs=1,
             debug=True,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         assert isinstance(results, list)
@@ -320,7 +327,7 @@ class HyperparameterOptimizationTestsMixin:
         assert isinstance(results, list)
 
     def test_hyperparameter_optimization_with_statistical_params(
-        self: "APITestProtocol", sample_hyperparameter_configs
+        self: "APITestProtocol", sample_hyperparameter_configs, tmp_path
     ):
         """Test optimization with custom statistical parameters.
 
@@ -339,6 +346,7 @@ class HyperparameterOptimizationTestsMixin:
             confidence_interval_level=0.99,
             alpha=0.01,
             debug=True,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         assert isinstance(results, list)
@@ -348,7 +356,7 @@ class OptimizeAndEvaluateTestsMixin:
     """Mixin with optimize-and-evaluate workflow tests."""
 
     def test_optimize_and_evaluate_basic_execution(
-        self: "APITestProtocol", sample_hyperparameter_configs
+        self: "APITestProtocol", sample_hyperparameter_configs, tmp_path
     ):
         """Test basic optimize and evaluate workflow.
 
@@ -368,13 +376,14 @@ class OptimizeAndEvaluateTestsMixin:
             evaluation_n_jobs=1,
             optimization_n_jobs=1,
             debug=True,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         assert isinstance(results, dict)
         assert isinstance(stats_df, pd.DataFrame)
 
     def test_optimize_and_evaluate_returns_correct_types(
-        self: "APITestProtocol", sample_hyperparameter_configs
+        self: "APITestProtocol", sample_hyperparameter_configs, tmp_path
     ):
         """Test return types from optimize and evaluate.
 
@@ -394,6 +403,7 @@ class OptimizeAndEvaluateTestsMixin:
             evaluation_n_jobs=1,
             optimization_n_jobs=1,
             debug=True,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         assert isinstance(results, dict)
@@ -644,7 +654,7 @@ class BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin:
         assert isinstance(stats_df, pd.DataFrame)
 
     def test_benchmark_environments_with_custom_statistical_params(
-        self: "APITestProtocol", sample_planner_generators
+        self: "APITestProtocol", sample_planner_generators, tmp_path
     ):
         """Test benchmark execution with custom statistical parameters.
 
@@ -665,6 +675,7 @@ class BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin:
             alpha=0.05,
             confidence_interval_level=0.99,
             n_jobs=1,
+            cache_dir_path=tmp_path / "test_cache",
         )
 
         assert isinstance(results, dict)
