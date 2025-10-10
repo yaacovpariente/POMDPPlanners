@@ -25,6 +25,7 @@ from POMDPPlanners.core.belief import (
     is_terminal_belief,
 )
 from POMDPPlanners.core.config_types import BeliefConfig
+from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP, LaserTagState
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
@@ -3259,3 +3260,58 @@ def test_is_terminal_belief_comprehensive_scenarios():
     assert is_terminal_belief(belief_all_non_terminal, env) is False
     assert is_terminal_belief(belief_mixed_majority_terminal, env) is False
     assert is_terminal_belief(belief_mixed_majority_non_terminal, env) is False
+
+
+def test_weighted_particle_belief_update_normalized_weights_sum_to_one_cartpole():
+    """Test that normalized weights sum to 1 after belief update using CartPole POMDP environment.
+
+    Purpose: Validates that WeightedParticleBelief properly normalizes weights after belief updates
+    when using continuous state space environments like CartPole POMDP.
+
+    Given: A WeightedParticleBelief initialized with CartPole states and unequal log weights
+    When: A belief update is performed with resampling enabled
+    Then: The normalized weights should sum to 1 (or number of particles for proper normalization)
+
+    Test type: unit
+    """
+    # ARRANGE: Create CartPole POMDP environment
+    noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
+    env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
+
+    # Create initial states for CartPole (4D continuous states)
+    particles = [
+        np.array([0.0, 0.0, 0.1, 0.0]),  # [cart_pos, cart_vel, pole_angle, pole_ang_vel]
+        np.array([0.1, 0.0, 0.08, 0.0]),
+        np.array([-0.1, 0.0, 0.12, 0.0]),
+        np.array([0.05, 0.0, 0.09, 0.0]),
+    ]
+
+    # Create unequal log weights to test normalization
+    log_weights = np.array([1.0, 2.0, 3.0, 4.0])
+    belief = WeightedParticleBelief(
+        particles=particles, log_weights=log_weights, resampling=True, ess_factor=0.5
+    )
+
+    # ACT: Perform belief update
+    action = 1  # Apply right force
+    observation = np.array([0.06, 0.0, 0.09, 0.0])  # Noisy observation
+    updated_belief = belief.update(action=action, observation=observation, pomdp=env)
+
+    # ASSERT: Verify normalized weights sum to 1.0 (proper probability distribution)
+    assert np.isclose(
+        np.sum(updated_belief.normalized_weights), 1.0
+    ), f"Normalized weights should sum to 1.0, got {np.sum(updated_belief.normalized_weights)}"
+
+    # Additional assertions to ensure proper belief update
+    assert isinstance(updated_belief, WeightedParticleBelief)
+    assert len(updated_belief.particles) == len(belief.particles)
+    assert np.all(np.isfinite(updated_belief.log_weights))
+    assert not np.array_equal(updated_belief.log_weights, belief.log_weights)
+
+    # Verify normalized_weights is a 1D array with correct shape
+    assert (
+        updated_belief.normalized_weights.ndim == 1
+    ), f"normalized_weights should be 1D, got {updated_belief.normalized_weights.ndim}D"
+    assert updated_belief.normalized_weights.shape == (
+        len(updated_belief.particles),
+    ), f"normalized_weights shape should be ({len(updated_belief.particles)},), got {updated_belief.normalized_weights.shape}"
