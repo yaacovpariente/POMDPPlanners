@@ -1,6 +1,5 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from ossaudiodev import SNDCTL_SEQ_SYNC
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Sequence, List
 
@@ -32,5 +31,14 @@ class EvaluationExperimentConfigCreator(ABC):
 
 class HyperparameterOptimizationExperimentConfigCreator(ABC):
     @abstractmethod
-    def get_experiment_configs(self) -> Sequence[HyperParameterRunParams]:
+    def _get_experiment_configs(self) -> Sequence[HyperParameterRunParams]:
         pass
+
+    def get_experiment_configs(self) -> List[HyperParameterRunParams]:
+        configs = self._get_experiment_configs()
+        config_ids = set([config.config_id for config in configs])
+
+        if len(config_ids) != len(configs):
+            raise ValueError("Duplicate configs found")
+
+        return list(configs)
