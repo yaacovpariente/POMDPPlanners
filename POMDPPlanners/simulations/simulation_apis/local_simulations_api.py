@@ -416,6 +416,7 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
         cache_visualizations: bool = True,
+        is_risk_averse: bool = False,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         if len(generators) == 0:
             raise ValueError("generators list cannot be empty")
@@ -428,6 +429,7 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             n_particles=n_particles,
             num_episodes=num_episodes,
             num_steps=num_steps,
+            is_risk_averse=is_risk_averse,
         )
 
         configs = creator.get_experiment_configs()

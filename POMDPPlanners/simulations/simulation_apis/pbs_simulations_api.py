@@ -285,6 +285,7 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
         cache_visualizations: bool = True,
+        is_risk_averse: bool = False,
     ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
         """Run all benchmark environments on planner generators using PBS cluster.
 
@@ -305,7 +306,7 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
             enable_profiling: Whether to enable performance profiling.
             profiling_output_limit: Maximum number of profiling entries to display.
             cache_visualizations: Whether to cache visualizations.
-
+            is_risk_averse: Whether to run risk-averse benchmark.
         Returns:
             Tuple of results dictionary and DataFrame.
 
@@ -326,6 +327,7 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
             n_particles=n_particles,
             num_episodes=num_episodes,
             num_steps=num_steps,
+            is_risk_averse=is_risk_averse,
         )
 
         workflow = PlannerEvaluationPBSWorkflow(
