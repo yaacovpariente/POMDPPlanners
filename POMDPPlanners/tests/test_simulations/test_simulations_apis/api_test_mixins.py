@@ -454,7 +454,7 @@ class BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin:
     """Mixin with tests for run_all_benchmark_environments_on_planner_generators method."""
 
     def test_benchmark_environments_basic_execution(
-        self: "APITestProtocol", sample_planner_generators
+        self: "APITestProtocol", sample_planner_generators, temp_cache_dir
     ):
         """Test basic execution of benchmark environments on planner generators.
 
@@ -475,13 +475,14 @@ class BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin:
             alpha=0.1,
             confidence_interval_level=0.95,
             n_jobs=1,
+            cache_dir_path=temp_cache_dir,
         )
 
         assert isinstance(results, dict)
         assert isinstance(stats_df, pd.DataFrame)
 
     def test_benchmark_environments_returns_correct_types(
-        self: "APITestProtocol", sample_planner_generators
+        self: "APITestProtocol", sample_planner_generators, temp_cache_dir
     ):
         """Test return types from benchmark environments method.
 
@@ -500,6 +501,7 @@ class BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin:
             num_episodes=2,
             num_steps=3,
             n_jobs=1,
+            cache_dir_path=temp_cache_dir,
         )
 
         assert isinstance(results, dict)
@@ -507,7 +509,7 @@ class BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin:
         assert len(stats_df) > 0
 
     def test_benchmark_environments_result_structure(
-        self: "APITestProtocol", sample_planner_generators
+        self: "APITestProtocol", sample_planner_generators, temp_cache_dir
     ):
         """Test result dictionary has expected nested structure.
 
@@ -526,6 +528,7 @@ class BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin:
             num_episodes=2,
             num_steps=3,
             n_jobs=1,
+            cache_dir_path=temp_cache_dir,
         )
 
         # Verify nested structure
@@ -558,7 +561,7 @@ class BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin:
             )
 
     def test_benchmark_environments_with_custom_experiment_name(
-        self: "APITestProtocol", sample_planner_generators
+        self: "APITestProtocol", sample_planner_generators, temp_cache_dir
     ):
         """Test benchmark execution with custom experiment name.
 
@@ -578,13 +581,14 @@ class BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin:
             num_steps=3,
             experiment_name="CustomBenchmarkTest",
             n_jobs=1,
+            cache_dir_path=temp_cache_dir,
         )
 
         assert isinstance(results, dict)
         assert isinstance(stats_df, pd.DataFrame)
 
     def test_benchmark_environments_with_profiling_enabled(
-        self: "APITestProtocol", sample_planner_generators
+        self: "APITestProtocol", sample_planner_generators, temp_cache_dir
     ):
         """Test benchmark execution with profiling enabled.
 
@@ -605,6 +609,7 @@ class BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin:
             n_jobs=1,
             enable_profiling=True,
             profiling_output_limit=10,
+            cache_dir_path=temp_cache_dir,
         )
 
         assert isinstance(results, dict)
