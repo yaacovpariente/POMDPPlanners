@@ -1,4 +1,5 @@
 from typing import List, Tuple, Optional, Sequence, Type
+from POMDPPlanners.core.simulation.simulation_configs import PlannerGenerator, EnvironmentRunParams
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
@@ -16,8 +17,8 @@ from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.simulation.hyperparameter_tuning import HyperParamPlannerConfigGenerator
 from POMDPPlanners.core.simulation.simulation_configs import (
-    EvaluationExperimentConfigCreator,
     HyperparameterOptimizationExperimentConfigCreator,
+    EvaluationExperimentConfigCreator,
 )
 
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
@@ -119,6 +120,49 @@ def get_hyperparameter_benchmarks(
         benchmarks.append((env, belief, planner_configs))
 
     return benchmarks
+
+
+class AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+    EvaluationExperimentConfigCreator
+):
+    def __init__(
+        self,
+        generators: Sequence[PlannerGenerator],
+        n_particles: int,
+        num_episodes: int,
+        num_steps: int,
+    ):
+        self.generators = generators
+        self.n_particles = n_particles
+        self.num_episodes = num_episodes
+        self.num_steps = num_steps
+
+    def _get_experiment_configs(self) -> List[EnvironmentRunParams]:
+        environment_configs = EnvironmentConfigsAPI(discount_factor=0.95)
+        configs_dict = {}
+
+        for generator in self.generators:
+            envs = environment_configs.get_compatible_environments(
+                policy_space_info=generator.get_planner_space_info(),
+                n_particles=self.n_particles,
+            )
+
+            for env, belief in envs:
+                env_id = env.config_id
+                policy = generator.generate(env)
+
+                if env_id in configs_dict:
+                    configs_dict[env_id].policies.append(policy)
+                else:
+                    configs_dict[env_id] = EnvironmentRunParams(
+                        environment=env,
+                        belief=belief,
+                        policies=[policy],
+                        num_episodes=self.num_episodes,
+                        num_steps=self.num_steps,
+                    )
+
+        return list(configs_dict.values())
 
 
 class AllHyperparameterBenchmarksExperimentConfigCreator(
