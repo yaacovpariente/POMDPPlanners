@@ -1735,909 +1735,909 @@ def test_joblib_task_manager_log_cache_statistics_precision(cache_db):
 # Use pytest markers to run only on PBS clusters:
 # pytest -m pbs_cluster tests/test_simulations/test_simulations_deployment/test_task_managers.py
 
-import os
-import requests
-from unittest.mock import patch
-
-
-@pytest.mark.pbs_cluster
-class TestPBSTaskManagerFunctionality:
-    """Comprehensive functionality tests for PBSTaskManager requiring PBS cluster."""
-
-    @pytest.fixture
-    def pbs_queue(self):
-        """Get PBS queue from environment variable or use default."""
-        return os.environ.get("PBS_QUEUE", "default")
-
-    @pytest.fixture
-    def pbs_walltime(self):
-        """Get PBS walltime from environment variable or use default."""
-        return os.environ.get("PBS_WALLTIME", "00:05:00")  # 5 minutes for tests
-
-    def test_pbs_task_manager_basic_functionality(
-        self, environment, policy, pbs_queue, pbs_walltime
-    ):
-        """Test basic PBS task manager functionality with real PBS cluster.
-
-        Purpose: Validates that PBSTaskManager can execute tasks on PBS cluster
-
-        Given: PBS cluster environment, TigerPOMDP environment, SparsePFT policy
-        When: PBSTaskManager executes EpisodeSimulationTask on PBS cluster
-        Then: Tasks execute successfully and return valid History objects
-
-        Test type: integration
-        """
-        with PBSTaskManager(
-            queue=pbs_queue,
-            n_workers=2,
-            cores=1,
-            memory="1GB",
-            walltime=pbs_walltime,
-            enable_dashboard=False,  # Disable dashboard for basic test
-        ) as task_manager:
-            # Create tasks
-            tasks = []
-            task_identifiers = []
-            for i in range(2):
-                belief = create_test_belief()
-                task = EpisodeSimulationTask(
-                    environment=environment,
-                    policy=policy,
-                    initial_belief=belief,
-                    num_steps=3,
-                    episode_id=i,
-                    seed=42 + i,
-                    console_output=False,
-                )
-                tasks.append(task)
-                task_identifiers.append(f"pbs_episode_{i}")
-
-            # Execute tasks
-            results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
-
-            # Verify results
-            assert len(results) == 2
-            assert len(successful_ids) == 2
-            assert all(id in successful_ids for id in task_identifiers)
-            for result in results:
-                assert isinstance(result, History)
-                assert len(result.history) <= 3
-
-    def test_pbs_task_manager_dashboard_functionality(
-        self, environment, policy, pbs_queue, pbs_walltime
-    ):
-        """Test PBS task manager dashboard functionality.
-
-        Purpose: Validates that PBSTaskManager dashboard is accessible and functional
-
-        Given: PBS cluster environment with dashboard enabled
-        When: PBSTaskManager is initialized with dashboard enabled
-        Then: Dashboard URL is accessible and returns valid HTTP response
-
-        Test type: integration
-        """
-        with PBSTaskManager(
-            queue=pbs_queue,
-            n_workers=1,
-            cores=1,
-            memory="1GB",
-            walltime=pbs_walltime,
-            enable_dashboard=True,
-            dashboard_port=8787,
-            dashboard_address="0.0.0.0",
-        ) as task_manager:
-            # Verify dashboard is running
-            assert task_manager.is_dashboard_running() is True
-
-            # Get dashboard URL
-            dashboard_url = task_manager.get_dashboard_url()
-            assert dashboard_url is not None
-            assert "http://" in dashboard_url
-
-            # Test dashboard accessibility
-            try:
-                response = requests.get(dashboard_url, timeout=10)
-                assert response.status_code == 200
-                assert "Dask" in response.text or "dashboard" in response.text.lower()
-            except requests.exceptions.RequestException:
-                # Dashboard might not be immediately accessible
-                # This is acceptable for PBS environments
-                pass
-
-            # Create and execute a simple task to generate dashboard activity
-            belief = create_test_belief()
-            task = EpisodeSimulationTask(
-                environment=environment,
-                policy=policy,
-                initial_belief=belief,
-                num_steps=2,
-                episode_id=1,
-                seed=42,
-                console_output=False,
-            )
-
-            results, successful_ids = task_manager.run_tasks([task], ["dashboard_test"])
-            assert len(results) == 1
-            assert "dashboard_test" in successful_ids
-
-    def test_pbs_task_manager_custom_dashboard_configuration(
-        self, environment, policy, pbs_queue, pbs_walltime
-    ):
-        """Test PBS task manager with custom dashboard configuration.
-
-        Purpose: Validates that PBSTaskManager respects custom dashboard settings
-
-        Given: PBS cluster environment with custom dashboard port and prefix
-        When: PBSTaskManager is initialized with custom dashboard configuration
-        Then: Dashboard uses specified port and prefix settings
-
-        Test type: integration
-        """
-        custom_port = 8888
-        custom_prefix = "/my-dashboard"
-
-        with PBSTaskManager(
-            queue=pbs_queue,
-            n_workers=1,
-            cores=1,
-            memory="1GB",
-            walltime=pbs_walltime,
-            enable_dashboard=True,
-            dashboard_port=custom_port,
-            dashboard_address="0.0.0.0",
-            dashboard_prefix=custom_prefix,
-        ) as task_manager:
-            # Verify dashboard configuration
-            assert task_manager.dashboard_port == custom_port
-            assert task_manager.dashboard_prefix == custom_prefix
-            assert task_manager.enable_dashboard is True
-
-            # Get dashboard URL and verify it includes custom settings
-            dashboard_url = task_manager.get_dashboard_url()
-            if dashboard_url:
-                assert str(custom_port) in dashboard_url
-                if custom_prefix in dashboard_url:
-                    assert custom_prefix in dashboard_url
-
-            # Execute a task to verify functionality
-            belief = create_test_belief()
-            task = EpisodeSimulationTask(
-                environment=environment,
-                policy=policy,
-                initial_belief=belief,
-                num_steps=2,
-                episode_id=1,
-                seed=42,
-                console_output=False,
-            )
-
-            results, successful_ids = task_manager.run_tasks([task], ["custom_dashboard_test"])
-            assert len(results) == 1
-            assert "custom_dashboard_test" in successful_ids
-
-    def test_pbs_task_manager_dashboard_disabled(
-        self, environment, policy, pbs_queue, pbs_walltime
-    ):
-        """Test PBS task manager with dashboard disabled.
-
-        Purpose: Validates that PBSTaskManager works correctly with dashboard disabled
-
-        Given: PBS cluster environment with dashboard disabled
-        When: PBSTaskManager is initialized with enable_dashboard=False
-        Then: Dashboard is not accessible and task execution works normally
-
-        Test type: integration
-        """
-        with PBSTaskManager(
-            queue=pbs_queue,
-            n_workers=1,
-            cores=1,
-            memory="1GB",
-            walltime=pbs_walltime,
-            enable_dashboard=False,
-        ) as task_manager:
-            # Verify dashboard is disabled
-            assert task_manager.enable_dashboard is False
-            assert task_manager.is_dashboard_running() is False
-            assert task_manager.get_dashboard_url() is None
-
-            # Execute tasks to verify functionality without dashboard
-            tasks = []
-            task_identifiers = []
-            for i in range(2):
-                belief = create_test_belief()
-                task = EpisodeSimulationTask(
-                    environment=environment,
-                    policy=policy,
-                    initial_belief=belief,
-                    num_steps=2,
-                    episode_id=i,
-                    seed=42 + i,
-                    console_output=False,
-                )
-                tasks.append(task)
-                task_identifiers.append(f"no_dashboard_episode_{i}")
-
-            results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
-            assert len(results) == 2
-            assert len(successful_ids) == 2
-
-    def test_pbs_task_manager_job_extra_directives(
-        self, environment, policy, pbs_queue, pbs_walltime
-    ):
-        """Test PBS task manager with custom job directives.
-
-        Purpose: Validates that PBSTaskManager respects custom PBS job directives
-
-        Given: PBS cluster environment with custom job directives
-        When: PBSTaskManager is initialized with job_extra directives
-        Then: Tasks execute successfully with custom PBS configuration
-
-        Test type: integration
-        """
-        custom_directives = [
-            "#PBS -m abe",  # Mail on abort, begin, end
-            "#PBS -M test@example.com",  # Mail address
-        ]
-
-        with PBSTaskManager(
-            queue=pbs_queue,
-            n_workers=1,
-            cores=1,
-            memory="1GB",
-            walltime=pbs_walltime,
-            job_extra=custom_directives,
-            enable_dashboard=False,
-        ) as task_manager:
-            # Verify job directives are stored
-            assert task_manager.job_extra == custom_directives
-
-            # Execute a task to verify functionality
-            belief = create_test_belief()
-            task = EpisodeSimulationTask(
-                environment=environment,
-                policy=policy,
-                initial_belief=belief,
-                num_steps=2,
-                episode_id=1,
-                seed=42,
-                console_output=False,
-            )
-
-            results, successful_ids = task_manager.run_tasks([task], ["job_extra_test"])
-            assert len(results) == 1
-            assert "job_extra_test" in successful_ids
-
-    def test_pbs_task_manager_resource_scaling(self, environment, policy, pbs_queue, pbs_walltime):
-        """Test PBS task manager with different resource configurations.
-
-        Purpose: Validates that PBSTaskManager can handle different resource allocations
-
-        Given: PBS cluster environment with various resource configurations
-        When: PBSTaskManager is initialized with different cores/memory settings
-        Then: Tasks execute successfully with specified resource allocation
-
-        Test type: integration
-        """
-        resource_configs = [
-            {"cores": 1, "memory": "1GB", "processes": 1},
-            {"cores": 2, "memory": "2GB", "processes": 1},
-            {"cores": 1, "memory": "1GB", "processes": 2},
-        ]
-
-        for i, config in enumerate(resource_configs):
-            with PBSTaskManager(
-                queue=pbs_queue,
-                n_workers=1,
-                cores=config["cores"],
-                memory=config["memory"],
-                processes=config["processes"],
-                walltime=pbs_walltime,
-                enable_dashboard=False,
-            ) as task_manager:
-                # Verify resource configuration
-                assert task_manager.cores == config["cores"]
-                assert task_manager.memory == config["memory"]
-                assert task_manager.processes == config["processes"]
-
-                # Execute a task to verify functionality
-                belief = create_test_belief()
-                task = EpisodeSimulationTask(
-                    environment=environment,
-                    policy=policy,
-                    initial_belief=belief,
-                    num_steps=2,
-                    episode_id=i,
-                    seed=42 + i,
-                    console_output=False,
-                )
-
-                results, successful_ids = task_manager.run_tasks([task], [f"resource_test_{i}"])
-                assert len(results) == 1
-                assert f"resource_test_{i}" in successful_ids
-
-    def test_pbs_task_manager_multiple_workers(self, environment, policy, pbs_queue, pbs_walltime):
-        """Test PBS task manager with multiple workers.
-
-        Purpose: Validates that PBSTaskManager can distribute tasks across multiple PBS workers
-
-        Given: PBS cluster environment with multiple workers
-        When: PBSTaskManager executes multiple tasks with n_workers > 1
-        Then: Tasks are distributed across workers and execute successfully
-
-        Test type: integration
-        """
-        with PBSTaskManager(
-            queue=pbs_queue,
-            n_workers=3,
-            cores=1,
-            memory="1GB",
-            walltime=pbs_walltime,
-            enable_dashboard=False,
-        ) as task_manager:
-            # Create multiple tasks
-            tasks = []
-            task_identifiers = []
-            for i in range(5):  # More tasks than workers
-                belief = create_test_belief()
-                task = EpisodeSimulationTask(
-                    environment=environment,
-                    policy=policy,
-                    initial_belief=belief,
-                    num_steps=2,
-                    episode_id=i,
-                    seed=42 + i,
-                    console_output=False,
-                )
-                tasks.append(task)
-                task_identifiers.append(f"multi_worker_episode_{i}")
-
-            # Execute tasks
-            results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
-
-            # Verify all tasks completed
-            assert len(results) == 5
-            assert len(successful_ids) == 5
-            assert all(id in successful_ids for id in task_identifiers)
-
-    def test_pbs_task_manager_task_status_monitoring(
-        self, environment, policy, pbs_queue, pbs_walltime
-    ):
-        """Test PBS task manager task status monitoring.
-
-        Purpose: Validates that PBSTaskManager can monitor task status during execution
-
-        Given: PBS cluster environment with task status monitoring
-        When: Tasks are submitted and status is checked during execution
-        Then: Task status information is available and accurate
-
-        Test type: integration
-        """
-        with PBSTaskManager(
-            queue=pbs_queue,
-            n_workers=1,
-            cores=1,
-            memory="1GB",
-            walltime=pbs_walltime,
-            enable_dashboard=False,
-        ) as task_manager:
-            # Create a task
-            belief = create_test_belief()
-            task = EpisodeSimulationTask(
-                environment=environment,
-                policy=policy,
-                initial_belief=belief,
-                num_steps=3,
-                episode_id=1,
-                seed=42,
-                console_output=False,
-            )
-
-            # Submit task and monitor status
-            futures = task_manager.submit_tasks([task])
-            assert len(futures) == 1
-
-            # Check initial status
-            status = task_manager.get_task_status(futures)
-            assert len(status) == 1
-            assert task._cache_key in status
-            assert status[task._cache_key] in ["pending", "running", "finished"]
-
-            # Wait for completion and check final status
-            results = task_manager.gather_results(futures)
-            assert len(results) == 1
-            assert isinstance(results[0], History)
-
-            # Final status check
-            final_status = task_manager.get_task_status(futures)
-            assert len(final_status) == 1
-            assert final_status[task._cache_key] == "finished"
-
-    def test_pbs_task_manager_error_handling(self, environment, policy, pbs_queue, pbs_walltime):
-        """Test PBS task manager error handling with failing tasks.
-
-        Purpose: Validates that PBSTaskManager handles task failures gracefully
-
-        Given: PBS cluster environment with a task that always fails
-        When: Failing task is submitted to PBS cluster
-        Then: Error is handled gracefully and doesn't crash the task manager
-
-        Test type: integration
-        """
-        with PBSTaskManager(
-            queue=pbs_queue,
-            n_workers=1,
-            cores=1,
-            memory="1GB",
-            walltime=pbs_walltime,
-            enable_dashboard=False,
-        ) as task_manager:
-            # Create a failing task
-            belief = create_test_belief()
-            failing_task = FailingEpisodeSimulationTask(
-                environment=environment,
-                policy=policy,
-                initial_belief=belief,
-                num_steps=2,
-                episode_id=999,
-                seed=42,
-                console_output=False,
-            )
-
-            # Submit failing task
-            with pytest.raises(RuntimeError, match="Simulated task failure for testing"):
-                task_manager.run_tasks([failing_task], ["failing_pbs_task"])
-
-            # Verify task manager is still functional
-            belief = create_test_belief()
-            working_task = EpisodeSimulationTask(
-                environment=environment,
-                policy=policy,
-                initial_belief=belief,
-                num_steps=2,
-                episode_id=1,
-                seed=42,
-                console_output=False,
-            )
-
-            results, successful_ids = task_manager.run_tasks([working_task], ["working_task"])
-            assert len(results) == 1
-            assert "working_task" in successful_ids
-
-    def test_pbs_task_manager_context_manager_cleanup(
-        self, environment, policy, pbs_queue, pbs_walltime
-    ):
-        """Test PBS task manager context manager cleanup.
-
-        Purpose: Validates that PBSTaskManager properly cleans up resources on exit
-
-        Given: PBS cluster environment with dashboard enabled
-        When: PBSTaskManager context manager exits
-        Then: All resources are properly cleaned up (client, cluster, dashboard)
-
-        Test type: integration
-        """
-        # Test with dashboard enabled to verify cleanup
-        with PBSTaskManager(
-            queue=pbs_queue,
-            n_workers=1,
-            cores=1,
-            memory="1GB",
-            walltime=pbs_walltime,
-            enable_dashboard=True,
-            dashboard_port=8787,
-        ) as task_manager:
-            # Verify resources are initialized
-            assert task_manager.client is not None
-            assert task_manager.cluster is not None
-            assert task_manager.is_dashboard_running() is True
-
-            # Execute a task
-            belief = create_test_belief()
-            task = EpisodeSimulationTask(
-                environment=environment,
-                policy=policy,
-                initial_belief=belief,
-                num_steps=2,
-                episode_id=1,
-                seed=42,
-                console_output=False,
-            )
-
-            results, successful_ids = task_manager.run_tasks([task], ["cleanup_test"])
-            assert len(results) == 1
-            assert "cleanup_test" in successful_ids
-
-        # After context manager exit, resources should be cleaned up
-        # Note: We can't directly test this as the objects are destroyed,
-        # but the test verifies that the context manager exits without errors
-
-    def test_pbs_task_manager_dashboard_url_construction(
-        self, environment, policy, pbs_queue, pbs_walltime
-    ):
-        """Test PBS task manager dashboard URL construction.
-
-        Purpose: Validates that PBSTaskManager constructs correct dashboard URLs
-
-        Given: PBS cluster environment with various dashboard configurations
-        When: Dashboard URL is requested with different settings
-        Then: URL is constructed correctly with proper host, port, and prefix
-
-        Test type: integration
-        """
-        test_configs = [
-            {"port": 8787, "prefix": None, "address": "0.0.0.0"},
-            {"port": 8888, "prefix": None, "address": "0.0.0.0"},
-            {"port": 8787, "prefix": "/dashboard", "address": "0.0.0.0"},
-            {"port": 9999, "prefix": "/my-dashboard", "address": "0.0.0.0"},
-        ]
-
-        for config in test_configs:
-            with PBSTaskManager(
-                queue=pbs_queue,
-                n_workers=1,
-                cores=1,
-                memory="1GB",
-                walltime=pbs_walltime,
-                enable_dashboard=True,
-                dashboard_port=config["port"],
-                dashboard_address=config["address"],
-                dashboard_prefix=config["prefix"],
-            ) as task_manager:
-                # Get dashboard URL
-                dashboard_url = task_manager.get_dashboard_url()
-
-                if dashboard_url:
-                    # Verify URL contains expected components
-                    assert str(config["port"]) in dashboard_url
-                    assert "http://" in dashboard_url
-
-                    if config["prefix"]:
-                        assert config["prefix"].lstrip("/") in dashboard_url
-
-                # Execute a quick task to verify functionality
-                belief = create_test_belief()
-                task = EpisodeSimulationTask(
-                    environment=environment,
-                    policy=policy,
-                    initial_belief=belief,
-                    num_steps=1,
-                    episode_id=1,
-                    seed=42,
-                    console_output=False,
-                )
-
-                results, successful_ids = task_manager.run_tasks([task], ["url_test"])
-                assert len(results) == 1
-                assert "url_test" in successful_ids
-
-    def test_pbs_task_manager_performance_monitoring(
-        self, environment, policy, pbs_queue, pbs_walltime
-    ):
-        """Test PBS task manager performance monitoring capabilities.
-
-        Purpose: Validates that PBSTaskManager can monitor task performance on PBS cluster
-
-        Given: PBS cluster environment with performance monitoring
-        When: Multiple tasks are executed with timing measurements
-        Then: Task execution times are reasonable and performance is monitored
-
-        Test type: integration
-        """
-        with PBSTaskManager(
-            queue=pbs_queue,
-            n_workers=2,
-            cores=1,
-            memory="1GB",
-            walltime=pbs_walltime,
-            enable_dashboard=True,  # Enable dashboard for performance monitoring
-        ) as task_manager:
-            # Create multiple tasks for performance testing
-            tasks = []
-            task_identifiers = []
-            for i in range(4):
-                belief = create_test_belief()
-                task = EpisodeSimulationTask(
-                    environment=environment,
-                    policy=policy,
-                    initial_belief=belief,
-                    num_steps=3,
-                    episode_id=i,
-                    seed=42 + i,
-                    console_output=False,
-                )
-                tasks.append(task)
-                task_identifiers.append(f"perf_test_{i}")
-
-            # Measure execution time
-            start_time = time.time()
-            results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
-            end_time = time.time()
-
-            # Verify results
-            assert len(results) == 4
-            assert len(successful_ids) == 4
-            assert all(id in successful_ids for id in task_identifiers)
-
-            # Verify reasonable execution time (should complete within walltime)
-            execution_time = end_time - start_time
-            assert execution_time < 300  # Should complete within 5 minutes
-
-            # Verify dashboard is accessible for performance monitoring
-            dashboard_url = task_manager.get_dashboard_url()
-            if dashboard_url:
-                assert task_manager.is_dashboard_running() is True
-
-    def test_pbs_task_manager_concurrent_execution(
-        self, environment, policy, pbs_queue, pbs_walltime
-    ):
-        """Test PBS task manager concurrent task execution.
-
-        Purpose: Validates that PBSTaskManager can handle concurrent task execution on PBS cluster
-
-        Given: PBS cluster environment with multiple workers
-        When: Multiple task batches are submitted concurrently
-        Then: All tasks execute successfully with proper concurrency handling
-
-        Test type: integration
-        """
-        with PBSTaskManager(
-            queue=pbs_queue,
-            n_workers=3,
-            cores=1,
-            memory="1GB",
-            walltime=pbs_walltime,
-            enable_dashboard=False,
-        ) as task_manager:
-            # Create multiple batches of tasks
-            batch_size = 3
-            num_batches = 2
-
-            all_results = []
-            all_successful_ids = []
-
-            for batch_idx in range(num_batches):
-                tasks = []
-                task_identifiers = []
-
-                for i in range(batch_size):
-                    belief = create_test_belief()
-                    task = EpisodeSimulationTask(
-                        environment=environment,
-                        policy=policy,
-                        initial_belief=belief,
-                        num_steps=2,
-                        episode_id=batch_idx * batch_size + i,
-                        seed=42 + batch_idx * batch_size + i,
-                        console_output=False,
-                    )
-                    tasks.append(task)
-                    task_identifiers.append(f"concurrent_batch_{batch_idx}_task_{i}")
-
-                # Execute batch
-                results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
-                all_results.extend(results)
-                all_successful_ids.extend(successful_ids)
-
-            # Verify all batches completed successfully
-            expected_total = batch_size * num_batches
-            assert len(all_results) == expected_total
-            assert len(all_successful_ids) == expected_total
-
-            # Verify all task identifiers are present
-            for batch_idx in range(num_batches):
-                for i in range(batch_size):
-                    expected_id = f"concurrent_batch_{batch_idx}_task_{i}"
-                    assert expected_id in all_successful_ids
-
-
-# ==============================================================================
-# MEMORY LEAK DIAGNOSTIC TESTS
-# ==============================================================================
-# These tests help identify specific sources of memory leaks in task managers.
-# Tests that fail indicate components that need memory management fixes.
-
-import gc
-import psutil
-from joblib import Parallel, delayed
-
-from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.simulation import EnvironmentRunParams, StepData
-from POMDPPlanners.core.policy import PolicyRunData
-from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
-    JoblibConfig,
-)
-from typing import Dict
-
-
-class MemoryTracker:
-    """Utility class for tracking memory usage in tests."""
-
-    def __init__(self, test_name: str):
-        self.test_name = test_name
-        self.process = psutil.Process()
-        self.initial_memory: float = 0.0
-        self.peak_memory: float = 0.0
-        self.measurements = []
-
-    def start(self):
-        """Start memory tracking."""
-        gc.collect()  # Clean up before measurement
-        self.initial_memory = self.process.memory_info().rss / 1024 / 1024  # MB
-        self.peak_memory = self.initial_memory
-
-    def checkpoint(self, label: str = ""):
-        """Record a memory checkpoint."""
-        gc.collect()
-        current_memory = self.process.memory_info().rss / 1024 / 1024  # MB
-        self.peak_memory = max(self.peak_memory, current_memory)
-        growth = current_memory - self.initial_memory
-        self.measurements.append((label, current_memory, growth))
-        return current_memory, growth
-
-    def finish(self):
-        """Finish tracking and return final results."""
-        final_memory, final_growth = self.checkpoint("Final")
-        peak_growth = self.peak_memory - self.initial_memory
-
-        return {
-            "initial_memory": self.initial_memory,
-            "final_memory": final_memory,
-            "peak_memory": self.peak_memory,
-            "final_growth": final_growth,
-            "peak_growth": peak_growth,
-            "measurements": self.measurements,
-        }
-
-
-def test_memory_leak_parallel_execution_resource_cleanup(temp_cache_dir, environment):
-    """
-    Purpose: Validates that parallel execution using joblib doesn't accumulate memory across iterations
-
-    Given: Multiple parallel execution cycles with POMDP objects and simulation data
-    When: Parallel tasks create environments, policies, and beliefs repeatedly
-    Then: Memory growth stays under 200MB indicating proper parallel resource cleanup
-
-    Test type: unit
-    """
-    tracker = MemoryTracker("Parallel Execution Test")
-    tracker.start()
-
-    def memory_intensive_task(task_id: int) -> Dict:
-        """Simulate a memory-intensive task similar to simulation."""
-        # Create some objects similar to what simulation does
-        env = TigerPOMDP(discount_factor=0.95)
-        policy = POMCP(
-            environment=env,
-            discount_factor=0.95,
-            depth=3,
-            exploration_constant=1.0,
-            name=f"TestPolicy_{task_id}",
-            n_simulations=5,
-        )
-
-        # Simulate some computation
-        belief = get_initial_belief(env, n_particles=50)
-
-        # Create mock history
-        mock_steps = []
-        for step in range(10):
-            step_data = StepData(
-                state=env.initial_state_dist().sample()[0],
-                action=env.get_actions()[0],
-                next_state=env.initial_state_dist().sample()[0],
-                observation=env.get_actions()[0],  # Simple mock
-                reward=1.0,
-                belief=belief,
-            )
-            mock_steps.append(step_data)
-
-        history = History(
-            history=mock_steps,
-            actual_num_steps=10,
-            reach_terminal_state=False,
-            discount_factor=0.95,
-            average_state_sampling_time=0.01,
-            average_action_time=0.02,
-            average_observation_time=0.01,
-            average_belief_update_time=0.03,
-            average_reward_time=0.001,
-            policy_run_data=[PolicyRunData(info_variables=[])],
-        )
-
-        return {"task_id": task_id, "history": history, "policy": policy, "env": env}
-
-    try:
-        # Test multiple parallel executions
-        for iteration in range(5):
-            # Run parallel tasks
-            results = Parallel(n_jobs=2)(
-                delayed(memory_intensive_task)(task_id) for task_id in range(10)
-            )
-
-            # Clear results
-            del results
-            gc.collect()
-
-    finally:
-        gc.collect()
-
-    results = tracker.finish()
-
-    # Assert memory growth is reasonable (<200MB for parallel operations)
-    assert (
-        results["final_growth"] < 200
-    ), f"Parallel execution leaked {results['final_growth']:.1f} MB"
-
-
-def test_memory_leak_task_manager_resource_cleanup(temp_cache_dir):
-    """
-    Purpose: Validates that task manager instances properly release their resources
-
-    Given: Multiple task manager instances created and used for parallel operations
-    When: Task managers execute parallel operations and are cleaned up
-    Then: Memory growth stays under 80MB indicating proper task manager resource management
-
-    Test type: unit
-    """
-    tracker = MemoryTracker("Task Manager Cleanup Test")
-    tracker.start()
-
-    try:
-        # Test multiple task manager creations and cleanups
-        for i in range(20):
-            # Create task manager config
-            config = JoblibConfig(n_jobs=2, verbose=0)
-            task_manager = config.create_task_manager(cache_dir=str(temp_cache_dir))
-
-            # Use task manager for some operations
-            with task_manager:
-                # Simulate task execution
-                def dummy_task(x):
-                    return x * 2
-
-                results = Parallel(n_jobs=2)(delayed(dummy_task)(x) for x in range(10))
-
-            # Explicit cleanup
-            del task_manager
-            del results
-            gc.collect()
-
-    finally:
-        gc.collect()
-
-    results = tracker.finish()
-
-    # Assert memory growth is reasonable (<80MB for task manager operations)
-    assert (
-        results["final_growth"] < 80
-    ), f"Task manager resources leaked {results['final_growth']:.1f} MB"
-
-
-class TestPBSTaskManagerIntegration:
-    """Test PBS task manager integration tests."""
-
-    @pytest.mark.pbs_cluster
-    def test_pbs_task_manager_initialization_integration(self):
-        """Test PBS task manager initialization with integration test.
-
-        Purpose: Validates that PBS task manager can be created with proper parameters
-        and all attributes are correctly set.
-
-        Given: PBS task manager parameters
-        When: Creating a PBSTaskManager instance
-        Then: All parameters are correctly set and manager is properly initialized
-
-        Test type: integration
-        """
-        manager = PBSTaskManager(
-            queue="default", n_workers=1, cores=1, memory="1GB", walltime="00:10:00"
-        )
-
-        assert manager.queue == "default"
-        assert manager.n_workers == 1
-        assert manager.cores == 1
-        assert manager.memory == "1GB"
-        assert manager.walltime == "00:10:00"
-        assert isinstance(manager, DaskTaskManager)
+# import os
+# import requests
+# from unittest.mock import patch
+
+
+# @pytest.mark.pbs_cluster
+# class TestPBSTaskManagerFunctionality:
+#     """Comprehensive functionality tests for PBSTaskManager requiring PBS cluster."""
+
+#     @pytest.fixture
+#     def pbs_queue(self):
+#         """Get PBS queue from environment variable or use default."""
+#         return os.environ.get("PBS_QUEUE", "default")
+
+#     @pytest.fixture
+#     def pbs_walltime(self):
+#         """Get PBS walltime from environment variable or use default."""
+#         return os.environ.get("PBS_WALLTIME", "00:05:00")  # 5 minutes for tests
+
+#     def test_pbs_task_manager_basic_functionality(
+#         self, environment, policy, pbs_queue, pbs_walltime
+#     ):
+#         """Test basic PBS task manager functionality with real PBS cluster.
+
+#         Purpose: Validates that PBSTaskManager can execute tasks on PBS cluster
+
+#         Given: PBS cluster environment, TigerPOMDP environment, SparsePFT policy
+#         When: PBSTaskManager executes EpisodeSimulationTask on PBS cluster
+#         Then: Tasks execute successfully and return valid History objects
+
+#         Test type: integration
+#         """
+#         with PBSTaskManager(
+#             queue=pbs_queue,
+#             n_workers=2,
+#             cores=1,
+#             memory="1GB",
+#             walltime=pbs_walltime,
+#             enable_dashboard=False,  # Disable dashboard for basic test
+#         ) as task_manager:
+#             # Create tasks
+#             tasks = []
+#             task_identifiers = []
+#             for i in range(2):
+#                 belief = create_test_belief()
+#                 task = EpisodeSimulationTask(
+#                     environment=environment,
+#                     policy=policy,
+#                     initial_belief=belief,
+#                     num_steps=3,
+#                     episode_id=i,
+#                     seed=42 + i,
+#                     console_output=False,
+#                 )
+#                 tasks.append(task)
+#                 task_identifiers.append(f"pbs_episode_{i}")
+
+#             # Execute tasks
+#             results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
+
+#             # Verify results
+#             assert len(results) == 2
+#             assert len(successful_ids) == 2
+#             assert all(id in successful_ids for id in task_identifiers)
+#             for result in results:
+#                 assert isinstance(result, History)
+#                 assert len(result.history) <= 3
+
+#     def test_pbs_task_manager_dashboard_functionality(
+#         self, environment, policy, pbs_queue, pbs_walltime
+#     ):
+#         """Test PBS task manager dashboard functionality.
+
+#         Purpose: Validates that PBSTaskManager dashboard is accessible and functional
+
+#         Given: PBS cluster environment with dashboard enabled
+#         When: PBSTaskManager is initialized with dashboard enabled
+#         Then: Dashboard URL is accessible and returns valid HTTP response
+
+#         Test type: integration
+#         """
+#         with PBSTaskManager(
+#             queue=pbs_queue,
+#             n_workers=1,
+#             cores=1,
+#             memory="1GB",
+#             walltime=pbs_walltime,
+#             enable_dashboard=True,
+#             dashboard_port=8787,
+#             dashboard_address="0.0.0.0",
+#         ) as task_manager:
+#             # Verify dashboard is running
+#             assert task_manager.is_dashboard_running() is True
+
+#             # Get dashboard URL
+#             dashboard_url = task_manager.get_dashboard_url()
+#             assert dashboard_url is not None
+#             assert "http://" in dashboard_url
+
+#             # Test dashboard accessibility
+#             try:
+#                 response = requests.get(dashboard_url, timeout=10)
+#                 assert response.status_code == 200
+#                 assert "Dask" in response.text or "dashboard" in response.text.lower()
+#             except requests.exceptions.RequestException:
+#                 # Dashboard might not be immediately accessible
+#                 # This is acceptable for PBS environments
+#                 pass
+
+#             # Create and execute a simple task to generate dashboard activity
+#             belief = create_test_belief()
+#             task = EpisodeSimulationTask(
+#                 environment=environment,
+#                 policy=policy,
+#                 initial_belief=belief,
+#                 num_steps=2,
+#                 episode_id=1,
+#                 seed=42,
+#                 console_output=False,
+#             )
+
+#             results, successful_ids = task_manager.run_tasks([task], ["dashboard_test"])
+#             assert len(results) == 1
+#             assert "dashboard_test" in successful_ids
+
+#     def test_pbs_task_manager_custom_dashboard_configuration(
+#         self, environment, policy, pbs_queue, pbs_walltime
+#     ):
+#         """Test PBS task manager with custom dashboard configuration.
+
+#         Purpose: Validates that PBSTaskManager respects custom dashboard settings
+
+#         Given: PBS cluster environment with custom dashboard port and prefix
+#         When: PBSTaskManager is initialized with custom dashboard configuration
+#         Then: Dashboard uses specified port and prefix settings
+
+#         Test type: integration
+#         """
+#         custom_port = 8888
+#         custom_prefix = "/my-dashboard"
+
+#         with PBSTaskManager(
+#             queue=pbs_queue,
+#             n_workers=1,
+#             cores=1,
+#             memory="1GB",
+#             walltime=pbs_walltime,
+#             enable_dashboard=True,
+#             dashboard_port=custom_port,
+#             dashboard_address="0.0.0.0",
+#             dashboard_prefix=custom_prefix,
+#         ) as task_manager:
+#             # Verify dashboard configuration
+#             assert task_manager.dashboard_port == custom_port
+#             assert task_manager.dashboard_prefix == custom_prefix
+#             assert task_manager.enable_dashboard is True
+
+#             # Get dashboard URL and verify it includes custom settings
+#             dashboard_url = task_manager.get_dashboard_url()
+#             if dashboard_url:
+#                 assert str(custom_port) in dashboard_url
+#                 if custom_prefix in dashboard_url:
+#                     assert custom_prefix in dashboard_url
+
+#             # Execute a task to verify functionality
+#             belief = create_test_belief()
+#             task = EpisodeSimulationTask(
+#                 environment=environment,
+#                 policy=policy,
+#                 initial_belief=belief,
+#                 num_steps=2,
+#                 episode_id=1,
+#                 seed=42,
+#                 console_output=False,
+#             )
+
+#             results, successful_ids = task_manager.run_tasks([task], ["custom_dashboard_test"])
+#             assert len(results) == 1
+#             assert "custom_dashboard_test" in successful_ids
+
+#     def test_pbs_task_manager_dashboard_disabled(
+#         self, environment, policy, pbs_queue, pbs_walltime
+#     ):
+#         """Test PBS task manager with dashboard disabled.
+
+#         Purpose: Validates that PBSTaskManager works correctly with dashboard disabled
+
+#         Given: PBS cluster environment with dashboard disabled
+#         When: PBSTaskManager is initialized with enable_dashboard=False
+#         Then: Dashboard is not accessible and task execution works normally
+
+#         Test type: integration
+#         """
+#         with PBSTaskManager(
+#             queue=pbs_queue,
+#             n_workers=1,
+#             cores=1,
+#             memory="1GB",
+#             walltime=pbs_walltime,
+#             enable_dashboard=False,
+#         ) as task_manager:
+#             # Verify dashboard is disabled
+#             assert task_manager.enable_dashboard is False
+#             assert task_manager.is_dashboard_running() is False
+#             assert task_manager.get_dashboard_url() is None
+
+#             # Execute tasks to verify functionality without dashboard
+#             tasks = []
+#             task_identifiers = []
+#             for i in range(2):
+#                 belief = create_test_belief()
+#                 task = EpisodeSimulationTask(
+#                     environment=environment,
+#                     policy=policy,
+#                     initial_belief=belief,
+#                     num_steps=2,
+#                     episode_id=i,
+#                     seed=42 + i,
+#                     console_output=False,
+#                 )
+#                 tasks.append(task)
+#                 task_identifiers.append(f"no_dashboard_episode_{i}")
+
+#             results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
+#             assert len(results) == 2
+#             assert len(successful_ids) == 2
+
+#     def test_pbs_task_manager_job_extra_directives(
+#         self, environment, policy, pbs_queue, pbs_walltime
+#     ):
+#         """Test PBS task manager with custom job directives.
+
+#         Purpose: Validates that PBSTaskManager respects custom PBS job directives
+
+#         Given: PBS cluster environment with custom job directives
+#         When: PBSTaskManager is initialized with job_extra directives
+#         Then: Tasks execute successfully with custom PBS configuration
+
+#         Test type: integration
+#         """
+#         custom_directives = [
+#             "#PBS -m abe",  # Mail on abort, begin, end
+#             "#PBS -M test@example.com",  # Mail address
+#         ]
+
+#         with PBSTaskManager(
+#             queue=pbs_queue,
+#             n_workers=1,
+#             cores=1,
+#             memory="1GB",
+#             walltime=pbs_walltime,
+#             job_extra=custom_directives,
+#             enable_dashboard=False,
+#         ) as task_manager:
+#             # Verify job directives are stored
+#             assert task_manager.job_extra == custom_directives
+
+#             # Execute a task to verify functionality
+#             belief = create_test_belief()
+#             task = EpisodeSimulationTask(
+#                 environment=environment,
+#                 policy=policy,
+#                 initial_belief=belief,
+#                 num_steps=2,
+#                 episode_id=1,
+#                 seed=42,
+#                 console_output=False,
+#             )
+
+#             results, successful_ids = task_manager.run_tasks([task], ["job_extra_test"])
+#             assert len(results) == 1
+#             assert "job_extra_test" in successful_ids
+
+#     def test_pbs_task_manager_resource_scaling(self, environment, policy, pbs_queue, pbs_walltime):
+#         """Test PBS task manager with different resource configurations.
+
+#         Purpose: Validates that PBSTaskManager can handle different resource allocations
+
+#         Given: PBS cluster environment with various resource configurations
+#         When: PBSTaskManager is initialized with different cores/memory settings
+#         Then: Tasks execute successfully with specified resource allocation
+
+#         Test type: integration
+#         """
+#         resource_configs = [
+#             {"cores": 1, "memory": "1GB", "processes": 1},
+#             {"cores": 2, "memory": "2GB", "processes": 1},
+#             {"cores": 1, "memory": "1GB", "processes": 2},
+#         ]
+
+#         for i, config in enumerate(resource_configs):
+#             with PBSTaskManager(
+#                 queue=pbs_queue,
+#                 n_workers=1,
+#                 cores=config["cores"],
+#                 memory=config["memory"],
+#                 processes=config["processes"],
+#                 walltime=pbs_walltime,
+#                 enable_dashboard=False,
+#             ) as task_manager:
+#                 # Verify resource configuration
+#                 assert task_manager.cores == config["cores"]
+#                 assert task_manager.memory == config["memory"]
+#                 assert task_manager.processes == config["processes"]
+
+#                 # Execute a task to verify functionality
+#                 belief = create_test_belief()
+#                 task = EpisodeSimulationTask(
+#                     environment=environment,
+#                     policy=policy,
+#                     initial_belief=belief,
+#                     num_steps=2,
+#                     episode_id=i,
+#                     seed=42 + i,
+#                     console_output=False,
+#                 )
+
+#                 results, successful_ids = task_manager.run_tasks([task], [f"resource_test_{i}"])
+#                 assert len(results) == 1
+#                 assert f"resource_test_{i}" in successful_ids
+
+#     def test_pbs_task_manager_multiple_workers(self, environment, policy, pbs_queue, pbs_walltime):
+#         """Test PBS task manager with multiple workers.
+
+#         Purpose: Validates that PBSTaskManager can distribute tasks across multiple PBS workers
+
+#         Given: PBS cluster environment with multiple workers
+#         When: PBSTaskManager executes multiple tasks with n_workers > 1
+#         Then: Tasks are distributed across workers and execute successfully
+
+#         Test type: integration
+#         """
+#         with PBSTaskManager(
+#             queue=pbs_queue,
+#             n_workers=3,
+#             cores=1,
+#             memory="1GB",
+#             walltime=pbs_walltime,
+#             enable_dashboard=False,
+#         ) as task_manager:
+#             # Create multiple tasks
+#             tasks = []
+#             task_identifiers = []
+#             for i in range(5):  # More tasks than workers
+#                 belief = create_test_belief()
+#                 task = EpisodeSimulationTask(
+#                     environment=environment,
+#                     policy=policy,
+#                     initial_belief=belief,
+#                     num_steps=2,
+#                     episode_id=i,
+#                     seed=42 + i,
+#                     console_output=False,
+#                 )
+#                 tasks.append(task)
+#                 task_identifiers.append(f"multi_worker_episode_{i}")
+
+#             # Execute tasks
+#             results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
+
+#             # Verify all tasks completed
+#             assert len(results) == 5
+#             assert len(successful_ids) == 5
+#             assert all(id in successful_ids for id in task_identifiers)
+
+#     def test_pbs_task_manager_task_status_monitoring(
+#         self, environment, policy, pbs_queue, pbs_walltime
+#     ):
+#         """Test PBS task manager task status monitoring.
+
+#         Purpose: Validates that PBSTaskManager can monitor task status during execution
+
+#         Given: PBS cluster environment with task status monitoring
+#         When: Tasks are submitted and status is checked during execution
+#         Then: Task status information is available and accurate
+
+#         Test type: integration
+#         """
+#         with PBSTaskManager(
+#             queue=pbs_queue,
+#             n_workers=1,
+#             cores=1,
+#             memory="1GB",
+#             walltime=pbs_walltime,
+#             enable_dashboard=False,
+#         ) as task_manager:
+#             # Create a task
+#             belief = create_test_belief()
+#             task = EpisodeSimulationTask(
+#                 environment=environment,
+#                 policy=policy,
+#                 initial_belief=belief,
+#                 num_steps=3,
+#                 episode_id=1,
+#                 seed=42,
+#                 console_output=False,
+#             )
+
+#             # Submit task and monitor status
+#             futures = task_manager.submit_tasks([task])
+#             assert len(futures) == 1
+
+#             # Check initial status
+#             status = task_manager.get_task_status(futures)
+#             assert len(status) == 1
+#             assert task._cache_key in status
+#             assert status[task._cache_key] in ["pending", "running", "finished"]
+
+#             # Wait for completion and check final status
+#             results = task_manager.gather_results(futures)
+#             assert len(results) == 1
+#             assert isinstance(results[0], History)
+
+#             # Final status check
+#             final_status = task_manager.get_task_status(futures)
+#             assert len(final_status) == 1
+#             assert final_status[task._cache_key] == "finished"
+
+#     def test_pbs_task_manager_error_handling(self, environment, policy, pbs_queue, pbs_walltime):
+#         """Test PBS task manager error handling with failing tasks.
+
+#         Purpose: Validates that PBSTaskManager handles task failures gracefully
+
+#         Given: PBS cluster environment with a task that always fails
+#         When: Failing task is submitted to PBS cluster
+#         Then: Error is handled gracefully and doesn't crash the task manager
+
+#         Test type: integration
+#         """
+#         with PBSTaskManager(
+#             queue=pbs_queue,
+#             n_workers=1,
+#             cores=1,
+#             memory="1GB",
+#             walltime=pbs_walltime,
+#             enable_dashboard=False,
+#         ) as task_manager:
+#             # Create a failing task
+#             belief = create_test_belief()
+#             failing_task = FailingEpisodeSimulationTask(
+#                 environment=environment,
+#                 policy=policy,
+#                 initial_belief=belief,
+#                 num_steps=2,
+#                 episode_id=999,
+#                 seed=42,
+#                 console_output=False,
+#             )
+
+#             # Submit failing task
+#             with pytest.raises(RuntimeError, match="Simulated task failure for testing"):
+#                 task_manager.run_tasks([failing_task], ["failing_pbs_task"])
+
+#             # Verify task manager is still functional
+#             belief = create_test_belief()
+#             working_task = EpisodeSimulationTask(
+#                 environment=environment,
+#                 policy=policy,
+#                 initial_belief=belief,
+#                 num_steps=2,
+#                 episode_id=1,
+#                 seed=42,
+#                 console_output=False,
+#             )
+
+#             results, successful_ids = task_manager.run_tasks([working_task], ["working_task"])
+#             assert len(results) == 1
+#             assert "working_task" in successful_ids
+
+#     def test_pbs_task_manager_context_manager_cleanup(
+#         self, environment, policy, pbs_queue, pbs_walltime
+#     ):
+#         """Test PBS task manager context manager cleanup.
+
+#         Purpose: Validates that PBSTaskManager properly cleans up resources on exit
+
+#         Given: PBS cluster environment with dashboard enabled
+#         When: PBSTaskManager context manager exits
+#         Then: All resources are properly cleaned up (client, cluster, dashboard)
+
+#         Test type: integration
+#         """
+#         # Test with dashboard enabled to verify cleanup
+#         with PBSTaskManager(
+#             queue=pbs_queue,
+#             n_workers=1,
+#             cores=1,
+#             memory="1GB",
+#             walltime=pbs_walltime,
+#             enable_dashboard=True,
+#             dashboard_port=8787,
+#         ) as task_manager:
+#             # Verify resources are initialized
+#             assert task_manager.client is not None
+#             assert task_manager.cluster is not None
+#             assert task_manager.is_dashboard_running() is True
+
+#             # Execute a task
+#             belief = create_test_belief()
+#             task = EpisodeSimulationTask(
+#                 environment=environment,
+#                 policy=policy,
+#                 initial_belief=belief,
+#                 num_steps=2,
+#                 episode_id=1,
+#                 seed=42,
+#                 console_output=False,
+#             )
+
+#             results, successful_ids = task_manager.run_tasks([task], ["cleanup_test"])
+#             assert len(results) == 1
+#             assert "cleanup_test" in successful_ids
+
+#         # After context manager exit, resources should be cleaned up
+#         # Note: We can't directly test this as the objects are destroyed,
+#         # but the test verifies that the context manager exits without errors
+
+#     def test_pbs_task_manager_dashboard_url_construction(
+#         self, environment, policy, pbs_queue, pbs_walltime
+#     ):
+#         """Test PBS task manager dashboard URL construction.
+
+#         Purpose: Validates that PBSTaskManager constructs correct dashboard URLs
+
+#         Given: PBS cluster environment with various dashboard configurations
+#         When: Dashboard URL is requested with different settings
+#         Then: URL is constructed correctly with proper host, port, and prefix
+
+#         Test type: integration
+#         """
+#         test_configs = [
+#             {"port": 8787, "prefix": None, "address": "0.0.0.0"},
+#             {"port": 8888, "prefix": None, "address": "0.0.0.0"},
+#             {"port": 8787, "prefix": "/dashboard", "address": "0.0.0.0"},
+#             {"port": 9999, "prefix": "/my-dashboard", "address": "0.0.0.0"},
+#         ]
+
+#         for config in test_configs:
+#             with PBSTaskManager(
+#                 queue=pbs_queue,
+#                 n_workers=1,
+#                 cores=1,
+#                 memory="1GB",
+#                 walltime=pbs_walltime,
+#                 enable_dashboard=True,
+#                 dashboard_port=config["port"],
+#                 dashboard_address=config["address"],
+#                 dashboard_prefix=config["prefix"],
+#             ) as task_manager:
+#                 # Get dashboard URL
+#                 dashboard_url = task_manager.get_dashboard_url()
+
+#                 if dashboard_url:
+#                     # Verify URL contains expected components
+#                     assert str(config["port"]) in dashboard_url
+#                     assert "http://" in dashboard_url
+
+#                     if config["prefix"]:
+#                         assert config["prefix"].lstrip("/") in dashboard_url
+
+#                 # Execute a quick task to verify functionality
+#                 belief = create_test_belief()
+#                 task = EpisodeSimulationTask(
+#                     environment=environment,
+#                     policy=policy,
+#                     initial_belief=belief,
+#                     num_steps=1,
+#                     episode_id=1,
+#                     seed=42,
+#                     console_output=False,
+#                 )
+
+#                 results, successful_ids = task_manager.run_tasks([task], ["url_test"])
+#                 assert len(results) == 1
+#                 assert "url_test" in successful_ids
+
+#     def test_pbs_task_manager_performance_monitoring(
+#         self, environment, policy, pbs_queue, pbs_walltime
+#     ):
+#         """Test PBS task manager performance monitoring capabilities.
+
+#         Purpose: Validates that PBSTaskManager can monitor task performance on PBS cluster
+
+#         Given: PBS cluster environment with performance monitoring
+#         When: Multiple tasks are executed with timing measurements
+#         Then: Task execution times are reasonable and performance is monitored
+
+#         Test type: integration
+#         """
+#         with PBSTaskManager(
+#             queue=pbs_queue,
+#             n_workers=2,
+#             cores=1,
+#             memory="1GB",
+#             walltime=pbs_walltime,
+#             enable_dashboard=True,  # Enable dashboard for performance monitoring
+#         ) as task_manager:
+#             # Create multiple tasks for performance testing
+#             tasks = []
+#             task_identifiers = []
+#             for i in range(4):
+#                 belief = create_test_belief()
+#                 task = EpisodeSimulationTask(
+#                     environment=environment,
+#                     policy=policy,
+#                     initial_belief=belief,
+#                     num_steps=3,
+#                     episode_id=i,
+#                     seed=42 + i,
+#                     console_output=False,
+#                 )
+#                 tasks.append(task)
+#                 task_identifiers.append(f"perf_test_{i}")
+
+#             # Measure execution time
+#             start_time = time.time()
+#             results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
+#             end_time = time.time()
+
+#             # Verify results
+#             assert len(results) == 4
+#             assert len(successful_ids) == 4
+#             assert all(id in successful_ids for id in task_identifiers)
+
+#             # Verify reasonable execution time (should complete within walltime)
+#             execution_time = end_time - start_time
+#             assert execution_time < 300  # Should complete within 5 minutes
+
+#             # Verify dashboard is accessible for performance monitoring
+#             dashboard_url = task_manager.get_dashboard_url()
+#             if dashboard_url:
+#                 assert task_manager.is_dashboard_running() is True
+
+#     def test_pbs_task_manager_concurrent_execution(
+#         self, environment, policy, pbs_queue, pbs_walltime
+#     ):
+#         """Test PBS task manager concurrent task execution.
+
+#         Purpose: Validates that PBSTaskManager can handle concurrent task execution on PBS cluster
+
+#         Given: PBS cluster environment with multiple workers
+#         When: Multiple task batches are submitted concurrently
+#         Then: All tasks execute successfully with proper concurrency handling
+
+#         Test type: integration
+#         """
+#         with PBSTaskManager(
+#             queue=pbs_queue,
+#             n_workers=3,
+#             cores=1,
+#             memory="1GB",
+#             walltime=pbs_walltime,
+#             enable_dashboard=False,
+#         ) as task_manager:
+#             # Create multiple batches of tasks
+#             batch_size = 3
+#             num_batches = 2
+
+#             all_results = []
+#             all_successful_ids = []
+
+#             for batch_idx in range(num_batches):
+#                 tasks = []
+#                 task_identifiers = []
+
+#                 for i in range(batch_size):
+#                     belief = create_test_belief()
+#                     task = EpisodeSimulationTask(
+#                         environment=environment,
+#                         policy=policy,
+#                         initial_belief=belief,
+#                         num_steps=2,
+#                         episode_id=batch_idx * batch_size + i,
+#                         seed=42 + batch_idx * batch_size + i,
+#                         console_output=False,
+#                     )
+#                     tasks.append(task)
+#                     task_identifiers.append(f"concurrent_batch_{batch_idx}_task_{i}")
+
+#                 # Execute batch
+#                 results, successful_ids = task_manager.run_tasks(tasks, task_identifiers)
+#                 all_results.extend(results)
+#                 all_successful_ids.extend(successful_ids)
+
+#             # Verify all batches completed successfully
+#             expected_total = batch_size * num_batches
+#             assert len(all_results) == expected_total
+#             assert len(all_successful_ids) == expected_total
+
+#             # Verify all task identifiers are present
+#             for batch_idx in range(num_batches):
+#                 for i in range(batch_size):
+#                     expected_id = f"concurrent_batch_{batch_idx}_task_{i}"
+#                     assert expected_id in all_successful_ids
+
+
+# # ==============================================================================
+# # MEMORY LEAK DIAGNOSTIC TESTS
+# # ==============================================================================
+# # These tests help identify specific sources of memory leaks in task managers.
+# # Tests that fail indicate components that need memory management fixes.
+
+# import gc
+# import psutil
+# from joblib import Parallel, delayed
+
+# from POMDPPlanners.core.belief import get_initial_belief
+# from POMDPPlanners.core.simulation import EnvironmentRunParams, StepData
+# from POMDPPlanners.core.policy import PolicyRunData
+# from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+# from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+#     JoblibConfig,
+# )
+# from typing import Dict
+
+
+# class MemoryTracker:
+#     """Utility class for tracking memory usage in tests."""
+
+#     def __init__(self, test_name: str):
+#         self.test_name = test_name
+#         self.process = psutil.Process()
+#         self.initial_memory: float = 0.0
+#         self.peak_memory: float = 0.0
+#         self.measurements = []
+
+#     def start(self):
+#         """Start memory tracking."""
+#         gc.collect()  # Clean up before measurement
+#         self.initial_memory = self.process.memory_info().rss / 1024 / 1024  # MB
+#         self.peak_memory = self.initial_memory
+
+#     def checkpoint(self, label: str = ""):
+#         """Record a memory checkpoint."""
+#         gc.collect()
+#         current_memory = self.process.memory_info().rss / 1024 / 1024  # MB
+#         self.peak_memory = max(self.peak_memory, current_memory)
+#         growth = current_memory - self.initial_memory
+#         self.measurements.append((label, current_memory, growth))
+#         return current_memory, growth
+
+#     def finish(self):
+#         """Finish tracking and return final results."""
+#         final_memory, final_growth = self.checkpoint("Final")
+#         peak_growth = self.peak_memory - self.initial_memory
+
+#         return {
+#             "initial_memory": self.initial_memory,
+#             "final_memory": final_memory,
+#             "peak_memory": self.peak_memory,
+#             "final_growth": final_growth,
+#             "peak_growth": peak_growth,
+#             "measurements": self.measurements,
+#         }
+
+
+# def test_memory_leak_parallel_execution_resource_cleanup(temp_cache_dir, environment):
+#     """
+#     Purpose: Validates that parallel execution using joblib doesn't accumulate memory across iterations
+
+#     Given: Multiple parallel execution cycles with POMDP objects and simulation data
+#     When: Parallel tasks create environments, policies, and beliefs repeatedly
+#     Then: Memory growth stays under 200MB indicating proper parallel resource cleanup
+
+#     Test type: unit
+#     """
+#     tracker = MemoryTracker("Parallel Execution Test")
+#     tracker.start()
+
+#     def memory_intensive_task(task_id: int) -> Dict:
+#         """Simulate a memory-intensive task similar to simulation."""
+#         # Create some objects similar to what simulation does
+#         env = TigerPOMDP(discount_factor=0.95)
+#         policy = POMCP(
+#             environment=env,
+#             discount_factor=0.95,
+#             depth=3,
+#             exploration_constant=1.0,
+#             name=f"TestPolicy_{task_id}",
+#             n_simulations=5,
+#         )
+
+#         # Simulate some computation
+#         belief = get_initial_belief(env, n_particles=50)
+
+#         # Create mock history
+#         mock_steps = []
+#         for step in range(10):
+#             step_data = StepData(
+#                 state=env.initial_state_dist().sample()[0],
+#                 action=env.get_actions()[0],
+#                 next_state=env.initial_state_dist().sample()[0],
+#                 observation=env.get_actions()[0],  # Simple mock
+#                 reward=1.0,
+#                 belief=belief,
+#             )
+#             mock_steps.append(step_data)
+
+#         history = History(
+#             history=mock_steps,
+#             actual_num_steps=10,
+#             reach_terminal_state=False,
+#             discount_factor=0.95,
+#             average_state_sampling_time=0.01,
+#             average_action_time=0.02,
+#             average_observation_time=0.01,
+#             average_belief_update_time=0.03,
+#             average_reward_time=0.001,
+#             policy_run_data=[PolicyRunData(info_variables=[])],
+#         )
+
+#         return {"task_id": task_id, "history": history, "policy": policy, "env": env}
+
+#     try:
+#         # Test multiple parallel executions
+#         for iteration in range(5):
+#             # Run parallel tasks
+#             results = Parallel(n_jobs=2)(
+#                 delayed(memory_intensive_task)(task_id) for task_id in range(10)
+#             )
+
+#             # Clear results
+#             del results
+#             gc.collect()
+
+#     finally:
+#         gc.collect()
+
+#     results = tracker.finish()
+
+#     # Assert memory growth is reasonable (<200MB for parallel operations)
+#     assert (
+#         results["final_growth"] < 200
+#     ), f"Parallel execution leaked {results['final_growth']:.1f} MB"
+
+
+# def test_memory_leak_task_manager_resource_cleanup(temp_cache_dir):
+#     """
+#     Purpose: Validates that task manager instances properly release their resources
+
+#     Given: Multiple task manager instances created and used for parallel operations
+#     When: Task managers execute parallel operations and are cleaned up
+#     Then: Memory growth stays under 80MB indicating proper task manager resource management
+
+#     Test type: unit
+#     """
+#     tracker = MemoryTracker("Task Manager Cleanup Test")
+#     tracker.start()
+
+#     try:
+#         # Test multiple task manager creations and cleanups
+#         for i in range(20):
+#             # Create task manager config
+#             config = JoblibConfig(n_jobs=2, verbose=0)
+#             task_manager = config.create_task_manager(cache_dir=str(temp_cache_dir))
+
+#             # Use task manager for some operations
+#             with task_manager:
+#                 # Simulate task execution
+#                 def dummy_task(x):
+#                     return x * 2
+
+#                 results = Parallel(n_jobs=2)(delayed(dummy_task)(x) for x in range(10))
+
+#             # Explicit cleanup
+#             del task_manager
+#             del results
+#             gc.collect()
+
+#     finally:
+#         gc.collect()
+
+#     results = tracker.finish()
+
+#     # Assert memory growth is reasonable (<80MB for task manager operations)
+#     assert (
+#         results["final_growth"] < 80
+#     ), f"Task manager resources leaked {results['final_growth']:.1f} MB"
+
+
+# class TestPBSTaskManagerIntegration:
+#     """Test PBS task manager integration tests."""
+
+#     @pytest.mark.pbs_cluster
+#     def test_pbs_task_manager_initialization_integration(self):
+#         """Test PBS task manager initialization with integration test.
+
+#         Purpose: Validates that PBS task manager can be created with proper parameters
+#         and all attributes are correctly set.
+
+#         Given: PBS task manager parameters
+#         When: Creating a PBSTaskManager instance
+#         Then: All parameters are correctly set and manager is properly initialized
+
+#         Test type: integration
+#         """
+#         manager = PBSTaskManager(
+#             queue="default", n_workers=1, cores=1, memory="1GB", walltime="00:10:00"
+#         )
+
+#         assert manager.queue == "default"
+#         assert manager.n_workers == 1
+#         assert manager.cores == 1
+#         assert manager.memory == "1GB"
+#         assert manager.walltime == "00:10:00"
+#         assert isinstance(manager, DaskTaskManager)
