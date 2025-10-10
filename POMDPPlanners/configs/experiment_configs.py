@@ -131,14 +131,20 @@ class AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
         n_particles: int,
         num_episodes: int,
         num_steps: int,
+        is_risk_averse: bool,
     ):
         self.generators = generators
         self.n_particles = n_particles
         self.num_episodes = num_episodes
         self.num_steps = num_steps
+        self.is_risk_averse = is_risk_averse
 
     def _get_experiment_configs(self) -> List[EnvironmentRunParams]:
-        environment_configs = EnvironmentConfigsAPI(discount_factor=0.95)
+        if self.is_risk_averse:
+            environment_configs = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95)
+        else:
+            environment_configs = EnvironmentConfigsAPI(discount_factor=0.95)
+
         configs_dict = {}
 
         for generator in self.generators:

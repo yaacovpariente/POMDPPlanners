@@ -919,6 +919,7 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
             n_particles=30,
             num_episodes=10,
             num_steps=20,
+            is_risk_averse=False,
         )
 
         assert creator.generators == [generator]
@@ -946,6 +947,7 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
             n_particles=25,
             num_episodes=5,
             num_steps=15,
+            is_risk_averse=False,
         )
 
         assert len(creator.generators) == 3
@@ -974,6 +976,7 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
             n_particles=10,  # Small number for faster tests
             num_episodes=2,
             num_steps=3,
+            is_risk_averse=False,
         )
 
         configs = creator.get_experiment_configs()
@@ -1011,6 +1014,7 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
             n_particles=10,
             num_episodes=2,
             num_steps=3,
+            is_risk_averse=False,
         )
 
         configs = creator.get_experiment_configs()
@@ -1046,6 +1050,7 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
             n_particles=10,
             num_episodes=2,
             num_steps=3,
+            is_risk_averse=False,
         )
 
         configs = creator.get_experiment_configs()
@@ -1074,6 +1079,7 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
             n_particles=10,
             num_episodes=2,
             num_steps=3,
+            is_risk_averse=False,
         )
 
         configs = creator.get_experiment_configs()
@@ -1099,6 +1105,7 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
             n_particles=50,
             num_episodes=15,
             num_steps=25,
+            is_risk_averse=False,
         )
 
         configs = creator.get_experiment_configs()
@@ -1129,6 +1136,7 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
             n_particles=10,
             num_episodes=2,
             num_steps=3,
+            is_risk_averse=False,
         )
 
         configs = creator.get_experiment_configs()
@@ -1160,6 +1168,7 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
             n_particles=10,
             num_episodes=2,
             num_steps=3,
+            is_risk_averse=False,
         )
 
         configs = creator.get_experiment_configs()
@@ -1194,6 +1203,7 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
             n_particles=10,
             num_episodes=2,
             num_steps=3,
+            is_risk_averse=False,
         )
 
         # Test that it's an instance of the parent class
@@ -1225,6 +1235,7 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
             n_particles=10,
             num_episodes=2,
             num_steps=3,
+            is_risk_averse=False,
         )
 
         configs = creator.get_experiment_configs()
