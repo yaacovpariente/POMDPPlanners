@@ -22,7 +22,7 @@ from POMDPPlanners.simulations.simulations_deployment.task_manager_configs impor
     DaskConfig,
     PBSConfig,
 )
-from POMDPPlanners.simulations.planner_evaluation_workflow import (
+from POMDPPlanners.simulations.workflows.planner_evaluation_workflow import (
     PlannerEvaluationWorkflow,
     PlannerEvaluationLocalWorkflow,
     PlannerEvaluationDaskWorkflow,

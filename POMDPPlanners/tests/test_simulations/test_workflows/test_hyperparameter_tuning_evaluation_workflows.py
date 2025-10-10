@@ -15,7 +15,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows import (
+from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows import (
     OptimizationEvaluationWorkflow,
     OptimizationEvaluationLocalWorkflow,
     OptimizationEvaluationDaskWorkflow,
