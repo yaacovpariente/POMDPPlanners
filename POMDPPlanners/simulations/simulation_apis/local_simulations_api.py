@@ -23,10 +23,10 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfigGenerator,
     OptimizedPolicyResult,
 )
-from POMDPPlanners.simulations.planner_evaluation_workflow import (
+from POMDPPlanners.simulations.workflows.planner_evaluation_workflow import (
     PlannerEvaluationLocalWorkflow,
 )
-from POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows import (
+from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows import (
     OptimizationEvaluationLocalWorkflow,
 )
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
