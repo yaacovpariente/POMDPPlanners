@@ -167,8 +167,12 @@ class TestPBSSimulationsAPI:
     @patch(
         "POMDPPlanners.simulations.simulation_apis.pbs_simulations_api.OptimizationEvaluationPBSWorkflow"
     )
+    @patch(
+        "POMDPPlanners.simulations.simulation_apis.pbs_simulations_api.PolicyHyperparameterOptimizationExperimentConfigCreator"
+    )
     def test_run_hyperparameter_tuning_experiment_with_benchmarks_success(
         self,
+        mock_creator_class,
         mock_workflow_class,
         temp_cache_dir,
     ):
@@ -182,6 +186,12 @@ class TestPBSSimulationsAPI:
 
         Test type: unit
         """
+        # Mock config creator
+        mock_creator_instance = MagicMock()
+        mock_configs = [Mock()]
+        mock_creator_instance.get_experiment_configs.return_value = mock_configs
+        mock_creator_class.return_value = mock_creator_instance
+
         # Mock the workflow instance and its methods
         mock_workflow_instance = MagicMock()
         mock_results = (

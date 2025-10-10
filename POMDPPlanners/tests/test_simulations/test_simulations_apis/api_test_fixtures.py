@@ -12,6 +12,12 @@ from pathlib import Path
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.core.belief import get_initial_belief
+from POMDPPlanners.core.environment import (
+    Environment,
+    DiscreteActionsEnvironment,
+    SpaceType,
+)
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
 from POMDPPlanners.core.simulation import (
     EnvironmentRunParams,
     NumericalHyperParameter,
@@ -21,6 +27,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
     HyperParamPlannerConfig,
 )
+from POMDPPlanners.core.simulation.simulation_configs import PlannerGenerator
 
 
 @pytest.fixture
@@ -126,3 +133,58 @@ def create_temp_cache_dir(tmp_path: Path, name: str) -> Path:
     cache_dir = tmp_path / name
     cache_dir.mkdir(parents=True, exist_ok=True)
     return cache_dir
+
+
+class MockPlannerGenerator(PlannerGenerator):
+    """Mock implementation of PlannerGenerator for testing."""
+
+    def __init__(self, space_info: PolicySpaceInfo, name: str = "MockPlanner"):
+        self.space_info = space_info
+        self.planner_name = name
+
+    def generate(self, environment: Environment) -> Policy:
+        """Generate a mock policy for the given environment.
+
+        Args:
+            environment: The environment to generate a policy for.
+                Should be a DiscreteActionsEnvironment for POMCP compatibility.
+
+        Returns:
+            A POMCP policy configured for the environment.
+        """
+        # Cast to DiscreteActionsEnvironment for POMCP
+        # This is safe as we only use this with discrete environments in tests
+        discrete_env = environment
+        assert isinstance(
+            discrete_env, DiscreteActionsEnvironment
+        ), "MockPlannerGenerator requires DiscreteActionsEnvironment"
+
+        return POMCP(
+            environment=discrete_env,
+            discount_factor=0.95,
+            depth=3,
+            exploration_constant=1.0,
+            name=f"{self.planner_name}_{environment.name}",
+            n_simulations=10,
+        )
+
+    def get_planner_space_info(self) -> PolicySpaceInfo:
+        """Return the stored space info."""
+        return self.space_info
+
+
+@pytest.fixture
+def sample_planner_generators():
+    """Create sample PlannerGenerator objects for testing.
+
+    Returns a list with PlannerGenerator instances compatible with
+    discrete action/observation spaces (e.g., TigerPOMDP).
+    """
+    discrete_space_info = PolicySpaceInfo(
+        action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
+    )
+
+    return [
+        MockPlannerGenerator(discrete_space_info, name="TestPOMCP_1"),
+        MockPlannerGenerator(discrete_space_info, name="TestPOMCP_2"),
+    ]

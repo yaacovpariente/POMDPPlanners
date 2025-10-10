@@ -13,6 +13,7 @@ import pandas as pd
 
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.simulation import EnvironmentRunParams
+from POMDPPlanners.core.simulation.simulation_configs import PlannerGenerator
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     HyperParamPlannerConfigGenerator,
@@ -97,6 +98,51 @@ class SimulationsAPIInterface(ABC):
                 Generates detailed timing information for optimization analysis.
             profiling_output_limit: Maximum number of profiling entries to display
                 when profiling is enabled. Helps focus on the most time-consuming operations.
+
+        Returns:
+            Tuple containing:
+                - Dict[str, Dict[str, list]]: Raw simulation results organized by environment
+                  name, then policy name, containing lists of History objects for each episode.
+                - pd.DataFrame: Statistical summary with confidence intervals, performance
+                  metrics, and policy configuration details for analysis and comparison.
+        """
+        pass
+
+    @abstractmethod
+    def run_all_benchmark_environments_on_planner_generators(
+        self,
+        generators: Sequence[PlannerGenerator],
+        n_particles: int = 30,
+        num_episodes: int = 10,
+        num_steps: int = 20,
+        alpha: float = 0.1,
+        confidence_interval_level: float = 0.95,
+        experiment_name: str = "All_Benchmark_Environments_On_Planner_Generators",
+        n_jobs: int = -1,
+        cache_dir_path: Optional[Path] = None,
+        clear_cache_on_start: bool = False,
+        enable_profiling: bool = False,
+        profiling_output_limit: int = 50,
+        cache_visualizations: bool = True,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run all benchmark environments on planner generators.
+
+        This method runs benchmark environments on planner generators.
+
+        Args:
+            generators: Sequence of PlannerGenerator objects.
+            n_particles: Number of particles for belief representation.
+            num_episodes: Number of episodes for optimization.
+            num_steps: Maximum steps per episode for optimization.
+            alpha: Statistical significance level for confidence intervals.
+            confidence_interval_level: Confidence level for statistical analysis.
+            experiment_name: Name for the experiment.
+            n_jobs: Number of parallel jobs for execution.
+            cache_dir_path: Optional path for storing simulation results.
+            clear_cache_on_start: Whether to clear existing cache before starting simulation.
+            enable_profiling: Whether to enable performance profiling.
+            profiling_output_limit: Maximum number of profiling entries to display.
+            cache_visualizations: Whether to cache visualizations.
 
         Returns:
             Tuple containing:

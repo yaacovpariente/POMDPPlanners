@@ -450,6 +450,222 @@ class OptimizeAndEvaluateTestsMixin:
         assert isinstance(stats_df, pd.DataFrame)
 
 
+class BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin:
+    """Mixin with tests for run_all_benchmark_environments_on_planner_generators method."""
+
+    def test_benchmark_environments_basic_execution(
+        self: "APITestProtocol", sample_planner_generators
+    ):
+        """Test basic execution of benchmark environments on planner generators.
+
+        Purpose: Validates method executes successfully with valid generators
+
+        Given: Valid PlannerGenerator objects
+        When: run_all_benchmark_environments_on_planner_generators is called
+        Then: Returns tuple of (dict, DataFrame) with expected types
+
+        Test type: integration
+        """
+        api = self.create_api()
+        results, stats_df = api.run_all_benchmark_environments_on_planner_generators(
+            generators=sample_planner_generators,
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+            alpha=0.1,
+            confidence_interval_level=0.95,
+            n_jobs=1,
+        )
+
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+
+    def test_benchmark_environments_returns_correct_types(
+        self: "APITestProtocol", sample_planner_generators
+    ):
+        """Test return types from benchmark environments method.
+
+        Purpose: Validates method returns correct data structures
+
+        Given: Valid planner generators
+        When: run_all_benchmark_environments_on_planner_generators completes
+        Then: Returns dict and DataFrame with proper structure
+
+        Test type: integration
+        """
+        api = self.create_api()
+        results, stats_df = api.run_all_benchmark_environments_on_planner_generators(
+            generators=sample_planner_generators,
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+            n_jobs=1,
+        )
+
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+        assert len(stats_df) > 0
+
+    def test_benchmark_environments_result_structure(
+        self: "APITestProtocol", sample_planner_generators
+    ):
+        """Test result dictionary has expected nested structure.
+
+        Purpose: Validates result organization by environment and policy names
+
+        Given: Valid planner generators
+        When: Benchmark execution completes successfully
+        Then: Result dict follows env_name → policy_name → list structure
+
+        Test type: integration
+        """
+        api = self.create_api()
+        results, _ = api.run_all_benchmark_environments_on_planner_generators(
+            generators=sample_planner_generators,
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+            n_jobs=1,
+        )
+
+        # Verify nested structure
+        for env_name, policies_dict in results.items():
+            assert isinstance(env_name, str)
+            assert isinstance(policies_dict, dict)
+            for policy_name, history_list in policies_dict.items():
+                assert isinstance(policy_name, str)
+                assert isinstance(history_list, list)
+
+    def test_benchmark_environments_empty_generators_raises_error(self: "APITestProtocol"):
+        """Test error handling for empty generators list.
+
+        Purpose: Validates proper error handling for invalid input
+
+        Given: Empty list of generators
+        When: run_all_benchmark_environments_on_planner_generators is called
+        Then: ValueError is raised
+
+        Test type: unit
+        """
+        api = self.create_api()
+
+        with pytest.raises(ValueError, match="generators list cannot be empty"):
+            api.run_all_benchmark_environments_on_planner_generators(
+                generators=[],
+                n_particles=10,
+                num_episodes=2,
+                num_steps=3,
+            )
+
+    def test_benchmark_environments_with_custom_experiment_name(
+        self: "APITestProtocol", sample_planner_generators
+    ):
+        """Test benchmark execution with custom experiment name.
+
+        Purpose: Validates experiment naming works correctly
+
+        Given: Valid generators and custom experiment name
+        When: run_all_benchmark_environments_on_planner_generators is called
+        Then: Execution completes successfully
+
+        Test type: integration
+        """
+        api = self.create_api()
+        results, stats_df = api.run_all_benchmark_environments_on_planner_generators(
+            generators=sample_planner_generators,
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+            experiment_name="CustomBenchmarkTest",
+            n_jobs=1,
+        )
+
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+
+    def test_benchmark_environments_with_profiling_enabled(
+        self: "APITestProtocol", sample_planner_generators
+    ):
+        """Test benchmark execution with profiling enabled.
+
+        Purpose: Validates profiling parameter works correctly
+
+        Given: Valid generators and enable_profiling=True
+        When: run_all_benchmark_environments_on_planner_generators is called
+        Then: Execution completes successfully with profiling data
+
+        Test type: integration
+        """
+        api = self.create_api()
+        results, stats_df = api.run_all_benchmark_environments_on_planner_generators(
+            generators=sample_planner_generators,
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+            n_jobs=1,
+            enable_profiling=True,
+            profiling_output_limit=10,
+        )
+
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+
+    def test_benchmark_environments_cache_directory_handling(
+        self: "APITestProtocol", sample_planner_generators, tmp_path
+    ):
+        """Test cache directory creation and management.
+
+        Purpose: Validates cache directory is created and used correctly
+
+        Given: Valid generators and custom cache directory
+        When: run_all_benchmark_environments_on_planner_generators is called
+        Then: Execution completes successfully
+
+        Test type: integration
+        """
+        cache_dir = tmp_path / "benchmark_cache"
+        api = self.create_api()
+
+        results, stats_df = api.run_all_benchmark_environments_on_planner_generators(
+            generators=sample_planner_generators,
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+            cache_dir_path=cache_dir,
+            n_jobs=1,
+        )
+
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+
+    def test_benchmark_environments_with_custom_statistical_params(
+        self: "APITestProtocol", sample_planner_generators
+    ):
+        """Test benchmark execution with custom statistical parameters.
+
+        Purpose: Validates alpha and confidence_interval_level parameters
+
+        Given: Valid generators with custom alpha and confidence level
+        When: run_all_benchmark_environments_on_planner_generators is called
+        Then: Execution completes successfully
+
+        Test type: integration
+        """
+        api = self.create_api()
+        results, stats_df = api.run_all_benchmark_environments_on_planner_generators(
+            generators=sample_planner_generators,
+            n_particles=10,
+            num_episodes=2,
+            num_steps=3,
+            alpha=0.05,
+            confidence_interval_level=0.99,
+            n_jobs=1,
+        )
+
+        assert isinstance(results, dict)
+        assert isinstance(stats_df, pd.DataFrame)
+
+
 class ErrorHandlingTestsMixin:
     """Mixin with common error handling tests."""
 

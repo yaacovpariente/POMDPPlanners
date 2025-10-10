@@ -23,6 +23,9 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfigGenerator,
     OptimizedPolicyResult,
 )
+from POMDPPlanners.simulations.planner_evaluation_workflow import (
+    PlannerEvaluationLocalWorkflow,
+)
 from POMDPPlanners.simulations.hyperparameter_tuning_evaluation_workflows import (
     OptimizationEvaluationLocalWorkflow,
 )
@@ -36,11 +39,15 @@ from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.configs.experiment_configs import (
     PolicyHyperparameterOptimizationExperimentConfigCreator,
     AllHyperparameterBenchmarksExperimentConfigCreator,
+    AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator,
 )
 from POMDPPlanners.utils.logger import get_logger
 from POMDPPlanners.simulations.simulation_apis.simulations_api_interface import (
     SimulationsAPIInterface,
 )
+
+
+from POMDPPlanners.core.simulation.simulation_configs import PlannerGenerator
 
 
 class LocalSimulationsAPI(SimulationsAPIInterface):
@@ -393,6 +400,48 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             )
         self.logger.info("Main simulation run completed!")
         return results
+
+    def run_all_benchmark_environments_on_planner_generators(
+        self,
+        generators: Sequence[PlannerGenerator],
+        n_particles: int = 30,
+        num_episodes: int = 10,
+        num_steps: int = 20,
+        alpha: float = 0.1,
+        confidence_interval_level: float = 0.95,
+        experiment_name: str = "All_Benchmark_Environments_On_Planner_Generators",
+        n_jobs: int = -1,
+        cache_dir_path: Optional[Path] = None,
+        clear_cache_on_start: bool = False,
+        enable_profiling: bool = False,
+        profiling_output_limit: int = 50,
+        cache_visualizations: bool = True,
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        if len(generators) == 0:
+            raise ValueError("generators list cannot be empty")
+
+        if not all(isinstance(gen, PlannerGenerator) for gen in generators):
+            raise ValueError("generators list must contain only PlannerGenerator objects")
+
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=generators,
+            n_particles=n_particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+        )
+
+        configs = creator.get_experiment_configs()
+        workflow = PlannerEvaluationLocalWorkflow(
+            cache_dir_path=cache_dir_path,
+            experiment_name=experiment_name,
+            alpha=alpha,
+            confidence_interval_level=confidence_interval_level,
+            n_jobs=n_jobs,
+            enable_profiling=enable_profiling,
+            verbose=True,
+            cache_visualizations=cache_visualizations,
+        )
+        return workflow.evaluate(configs)
 
     def run_hyperparameter_optimization(
         self,
