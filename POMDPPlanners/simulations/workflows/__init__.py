@@ -14,6 +14,10 @@ from POMDPPlanners.simulations.workflows.planner_evaluation_workflow import (
     PlannerEvaluationDaskWorkflow,
     PlannerEvaluationPBSWorkflow,
 )
+from POMDPPlanners.simulations.workflows.optimization import (
+    run_hyperparameter_optimization_local_run,
+    run_hyperparameter_optimization_pbs,
+)
 
 __all__ = [
     # Workflow classes (recommended for new code)
@@ -23,4 +27,7 @@ __all__ = [
     "PlannerEvaluationLocalWorkflow",
     "PlannerEvaluationDaskWorkflow",
     "PlannerEvaluationPBSWorkflow",
+    # Optimization functions
+    "run_hyperparameter_optimization_local_run",
+    "run_hyperparameter_optimization_pbs",
 ]
