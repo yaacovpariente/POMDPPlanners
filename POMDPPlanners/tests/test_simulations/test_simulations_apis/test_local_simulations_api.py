@@ -36,6 +36,7 @@ from .api_test_mixins import (
     RunMultipleEnvironmentsTestsMixin,
     HyperparameterOptimizationTestsMixin,
     OptimizeAndEvaluateTestsMixin,
+    BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin,
     ErrorHandlingTestsMixin,
 )
 
@@ -48,6 +49,7 @@ class TestLocalSimulationsAPI(
     RunMultipleEnvironmentsTestsMixin,
     HyperparameterOptimizationTestsMixin,
     OptimizeAndEvaluateTestsMixin,
+    BenchmarkEnvironmentsOnPlannerGeneratorsTestsMixin,
     ErrorHandlingTestsMixin,
 ):
     """Test suite for LocalSimulationsAPI.

@@ -5,6 +5,7 @@ import pandas as pd
 
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.simulation import EnvironmentRunParams
+from POMDPPlanners.core.simulation.simulation_configs import PlannerGenerator
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     HyperParamPlannerConfigGenerator,
@@ -23,10 +24,14 @@ from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.configs.experiment_configs import (
     PolicyHyperparameterOptimizationExperimentConfigCreator,
     AllHyperparameterBenchmarksExperimentConfigCreator,
+    AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator,
 )
 from POMDPPlanners.utils.logger import get_logger
 from POMDPPlanners.simulations.simulation_apis.simulations_api_interface import (
     SimulationsAPIInterface,
+)
+from POMDPPlanners.simulations.planner_evaluation_workflow import (
+    PlannerEvaluationDaskWorkflow,
 )
 
 
@@ -221,6 +226,86 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
             )
             self.logger.info("Simulation run completed")
             return results
+
+    def run_all_benchmark_environments_on_planner_generators(
+        self,
+        generators: Sequence[PlannerGenerator],
+        n_particles: int = 30,
+        num_episodes: int = 10,
+        num_steps: int = 20,
+        alpha: float = 0.1,
+        confidence_interval_level: float = 0.95,
+        experiment_name: str = "All_Benchmark_Environments_On_Planner_Generators",
+        n_jobs: int = -1,
+        cache_dir_path: Optional[Path] = None,
+        clear_cache_on_start: bool = False,
+        enable_profiling: bool = False,
+        profiling_output_limit: int = 50,
+        cache_visualizations: bool = True,
+        scheduler_address: Optional[str] = None,
+        cache_size: int = int(2e9),
+    ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
+        """Run all benchmark environments on planner generators using Dask.
+
+        This method runs evaluation experiments across all compatible benchmark environments
+        for a given set of planner generators using Dask for distributed execution.
+
+        Args:
+            generators: Sequence of planner generators to evaluate.
+            n_particles: Number of particles for belief representation.
+            num_episodes: Number of episodes for evaluation.
+            num_steps: Maximum steps per episode for evaluation.
+            alpha: Significance level for statistical tests.
+            confidence_interval_level: Confidence level for intervals.
+            experiment_name: Name for the experiment.
+            n_jobs: Number of parallel jobs for execution.
+            cache_dir_path: Optional path for storing results.
+            clear_cache_on_start: Whether to clear cache at startup.
+            enable_profiling: Whether to enable performance profiling.
+            profiling_output_limit: Maximum number of profiling entries to display.
+            cache_visualizations: Whether to cache visualizations.
+            scheduler_address: Address of existing Dask scheduler (None for local cluster).
+            cache_size: Size of Dask cache in bytes.
+
+        Returns:
+            Tuple of results dictionary and DataFrame.
+
+        Raises:
+            ValueError: If generators list is empty or contains invalid objects.
+        """
+        if len(generators) == 0:
+            raise ValueError("generators list cannot be empty")
+
+        if not all(isinstance(gen, PlannerGenerator) for gen in generators):
+            raise ValueError("generators list must contain only PlannerGenerator objects")
+
+        if cache_dir_path is None:
+            cache_dir_path = Path("./all_benchmark_environments_on_planner_generators_dask_results")
+
+        creator = AllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator(
+            generators=generators,
+            n_particles=n_particles,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+        )
+
+        workflow = PlannerEvaluationDaskWorkflow(
+            cache_dir_path=cache_dir_path,
+            experiment_name=experiment_name,
+            n_workers=n_jobs,
+            scheduler_address=scheduler_address,
+            cache_size=cache_size,
+            clear_cache_on_start=clear_cache_on_start,
+            debug=False,
+            n_jobs=n_jobs,
+            enable_profiling=enable_profiling,
+            verbose=True,
+            alpha=alpha,
+            confidence_interval_level=confidence_interval_level,
+            cache_visualizations=cache_visualizations,
+        )
+        configs = creator.get_experiment_configs()
+        return workflow.evaluate(configs)
 
     def run_hyperparameter_optimization(
         self,
