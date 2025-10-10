@@ -200,10 +200,17 @@ class CartPoleObservation(ObservationModel):
         return samples
 
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
+        # Handle empty list case
+        if len(values) == 0:
+            return np.array([])
+
         # Convert list of arrays to 2D numpy array for vectorized computation
         values_array = np.array(values)
         mvn = stats.multivariate_normal(mean=self.next_state, cov=self.noise_cov)  # type: ignore
-        return np.array(mvn.pdf(values_array)).reshape(-1, 1)
+        pdf_values = mvn.pdf(values_array)
+
+        # Ensure result is always a 1D array (pdf returns scalar for single input)
+        return np.atleast_1d(pdf_values)
 
 
 class CartPoleInitialStateDistribution(Distribution):

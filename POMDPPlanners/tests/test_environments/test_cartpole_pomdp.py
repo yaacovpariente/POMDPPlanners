@@ -440,3 +440,139 @@ def test_cartpole_pomdp_models():
     # Test initial observation distribution
     initial_obs_dist = env.initial_observation_dist()
     assert isinstance(initial_obs_dist, CartPoleInitialStateDistribution)
+
+
+def test_cartpole_observation_model_probability_shape_single_observation():
+    """Test that observation model probability returns correct shape for single observation.
+
+    Purpose: Validates that CartPoleObservation.probability() returns a 1D array of scalars,
+    not a 2D array, when given a single observation
+
+    Given: A CartPoleObservation model with state [0.1, 0.05, 0.02, -0.1] and a single observation
+    When: probability() method is called with a list containing one observation
+    Then: Returns 1D numpy array with shape (1,) containing a scalar probability value
+
+    Test type: unit
+    """
+    # ARRANGE: Create observation model
+    true_state = np.array([0.1, 0.05, 0.02, -0.1])
+    action = 1
+    noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
+    obs_model = CartPoleObservation(next_state=true_state, action=action, noise_cov=noise_cov)
+
+    # Create single observation
+    observation = np.array([0.12, 0.06, 0.025, -0.09])
+
+    # ACT: Get probability
+    probs = obs_model.probability([observation])
+
+    # ASSERT: Check shape and type
+    assert isinstance(probs, np.ndarray), "probability() should return numpy array"
+    assert (
+        probs.ndim == 1
+    ), f"probability() should return 1D array, got {probs.ndim}D array with shape {probs.shape}"
+    assert probs.shape == (1,), f"probability([obs]) should have shape (1,), got {probs.shape}"
+    assert np.isscalar(probs[0]), f"Individual probability should be scalar, got {type(probs[0])}"
+    assert probs[0] > 0.0, f"Probability density should be positive, got {probs[0]}"
+
+
+def test_cartpole_observation_model_probability_shape_multiple_observations():
+    """Test that observation model probability returns correct shape for multiple observations.
+
+    Purpose: Validates that CartPoleObservation.probability() returns a 1D array of scalars
+    when given multiple observations, with length matching number of observations
+
+    Given: A CartPoleObservation model with state [0.1, 0.05, 0.02, -0.1] and three observations
+    When: probability() method is called with a list containing three observations
+    Then: Returns 1D numpy array with shape (3,) containing scalar probability values
+
+    Test type: unit
+    """
+    # ARRANGE: Create observation model
+    true_state = np.array([0.1, 0.05, 0.02, -0.1])
+    action = 1
+    noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
+    obs_model = CartPoleObservation(next_state=true_state, action=action, noise_cov=noise_cov)
+
+    # Create multiple observations
+    observations = [
+        np.array([0.12, 0.06, 0.025, -0.09]),
+        np.array([0.08, 0.04, 0.015, -0.11]),
+        np.array([0.11, 0.055, 0.022, -0.095]),
+    ]
+
+    # ACT: Get probabilities
+    probs = obs_model.probability(observations)
+
+    # ASSERT: Check shape and type
+    assert isinstance(probs, np.ndarray), "probability() should return numpy array"
+    assert (
+        probs.ndim == 1
+    ), f"probability() should return 1D array, got {probs.ndim}D array with shape {probs.shape}"
+    assert probs.shape == (3,), f"probability(3 obs) should have shape (3,), got {probs.shape}"
+
+    # Check each probability density is a scalar and positive
+    for i, prob in enumerate(probs):
+        assert np.isscalar(prob), f"Individual probability[{i}] should be scalar, got {type(prob)}"
+        assert prob > 0.0, f"Probability density[{i}] should be positive, got {prob}"
+
+
+def test_cartpole_observation_model_probability_empty_list():
+    """Test that observation model probability handles empty observation list correctly.
+
+    Purpose: Validates that CartPoleObservation.probability() returns empty 1D array for empty input
+
+    Given: A CartPoleObservation model and an empty list of observations
+    When: probability() method is called with empty list
+    Then: Returns empty 1D numpy array with shape (0,)
+
+    Test type: unit
+    """
+    # ARRANGE: Create observation model
+    true_state = np.array([0.1, 0.05, 0.02, -0.1])
+    action = 1
+    noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
+    obs_model = CartPoleObservation(next_state=true_state, action=action, noise_cov=noise_cov)
+
+    # ACT: Get probability for empty list
+    probs = obs_model.probability([])
+
+    # ASSERT: Check shape
+    assert isinstance(probs, np.ndarray), "probability() should return numpy array"
+    assert probs.ndim == 1, f"probability() should return 1D array, got {probs.ndim}D array"
+    assert probs.shape == (0,), f"probability([]) should have shape (0,), got {probs.shape}"
+
+
+def test_cartpole_observation_model_probability_values_reasonable():
+    """Test that observation model probability values are reasonable for noisy observations.
+
+    Purpose: Validates that CartPoleObservation.probability() computes reasonable probability values
+    based on Gaussian noise model, with closer observations having higher probability
+
+    Given: A CartPoleObservation model and observations at different distances from true state
+    When: probability() method is called with observations close to and far from true state
+    Then: Closer observations have higher probability than distant observations
+
+    Test type: unit
+    """
+    # ARRANGE: Create observation model
+    true_state = np.array([0.1, 0.05, 0.02, -0.1])
+    action = 1
+    noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
+    obs_model = CartPoleObservation(next_state=true_state, action=action, noise_cov=noise_cov)
+
+    # Create observations: one close to true state, one far
+    close_obs = true_state + np.array([0.01, 0.01, 0.01, 0.01])  # Small deviation
+    far_obs = true_state + np.array([1.0, 1.0, 1.0, 1.0])  # Large deviation
+
+    # ACT: Get probabilities
+    probs = obs_model.probability([close_obs, far_obs])
+
+    # ASSERT: Close observation should have higher probability
+    assert (
+        probs[0] > probs[1]
+    ), f"Close observation prob ({probs[0]}) should be higher than far observation prob ({probs[1]})"
+
+    # Both should be positive (Gaussian has non-zero probability everywhere)
+    assert probs[0] > 0.0, "Close observation should have positive probability"
+    assert probs[1] > 0.0, "Far observation should have positive (but smaller) probability"
