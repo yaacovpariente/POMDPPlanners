@@ -155,7 +155,7 @@ class TestPlannerEvaluationWorkflow:
         with pytest.raises(NotImplementedError):
             workflow._get_task_manager_config()
 
-    @patch("POMDPPlanners.simulations.planner_evaluation_workflow.POMDPSimulator")
+    @patch("POMDPPlanners.simulations.workflows.planner_evaluation_workflow.POMDPSimulator")
     def test_evaluate_method_calls_simulator_correctly(
         self, mock_simulator_class, sample_environment_run_params, mock_simulator_results
     ):
@@ -732,7 +732,7 @@ class TestPlannerEvaluationPBSWorkflow:
 class TestWorkflowIntegration:
     """Integration tests for workflow classes."""
 
-    @patch("POMDPPlanners.simulations.planner_evaluation_workflow.POMDPSimulator")
+    @patch("POMDPPlanners.simulations.workflows.planner_evaluation_workflow.POMDPSimulator")
     def test_local_workflow_evaluation_flow(
         self, mock_simulator_class, sample_environment_run_params, mock_simulator_results
     ):
@@ -770,7 +770,7 @@ class TestWorkflowIntegration:
         # Verify results are returned
         assert results == mock_simulator_results
 
-    @patch("POMDPPlanners.simulations.planner_evaluation_workflow.POMDPSimulator")
+    @patch("POMDPPlanners.simulations.workflows.planner_evaluation_workflow.POMDPSimulator")
     def test_dask_workflow_evaluation_flow(
         self, mock_simulator_class, sample_environment_run_params, mock_simulator_results
     ):
@@ -810,7 +810,7 @@ class TestWorkflowIntegration:
         # Verify results are returned
         assert results == mock_simulator_results
 
-    @patch("POMDPPlanners.simulations.planner_evaluation_workflow.POMDPSimulator")
+    @patch("POMDPPlanners.simulations.workflows.planner_evaluation_workflow.POMDPSimulator")
     def test_pbs_workflow_evaluation_flow(
         self, mock_simulator_class, sample_environment_run_params, mock_simulator_results
     ):
@@ -941,7 +941,7 @@ class TestErrorHandling:
 
         # Should not raise error with empty list
         with patch(
-            "POMDPPlanners.simulations.planner_evaluation_workflow.POMDPSimulator"
+            "POMDPPlanners.simulations.workflows.planner_evaluation_workflow.POMDPSimulator"
         ) as mock_simulator_class:
             mock_simulator_instance = Mock()
             mock_simulator_instance.compare_multiple_environments_policies.return_value = (
@@ -977,7 +977,7 @@ class TestErrorHandling:
         )
 
         with patch(
-            "POMDPPlanners.simulations.planner_evaluation_workflow.POMDPSimulator"
+            "POMDPPlanners.simulations.workflows.planner_evaluation_workflow.POMDPSimulator"
         ) as mock_simulator_class:
             mock_simulator_instance = Mock()
             mock_simulator_instance.compare_multiple_environments_policies.return_value = (
