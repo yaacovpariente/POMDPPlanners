@@ -1,5 +1,6 @@
 import hashlib
 import json
+from enum import Enum
 
 import numpy as np
 
@@ -14,6 +15,10 @@ class NumpyEncoder(json.JSONEncoder):
             return int(o)
         if isinstance(o, np.floating):
             return float(o)
+
+        # Handle Enum types by using their value
+        if isinstance(o, Enum):
+            return o.value
 
         # Handle Environment and Belief objects by using their config_id
         if hasattr(o, "config_id"):
