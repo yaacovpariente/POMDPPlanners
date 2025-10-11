@@ -1252,11 +1252,290 @@ class TestHyperParameterTuningSimulationTaskMLFlowIntegration:
         assert "optimization_time" in metadata
         assert "n_trials" in metadata
         assert "best_trial_number" in metadata
+        assert "num_pareto_optimal_trials" in metadata  # New field for multi-objective optimization
 
         # Verify metadata types and ranges
         assert isinstance(metadata["best_pareto_score"], (int, float))
         assert isinstance(metadata["best_trial_metrics"], dict)
         assert isinstance(metadata["optimization_time"], (int, float))
         assert isinstance(metadata["n_trials"], int)
+        assert isinstance(metadata["num_pareto_optimal_trials"], int)
         assert metadata["n_trials"] > 0
         assert metadata["optimization_time"] >= 0
+        assert metadata["num_pareto_optimal_trials"] > 0
+        assert metadata["num_pareto_optimal_trials"] <= metadata["n_trials"]
+
+
+# =============================================================================
+# Multi-Objective Optimization Tests
+# =============================================================================
+
+
+def test_multi_objective_optimization_with_multiple_metrics(environment, hyper_parameters):
+    """Test multi-objective optimization with multiple optimization targets.
+
+    Purpose: Validates that HyperParameterTuningSimulationTask handles multiple optimization objectives
+
+    Given: A HyperParameterTuningSimulationTask with multiple parameters to optimize
+    When: Task is executed with multiple optimization directions
+    Then: Task successfully optimizes multiple objectives and returns Pareto-optimal results
+
+    Test type: integration
+    """
+    belief = create_test_belief(environment)
+
+    # Create task with multiple optimization parameters
+    # Use metrics that actually exist in simulation_statistics.py
+    task = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=2,
+        num_steps=2,
+        parameters_to_optimize=[
+            ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ("return_cvar", HyperParameterOptimizationDirection.MAXIMIZE),  # Valid metric
+        ],
+        console_output=False,
+        n_trials=3,  # Small for fast tests
+        seed=42,
+    )
+
+    # Run optimization
+    result = task.run()
+
+    # Verify result contains both optimized metrics
+    assert result is not None
+    assert "average_return" in result.optimized_metric_values
+    assert "return_cvar" in result.optimized_metric_values
+
+    # Verify metadata includes Pareto information
+    metadata = task.get_optimization_metadata()
+    assert metadata is not None
+    assert "num_pareto_optimal_trials" in metadata
+    assert metadata["num_pareto_optimal_trials"] > 0
+
+
+def test_multi_objective_optimization_with_mixed_directions(environment, hyper_parameters):
+    """Test multi-objective optimization with mixed maximize/minimize directions.
+
+    Purpose: Validates that HyperParameterTuningSimulationTask handles mixed optimization directions
+
+    Given: A HyperParameterTuningSimulationTask with maximize and minimize objectives
+    When: Task is executed with mixed optimization directions
+    Then: Task successfully handles mixed directions and returns appropriate results
+
+    Test type: integration
+    """
+    belief = create_test_belief(environment)
+
+    # Create task with mixed optimization directions
+    # Use metrics that actually exist: average_action_time for minimize
+    task = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=2,
+        num_steps=2,
+        parameters_to_optimize=[
+            ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ("average_action_time", HyperParameterOptimizationDirection.MINIMIZE),  # Valid metric
+        ],
+        console_output=False,
+        n_trials=3,  # Small for fast tests
+        seed=42,
+    )
+
+    # Run optimization
+    result = task.run()
+
+    # Verify result contains both optimized metrics
+    assert result is not None
+    assert "average_return" in result.optimized_metric_values
+    assert "average_action_time" in result.optimized_metric_values
+
+    # Verify parameters_to_optimize includes both directions
+    assert len(result.parameters_to_optimize) == 2
+    assert result.parameters_to_optimize[0] == (
+        "average_return",
+        HyperParameterOptimizationDirection.MAXIMIZE,
+    )
+    assert result.parameters_to_optimize[1] == (
+        "average_action_time",
+        HyperParameterOptimizationDirection.MINIMIZE,
+    )
+
+
+def test_objective_function_returns_tuple_of_metrics(environment, hyper_parameters):
+    """Test that objective function returns tuple of metric values for Optuna.
+
+    Purpose: Validates that the objective function returns a tuple of metrics for multi-objective optimization
+
+    Given: A HyperParameterTuningSimulationTask with multiple optimization objectives
+    When: Objective function is created and called internally
+    Then: Objective function returns tuple of metric values in correct order
+
+    Test type: unit
+    """
+    belief = create_test_belief(environment)
+
+    task = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=2,
+        num_steps=2,
+        parameters_to_optimize=[
+            ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ("return_cvar", HyperParameterOptimizationDirection.MAXIMIZE),  # Valid metric
+        ],
+        console_output=False,
+        n_trials=2,
+        seed=42,
+    )
+
+    # Run optimization (this internally tests that objective returns tuple)
+    result = task.run()
+
+    # If this completes without error, the objective function is working correctly
+    assert result is not None
+
+    # Verify both metrics are present in result
+    assert len(result.optimized_metric_values) == 2
+    assert all(isinstance(v, float) for v in result.optimized_metric_values.values())
+
+
+def test_pareto_optimal_trials_identified(environment, hyper_parameters):
+    """Test that Optuna correctly identifies Pareto-optimal trials.
+
+    Purpose: Validates that Optuna's multi-objective optimization identifies Pareto-optimal trials
+
+    Given: A HyperParameterTuningSimulationTask with multiple optimization objectives
+    When: Task runs with sufficient trials to create Pareto frontier
+    Then: Optuna identifies at least one Pareto-optimal trial and metadata reflects this
+
+    Test type: integration
+    """
+    belief = create_test_belief(environment)
+
+    task = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=2,
+        num_steps=2,
+        parameters_to_optimize=[
+            ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ("return_cvar", HyperParameterOptimizationDirection.MAXIMIZE),  # Valid metric
+        ],
+        console_output=False,
+        n_trials=5,  # More trials to ensure Pareto frontier
+        seed=42,
+    )
+
+    # Run optimization
+    result = task.run()
+    assert result is not None
+
+    # Verify Pareto-optimal trials were identified
+    metadata = task.get_optimization_metadata()
+    assert metadata is not None
+    assert "num_pareto_optimal_trials" in metadata
+    assert metadata["num_pareto_optimal_trials"] >= 1
+    assert metadata["num_pareto_optimal_trials"] <= metadata["n_trials"]
+
+    # Verify all_pareto_scores contains scores for Pareto-optimal trials
+    assert "all_pareto_scores" in metadata
+    assert isinstance(metadata["all_pareto_scores"], dict)
+    assert len(metadata["all_pareto_scores"]) == metadata["num_pareto_optimal_trials"]
+
+
+def test_compute_pareto_scores_with_subset_of_trials(environment, hyper_parameters):
+    """Test _compute_pareto_scores with subset of trials (Pareto-optimal only).
+
+    Purpose: Validates that _compute_pareto_scores can score a subset of trials
+
+    Given: A HyperParameterTuningSimulationTask that completes optimization
+    When: Pareto scores are computed for only Pareto-optimal trials
+    Then: Scores are computed correctly for the subset without errors
+
+    Test type: integration
+    """
+    belief = create_test_belief(environment)
+
+    task = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=2,
+        num_steps=2,
+        parameters_to_optimize=[
+            ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+        ],
+        console_output=False,
+        n_trials=4,
+        seed=42,
+    )
+
+    # Run optimization
+    result = task.run()
+    assert result is not None
+
+    # Verify that Pareto scores were computed
+    metadata = task.get_optimization_metadata()
+    assert metadata is not None
+    assert "all_pareto_scores" in metadata
+    assert len(metadata["all_pareto_scores"]) > 0
+
+
+def test_multi_objective_optimization_single_objective_still_works(environment, hyper_parameters):
+    """Test that single-objective optimization still works with multi-objective implementation.
+
+    Purpose: Validates backward compatibility - single objective optimization works with new implementation
+
+    Given: A HyperParameterTuningSimulationTask with single optimization objective
+    When: Task is executed with only one parameter to optimize
+    Then: Task completes successfully and returns valid results (backward compatible)
+
+    Test type: integration
+    """
+    belief = create_test_belief(environment)
+
+    task = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=2,
+        num_steps=2,
+        parameters_to_optimize=[
+            ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+        ],  # Single objective
+        console_output=False,
+        n_trials=3,
+        seed=42,
+    )
+
+    # Run optimization
+    result = task.run()
+
+    # Verify result is valid
+    assert result is not None
+    assert len(result.optimized_metric_values) == 1
+    assert "average_return" in result.optimized_metric_values
+
+    # Should still have Pareto metadata (even with single objective)
+    metadata = task.get_optimization_metadata()
+    assert metadata is not None
+    assert "num_pareto_optimal_trials" in metadata
