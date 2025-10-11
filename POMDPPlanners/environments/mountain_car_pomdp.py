@@ -190,9 +190,16 @@ class MountainCarObservation(ObservationModel):
         return samples
 
     def probability(self, values: List[np.ndarray]) -> np.ndarray:
+        # Handle empty list case
+        if len(values) == 0:
+            return np.array([])
+
         # Vectorized probability for a batch of observations
         values_array = np.array(values)
-        return scipy.stats.multivariate_normal(self.mean, self.cov_matrix).pdf(values_array)  # type: ignore
+        pdf_values = scipy.stats.multivariate_normal(self.mean, self.cov_matrix).pdf(values_array)  # type: ignore
+
+        # Ensure result is always a 1D array (pdf returns scalar for single input)
+        return np.atleast_1d(pdf_values)
 
 
 class MountainCarPOMDP(DiscreteActionsEnvironment):
