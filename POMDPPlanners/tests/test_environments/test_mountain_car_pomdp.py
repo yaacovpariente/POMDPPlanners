@@ -11,9 +11,10 @@ import random
 
 import numpy as np
 import pytest
+import scipy.stats
 
 from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
+from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP, MountainCarObservation
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -103,6 +104,259 @@ def test_observation_model(base_mountain_car_environment):
     )
     assert len(observations) == 100
     assert all(isinstance(obs, np.ndarray) and obs.shape == (2,) for obs in observations)
+
+
+def test_observation_model_probability_single_observation(base_mountain_car_environment):
+    """Test observation model probability function with single observation.
+
+    Purpose: Validates that observation model probability function correctly handles single observation input
+
+    Given: MountainCarPOMDP environment and observation model with specific state and covariance
+    When: probability() method is called with single observation
+    Then: Returns numpy array with shape (1,) containing probability density value
+
+    Test type: unit
+    """
+    # Test single observation probability
+    state = np.array([0.0, 0.0])
+    action = 0
+    obs_model = base_mountain_car_environment.observation_model(state, action)
+
+    # Create a single observation close to true state
+    observation = np.array([0.05, 0.01])  # Small deviation from true state [0.0, 0.0]
+
+    # Get probability
+    probabilities = obs_model.probability([observation])
+
+    # Verify output type and shape
+    assert isinstance(probabilities, np.ndarray), "Probability should return numpy array"
+    assert probabilities.shape == (
+        1,
+    ), f"Single observation should return shape (1,), got {probabilities.shape}"
+    assert probabilities[0] > 0.0, "Probability should be positive"
+    assert isinstance(probabilities[0], (float, np.floating)), "Probability value should be float"
+
+
+def test_observation_model_probability_multiple_observations(base_mountain_car_environment):
+    """Test observation model probability function with multiple observations.
+
+    Purpose: Validates that observation model probability function correctly handles multiple observations input
+
+    Given: MountainCarPOMDP environment and observation model with specific state and covariance
+    When: probability() method is called with multiple observations
+    Then: Returns numpy array with shape (n,) containing probability densities for each observation
+
+    Test type: unit
+    """
+    # Test multiple observations probability
+    state = np.array([0.0, 0.0])
+    action = 0
+    obs_model = base_mountain_car_environment.observation_model(state, action)
+
+    # Create multiple observations at different distances from true state
+    observations = [
+        np.array([0.0, 0.0]),  # Exactly at true state (highest probability)
+        np.array([0.05, 0.01]),  # Close to true state
+        np.array([0.1, 0.02]),  # Medium distance
+        np.array([0.5, 0.1]),  # Far from true state (lowest probability)
+    ]
+
+    # Get probabilities
+    probabilities = obs_model.probability(observations)
+
+    # Verify output type and shape
+    assert isinstance(probabilities, np.ndarray), "Probability should return numpy array"
+    assert probabilities.shape == (
+        4,
+    ), f"Four observations should return shape (4,), got {probabilities.shape}"
+
+    # All probabilities should be positive
+    assert np.all(probabilities > 0.0), "All probabilities should be positive"
+
+    # Probabilities should decrease with distance from true state
+    assert probabilities[0] > probabilities[1], "Probability at true state should be highest"
+    assert probabilities[1] > probabilities[2], "Closer observation should have higher probability"
+    assert probabilities[2] > probabilities[3], "Closer observation should have higher probability"
+
+
+def test_observation_model_probability_mathematical_correctness(base_mountain_car_environment):
+    """Test observation model probability function mathematical correctness.
+
+    Purpose: Validates that observation model probability function computes correct probability densities
+    using multivariate normal distribution
+
+    Given: MountainCarPOMDP environment with known covariance matrix and true state
+    When: probability() method is called with specific observations
+    Then: Probabilities match expected multivariate normal distribution calculations
+
+    Test type: unit
+    """
+    # Test mathematical correctness
+    state = np.array([0.0, 0.0])
+    action = 0
+    obs_model = base_mountain_car_environment.observation_model(state, action)
+
+    # Get the true state and covariance matrix
+    true_state = obs_model.mean
+    cov_matrix = obs_model.cov_matrix
+
+    # Test with observation at true state (should have highest probability)
+    observation_at_mean = true_state.copy()
+    prob_at_mean = obs_model.probability([observation_at_mean])[0]
+
+    # Calculate expected probability using scipy
+    expected_prob_at_mean = scipy.stats.multivariate_normal.pdf(
+        observation_at_mean, mean=true_state, cov=cov_matrix
+    )
+
+    # Verify probability matches expected value
+    assert np.isclose(
+        prob_at_mean, expected_prob_at_mean, rtol=1e-10
+    ), f"Probability at mean {prob_at_mean} should match expected {expected_prob_at_mean}"
+
+    # Test with observation away from mean
+    observation_offset = true_state + np.array([0.1, 0.01])
+    prob_offset = obs_model.probability([observation_offset])[0]
+
+    expected_prob_offset = scipy.stats.multivariate_normal.pdf(
+        observation_offset, mean=true_state, cov=cov_matrix
+    )
+
+    assert np.isclose(
+        prob_offset, expected_prob_offset, rtol=1e-10
+    ), f"Probability at offset {prob_offset} should match expected {expected_prob_offset}"
+
+    # Verify that probability at mean is higher than probability at offset
+    assert prob_at_mean > prob_offset, "Probability at mean should be higher than at offset"
+
+
+def test_observation_model_probability_edge_cases(base_mountain_car_environment):
+    """Test observation model probability function edge cases.
+
+    Purpose: Validates that observation model probability function handles edge cases correctly
+
+    Given: MountainCarPOMDP environment and observation model
+    When: probability() method is called with edge cases (empty list, extreme values)
+    Then: Function handles edge cases gracefully and returns appropriate results
+
+    Test type: unit
+    """
+    state = np.array([0.0, 0.0])
+    action = 0
+    obs_model = base_mountain_car_environment.observation_model(state, action)
+
+    # Test empty list (should return empty array)
+    empty_probs = obs_model.probability([])
+    assert isinstance(empty_probs, np.ndarray), "Empty list should return numpy array"
+    assert empty_probs.shape == (
+        0,
+    ), f"Empty list should return shape (0,), got {empty_probs.shape}"
+
+    # Test with extreme observation values (should still return positive probabilities)
+    extreme_observations = [
+        np.array([10.0, 10.0]),  # Very far from true state
+        np.array([-10.0, -10.0]),  # Very far in opposite direction
+        np.array([0.0, 0.0]),  # At true state
+    ]
+
+    extreme_probs = obs_model.probability(extreme_observations)
+    assert isinstance(extreme_probs, np.ndarray), "Extreme values should return numpy array"
+    assert extreme_probs.shape == (
+        3,
+    ), f"Three extreme observations should return shape (3,), got {extreme_probs.shape}"
+
+    # All probabilities should be non-negative (Gaussian has non-zero probability everywhere, but can be numerically zero)
+    assert np.all(
+        extreme_probs >= 0.0
+    ), "All probabilities should be non-negative even for extreme values"
+
+    # Probability at true state should be highest
+    assert (
+        extreme_probs[2] > extreme_probs[0]
+    ), "Probability at true state should be higher than extreme offset"
+    assert (
+        extreme_probs[2] > extreme_probs[1]
+    ), "Probability at true state should be higher than extreme offset"
+
+
+def test_observation_model_probability_batch_consistency(base_mountain_car_environment):
+    """Test observation model probability function batch consistency.
+
+    Purpose: Validates that observation model probability function produces consistent results
+    when called multiple times with same inputs
+
+    Given: MountainCarPOMDP environment and observation model
+    When: probability() method is called multiple times with identical observations
+    Then: All calls return identical probability values, demonstrating deterministic behavior
+
+    Test type: unit
+    """
+    state = np.array([0.0, 0.0])
+    action = 0
+    obs_model = base_mountain_car_environment.observation_model(state, action)
+
+    # Create test observations
+    observations = [
+        np.array([0.0, 0.0]),
+        np.array([0.1, 0.01]),
+        np.array([-0.05, -0.005]),
+    ]
+
+    # Call probability function multiple times
+    probs1 = obs_model.probability(observations)
+    probs2 = obs_model.probability(observations)
+    probs3 = obs_model.probability(observations)
+
+    # All results should be identical
+    assert np.array_equal(probs1, probs2), "Multiple calls should return identical results"
+    assert np.array_equal(probs2, probs3), "Multiple calls should return identical results"
+    assert np.array_equal(probs1, probs3), "Multiple calls should return identical results"
+
+
+def test_observation_model_probability_different_states(base_mountain_car_environment):
+    """Test observation model probability function with different true states.
+
+    Purpose: Validates that observation model probability function works correctly
+    with different true states and maintains proper probability relationships
+
+    Given: MountainCarPOMDP environment and observation models with different true states
+    When: probability() method is called with observations relative to each true state
+    Then: Probabilities are highest for observations closest to their respective true states
+
+    Test type: unit
+    """
+    # Test with different true states
+    states = [
+        np.array([0.0, 0.0]),
+        np.array([0.2, 0.01]),
+        np.array([-0.3, -0.02]),
+    ]
+
+    for state in states:
+        action = 0
+        obs_model = base_mountain_car_environment.observation_model(state, action)
+
+        # Create observations at different distances from this true state
+        observations = [
+            state.copy(),  # At true state
+            state + np.array([0.05, 0.005]),  # Close to true state
+            state + np.array([0.2, 0.02]),  # Far from true state
+        ]
+
+        probabilities = obs_model.probability(observations)
+
+        # Verify shape and type
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert probabilities.shape == (3,), f"Should return shape (3,), got {probabilities.shape}"
+
+        # Verify probability relationships
+        assert probabilities[0] > probabilities[1], "Probability at true state should be highest"
+        assert (
+            probabilities[1] > probabilities[2]
+        ), "Closer observation should have higher probability"
+
+        # All probabilities should be positive
+        assert np.all(probabilities > 0.0), "All probabilities should be positive"
 
 
 def test_initial_state_distribution(base_mountain_car_environment):
