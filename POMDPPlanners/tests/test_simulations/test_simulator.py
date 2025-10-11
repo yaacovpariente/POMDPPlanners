@@ -999,8 +999,10 @@ def test_create_simulation_tasks(simulator):
 
     # Check task identifiers
     for identifier in task_identifiers:
-        assert isinstance(identifier, str)  # task identifiers are cache key strings
-        assert len(identifier) > 0  # should be non-empty string
+        assert isinstance(identifier, tuple)  # task identifiers are (env_name, policy_name) tuples
+        assert len(identifier) == 2  # should be (env_name, policy_name) tuple
+        assert isinstance(identifier[0], str)  # env_name should be string
+        assert isinstance(identifier[1], str)  # policy_name should be string
 
 
 def test_create_simulation_tasks_length_verification(simulator):
@@ -1215,8 +1217,10 @@ def test_create_simulation_tasks_length_verification(simulator):
 
     # Verify task identifiers have correct format
     for identifier in task_identifiers1 + task_identifiers2 + task_identifiers3 + task_identifiers4:
-        assert isinstance(identifier, str)  # task identifiers are cache key strings
-        assert len(identifier) > 0  # should be non-empty string
+        assert isinstance(identifier, tuple)  # task identifiers are (env_name, policy_name) tuples
+        assert len(identifier) == 2  # should be (env_name, policy_name) tuple
+        assert isinstance(identifier[0], str)  # env_name should be string
+        assert isinstance(identifier[1], str)  # policy_name should be string
 
 
 def test_simulator_handles_empty_results_gracefully(simulator):

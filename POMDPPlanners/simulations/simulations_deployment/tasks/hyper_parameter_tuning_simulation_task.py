@@ -99,11 +99,18 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         )
 
     def run(self) -> Union[OptimizedPolicyResult, None]:
-        """Run the hyperparameter optimization task.
+        """Run the hyperparameter optimization task using multi-objective optimization.
 
         This method performs hyperparameter optimization for the given policy class
-        using Optuna optimization framework. It evaluates multiple parameter
-        configurations by running episodes and returns the best parameters found.
+        using Optuna's native multi-objective optimization framework. It evaluates
+        multiple parameter configurations by running episodes and uses intelligent
+        search algorithms to explore the Pareto frontier efficiently.
+
+        The optimization process:
+        1. Uses Optuna's multi-objective study to intelligently sample hyperparameters
+        2. Each trial returns actual metric values (not dummy values)
+        3. Optuna identifies the Pareto-optimal set of trials
+        4. Selects the best trial from the Pareto set using normalized scoring
 
         Returns:
             OptimizedPolicyResult: NamedTuple containing optimization results with fields:
@@ -112,8 +119,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 - chosen_hyper_parameters: Best hyperparameters found
                 - num_episodes: Number of episodes used for evaluation
                 - num_steps: Number of steps per episode
-                - direction: Optimization direction (maximize/minimize)
-                - parameter_to_optimize: Name of the parameter being optimized
+                - parameters_to_optimize: List of (parameter_name, direction) tuples
+                - optimized_metric_values: Dict of optimized metric values
             None: If optimization fails
 
         Raises:
@@ -286,20 +293,24 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             self.logger.error(f"Error in evaluation function for trial {trial.number}: {e}")
             raise e
 
-    def _compute_pareto_scores(self, study) -> Dict[int, float]:
-        """Compute normalized Pareto scores for all trials.
+    def _compute_pareto_scores(self, study, pareto_trials=None) -> Dict[int, float]:
+        """Compute normalized Pareto scores for specified trials.
 
         Args:
             study: Completed Optuna study with trial data
+            pareto_trials: List of trials to score. If None, scores all completed trials.
 
         Returns:
             Dict mapping trial number to aggregated Pareto score
         """
         import optuna
 
-        # Collect all metric values across trials
+        # Use provided pareto_trials if available, otherwise use all trials
+        trials_to_score = pareto_trials if pareto_trials is not None else study.trials
+
+        # Collect all metric values across trials to score
         trial_metrics = {}
-        for trial in study.trials:
+        for trial in trials_to_score:
             if trial.state != optuna.trial.TrialState.COMPLETE:
                 continue
 
@@ -316,7 +327,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         if not trial_metrics:
             raise ValueError("No completed trials with all required metrics found")
 
-        # Compute mean and std for each metric across all trials
+        # Compute mean and std for each metric across trials to score
         metric_stats = {}
         for param_name, _ in self.parameters_to_optimize:
             values = [trial_metrics[trial_num][param_name] for trial_num in trial_metrics.keys()]
@@ -353,14 +364,15 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         """Create the Optuna objective function for multi-objective optimization.
 
         Returns:
-            Callable: Objective function that evaluates and stores multiple metrics
+            Callable: Objective function that returns tuple of metric values for Optuna
         """
 
-        def objective(trial) -> float:
+        def objective(trial) -> Tuple[float, ...]:
             """Optuna objective function for a single optimization trial.
 
-            Note: Returns dummy value (0.0) since actual selection happens in
-            _build_optimization_results using Pareto analysis.
+            Returns:
+                Tuple of metric values in the same order as self.parameters_to_optimize.
+                Optuna uses these values to perform intelligent multi-objective optimization.
             """
             try:
                 # Create parameters dictionary from hyperparameters
@@ -378,8 +390,13 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
                 self.logger.info(f"Trial {trial.number} completed with metrics: {metric_values}")
 
-                # Return dummy value - actual selection done via Pareto analysis
-                return 0.0
+                # Return metrics as tuple in the order specified by parameters_to_optimize
+                # This allows Optuna to intelligently guide the hyperparameter search
+                metric_tuple = tuple(
+                    metric_values[param_name] for param_name, _ in self.parameters_to_optimize
+                )
+
+                return metric_tuple
 
             except Exception as e:
                 self.logger.error(f"Error in objective function for trial {trial.number}: {e}")
@@ -389,35 +406,44 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         return objective
 
     def _execute_optimization_study(self, objective_function, n_trials: int, n_jobs: int = 1):
-        """Execute the Optuna optimization study.
+        """Execute the Optuna optimization study with multi-objective optimization.
 
         Args:
-            objective_function: Function to optimize
+            objective_function: Function to optimize (returns tuple of metric values)
             n_trials: Number of optimization trials to run
+            n_jobs: Number of parallel jobs for optimization
 
         Returns:
-            optuna.Study: Completed optimization study
+            optuna.Study: Completed multi-objective optimization study
         """
         import optuna
 
-        # Create and run the optimization study
+        # Create and run the optimization study with multiple objectives
         self.logger.info("Creating Optuna study for multi-objective optimization...")
-        # Use maximize since we return dummy values - actual selection via Pareto
-        study = optuna.create_study(direction="maximize")
+
+        # Create study with directions for each parameter to optimize
+        directions = [direction.value for _, direction in self.parameters_to_optimize]
+        self.logger.info(f"Optimization directions: {directions}")
+
+        study = optuna.create_study(directions=directions)
 
         self.logger.info("Starting optimization trials...")
         study.optimize(objective_function, n_trials=n_trials, n_jobs=n_jobs)
 
         # Log optimization completion
         self.logger.info("Optimization completed successfully!")
+        self.logger.info(f"Found {len(study.best_trials)} Pareto-optimal trials")
 
         return study
 
     def _build_optimization_results(self, study, optimization_time: float) -> OptimizedPolicyResult:
         """Build OptimizedPolicyResult using Pareto-optimal policy selection.
 
+        This method selects the best trial from Optuna's Pareto-optimal trials
+        using normalized scoring across all optimization objectives.
+
         Args:
-            study: Completed Optuna study
+            study: Completed Optuna multi-objective study
             optimization_time: Total time spent on optimization
 
         Returns:
@@ -425,10 +451,14 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         """
         self.logger.info(f"Total optimization time: {optimization_time:.4f} seconds")
 
-        # Compute Pareto scores for all trials
-        pareto_scores = self._compute_pareto_scores(study)
+        # Get Pareto-optimal trials from Optuna
+        pareto_trials = study.best_trials
+        self.logger.info(f"Optuna identified {len(pareto_trials)} Pareto-optimal trials")
 
-        # Find trial with highest Pareto score
+        # Compute Pareto scores only for the Pareto-optimal trials
+        pareto_scores = self._compute_pareto_scores(study, pareto_trials)
+
+        # Find trial with highest Pareto score among Pareto-optimal trials
         best_trial_num = max(pareto_scores.keys(), key=lambda k: pareto_scores[k])
         best_trial = study.trials[best_trial_num]
         best_score = pareto_scores[best_trial_num]
@@ -466,6 +496,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             "best_trial_number": best_trial_num,
             "best_trial_statistics": best_trial.user_attrs.get("statistics"),
             "all_pareto_scores": pareto_scores,
+            "num_pareto_optimal_trials": len(pareto_trials),
         }
 
         # Extract actual metric values from best trial
