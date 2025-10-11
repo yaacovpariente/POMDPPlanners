@@ -999,9 +999,224 @@ def test_create_simulation_tasks(simulator):
 
     # Check task identifiers
     for identifier in task_identifiers:
-        env_name, policy_name = identifier
-        assert env_name == environment.name
-        assert policy_name == policy.name
+        assert isinstance(identifier, str)  # task identifiers are cache key strings
+        assert len(identifier) > 0  # should be non-empty string
+
+
+def test_create_simulation_tasks_length_verification(simulator):
+    """Test that _create_simulation_tasks creates the correct number of tasks.
+
+    Purpose: Validates that the length of tasks created matches the expected formula:
+    num_episodes * sum([len(params.policies) for params in environment_run_params])
+
+    Given: Multiple environments with different numbers of policies and episodes
+    When: _create_simulation_tasks is called with various environment run parameters
+    Then: The total number of tasks equals the expected formula calculation
+
+    Test type: unit
+    """
+    # Test Case 1: Single environment, single policy, multiple episodes
+    environment1 = TigerPOMDP(discount_factor=0.95, name="Tiger1")
+    policy1 = POMCP(
+        environment=cast(DiscreteActionsEnvironment, environment1),
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy1",
+        n_simulations=2,
+    )
+    initial_belief = get_initial_belief(environment1, n_particles=3)
+
+    env_run_params_case1 = [
+        EnvironmentRunParams(
+            environment=cast(DiscreteActionsEnvironment, environment1),
+            belief=initial_belief,
+            policies=[policy1],
+            num_episodes=3,
+            num_steps=3,
+        )
+    ]
+
+    tasks1, task_identifiers1 = simulator._create_simulation_tasks(env_run_params_case1)
+    expected_length_case1 = 3 * sum([len(params.policies) for params in env_run_params_case1])
+    assert (
+        len(tasks1) == expected_length_case1
+    ), f"Expected {expected_length_case1} tasks, got {len(tasks1)}"
+    assert len(task_identifiers1) == expected_length_case1
+
+    # Test Case 2: Single environment, multiple policies, multiple episodes
+    environment2 = TigerPOMDP(discount_factor=0.95, name="Tiger2")
+    policy2a = POMCP(
+        environment=cast(DiscreteActionsEnvironment, environment2),
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy2A",
+        n_simulations=2,
+    )
+    policy2b = POMCP(
+        environment=cast(DiscreteActionsEnvironment, environment2),
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy2B",
+        n_simulations=2,
+    )
+
+    env_run_params_case2 = [
+        EnvironmentRunParams(
+            environment=cast(DiscreteActionsEnvironment, environment2),
+            belief=initial_belief,
+            policies=[policy2a, policy2b],
+            num_episodes=2,
+            num_steps=3,
+        )
+    ]
+
+    tasks2, task_identifiers2 = simulator._create_simulation_tasks(env_run_params_case2)
+    expected_length_case2 = 2 * sum([len(params.policies) for params in env_run_params_case2])
+    assert (
+        len(tasks2) == expected_length_case2
+    ), f"Expected {expected_length_case2} tasks, got {len(tasks2)}"
+    assert len(task_identifiers2) == expected_length_case2
+
+    # Test Case 3: Multiple environments with different numbers of policies
+    environment3a = TigerPOMDP(discount_factor=0.95, name="Tiger3A")
+    environment3b = TigerPOMDP(discount_factor=0.95, name="Tiger3B")
+
+    policy3a = POMCP(
+        environment=cast(DiscreteActionsEnvironment, environment3a),
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy3A",
+        n_simulations=2,
+    )
+    policy3b1 = POMCP(
+        environment=cast(DiscreteActionsEnvironment, environment3b),
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy3B1",
+        n_simulations=2,
+    )
+    policy3b2 = POMCP(
+        environment=cast(DiscreteActionsEnvironment, environment3b),
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy3B2",
+        n_simulations=2,
+    )
+
+    env_run_params_case3 = [
+        EnvironmentRunParams(
+            environment=cast(DiscreteActionsEnvironment, environment3a),
+            belief=initial_belief,
+            policies=[policy3a],
+            num_episodes=2,
+            num_steps=3,
+        ),
+        EnvironmentRunParams(
+            environment=cast(DiscreteActionsEnvironment, environment3b),
+            belief=initial_belief,
+            policies=[policy3b1, policy3b2],
+            num_episodes=3,
+            num_steps=3,
+        ),
+    ]
+
+    tasks3, task_identifiers3 = simulator._create_simulation_tasks(env_run_params_case3)
+    expected_length_case3 = sum(
+        params.num_episodes * len(params.policies) for params in env_run_params_case3
+    )
+    assert (
+        len(tasks3) == expected_length_case3
+    ), f"Expected {expected_length_case3} tasks, got {len(tasks3)}"
+    assert len(task_identifiers3) == expected_length_case3
+
+    # Test Case 4: Complex scenario with varying episodes per environment
+    environment4a = TigerPOMDP(discount_factor=0.95, name="Tiger4A")
+    environment4b = TigerPOMDP(discount_factor=0.95, name="Tiger4B")
+    environment4c = TigerPOMDP(discount_factor=0.95, name="Tiger4C")
+
+    policy4a = POMCP(
+        environment=cast(DiscreteActionsEnvironment, environment4a),
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy4A",
+        n_simulations=2,
+    )
+    policy4b1 = POMCP(
+        environment=cast(DiscreteActionsEnvironment, environment4b),
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy4B1",
+        n_simulations=2,
+    )
+    policy4b2 = POMCP(
+        environment=cast(DiscreteActionsEnvironment, environment4b),
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy4B2",
+        n_simulations=2,
+    )
+    policy4c = POMCP(
+        environment=cast(DiscreteActionsEnvironment, environment4c),
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="Policy4C",
+        n_simulations=2,
+    )
+
+    env_run_params_case4 = [
+        EnvironmentRunParams(
+            environment=cast(DiscreteActionsEnvironment, environment4a),
+            belief=initial_belief,
+            policies=[policy4a],
+            num_episodes=1,
+            num_steps=3,
+        ),
+        EnvironmentRunParams(
+            environment=cast(DiscreteActionsEnvironment, environment4b),
+            belief=initial_belief,
+            policies=[policy4b1, policy4b2],
+            num_episodes=2,
+            num_steps=3,
+        ),
+        EnvironmentRunParams(
+            environment=cast(DiscreteActionsEnvironment, environment4c),
+            belief=initial_belief,
+            policies=[policy4c],
+            num_episodes=4,
+            num_steps=3,
+        ),
+    ]
+
+    tasks4, task_identifiers4 = simulator._create_simulation_tasks(env_run_params_case4)
+    # For this case, we need to calculate the expected length differently since episodes vary per environment
+    expected_length_case4 = sum(
+        params.num_episodes * len(params.policies) for params in env_run_params_case4
+    )
+    assert (
+        len(tasks4) == expected_length_case4
+    ), f"Expected {expected_length_case4} tasks, got {len(tasks4)}"
+    assert len(task_identifiers4) == expected_length_case4
+
+    # Verify that all tasks are EpisodeSimulationTask instances
+    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+
+    for task in tasks1 + tasks2 + tasks3 + tasks4:
+        assert isinstance(task, EpisodeSimulationTask)
+
+    # Verify task identifiers have correct format
+    for identifier in task_identifiers1 + task_identifiers2 + task_identifiers3 + task_identifiers4:
+        assert isinstance(identifier, str)  # task identifiers are cache key strings
+        assert len(identifier) > 0  # should be non-empty string
 
 
 def test_simulator_handles_empty_results_gracefully(simulator):
