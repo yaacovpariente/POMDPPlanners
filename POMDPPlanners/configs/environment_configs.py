@@ -326,9 +326,10 @@ class EnvironmentConfigsAPI:
         return pomdp, belief
 
 
-class RiskAverseEnvironmentConfigsAPI(EnvironmentConfigsAPI):
+class RiskAverseEnvironmentConfigsAPI:
     def __init__(self, discount_factor: float = 0.95, debug: bool = False):
-        super().__init__(discount_factor=discount_factor, debug=debug)
+        self.discount_factor = discount_factor
+        self.debug = debug
 
     def get_compatible_environments(
         self, policy_space_info: PolicySpaceInfo, n_particles: int = 20, seed: int = 42
