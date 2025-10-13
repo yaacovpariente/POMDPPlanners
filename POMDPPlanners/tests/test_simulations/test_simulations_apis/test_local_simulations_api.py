@@ -667,22 +667,22 @@ class TestLocalSimulationsAPIIntegration:
         """
         api = LocalSimulationsAPI()
         policy_space_info = PolicySpaceInfo(
-            action_space=SpaceType.DISCRETE,
-            observation_space=SpaceType.DISCRETE,
+            action_space=SpaceType.MIXED,
+            observation_space=SpaceType.MIXED,
         )
 
         results, stats_df = api.run_all_hyperparameter_benchmarks(
             policy_space_info=policy_space_info,
             particles=5,
             num_episodes=1,
-            num_steps=3,
+            num_steps=2,
             n_trials=2,  # Minimal for fast execution
             discount_factor=0.95,
-            time_out_in_seconds=1.0,
+            time_out_in_seconds=0.1,
             evaluation_episodes=1,
-            evaluation_steps=3,
+            evaluation_steps=2,
             evaluation_n_jobs=1,
-            optimization_n_jobs=1,
+            optimization_n_jobs=-1,
             is_risk_averse=False,
             confidence_interval_level=0.95,
             alpha=0.05,

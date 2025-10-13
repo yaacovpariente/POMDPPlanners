@@ -88,7 +88,7 @@ class RiskAverseParameterToOptimizeMapper(ParameterToOptimizeMapper):
             ]
         elif isinstance(environment, PacManPOMDP):
             return [
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+                ("avg_collision_encounters", HyperParameterOptimizationDirection.MINIMIZE),
                 ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         else:
