@@ -1,7 +1,7 @@
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -27,6 +27,65 @@ from POMDPPlanners.core.tree import ActionNode, BeliefNode
 
 # Set up logger
 logger = logging.getLogger(__name__)
+
+
+def _safe_histplot(
+    data: Sequence[float],
+    *,
+    max_bins: int = 15,
+    color: Union[str, Tuple[float, float, float]] = "skyblue",
+    alpha: float = 0.7,
+    edgecolor: str = "black",
+    linewidth: float = 0.5,
+    label: Optional[str] = None,
+):
+    """Safely render a histogram for possibly degenerate data.
+
+    Handles cases with very small or zero data range by reducing the number of
+    bins and/or explicitly setting a padded bin range to avoid numpy/seaborn
+    errors like "Too many bins for data range".
+
+    Returns True if a plot was rendered, False otherwise.
+    """
+    values = np.asarray(list(data), dtype=float)
+    if values.size == 0:
+        return False
+
+    values = values[np.isfinite(values)]
+    if values.size == 0:
+        return False
+
+    unique_values = np.unique(values)
+    data_min = float(np.min(values))
+    data_max = float(np.max(values))
+    data_range = data_max - data_min
+
+    # Determine a safe bin count
+    bins = min(max_bins, max(1, int(values.size)))
+    # Do not request more bins than unique values for tiny datasets
+    bins = min(bins, max(1, int(unique_values.size)))
+
+    binrange = None
+    # If the data range is zero or extremely tiny, pad the range and use a single bin
+    if not np.isfinite(data_range) or data_range == 0.0 or data_range < 1e-12:
+        bins = 1
+        pad = 0.5 if data_range == 0.0 else max(1e-6, data_range * 0.5)
+        binrange = (data_min - pad, data_max + pad)
+
+    try:
+        sns.histplot(
+            data=values,
+            bins=bins,
+            binrange=binrange,
+            edgecolor=edgecolor,
+            color=color,
+            alpha=alpha,
+            linewidth=linewidth,
+            label=label,
+        )
+        return True
+    except Exception:
+        return False
 
 
 def plot_metrics_comparison(
@@ -169,8 +228,26 @@ def plot_discounted_returns_histogram(
     # Create the figure and axis
     plt.figure(figsize=(10, 6))
 
-    # Create the histogram using seaborn
-    sns.histplot(data=discounted_returns, bins=15, edgecolor="black", color="skyblue", alpha=0.7)
+    # Safely render histogram (handles degenerate ranges)
+    plotted = _safe_histplot(
+        discounted_returns,
+        max_bins=15,
+        color="skyblue",
+        alpha=0.7,
+        edgecolor="black",
+        linewidth=0.5,
+    )
+
+    if not plotted:
+        # Fallback text when no valid data to plot
+        plt.text(
+            0.5,
+            0.5,
+            "No valid data to plot",
+            ha="center",
+            va="center",
+            transform=plt.gca().transAxes,
+        )
 
     # Customize the plot
     plt.xlabel(f"Discounted Return for {policy.name} in {environment.name}", fontsize=12)
@@ -223,14 +300,14 @@ def plot_discounted_returns_histogram_multiple_policies(
             history_to_discounted_return_value(history) for history in policy_histories
         ]
 
-        sns.histplot(
-            data=discounted_returns,
-            bins=15,
-            alpha=0.5,
+        _ = _safe_histplot(
+            discounted_returns,
+            max_bins=15,
             color=color,
-            label=policy.name,
+            alpha=0.5,
             edgecolor="black",
             linewidth=0.5,
+            label=policy.name,
         )
 
     # Customize the plot
