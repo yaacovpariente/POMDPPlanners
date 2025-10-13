@@ -79,12 +79,7 @@ jobs:
         docker run --rm pomdpplanners-test:latest pytest --doctest-modules POMDPPlanners/ -v
 
 
-    - name: Run visualization examples inside Docker
-      run: |
-        docker run --rm -e MPLBACKEND=Agg pomdpplanners-test:latest python legacy/light_dark_pomdp_visualization_example.py
-        docker run --rm -e MPLBACKEND=Agg pomdpplanners-test:latest python legacy/pomcpow_rock_sample_visualization_demo.py
-        docker run --rm -e MPLBACKEND=Agg pomdpplanners-test:latest python legacy/push_pomdp_visualization_example.py
-      continue-on-error: true  # Visualization examples may have display issues in CI
+    # Visualization examples removed - legacy files not available
 
     - name: Build documentation inside Docker
       run: |

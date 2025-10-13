@@ -35,11 +35,7 @@ services:
         echo '📚 Running doctests...'
         pytest --doctest-modules POMDPPlanners/ -v
         
-        # Run visualization examples
-        echo '📊 Running visualization examples...'
-        python legacy/light_dark_pomdp_visualization_example.py || echo 'Visualization test failed (continuing...)'
-        python legacy/pomcpow_rock_sample_visualization_demo.py || echo 'Visualization test failed (continuing...)'
-        python legacy/push_pomdp_visualization_example.py || echo 'Visualization test failed (continuing...)'
+        # Visualization examples removed - legacy files not available
         
         # Build documentation
         echo '📖 Building documentation...'
