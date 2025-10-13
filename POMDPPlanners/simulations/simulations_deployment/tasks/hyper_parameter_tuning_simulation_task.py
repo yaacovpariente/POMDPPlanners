@@ -48,6 +48,9 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         seed: int = 42,
         use_queue_logger: bool = False,
     ):
+        if len(set(parameters_to_optimize)) != len(parameters_to_optimize):
+            raise ValueError("parameters_to_optimize must be a list of unique tuples")
+
         self.environment = environment
         self.belief = belief
         self.policy_cls = policy_cls
