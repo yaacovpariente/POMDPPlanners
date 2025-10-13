@@ -173,7 +173,7 @@ class MountainCarObservation(ObservationModel):
             >>>
             >>> # Calculate observation probability
             >>> prob = obs_model.probability([observation])
-            >>> print(f"Observation probability: {prob:.6f}")
+            >>> print(f"Observation probability: {prob[0]:.6f}")
             Observation probability: 139.345607
     """
 
