@@ -149,5 +149,5 @@ class PathSimulationPolicy(Policy):
         raise ValueError("Unsupported belief type")
 
     @abstractmethod
-    def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
+    def _simulate_path(self, belief_node: BeliefNode, depth: int) -> Optional[float]:
         pass
