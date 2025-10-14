@@ -22,6 +22,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
 from POMDPPlanners.core.simulation.simulation_configs import EnvironmentRunParams
 from POMDPPlanners.utils.config_to_id import config_to_id
 from POMDPPlanners.utils.logger import get_logger
+from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
 
 HyperParameterFeature = Union[CategoricalHyperParameter, NumericalHyperParameter]
 
@@ -85,6 +86,12 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             debug=debug,  # Keep episode-level logging minimal for optimization
             use_queue_logger=use_queue_logger,
         )
+
+        if cache_dir is not None:
+            storage_dir = cache_dir / "study_storage" / self.get_config_id()
+            self.study_storage = DiskCacheDB(cache_dir=str(storage_dir))
+        else:
+            self.study_storage = None
 
     @property
     def logger(self) -> logging.Logger:
@@ -250,6 +257,21 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             compute_statistics_environment_policy_pair,
         )
 
+        if self.study_storage is not None and self.study_storage.is_key_in_cache(trial.number):
+            stored_params = self.study_storage.get(trial.number)
+            metric_values = stored_params["metric_values"]
+            statistics = stored_params["statistics"]
+            histories = stored_params["histories"]
+
+            trial.set_user_attr("histories", histories)
+            trial.set_user_attr("statistics", [stat._asdict() for stat in statistics])
+
+            # Store individual metric values as trial attributes (needed for Pareto scoring)
+            for metric_name, metric_value in metric_values.items():
+                trial.set_user_attr(f"metric_{metric_name}", metric_value)
+
+            return metric_values
+
         try:
             # Run multiple episodes to evaluate this parameter configuration
             histories = self.run_multiple_episodes(
@@ -289,6 +311,14 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             # Store individual metric values as trial attributes
             for metric_name, metric_value in metric_values.items():
                 trial.set_user_attr(f"metric_{metric_name}", metric_value)
+
+            params_to_store = {
+                "metric_values": metric_values,
+                "statistics": statistics,
+                "histories": histories,
+            }
+            if self.study_storage is not None:
+                self.study_storage.set(trial.number, params_to_store)
 
             return metric_values
 
