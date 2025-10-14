@@ -82,7 +82,7 @@ def categorical_hyper_parameters():
     ]
 
 
-def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters):
+def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters, temp_cache_dir):
     """Test creation and basic properties of HyperParameterTuningSimulationTask.
 
     Purpose: Validates that HyperParameterTuningSimulationTask can be created with correct attributes
@@ -104,7 +104,7 @@ def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters):
         num_episodes=2,  # Smaller for fast tests
         num_steps=3,  # Smaller for fast tests
         parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
-        cache_dir=Path("/tmp/test_cache"),
+        cache_dir=temp_cache_dir,
         debug=False,
         console_output=False,
         n_jobs=1,
@@ -122,7 +122,7 @@ def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters):
     assert task.parameters_to_optimize == [
         ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
     ]
-    assert task.cache_dir == Path("/tmp/test_cache")
+    assert task.cache_dir == temp_cache_dir
     assert task.debug == False
     assert task.console_output == False
     assert task.n_jobs == 1
@@ -135,6 +135,10 @@ def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters):
     config_id = task.get_config_id()
     assert isinstance(config_id, str)
     assert len(config_id) > 0
+
+    # Test that study_storage is created
+    assert hasattr(task, "study_storage")
+    assert task.study_storage is not None
 
 
 def test_hyper_parameter_tuning_task_creation_with_default_seed(environment, hyper_parameters):
@@ -1539,3 +1543,262 @@ def test_multi_objective_optimization_single_objective_still_works(environment, 
     metadata = task.get_optimization_metadata()
     assert metadata is not None
     assert "num_pareto_optimal_trials" in metadata
+
+
+# =============================================================================
+# Trial Caching Tests
+# =============================================================================
+
+
+def test_study_storage_initialization(environment, hyper_parameters, temp_cache_dir):
+    """Test that study_storage is properly initialized during task creation.
+
+    Purpose: Validates that DiskCacheDB study_storage is created and configured correctly
+
+    Given: A HyperParameterTuningSimulationTask with a cache directory
+    When: Task is instantiated
+    Then: study_storage attribute exists and is a DiskCacheDB instance
+
+    Test type: unit
+    """
+    belief = create_test_belief(environment)
+
+    task = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=2,
+        num_steps=2,
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
+        cache_dir=temp_cache_dir,
+        console_output=False,
+        n_trials=2,
+        seed=42,
+    )
+
+    # Verify study_storage is initialized
+    assert hasattr(task, "study_storage")
+    assert task.study_storage is not None
+
+    # Verify study_storage is DiskCacheDB
+    from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
+
+    assert isinstance(task.study_storage, DiskCacheDB)
+
+
+def test_trial_results_cached_between_runs(environment, hyper_parameters, temp_cache_dir):
+    """Test that trial results are cached and reused across optimization runs.
+
+    Purpose: Validates that trial evaluation results are persisted to cache and reused
+
+    Given: A HyperParameterTuningSimulationTask with caching enabled
+    When: Task is run twice with the same configuration
+    Then: Second run reuses cached trial results without re-evaluation
+
+    Test type: integration
+    """
+    belief = create_test_belief(environment)
+
+    # Create and run first task
+    task1 = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=2,
+        num_steps=2,
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
+        cache_dir=temp_cache_dir,
+        console_output=False,
+        n_trials=2,
+        seed=42,
+    )
+
+    result1 = task1.run()
+    assert result1 is not None
+
+    # Create second task with same configuration
+    task2 = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=2,
+        num_steps=2,
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
+        cache_dir=temp_cache_dir,
+        console_output=False,
+        n_trials=2,
+        seed=42,
+    )
+
+    # Verify they share the same config_id
+    assert task1.get_config_id() == task2.get_config_id()
+
+    # Verify cache directory exists and has stored data
+    config_id = task1.get_config_id()
+    storage_dir = temp_cache_dir / "study_storage" / config_id
+    assert storage_dir.exists()
+
+    # Verify cache has trial data stored from first run
+    assert task2.study_storage is not None
+    # Check that at least some trials were cached (trial numbers 0 and 1)
+    assert task2.study_storage.is_key_in_cache(0) or task2.study_storage.is_key_in_cache(1)
+
+    # Verify that all trials were cached (number of cached trials equals n_trials)
+    n_trials = task1.n_trials
+    cached_trials_count = sum(
+        1 for trial_num in range(n_trials) if task2.study_storage.is_key_in_cache(trial_num)
+    )
+    assert (
+        cached_trials_count == n_trials
+    ), f"Expected {n_trials} trials to be cached, but found {cached_trials_count}"
+
+    # Run second task - should use cached results when available
+    result2 = task2.run()
+    assert result2 is not None
+
+    # Verify both runs produced valid results
+    assert "average_return" in result1.optimized_metric_values
+    assert "average_return" in result2.optimized_metric_values
+    assert isinstance(result1.optimized_metric_values["average_return"], float)
+    assert isinstance(result2.optimized_metric_values["average_return"], float)
+
+
+def test_cache_isolation_between_different_configs(environment, hyper_parameters, temp_cache_dir):
+    """Test that caches are isolated between tasks with different configurations.
+
+    Purpose: Validates that different task configurations use separate cache storage
+
+    Given: Two HyperParameterTuningSimulationTask instances with different configurations
+    When: Both tasks are run
+    Then: Each task uses its own isolated cache storage based on config_id
+
+    Test type: integration
+    """
+    belief = create_test_belief(environment)
+
+    # Task 1: 2 episodes
+    task1 = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=2,
+        num_steps=2,
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
+        cache_dir=temp_cache_dir,
+        console_output=False,
+        n_trials=2,
+        seed=42,
+    )
+
+    # Task 2: 3 episodes (different configuration)
+    task2 = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=3,  # Different!
+        num_steps=2,
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
+        cache_dir=temp_cache_dir,
+        console_output=False,
+        n_trials=2,
+        seed=42,
+    )
+
+    # Verify different config IDs
+    assert task1.get_config_id() != task2.get_config_id()
+
+    # Run both tasks
+    result1 = task1.run()
+    result2 = task2.run()
+
+    assert result1 is not None
+    assert result2 is not None
+
+    # Results should be different due to different configurations
+    # (they shouldn't share cached data)
+    assert result1.num_episodes != result2.num_episodes
+
+
+def test_cache_survives_task_recreation(environment, hyper_parameters, temp_cache_dir):
+    """Test that cached data persists after task object is destroyed and recreated.
+
+    Purpose: Validates that DiskCacheDB persists trial results across task lifecycle
+
+    Given: A HyperParameterTuningSimulationTask that completes optimization
+    When: Task object is destroyed and new task with same config is created
+    Then: New task can access cached results from previous task
+
+    Test type: integration
+    """
+    belief = create_test_belief(environment)
+
+    # Create and run first task
+    task1 = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=2,
+        num_steps=2,
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
+        cache_dir=temp_cache_dir,
+        console_output=False,
+        n_trials=2,
+        seed=42,
+    )
+
+    config_id = task1.get_config_id()
+    result1 = task1.run()
+    assert result1 is not None
+
+    # Delete task1 to ensure no in-memory caching
+    del task1
+
+    # Create new task with same configuration
+    task2 = HyperParameterTuningSimulationTask(
+        environment=environment,
+        belief=belief,
+        policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+        hyper_parameters=hyper_parameters,
+        constant_parameters={},
+        num_episodes=2,
+        num_steps=2,
+        parameters_to_optimize=[("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
+        cache_dir=temp_cache_dir,
+        console_output=False,
+        n_trials=2,
+        seed=42,
+    )
+
+    # Verify same config_id
+    assert task2.get_config_id() == config_id
+
+    # Verify cache directory exists for this config
+    storage_dir = temp_cache_dir / "study_storage" / config_id
+    assert storage_dir.exists()
+
+    # Verify cache has trial data persisted from first run
+    assert task2.study_storage is not None
+    # Check that at least some trials were cached (trial numbers 0 and 1)
+    assert task2.study_storage.is_key_in_cache(0) or task2.study_storage.is_key_in_cache(1)
+
+    # Run task2 - should use cached data
+    result2 = task2.run()
+    assert result2 is not None
+
+    # Verify both runs produced valid results
+    assert "average_return" in result1.optimized_metric_values
+    assert "average_return" in result2.optimized_metric_values
+    assert isinstance(result1.optimized_metric_values["average_return"], float)
+    assert isinstance(result2.optimized_metric_values["average_return"], float)
