@@ -1646,13 +1646,15 @@ def test_trial_results_cached_between_runs(environment, hyper_parameters, temp_c
 
     # Verify cache has trial data stored from first run
     assert task2.study_storage is not None
-    # Check that at least some trials were cached (trial numbers 0 and 1)
-    assert task2.study_storage.is_key_in_cache(0) or task2.study_storage.is_key_in_cache(1)
+    # Check that at least some trials were cached (trial IDs 0 and 1)
+    assert task2.study_storage.is_key_in_cache(str(0)) or task2.study_storage.is_key_in_cache(
+        str(1)
+    )
 
     # Verify that all trials were cached (number of cached trials equals n_trials)
     n_trials = task1.n_trials
     cached_trials_count = sum(
-        1 for trial_num in range(n_trials) if task2.study_storage.is_key_in_cache(trial_num)
+        1 for trial_num in range(n_trials) if task2.study_storage.is_key_in_cache(str(trial_num))
     )
     assert (
         cached_trials_count == n_trials
@@ -1790,8 +1792,10 @@ def test_cache_survives_task_recreation(environment, hyper_parameters, temp_cach
 
     # Verify cache has trial data persisted from first run
     assert task2.study_storage is not None
-    # Check that at least some trials were cached (trial numbers 0 and 1)
-    assert task2.study_storage.is_key_in_cache(0) or task2.study_storage.is_key_in_cache(1)
+    # Check that at least some trials were cached (trial IDs 0 and 1)
+    assert task2.study_storage.is_key_in_cache(str(0)) or task2.study_storage.is_key_in_cache(
+        str(1)
+    )
 
     # Run task2 - should use cached data
     result2 = task2.run()
