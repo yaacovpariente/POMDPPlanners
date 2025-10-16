@@ -5,6 +5,8 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
 
 import numpy as np
+import optuna
+from optuna.trial import FrozenTrial
 
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
@@ -210,8 +212,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.logger.info(f"Running optimization with {self.n_trials} trials")
 
     def _create_policy_parameter_suggestions(
-        self, trial, hyperparameters: Sequence[HyperParameterFeature]
-    ) -> dict:
+        self, trial: FrozenTrial, hyperparameters: Sequence[HyperParameterFeature]
+    ) -> Dict[str, Any]:
         """Create policy parameters from Optuna trial suggestions.
 
         Args:
@@ -221,7 +223,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         Returns:
             dict: Dictionary of suggested parameter values for policy construction
         """
-        policy_params = {
+        policy_params: Dict[str, Any] = {
             "environment": self.environment,
         }
 
@@ -231,16 +233,22 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             if isinstance(param, CategoricalHyperParameter):
                 policy_params[param.name] = trial.suggest_categorical(param.name, param.choices)
             elif isinstance(param, NumericalHyperParameter):
-                if isinstance(param.low, float):
+                if isinstance(param.low, float) and isinstance(param.high, float):
                     policy_params[param.name] = trial.suggest_float(
                         param.name, param.low, param.high
                     )
-                else:
+                elif isinstance(param.low, int) and isinstance(param.high, int):
                     policy_params[param.name] = trial.suggest_int(param.name, param.low, param.high)
+                else:
+                    raise ValueError(
+                        f"Invalid parameter type: {type(param.low)} or {type(param.high)}"
+                    )
 
         return policy_params
 
-    def _evaluate_policy_configuration(self, policy: Policy, trial) -> Dict[str, float]:
+    def _evaluate_policy_configuration(
+        self, policy: Policy, trial: FrozenTrial
+    ) -> Dict[str, float]:
         """Evaluate a policy configuration and return multiple metrics.
 
         Args:
@@ -257,8 +265,9 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             compute_statistics_environment_policy_pair,
         )
 
-        if self.study_storage is not None and self.study_storage.is_key_in_cache(trial.number):
-            stored_params = self.study_storage.get(trial.number)
+        trial_id = str(trial._trial_id)
+        if self.study_storage is not None and self.study_storage.is_key_in_cache(trial_id):
+            stored_params = self.study_storage.get(trial_id)
             metric_values = stored_params["metric_values"]
             statistics = stored_params["statistics"]
             histories = stored_params["histories"]
@@ -318,12 +327,12 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 "histories": histories,
             }
             if self.study_storage is not None:
-                self.study_storage.set(trial.number, params_to_store)
+                self.study_storage.set(trial_id, params_to_store)
 
             return metric_values
 
         except Exception as e:
-            self.logger.error(f"Error in evaluation function for trial {trial.number}: {e}")
+            self.logger.error(f"Error in evaluation function for trial {trial_id}: {e}")
             raise e
 
     def _compute_pareto_scores(self, study, pareto_trials=None) -> Dict[int, float]:
@@ -400,7 +409,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             Callable: Objective function that returns tuple of metric values for Optuna
         """
 
-        def objective(trial) -> Tuple[float, ...]:
+        def objective(trial: FrozenTrial) -> Tuple[float, ...]:
             """Optuna objective function for a single optimization trial.
 
             Returns:
