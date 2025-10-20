@@ -1,0 +1,6 @@
+artifact_location: file:///app/test_optimization_results/mlruns/296667616099275242
+creation_time: 1760962142214
+experiment_id: '296667616099275242'
+last_update_time: 1760962142214
+lifecycle_stage: active
+name: POMCP_Tiger_Test
