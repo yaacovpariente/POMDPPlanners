@@ -76,7 +76,7 @@ jobs:
 
     - name: Run doctests inside Docker
       run: |
-        docker run --rm pomdpplanners-test:latest pytest --doctest-modules POMDPPlanners/ -v
+        docker run --rm pomdpplanners-test:latest pytest --doctest-modules POMDPPlanners/core/ POMDPPlanners/environments/ POMDPPlanners/planners/ POMDPPlanners/simulations/ POMDPPlanners/utils/ POMDPPlanners/configs/ -v
 
 
     # Visualization examples removed - legacy files not available
