@@ -6,6 +6,16 @@ repos:
         language_version: python3.12
         args: [--line-length=100]
 
+  - repo: local
+    hooks:
+      - id: pylint
+        name: pylint
+        entry: pylint
+        language: system
+        args: [--rcfile=pylintrc]
+        files: ^POMDPPlanners/.*\.py$
+        exclude: ^POMDPPlanners/tests/.*$
+
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.391
     hooks:
