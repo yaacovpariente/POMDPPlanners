@@ -42,7 +42,9 @@ Example:
     >>> from POMDPPlanners.core.belief import get_initial_belief
 
     >>> # Set up optimization
-    >>> cache_path = Path("./test_optimization_results")
+    >>> import tempfile
+    >>> import shutil
+    >>> cache_path = Path(tempfile.mkdtemp())
     >>> optimizer = HyperParameterOptimizer(
     ...     cache_dir_path=cache_path,
     ...     experiment_name="POMCP_Tiger_Test",
@@ -54,6 +56,7 @@ Example:
     'POMCP_Tiger_Test'
     >>> optimizer.n_jobs
     1
+    >>> shutil.rmtree(cache_path, ignore_errors=True)
 
     >>> # Create test environment and belief
     >>> tiger_env = TigerPOMDP(discount_factor=0.95)
@@ -185,8 +188,11 @@ class HyperParameterOptimizer:
         >>> from POMDPPlanners.core.belief import get_initial_belief
 
         >>> # Test optimizer configuration
+        >>> import tempfile
+        >>> import shutil
+        >>> cache_path = Path(tempfile.mkdtemp())
         >>> optimizer = HyperParameterOptimizer(
-        ...     cache_dir_path=Path("./test_optimization_cache"),
+        ...     cache_dir_path=cache_path,
         ...     experiment_name="POMCP_Tuning_Test",
         ...     n_jobs=1,                   # Single job for testing
         ...     confidence_interval_level=0.95,
@@ -198,6 +204,7 @@ class HyperParameterOptimizer:
         0.95
         >>> optimizer.alpha
         0.05
+        >>> shutil.rmtree(cache_path, ignore_errors=True)
 
         >>> # Create test environment and belief
         >>> env = TigerPOMDP(discount_factor=0.95)

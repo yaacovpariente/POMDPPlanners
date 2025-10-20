@@ -95,7 +95,7 @@ def run_distributed(
     logger.info(f"Resources per task: {num_cpus} CPUs, {num_gpus} GPUs")
 
     # Submit all tasks
-    futures = [remote_func.remote(**kwargs) for kwargs in kwargs_list]
+    futures = [remote_func.remote(**kwargs) for kwargs in kwargs_list]  # type: ignore[attr-defined]
 
     # Track progress and collect results
     results = []

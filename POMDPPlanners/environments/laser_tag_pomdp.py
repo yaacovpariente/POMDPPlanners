@@ -950,7 +950,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         fig: Figure
         ax: Axes
-        fig, ax = plt.subplots(figsize=(14, 8))
+        fig, ax = plt.subplots(figsize=(14, 8))  # type: ignore[assignment]
         rows, cols = self.floor_shape
         ax.set_xlim(-0.5, rows - 0.5)
         ax.set_ylim(-0.5, cols - 0.5)
@@ -958,8 +958,8 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         ax.invert_yaxis()  # Invert y-axis so (0,0) is top-left like matrix indexing
 
         # Set grid
-        ax.set_xticks(range(rows))
-        ax.set_yticks(range(cols))
+        ax.set_xticks(range(rows))  # type: ignore[arg-type]
+        ax.set_yticks(range(cols))  # type: ignore[arg-type]
         ax.grid(True, alpha=0.3)
         ax.set_xlabel("Row")
         ax.set_ylabel("Column")
@@ -986,9 +986,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         danger_patches = []
         for i, danger_center in enumerate(self.dangerous_areas):
             row, col = danger_center
-            circle = plt.Circle(  # type: ignore
+            circle = plt.Circle(  # type: ignore[attr-defined]
                 (row, col),
-                self.dangerous_area_radius,
+                float(self.dangerous_area_radius),  # type: ignore[arg-type]
                 facecolor="red",
                 edgecolor="none",
                 alpha=0.3,
@@ -999,10 +999,17 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 danger_patches.append(circle)
 
         # Initialize animated elements
-        (robot_agent,) = ax.plot([], [], "ro", markersize=12, label="Robot")
-        (opponent_agent,) = ax.plot([], [], "bo", markersize=12, label="Opponent")
-        (robot_path_line,) = ax.plot([], [], "r-", alpha=0.5, linewidth=2, label="Robot Path")
-        (opponent_path_line,) = ax.plot([], [], "b-", alpha=0.5, linewidth=2, label="Opponent Path")
+        from matplotlib.lines import Line2D
+        from typing import cast
+
+        robot_agent = cast(Line2D, ax.plot([], [], "ro", markersize=12, label="Robot")[0])
+        opponent_agent = cast(Line2D, ax.plot([], [], "bo", markersize=12, label="Opponent")[0])
+        robot_path_line = cast(
+            Line2D, ax.plot([], [], "r-", alpha=0.5, linewidth=2, label="Robot Path")[0]
+        )
+        opponent_path_line = cast(
+            Line2D, ax.plot([], [], "b-", alpha=0.5, linewidth=2, label="Opponent Path")[0]
+        )
 
         # Action arrow
         action_arrow = ax.annotate(

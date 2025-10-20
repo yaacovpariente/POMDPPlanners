@@ -1091,7 +1091,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
                 )
             else:
                 # Create simple yellow circle for PacMan
-                img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
+                img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))  # type: ignore[arg-type]
                 draw = ImageDraw.Draw(img)
                 draw.ellipse([4, 4, TILE_SIZE - 4, TILE_SIZE - 4], fill=(255, 255, 0, 255))
                 sprites["pacman"] = img
@@ -1118,7 +1118,7 @@ class PacManPOMDP(DiscreteActionsEnvironment):
             else:
                 # Create colored rectangles for each ghost
                 for i, color in enumerate(ghost_colors):
-                    img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))
+                    img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))  # type: ignore[arg-type]
                     draw = ImageDraw.Draw(img)
                     draw.rectangle([4, 4, TILE_SIZE - 4, TILE_SIZE - 4], fill=color)
                     sprites[f"ghost_{i}"] = img

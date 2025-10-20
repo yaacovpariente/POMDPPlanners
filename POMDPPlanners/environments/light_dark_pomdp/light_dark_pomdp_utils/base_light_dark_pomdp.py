@@ -247,13 +247,17 @@ class BaseLightDarkPOMDP(Environment, ABC):
         from matplotlib.figure import Figure
         from matplotlib.axes import Axes
 
+        from typing import cast
+
         fig: Figure
         ax: Axes
-        fig, ax = plt.subplots(figsize=(10, 8))
+        fig_temp, ax_temp = plt.subplots(figsize=(10, 8))
+        fig = cast(Figure, fig_temp)
+        ax = cast(Axes, ax_temp)
         ax.set_xlim(-1, self.grid_size + 1)
         ax.set_ylim(-1, self.grid_size + 1)
-        ax.set_xticks(np.arange(-1, self.grid_size + 1, 1))
-        ax.set_yticks(np.arange(-1, self.grid_size + 1, 1))
+        ax.set_xticks(np.arange(-1, self.grid_size + 1, 1))  # type: ignore[arg-type]
+        ax.set_yticks(np.arange(-1, self.grid_size + 1, 1))  # type: ignore[arg-type]
         ax.set_facecolor("#696969")  # Darker grey
         ax.grid(False)  # Remove the grid from the background
 
@@ -265,12 +269,12 @@ class BaseLightDarkPOMDP(Environment, ABC):
                 radius = self.beacon_radius + j * 0.05  # Smaller radius increments
                 # Exponential decay for more realistic light fade
                 alpha = 0.9 * np.exp(-j * 0.3)  # Exponential decay from 0.9 to near 0
-                circle = plt.Circle(  # type: ignore
+                circle = plt.Circle(  # type: ignore[attr-defined]
                     (beacon_x, beacon_y),
-                    radius,
+                    float(radius),  # type: ignore[arg-type]
                     facecolor="white",
                     edgecolor="none",
-                    alpha=alpha,
+                    alpha=float(alpha),
                 )
                 ax.add_patch(circle)
 
@@ -300,9 +304,9 @@ class BaseLightDarkPOMDP(Environment, ABC):
                 self.obstacles[0, i],
                 self.obstacles[1, i],
             )  # obstacles[0,i] is x, obstacles[1,i] is y
-            circle = plt.Circle(  # type: ignore
+            circle = plt.Circle(  # type: ignore[attr-defined]
                 (obstacle_x, obstacle_y),
-                self.obstacle_radius,
+                float(self.obstacle_radius),  # type: ignore[arg-type]
                 facecolor="red",
                 edgecolor="none",
                 alpha=0.3,
@@ -314,8 +318,10 @@ class BaseLightDarkPOMDP(Environment, ABC):
             ax.scatter(self.obstacles[0], self.obstacles[1], color="black", label="Obstacles")
 
         # Initialize the agent's position and path line
-        (agent,) = ax.plot([], [], "ro", markersize=10)
-        (path_line,) = ax.plot([], [], "r-", alpha=0.5, linewidth=2)
+        from matplotlib.lines import Line2D as Line2DType
+
+        agent = cast(Line2DType, ax.plot([], [], "ro", markersize=10)[0])
+        path_line = cast(Line2DType, ax.plot([], [], "r-", alpha=0.5, linewidth=2)[0])
         # Initialize the action arrow
         arrow = plt.arrow(
             0,

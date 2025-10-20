@@ -246,7 +246,7 @@ def plot_discounted_returns_histogram(
             "No valid data to plot",
             ha="center",
             va="center",
-            transform=plt.gca().transAxes,
+            transform=plt.gca().transAxes,  # type: ignore[attr-defined]
         )
 
     # Customize the plot
@@ -920,7 +920,7 @@ def plot_policy_returns(
             "No valid data to plot",
             ha="center",
             va="center",
-            transform=plt.gca().transAxes,
+            transform=plt.gca().transAxes,  # type: ignore[attr-defined]
         )
         if logger:
             logger.warning(

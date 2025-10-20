@@ -35,7 +35,7 @@ def belief_expectation_cost_particle_belief(
     costs = np.array(
         [-env.reward(belief.particles[i], action) for i in range(len(belief.particles))]
     )
-    cost_: float = np.sum(costs * belief.normalized_weights)
+    cost_: float = float(np.sum(costs * belief.normalized_weights))
 
     return cost_
 
