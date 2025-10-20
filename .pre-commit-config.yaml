@@ -10,11 +10,12 @@ repos:
     hooks:
       - id: pylint
         name: pylint
-        entry: pylint
+        entry: .venv/bin/python -m pylint
         language: system
-        args: [--rcfile=pylintrc]
+        args: [--rcfile=pylintrc, --errors-only]
         files: ^POMDPPlanners/.*\.py$
         exclude: ^POMDPPlanners/tests/.*$
+        pass_filenames: true
 
   - repo: https://github.com/RobertCraigie/pyright-python
     rev: v1.1.391
