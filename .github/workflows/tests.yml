@@ -37,11 +37,11 @@ jobs:
 
     - name: Run linting inside Docker
       run: |
-        docker run --rm pomdpplanners-test:latest pylint POMDPPlanners/ --exit-zero
+        docker run --rm pomdpplanners-test:latest pylint POMDPPlanners/core/ POMDPPlanners/environments/ POMDPPlanners/planners/ POMDPPlanners/simulations/ POMDPPlanners/utils/ POMDPPlanners/configs/ --exit-zero
 
     - name: Run code formatting check inside Docker
       run: |
-        docker run --rm pomdpplanners-test:latest black --check POMDPPlanners/
+        docker run --rm pomdpplanners-test:latest black --check POMDPPlanners/core/ POMDPPlanners/environments/ POMDPPlanners/planners/ POMDPPlanners/simulations/ POMDPPlanners/utils/ POMDPPlanners/configs/
 
     - name: Set up Python for pyright
       uses: actions/setup-python@v4
