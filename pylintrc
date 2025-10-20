@@ -13,6 +13,7 @@ disable=C0111,  # missing-docstring
            R0913,  # too-many-arguments
            R0914,  # too-many-locals
            W0621,  # redefined-outer-name
+           E0110,  # abstract-class-instantiated (false positives in factory methods and tests)
 
 [REPORTS]
 output-format=text

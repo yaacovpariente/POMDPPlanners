@@ -599,7 +599,8 @@ def test_cache_episode_simulation_results_returns_none(
     """
     results = [simple_history]
 
-    return_value = cache_episode_simulation_results(
+    # Intentionally assigning result of void function to verify it returns None
+    return_value = cache_episode_simulation_results(  # pylint: disable=assignment-from-no-return
         mock_environment, mock_policy, mock_belief, results, temp_cache_dir
     )
 

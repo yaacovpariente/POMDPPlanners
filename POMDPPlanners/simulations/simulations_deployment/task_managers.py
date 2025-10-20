@@ -394,7 +394,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
         """Log cache statistics for performance monitoring."""
         try:
             # Get joblib cache statistics
-            cache_stats = self.memory.get_stats()  # type: ignore
+            cache_stats = self.memory.get_stats()  # type: ignore  # pylint: disable=no-member
             self.logger.info(
                 f"Joblib Cache Stats - "
                 f"Cache hits: {cache_stats.get('hits', 0)}, "
