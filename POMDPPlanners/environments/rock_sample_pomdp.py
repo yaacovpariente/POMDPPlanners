@@ -523,9 +523,13 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         from matplotlib.figure import Figure
         from matplotlib.axes import Axes
 
+        from typing import cast
+
         fig: Figure
         ax: Axes
-        fig, ax = plt.subplots(figsize=(10, 8))
+        fig_temp, ax_temp = plt.subplots(figsize=(10, 8))
+        fig = cast(Figure, fig_temp)
+        ax = cast(Axes, ax_temp)
         ax.set_xlim(-0.5, self.map_size[1] - 0.5)
         ax.set_ylim(self.map_size[0] - 0.5, -0.5)  # Flip y-axis for standard grid display
         ax.set_aspect("equal")
@@ -544,9 +548,9 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         danger_patches = []
         for i, danger_center in enumerate(self.dangerous_areas):
             row, col = danger_center
-            circle = plt.Circle(  # type: ignore
+            circle = plt.Circle(  # type: ignore[attr-defined]
                 (col, row),
-                self.dangerous_area_radius,
+                float(self.dangerous_area_radius),  # type: ignore[arg-type]
                 facecolor="red",
                 edgecolor="none",
                 alpha=0.3,
@@ -558,11 +562,13 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
         # Plot exit zone
         exit_x = self.map_size[1] - 0.5
-        ax.axvline(x=exit_x, color="gold", linewidth=3, alpha=0.7, label="Exit")
+        ax.axvline(x=float(exit_x), color="gold", linewidth=3, alpha=0.7, label="Exit")  # type: ignore[arg-type]
 
         # Initialize robot position
+        from matplotlib.lines import Line2D
+
         robot_scatter = ax.scatter([], [], s=150, c="blue", marker="o", zorder=5, label="Robot")
-        (path_line,) = ax.plot([], [], "b-", alpha=0.5, linewidth=2, label="Path")
+        path_line = cast(Line2D, ax.plot([], [], "b-", alpha=0.5, linewidth=2, label="Path")[0])
 
         # Initialize action arrow
         arrow = ax.annotate(

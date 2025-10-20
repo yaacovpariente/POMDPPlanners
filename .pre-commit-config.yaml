@@ -13,3 +13,8 @@ repos:
         files: ^docs/examples/.*\.ipynb$
         args: [docs/examples/]
         exclude: ^(type_hints\.py|setup\.py)$
+
+      - id: pyright
+        name: pyright (POMDPPlanners)
+        files: ^POMDPPlanners/.*\.py$
+        args: [POMDPPlanners/]

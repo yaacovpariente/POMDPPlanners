@@ -528,9 +528,13 @@ class PushPOMDP(DiscreteActionsEnvironment):
         from matplotlib.figure import Figure
         from matplotlib.axes import Axes
 
+        from typing import cast
+
         fig: Figure
         ax: Axes
-        fig, ax = plt.subplots(figsize=(12, 10))
+        fig_temp, ax_temp = plt.subplots(figsize=(12, 10))
+        fig = cast(Figure, fig_temp)
+        ax = cast(Axes, ax_temp)
         ax.set_xlim(-0.5, self.grid_size + 0.5)
         ax.set_ylim(-0.5, self.grid_size + 0.5)
         ax.set_aspect("equal")
@@ -577,9 +581,9 @@ class PushPOMDP(DiscreteActionsEnvironment):
         # Plot obstacles as permanent features
         obstacle_scatters: List[Any] = []
         for i, (obs_x, obs_y) in enumerate(self.obstacles):
-            obstacle_circle = plt.Circle(  # type: ignore
+            obstacle_circle = plt.Circle(  # type: ignore[attr-defined]
                 (obs_x, obs_y),
-                self.obstacle_radius,
+                float(self.obstacle_radius),  # type: ignore[arg-type]
                 facecolor="red",
                 edgecolor="darkred",
                 alpha=0.6,
@@ -591,15 +595,23 @@ class PushPOMDP(DiscreteActionsEnvironment):
                 ax.scatter(obs_x, obs_y, s=1, c="red", label="Obstacles")
 
         # Initialize path traces
-        (robot_path_line,) = ax.plot([], [], "b-", alpha=0.4, linewidth=2, label="Robot Path")
-        (object_path_line,) = ax.plot(
-            [],
-            [],
-            "orange",
-            linestyle="--",
-            alpha=0.4,
-            linewidth=2,
-            label="Object Path",
+        from matplotlib.lines import Line2D
+        from typing import cast
+
+        robot_path_line = cast(
+            Line2D, ax.plot([], [], "b-", alpha=0.4, linewidth=2, label="Robot Path")[0]
+        )
+        object_path_line = cast(
+            Line2D,
+            ax.plot(
+                [],
+                [],
+                "orange",
+                linestyle="--",
+                alpha=0.4,
+                linewidth=2,
+                label="Object Path",
+            )[0],
         )
 
         # Initialize push vector arrow
@@ -613,7 +625,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         )
 
         # Initialize connection line between robot and object during pushes
-        (connection_line,) = ax.plot([], [], "r-", alpha=0.6, linewidth=2, zorder=1)
+        connection_line = cast(Line2D, ax.plot([], [], "r-", alpha=0.6, linewidth=2, zorder=1)[0])
 
         # Text displays
         step_text = ax.text(
