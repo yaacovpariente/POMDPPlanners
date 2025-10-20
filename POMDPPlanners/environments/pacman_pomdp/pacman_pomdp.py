@@ -89,8 +89,7 @@ class PacManStateTransitionModel(StateTransitionModel):
             action: Action to execute
             pomdp: Reference to the POMDP environment
         """
-        self.state = state
-        self.action = action
+        super().__init__(state=state, action=action)
         self.pomdp = pomdp
 
     def sample(self, n_samples: int = 1) -> List[PacManState]:
@@ -389,8 +388,7 @@ class PacManObservationModel(ObservationModel):
             action: Action that was executed
             pomdp: Reference to the POMDP environment
         """
-        self.next_state = next_state
-        self.action = action
+        super().__init__(next_state=next_state, action=action)
         self.pomdp = pomdp
 
     def sample(self, n_samples: int = 1) -> List[Tuple[Tuple[int, int], ...]]:

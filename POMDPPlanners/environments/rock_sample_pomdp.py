@@ -21,7 +21,7 @@ from matplotlib import animation
 import matplotlib.pyplot as plt
 import numpy as np
 
-from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
+from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     ObservationModel,
@@ -64,8 +64,7 @@ class RockSampleStateTransitionModel(StateTransitionModel):
             action: Action to execute
             pomdp: Reference to the POMDP environment
         """
-        self.state = state
-        self.action = action
+        super().__init__(state=state, action=action)
         self.pomdp = pomdp
 
     def sample(self, n_samples: int = 1) -> List[RockSampleState]:
@@ -122,8 +121,7 @@ class RockSampleObservationModel(ObservationModel):
             action: Action that was executed
             pomdp: Reference to the POMDP environment
         """
-        self.next_state = next_state
-        self.action = action
+        super().__init__(next_state=next_state, action=action)
         self.pomdp = pomdp
 
     def sample(self, n_samples: int = 1) -> List[str]:

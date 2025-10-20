@@ -1,0 +1,96 @@
+version: '3.8'
+
+services:
+  # PBS Professional server container
+  pbs-server:
+    image: pbspro/pbspro:latest
+    hostname: pbs
+    container_name: pbs-test-server
+    privileged: true
+    networks:
+      - test-network
+    ports:
+      - "15001:15001"  # PBS server port
+      - "15002:15002"  # PBS MOM port
+      - "15003:15003"  # PBS scheduler port
+    environment:
+      - PBS_START_MOM=1
+      - PBS_START_SERVER=1
+      - PBS_START_SCHED=1
+      - PBS_START_COMM=1
+    volumes:
+      - pbs_test_data:/var/spool/pbs
+      - pbs_test_logs:/var/log/pbs
+    command: |
+      bash -c "
+        echo '🐳 Starting PBS test services...'
+
+        # Fix permissions
+        chown -R pbs:pbs /var/spool/pbs /var/log/pbs 2>/dev/null || true
+        chmod -R 755 /var/spool/pbs /var/log/pbs 2>/dev/null || true
+
+        # Start PBS services
+        /opt/pbs/sbin/pbs_server -t create 2>/dev/null || echo 'Server already initialized'
+        /opt/pbs/sbin/pbs_server &
+        sleep 3
+        /opt/pbs/sbin/pbs_sched &
+        sleep 2
+        /opt/pbs/sbin/pbs_mom &
+        sleep 2
+
+        # Create default queue
+        echo 'create queue default' | /opt/pbs/bin/qmgr 2>/dev/null || echo 'Queue may already exist'
+        echo 'set queue default queue_type = Execution' | /opt/pbs/bin/qmgr 2>/dev/null || true
+        echo 'set queue default enabled = True' | /opt/pbs/bin/qmgr 2>/dev/null || true
+        echo 'set queue default started = True' | /opt/pbs/bin/qmgr 2>/dev/null || true
+        echo 'set server scheduling = True' | /opt/pbs/bin/qmgr 2>/dev/null || true
+
+        # Keep container running
+        echo '✅ PBS test services started successfully!'
+        echo '📝 PBS Server: pbs-server'
+        echo '🔍 Queue status: /opt/pbs/bin/qstat -Q'
+
+        # Keep the container alive
+        tail -f /dev/null
+      "
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/pbs/bin/qstat -B > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Your application test container
+  pomdp-test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: test
+      network: host
+    container_name: pomdp-test
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    depends_on:
+      pbs-server:
+        condition: service_healthy
+    environment:
+      - PBS_SERVER=pbs-server
+      - PBS_EXEC=/opt/pbs
+      - PYTHONUNBUFFERED=1
+    networks:
+      - test-network
+    volumes:
+      - .:/app
+      - ./cache:/app/cache
+    working_dir: /app
+    # Default command runs all project tests
+    command: pytest POMDPPlanners/tests/ -v
+
+networks:
+  test-network:
+    driver: bridge
+
+volumes:
+  pbs_test_data:
+  pbs_test_logs:

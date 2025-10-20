@@ -22,8 +22,6 @@ from pathlib import Path
 from typing import Any, List, Optional
 
 import numpy as np
-from matplotlib import animation
-import matplotlib.pyplot as plt
 
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
@@ -81,8 +79,7 @@ class TigerStateTransition(StateTransitionModel):
             state: Current state indicating tiger location
             action: Action being executed
         """
-        self.state = state
-        self.action = action
+        super().__init__(state=state, action=action)
 
     def sample(self, n_samples: int = 1) -> List[str]:
         samples = []
@@ -151,8 +148,7 @@ class TigerObservation(ObservationModel):
             next_state: State after taking the action
             action: Action that was executed
         """
-        self.next_state = next_state
-        self.action = action
+        super().__init__(next_state=next_state, action=action)
 
     def sample(self, n_samples: int = 1) -> List[str]:
         samples = []

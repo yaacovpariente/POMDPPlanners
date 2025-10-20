@@ -34,8 +34,8 @@ class DiscreteLDObservationModel(ObservationModel):
         beacon_radius: float,
         observation_error_prob: float,
     ):
-        self.next_state = next_state
-        self.action = action
+        super().__init__(next_state=next_state, action=action)
+
         self.beacons = beacons
         self.obstacles = obstacles
         self.beacon_radius = beacon_radius
