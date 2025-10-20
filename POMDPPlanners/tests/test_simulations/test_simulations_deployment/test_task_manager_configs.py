@@ -162,7 +162,7 @@ class TestPBSConfig:
         Test type: unit
         """
         with pytest.raises(TypeError, match="missing 1 required positional argument: 'queue'"):
-            PBSConfig()  # type: ignore[call-arg]
+            PBSConfig()  # type: ignore[call-arg]  # pylint: disable=no-value-for-parameter
 
     def test_pbs_config_default_initialization(self):
         """Test PBSConfig initialization with required parameter and defaults.
