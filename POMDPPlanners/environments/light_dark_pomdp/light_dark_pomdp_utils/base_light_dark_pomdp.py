@@ -128,6 +128,104 @@ class BaseLightDarkPOMDP(Environment, ABC):
         coords_array = np.array(obstacles_list).T  # Shape: (2, N)
         return coords_array
 
+    def __validate_types(
+        self,
+        discount_factor: float,
+        name: str,
+        beacons: List[Tuple[float, float]],
+        goal_state: np.ndarray,
+        start_state: np.ndarray,
+        obstacles: List[Tuple[float, float]],
+        obstacle_hit_probability: float,
+        obstacle_reward: float,
+        goal_reward: float,
+        beacon_radius: float,
+        fuel_cost: float,
+        grid_size: int,
+    ):
+        """Validate parameter types."""
+        type_checks = [
+            (isinstance(discount_factor, float), "discount_factor must be a float"),
+            (isinstance(name, str), "name must be a string"),
+            (isinstance(beacons, list), "beacons must be a list of tuples"),
+            (isinstance(goal_state, np.ndarray), "goal_state must be a numpy array"),
+            (isinstance(start_state, np.ndarray), "start_state must be a numpy array"),
+            (isinstance(obstacles, list), "obstacles must be a list of tuples"),
+            (
+                isinstance(obstacle_hit_probability, float),
+                "obstacle_hit_probability must be a float",
+            ),
+            (isinstance(obstacle_reward, float), "obstacle_reward must be a float"),
+            (isinstance(goal_reward, float), "goal_reward must be a float"),
+            (isinstance(beacon_radius, float), "beacon_radius must be a float"),
+            (isinstance(fuel_cost, float), "fuel_cost must be a float"),
+            (isinstance(grid_size, int), "grid_size must be an integer"),
+        ]
+
+        for condition, error_msg in type_checks:
+            if not condition:
+                raise TypeError(error_msg)
+
+        # Validate coordinate tuple structures
+        if beacons and not all(isinstance(b, tuple) and len(b) == 2 for b in beacons):
+            raise TypeError("beacons must be a list of (x, y) coordinate tuples")
+        if obstacles and not all(isinstance(o, tuple) and len(o) == 2 for o in obstacles):
+            raise TypeError("obstacles must be a list of (x, y) coordinate tuples")
+
+    def __validate_value_ranges(
+        self,
+        discount_factor: float,
+        obstacle_hit_probability: float,
+        grid_size: int,
+        beacon_radius: float,
+        obstacle_radius: float,
+        goal_state: np.ndarray,
+        start_state: np.ndarray,
+    ):
+        """Validate parameter value ranges."""
+        # Probability ranges
+        if not (0 <= discount_factor <= 1):
+            raise ValueError("discount_factor must be between 0 and 1")
+        if not (0 <= obstacle_hit_probability <= 1):
+            raise ValueError("obstacle_hit_probability must be between 0 and 1")
+
+        # Positive value checks
+        if grid_size <= 0:
+            raise ValueError("grid_size must be positive")
+        if beacon_radius <= 0:
+            raise ValueError("beacon_radius must be positive")
+        if obstacle_radius <= 0:
+            raise ValueError("obstacle_radius must be positive")
+
+        # Shape checks
+        if goal_state.shape != (2,):
+            raise ValueError("goal_state must be a 2D vector")
+        if start_state.shape != (2,):
+            raise ValueError("start_state must be a 2D vector")
+
+    def __validate_coordinates_within_grid(
+        self,
+        beacons: List[Tuple[float, float]],
+        goal_state: np.ndarray,
+        start_state: np.ndarray,
+        obstacles: List[Tuple[float, float]],
+        grid_size: int,
+    ):
+        """Validate that all coordinates are within grid bounds."""
+        for beacon in beacons:
+            if not (0 <= beacon[0] <= grid_size and 0 <= beacon[1] <= grid_size):
+                raise ValueError("beacons coordinates must be within grid")
+
+        if not (np.all(goal_state >= 0) and np.all(goal_state <= grid_size)):
+            raise ValueError("goal_state must be within grid")
+
+        if not (np.all(start_state >= 0) and np.all(start_state <= grid_size)):
+            raise ValueError("start_state must be within grid")
+
+        for obstacle in obstacles:
+            if not (0 <= obstacle[0] <= grid_size and 0 <= obstacle[1] <= grid_size):
+                raise ValueError("obstacles coordinates must be within grid")
+
     def __type_check(
         self,
         discount_factor: float,
@@ -144,68 +242,33 @@ class BaseLightDarkPOMDP(Environment, ABC):
         fuel_cost: float,
         grid_size: int,
     ):
-        # Type checks
-        if not isinstance(discount_factor, float):
-            raise TypeError("discount_factor must be a float")
-        if not isinstance(name, str):
-            raise TypeError("name must be a string")
-        if not isinstance(beacons, list):
-            raise TypeError("beacons must be a list of tuples")
-        if beacons and not all(
-            isinstance(beacon, tuple) and len(beacon) == 2 for beacon in beacons
-        ):
-            raise TypeError("beacons must be a list of (x, y) coordinate tuples")
-        if not isinstance(goal_state, np.ndarray):
-            raise TypeError("goal_state must be a numpy array")
-        if not isinstance(start_state, np.ndarray):
-            raise TypeError("start_state must be a numpy array")
-        if not isinstance(obstacles, list):
-            raise TypeError("obstacles must be a list of tuples")
-        if obstacles and not all(
-            isinstance(obstacle, tuple) and len(obstacle) == 2 for obstacle in obstacles
-        ):
-            raise TypeError("obstacles must be a list of (x, y) coordinate tuples")
-        if not isinstance(obstacle_hit_probability, float):
-            raise TypeError("obstacle_hit_probability must be a float")
-        if not isinstance(obstacle_reward, float):
-            raise TypeError("obstacle_reward must be a float")
-        if not isinstance(goal_reward, float):
-            raise TypeError("goal_reward must be a float")
-        if not isinstance(beacon_radius, float):
-            raise TypeError("beacon_radius must be a float")
-        if not isinstance(fuel_cost, float):
-            raise TypeError("fuel_cost must be a float")
-        if not isinstance(grid_size, int):
-            raise TypeError("grid_size must be an integer")
-
-        # Value range checks
-        if not (0 <= discount_factor <= 1):
-            raise ValueError("discount_factor must be between 0 and 1")
-        if not (0 <= obstacle_hit_probability <= 1):
-            raise ValueError("obstacle_hit_probability must be between 0 and 1")
-        if grid_size <= 0:
-            raise ValueError("grid_size must be positive")
-        if beacon_radius <= 0:
-            raise ValueError("beacon_radius must be positive")
-        if obstacle_radius <= 0:
-            raise ValueError("obstacle_radius must be positive")
-        # Shape checks
-        if goal_state.shape != (2,):
-            raise ValueError("goal_state must be a 2D vector")
-        if start_state.shape != (2,):
-            raise ValueError("start_state must be a 2D vector")
-
-        # Range checks for states
-        for beacon in beacons:
-            if not (0 <= beacon[0] <= grid_size and 0 <= beacon[1] <= grid_size):
-                raise ValueError("beacons coordinates must be within grid")
-        if not (np.all(goal_state >= 0) and np.all(goal_state <= grid_size)):
-            raise ValueError("goal_state must be within grid")
-        if not (np.all(start_state >= 0) and np.all(start_state <= grid_size)):
-            raise ValueError("start_state must be within grid")
-        for obstacle in obstacles:
-            if not (0 <= obstacle[0] <= grid_size and 0 <= obstacle[1] <= grid_size):
-                raise ValueError("obstacles coordinates must be within grid")
+        """Perform comprehensive type and value validation."""
+        self.__validate_types(
+            discount_factor,
+            name,
+            beacons,
+            goal_state,
+            start_state,
+            obstacles,
+            obstacle_hit_probability,
+            obstacle_reward,
+            goal_reward,
+            beacon_radius,
+            fuel_cost,
+            grid_size,
+        )
+        self.__validate_value_ranges(
+            discount_factor,
+            obstacle_hit_probability,
+            grid_size,
+            beacon_radius,
+            obstacle_radius,
+            goal_state,
+            start_state,
+        )
+        self.__validate_coordinates_within_grid(
+            beacons, goal_state, start_state, obstacles, grid_size
+        )
 
     @abstractmethod
     def state_transition_model(self, state: np.ndarray, action: Any) -> StateTransitionModel:
