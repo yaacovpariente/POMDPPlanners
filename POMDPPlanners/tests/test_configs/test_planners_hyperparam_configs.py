@@ -4,6 +4,8 @@ This module contains comprehensive tests for the PlannersHyperparamConfigs imple
 including tests for all planner configuration methods and their hyperparameter ranges.
 """
 
+# pylint: disable=protected-access  # Tests need to access protected members
+
 from unittest.mock import Mock
 
 

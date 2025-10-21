@@ -9,6 +9,8 @@ This module tests the planner evaluation workflow functionality, focusing on:
 - Error handling and edge cases
 """
 
+# pylint: disable=protected-access  # Tests need to access protected members
+
 import pytest
 import pandas as pd
 from pathlib import Path

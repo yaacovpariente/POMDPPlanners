@@ -7,6 +7,8 @@ This module tests the simulator functionality, focusing on:
 - Metrics computation
 """
 
+# pylint: disable=protected-access  # Tests need to access protected members
+
 import random
 import shutil
 import tempfile

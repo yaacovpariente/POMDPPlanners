@@ -4,6 +4,8 @@ This module tests the workflow classes for running hyperparameter optimization
 followed by policy evaluation in different execution environments.
 """
 
+# pylint: disable=protected-access  # Tests need to access protected members
+
 import random
 import shutil
 import tempfile

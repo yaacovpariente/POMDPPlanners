@@ -7,6 +7,8 @@ This module tests the reward models from light_dark_reward_models.py, focusing o
 - Decaying hit probability reward model
 """
 
+# pylint: disable=protected-access  # Tests need to access protected members
+
 import random
 
 import numpy as np
