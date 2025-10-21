@@ -30,11 +30,10 @@ from typing import Any, Optional
 # Python 3.9 compatibility - KW_ONLY was introduced in Python 3.10
 
 from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-from POMDPPlanners.core.environment import Environment, SpaceType
-from POMDPPlanners.core.policy import PolicySpaceInfo
+from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.tree import BeliefNode
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
-    PathSimulationPolicy,
+    ProgressiveWideningMCTSPolicy,
 )
 from POMDPPlanners.planners.planners_utils.dpw import (
     ActionSampler,
@@ -43,7 +42,7 @@ from POMDPPlanners.planners.planners_utils.dpw import (
 from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
 
 
-class POMCP_DPW(PathSimulationPolicy):
+class POMCP_DPW(ProgressiveWideningMCTSPolicy):
     """POMCP_DPW (Partially Observable Monte Carlo Planning with Double Progressive Widening) Algorithm.
 
     POMCP_DPW is an advanced Monte Carlo Tree Search algorithm for POMDP planning that extends
@@ -172,28 +171,29 @@ class POMCP_DPW(PathSimulationPolicy):
 
         Raises:
             ValueError: If both time_out_in_seconds and n_simulations are provided or both are None
+            TypeError: If parameters have incorrect types
+            ValueError: If parameters have invalid values
         """
+        # All validation and initialization is handled by the base class
         super().__init__(
             environment=environment,
             discount_factor=discount_factor,
+            depth=depth,
             name=name,
             action_sampler=action_sampler,
-            n_simulations=n_simulations,
+            k_a=k_a,
+            alpha_a=alpha_a,
+            k_o=k_o,
+            alpha_o=alpha_o,
+            exploration_constant=exploration_constant,
+            min_samples_per_node=min_samples_per_node,
             time_out_in_seconds=time_out_in_seconds,
+            n_simulations=n_simulations,
             log_path=log_path,
             debug=debug,
             use_queue_logger=use_queue_logger,
         )
-
-        self.depth = depth
-        self.exploration_constant = exploration_constant
-        self.min_samples_per_node = min_samples_per_node
-        self.action_sampler: ActionSampler = action_sampler
-
-        self.k_o = k_o
-        self.k_a = k_a
-        self.alpha_o = alpha_o
-        self.alpha_a = alpha_a
+        # No POMCP_DPW-specific attributes needed
 
     def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
         """Simulate a single MCTS path from belief node using sampled state.
@@ -301,14 +301,4 @@ class POMCP_DPW(PathSimulationPolicy):
 
         return total
 
-    @classmethod
-    def get_space_info(cls) -> PolicySpaceInfo:
-        """Get information about action and observation spaces.
-
-        POMCP_DPW supports mixed-type spaces through its action sampler interface,
-        allowing it to handle both discrete and continuous action spaces.
-
-        Returns:
-            PolicySpaceInfo with MIXED space types for both actions and observations
-        """
-        return PolicySpaceInfo(action_space=SpaceType.MIXED, observation_space=SpaceType.MIXED)
+    # Note: get_space_info() is inherited from ProgressiveWideningMCTSPolicy (returns MIXED)
