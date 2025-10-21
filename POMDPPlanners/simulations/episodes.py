@@ -125,7 +125,7 @@ def run_episode(
             name=f"episode.{environment.name}.{policy.name}",
         )
 
-    logger.debug(f"Starting episode with {num_steps} steps")
+    logger.debug("Starting episode with %d steps", num_steps)
 
     # Initialize timing metrics with deterministic values
     average_state_sampling_time = 0.0
@@ -215,9 +215,14 @@ def run_episode(
                 break
 
     logger.debug(
-        f"Episode completed with average times: action={average_action_time:.4f}s, "
-        f"reward={average_reward_time:.4f}s, state_sampling={average_state_sampling_time:.4f}s, "
-        f"observation={average_observation_time:.4f}s, belief_update={average_belief_update_time:.4f}s"
+        "Episode completed with average times: action=%.4fs, "
+        "reward=%.4fs, state_sampling=%.4fs, "
+        "observation=%.4fs, belief_update=%.4fs",
+        average_action_time,
+        average_reward_time,
+        average_state_sampling_time,
+        average_observation_time,
+        average_belief_update_time,
     )
 
     return History(

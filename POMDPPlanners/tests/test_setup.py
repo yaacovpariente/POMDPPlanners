@@ -3,7 +3,6 @@
 import importlib
 import importlib.metadata
 import random
-import sys
 from pathlib import Path
 
 import numpy as np

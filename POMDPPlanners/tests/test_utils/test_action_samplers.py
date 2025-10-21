@@ -4,7 +4,6 @@ This module tests the action sampler implementations used for continuous action
 space sampling in POMDP planners, particularly for PFT-DPW integration.
 """
 
-import json
 import pickle
 import random
 import tempfile

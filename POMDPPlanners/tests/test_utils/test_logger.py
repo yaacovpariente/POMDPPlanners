@@ -1,5 +1,3 @@
-import logging
-import os
 import random
 import tempfile
 import time
@@ -11,7 +9,6 @@ from POMDPPlanners.utils.logger import (
     cleanup_all_loggers,
     get_logger,
     get_queue_logger_diagnostics,
-    get_queue_logger_manager,
 )
 
 np.random.seed(42)

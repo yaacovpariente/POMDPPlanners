@@ -25,9 +25,6 @@ from POMDPPlanners.simulations.simulations_deployment.task_manager_configs impor
     PBSConfig,
     TaskManagerConfig,
 )
-from POMDPPlanners.configs.experiment_configs import (
-    complete_environments_and_benchmarks_hyperparameter_optimization_configs,
-)
 from POMDPPlanners.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -124,10 +121,10 @@ class OptimizationEvaluationWorkflow(ABC):
             Tuple of results dictionary and DataFrame.
         """
         if self.verbose:
-            logger.info(f"Optimizing {len(configs)} environments and policies")
+            logger.info("Optimizing %d environments and policies", len(configs))
 
         if self.debug:
-            logger.debug(f"Optimizing {len(configs)} environments and policies")
+            logger.debug("Optimizing %d environments and policies", len(configs))
 
         optimizer = HyperParameterOptimizer(
             cache_dir_path=self.cache_dir,

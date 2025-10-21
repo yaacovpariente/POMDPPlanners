@@ -2002,11 +2002,13 @@ def test_simulator_visualization_error_handling_with_continuous_light_dark(
                 policy_dir=test_policy_dir,
             )
 
-            # Verify warning was logged
+            # Verify warning was logged (lazy % formatting)
             mock_warning.assert_called_once()
-            warning_call_args = mock_warning.call_args[0][0]
-            assert "Visualization failed for episode 0" in warning_call_args
-            assert "Test visualization error" in warning_call_args
+            warning_format = mock_warning.call_args[0][0]
+            warning_args = mock_warning.call_args[0][1:]
+            assert "Visualization failed for episode" in warning_format
+            assert 0 in warning_args  # episode number
+            assert any("Test visualization error" in str(arg) for arg in warning_args)
 
     # Verify visualization directory is still created even with errors
     viz_dir = test_policy_dir / "visualizations"

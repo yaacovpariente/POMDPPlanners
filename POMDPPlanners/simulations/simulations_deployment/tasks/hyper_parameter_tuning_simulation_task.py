@@ -328,7 +328,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             return metric_values
 
         except Exception as e:
-            self.logger.error("Error in evaluation function for trial %d: %s", trial_id, e)
+            self.logger.error("Error in evaluation function for trial %s: %s", trial_id, e)
             raise e
 
     def _compute_pareto_scores(self, study, pareto_trials=None) -> Dict[int, float]:

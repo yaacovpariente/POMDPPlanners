@@ -13,8 +13,7 @@ import numpy as np
 import pytest
 import scipy.stats
 
-from POMDPPlanners.core.simulation import StepData
-from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP, MountainCarObservation
+from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 
 # Set seeds for reproducible tests
 np.random.seed(42)

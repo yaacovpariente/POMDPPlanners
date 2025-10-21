@@ -48,7 +48,7 @@ def cache_episode_simulation_results(
 
     key = get_cache_key(environment, policy, initial_belief, general_config)
     if key in cache:
-        logger.info(f"Simulation results for {key} already cached")
+        logger.info("Simulation results for %s already cached", key)
     else:
         cache[key] = results
 
@@ -68,5 +68,5 @@ def load_episode_simulation_results(
     if key in cache:
         return cache[key]  # type: ignore
     else:
-        logger.debug(f"Simulation results for {key} not found in cache")
+        logger.debug("Simulation results for %s not found in cache", key)
         return []

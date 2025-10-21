@@ -2,7 +2,6 @@ import random
 from typing import List
 
 import numpy as np
-import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData

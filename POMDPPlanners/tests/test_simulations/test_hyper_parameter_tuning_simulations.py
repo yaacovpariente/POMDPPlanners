@@ -16,8 +16,6 @@ import pytest
 
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.simulation import (
-    CategoricalHyperParameter,
-    MetricValue,
     NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (

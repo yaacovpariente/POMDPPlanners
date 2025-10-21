@@ -1,13 +1,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Sequence, List
+from typing import TYPE_CHECKING, Sequence, List
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-    HyperParameterFeature,
     HyperParameterRunParams,
-    HyperParamPlannerConfig,
 )
 
 if TYPE_CHECKING:

@@ -2,7 +2,6 @@ import random
 
 import numpy as np
 import pytest
-from scipy.stats import norm
 
 from POMDPPlanners.utils.statistics_utils import cvar_estimator
 
