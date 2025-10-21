@@ -7,6 +7,8 @@ This module tests the PathSimulationPolicy abstract base class, focusing on:
 - Abstract method contract enforcement
 """
 
+# pylint: disable=protected-access  # Tests need to access protected members
+
 import random
 from pathlib import Path
 from unittest.mock import Mock, patch

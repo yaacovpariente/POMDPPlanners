@@ -6,6 +6,8 @@ This module tests the Push POMDP environment, focusing on:
 - Reward verification between obstacle and non-obstacle states
 """
 
+# pylint: disable=protected-access  # Tests need to access protected members
+
 import random
 
 import numpy as np

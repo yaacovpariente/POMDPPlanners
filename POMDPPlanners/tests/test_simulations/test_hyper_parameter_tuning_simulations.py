@@ -4,6 +4,8 @@ This module tests the HyperParameterOptimizer class and its functionality for
 optimizing POMDP policy hyperparameters using Optuna and MLFlow.
 """
 
+# pylint: disable=protected-access  # Tests need to access protected members
+
 import random
 import shutil
 import tempfile

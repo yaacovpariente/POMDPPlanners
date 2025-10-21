@@ -7,6 +7,8 @@ This module tests the POMCPOW planner, focusing on:
 - Planning algorithms
 """
 
+# pylint: disable=protected-access  # Tests need to access protected members
+
 import random
 
 import numpy as np

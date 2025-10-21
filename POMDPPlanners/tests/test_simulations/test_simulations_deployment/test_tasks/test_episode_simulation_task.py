@@ -1,3 +1,4 @@
+# pylint: disable=protected-access  # Tests need to access protected members
 from unittest.mock import patch
 
 import numpy as np
