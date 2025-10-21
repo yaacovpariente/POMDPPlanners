@@ -32,7 +32,7 @@ from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
-    PathSimulationPolicy,
+    ProgressiveWideningMCTSPolicy,
 )
 from POMDPPlanners.planners.planners_utils.dpw import (
     ActionSampler,
@@ -40,7 +40,7 @@ from POMDPPlanners.planners.planners_utils.dpw import (
 )
 
 
-class PFT_DPW(PathSimulationPolicy):
+class PFT_DPW(ProgressiveWideningMCTSPolicy):
     """PFT-DPW (Progressive Function Transfer with Double Progressive Widening) Algorithm.
 
     PFT-DPW is a Monte Carlo Tree Search algorithm designed for continuous action spaces
@@ -133,41 +133,91 @@ class PFT_DPW(PathSimulationPolicy):
         debug: bool = False,
         use_queue_logger: bool = False,
     ):
+        """Initialize PFT_DPW planner.
+
+        Args:
+            environment: The POMDP environment to plan for
+            discount_factor: Discount factor for future rewards (0 < γ ≤ 1)
+            depth: Maximum search depth for tree expansion
+            name: Identifier for the policy instance
+            action_sampler: Action sampling strategy for progressive widening
+            k_a: Action progressive widening coefficient (default: 1.0)
+            alpha_a: Action progressive widening exponent (default: 0.5)
+            k_o: Observation progressive widening coefficient (default: 1.0)
+            alpha_o: Observation progressive widening exponent (default: 0.5)
+            exploration_constant: UCB1 exploration parameter (default: 1.0)
+            time_out_in_seconds: Time limit for planning
+            n_simulations: Number of simulations to run
+            min_samples_per_node: Minimum samples before node is reliable (default: 10)
+            min_visit_count_per_action: Minimum visits per action (PFT_DPW-specific, default: 1)
+            log_path: Optional path for logging
+            debug: Enable debug logging
+            use_queue_logger: Use queue-based logging
+
+        Raises:
+            TypeError: If parameters have incorrect types
+            ValueError: If parameters have invalid values
+        """
+        # Validate PFT_DPW-specific parameters before calling super
+        self._validate_pft_dpw_params(
+            min_samples_per_node=min_samples_per_node,
+            min_visit_count_per_action=min_visit_count_per_action,
+        )
+
+        # Base class handles common parameter validation
         super().__init__(
             environment=environment,
             discount_factor=discount_factor,
+            depth=depth,
             name=name,
-            n_simulations=n_simulations,
-            time_out_in_seconds=time_out_in_seconds,
             action_sampler=action_sampler,
+            k_a=k_a,
+            alpha_a=alpha_a,
+            k_o=k_o,
+            alpha_o=alpha_o,
+            exploration_constant=exploration_constant,
+            min_samples_per_node=min_samples_per_node,
+            time_out_in_seconds=time_out_in_seconds,
+            n_simulations=n_simulations,
             log_path=log_path,
             debug=debug,
             use_queue_logger=use_queue_logger,
         )
 
-        self.__type_check_inputs(
-            min_samples_per_node=min_samples_per_node,
-            min_visit_count_per_action=min_visit_count_per_action,
-        )
-
-        self.depth = depth
-        self.action_sampler = action_sampler
-        self.min_samples_per_node = min_samples_per_node
+        # PFT_DPW-specific attributes
         self.min_visit_count_per_action = min_visit_count_per_action
 
-        self.k_a = k_a
-        self.alpha_a = alpha_a
-        self.k_o = k_o
-        self.alpha_o = alpha_o
-        self.exploration_constant = exploration_constant
+    @staticmethod
+    def _validate_pft_dpw_params(
+        min_samples_per_node: int,
+        min_visit_count_per_action: int,
+    ) -> None:
+        """Validate PFT_DPW-specific parameters.
 
-    def __type_check_inputs(self, min_samples_per_node: int, min_visit_count_per_action: int):
-        if not isinstance(min_samples_per_node, int):
-            raise TypeError("min_samples_per_node must be an int")
+        Args:
+            min_samples_per_node: Minimum samples per node
+            min_visit_count_per_action: Minimum visits per action
+
+        Raises:
+            TypeError: If parameters have incorrect types
+            ValueError: If parameters have invalid values
+        """
         if not isinstance(min_visit_count_per_action, int):
-            raise TypeError("min_visit_count_per_action must be an int")
-        # TODO: check if min_samples_per_node is greater than min_visit_count_per_action
-        # TODO: check k and alpha params
+            raise TypeError(
+                f"min_visit_count_per_action must be an int, "
+                f"got {type(min_visit_count_per_action).__name__}"
+            )
+        if min_visit_count_per_action < 1:
+            raise ValueError(
+                f"min_visit_count_per_action must be >= 1, got {min_visit_count_per_action}"
+            )
+        # Note: min_samples_per_node validation is already done in base class
+        # This additional check ensures consistency for PFT_DPW
+        if min_samples_per_node < min_visit_count_per_action:
+            raise ValueError(
+                f"min_samples_per_node ({min_samples_per_node}) should be >= "
+                f"min_visit_count_per_action ({min_visit_count_per_action})"
+            )
 
     def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
         if depth > self.depth:
@@ -264,7 +314,3 @@ class PFT_DPW(PathSimulationPolicy):
         action_node.visit_count += 1
         action_node.q_value += (total - action_node.q_value) / action_node.visit_count
         belief_node.v_value = np.max([child.q_value for child in belief_node.children])
-
-    @classmethod
-    def get_space_info(cls) -> PolicySpaceInfo:
-        return PolicySpaceInfo(action_space=SpaceType.CONTINUOUS, observation_space=SpaceType.MIXED)
