@@ -153,7 +153,7 @@ class PathSimulationPolicy(Policy):
         pass
 
 
-class ProgressiveWideningMCTSPolicy(PathSimulationPolicy):
+class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
     """Abstract base class for MCTS planners using double progressive widening.
 
     This base class provides common initialization, parameter validation, and attributes

@@ -33,7 +33,7 @@ from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.tree import BeliefNode
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
-    ProgressiveWideningMCTSPolicy,
+    DoubleProgressiveWideningMCTSPolicy,
 )
 from POMDPPlanners.planners.planners_utils.dpw import (
     ActionSampler,
@@ -42,7 +42,7 @@ from POMDPPlanners.planners.planners_utils.dpw import (
 from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
 
 
-class POMCP_DPW(ProgressiveWideningMCTSPolicy):
+class POMCP_DPW(DoubleProgressiveWideningMCTSPolicy):
     """POMCP_DPW (Partially Observable Monte Carlo Planning with Double Progressive Widening) Algorithm.
 
     POMCP_DPW is an advanced Monte Carlo Tree Search algorithm for POMDP planning that extends
@@ -300,5 +300,3 @@ class POMCP_DPW(ProgressiveWideningMCTSPolicy):
         belief_node.v_value = max([child.q_value for child in belief_node.children])
 
         return total
-
-    # Note: get_space_info() is inherited from ProgressiveWideningMCTSPolicy (returns MIXED)
