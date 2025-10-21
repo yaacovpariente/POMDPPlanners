@@ -1,4 +1,5 @@
 import random
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -9,22 +10,11 @@ import pandas as pd
 import pytest
 
 from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.simulation import (
-    EnvironmentRunParams,
-    History,
-    NumericalHyperParameter,
-)
-from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-    HyperParameterRunParams,
-    HyperParamPlannerConfig,
-    HyperParameterOptimizationDirection,
-    OptimizedPolicyResult,
-)
+from POMDPPlanners.core.simulation import EnvironmentRunParams
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
-from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.simulations.simulation_apis.dask_simulations_api import DaskSimulationsAPI
 
 np.random.seed(42)
@@ -42,8 +32,6 @@ def temp_cache_dir():
         time.sleep(0.1)
         # Ensure cleanup happens even if test fails
         try:
-            import shutil
-
             shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception:
             pass

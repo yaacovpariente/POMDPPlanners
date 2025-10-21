@@ -7,9 +7,8 @@ integration tests with real execution using debug mode.
 
 import pytest
 import pandas as pd
-from pathlib import Path
 from typing import cast, List
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.environment import Environment, SpaceType
@@ -24,6 +23,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterFeature,
     HyperParameterOptimizationDirection,
     HyperParameterRunParams,
+    OptimizedPolicyResult,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
@@ -313,9 +313,6 @@ class TestLocalSimulationsAPI(
         Test type: unit
         """
         # Create a mock OptimizedPolicyResult
-        from POMDPPlanners.core.simulation.hyperparameter_tuning import OptimizedPolicyResult
-        from unittest.mock import Mock
-
         mock_result = Mock(spec=OptimizedPolicyResult)
 
         # Mock the optimizer instance
@@ -399,9 +396,6 @@ class TestLocalSimulationsAPI(
 
         Test type: unit
         """
-        from POMDPPlanners.core.policy import PolicySpaceInfo
-        from POMDPPlanners.core.environment import SpaceType
-
         # Mock the workflow instance
         mock_workflow_instance = MagicMock()
         mock_results = ({}, pd.DataFrame())

@@ -3,12 +3,8 @@
 from pathlib import Path
 from typing import List, Optional
 
-from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-    HyperParameterOptimizationDirection,
     HyperParameterRunParams,
-    HyperParamPlannerConfig,
     OptimizedPolicyResult,
 )
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
@@ -153,11 +149,15 @@ def run_hyperparameter_optimization_local_run(
         - Supports both numerical and categorical hyperparameters
     """
     logger.info(
-        f"Starting hyperparameter optimization for {len(environment_run_params)} configurations"
+        "Starting hyperparameter optimization for %s configurations",
+        len(environment_run_params),
     )
     logger.debug(
-        f"Parameters: experiment_name={experiment_name}, n_jobs={n_jobs}, "
-        f"confidence_interval={confidence_interval_level}, alpha={alpha}"
+        "Parameters: experiment_name=%s, n_jobs=%s, " "confidence_interval=%s, alpha=%s",
+        experiment_name,
+        n_jobs,
+        confidence_interval_level,
+        alpha,
     )
 
     # Set up cache directory
@@ -186,22 +186,26 @@ def run_hyperparameter_optimization_local_run(
         results = optimizer.optimize(environment_run_params)
 
         logger.info(
-            f"Hyperparameter optimization completed successfully. "
-            f"Optimized {len(results)} out of {len(environment_run_params)} configurations"
+            "Hyperparameter optimization completed successfully. "
+            "Optimized %s out of %s configurations",
+            len(results),
+            len(environment_run_params),
         )
 
         # Log summary of results
         for i, result in enumerate(results):
             logger.info(
-                f"Configuration {i+1}: {result.environment.__class__.__name__} "
-                f"with {result.policy.__class__.__name__} - "
-                f"Best parameters: {result.chosen_hyper_parameters}"
+                "Configuration %s: %s " "with %s - " "Best parameters: %s",
+                i + 1,
+                result.environment.__class__.__name__,
+                result.policy.__class__.__name__,
+                result.chosen_hyper_parameters,
             )
 
         return results
 
     except Exception as e:
-        logger.error(f"Hyperparameter optimization failed: {e}")
+        logger.error("Hyperparameter optimization failed: %s", e)
         raise RuntimeError(f"Hyperparameter optimization failed: {e}") from e
 
     finally:
@@ -209,7 +213,7 @@ def run_hyperparameter_optimization_local_run(
         try:
             optimizer.cleanup()
         except Exception as cleanup_error:
-            logger.warning(f"Error during optimizer cleanup: {cleanup_error}")
+            logger.warning("Error during optimizer cleanup: %s", cleanup_error)
 
 
 def run_hyperparameter_optimization_pbs(
@@ -364,15 +368,24 @@ def run_hyperparameter_optimization_pbs(
         - PBS cluster resources enable large-scale distributed optimization
     """
     logger.info(
-        f"Starting PBS hyperparameter optimization for {len(environment_run_params)} configurations"
+        "Starting PBS hyperparameter optimization for %s configurations",
+        len(environment_run_params),
     )
     logger.debug(
-        f"PBS Parameters: queue={queue}, n_workers={n_workers}, cores={cores}, "
-        f"memory={memory}, walltime={walltime}"
+        "PBS Parameters: queue=%s, n_workers=%s, cores=%s, " "memory=%s, walltime=%s",
+        queue,
+        n_workers,
+        cores,
+        memory,
+        walltime,
     )
     logger.debug(
-        f"Optimization Parameters: experiment_name={experiment_name}, n_jobs={n_jobs}, "
-        f"confidence_interval={confidence_interval_level}, alpha={alpha}"
+        "Optimization Parameters: experiment_name=%s, n_jobs=%s, "
+        "confidence_interval=%s, alpha=%s",
+        experiment_name,
+        n_jobs,
+        confidence_interval_level,
+        alpha,
     )
 
     # Set up cache directory
@@ -413,27 +426,31 @@ def run_hyperparameter_optimization_pbs(
         # Run optimization
         logger.info("Running PBS hyperparameter optimization")
         if enable_dashboard:
-            logger.info(f"Dashboard available at: http://{dashboard_address}:{dashboard_port}")
+            logger.info("Dashboard available at: http://%s:%s", dashboard_address, dashboard_port)
 
         results = optimizer.optimize(environment_run_params)
 
         logger.info(
-            f"PBS hyperparameter optimization completed successfully. "
-            f"Optimized {len(results)} out of {len(environment_run_params)} configurations"
+            "PBS hyperparameter optimization completed successfully. "
+            "Optimized %s out of %s configurations",
+            len(results),
+            len(environment_run_params),
         )
 
         # Log summary of results
         for i, result in enumerate(results):
             logger.info(
-                f"Configuration {i+1}: {result.environment.__class__.__name__} "
-                f"with {result.policy.__class__.__name__} - "
-                f"Best parameters: {result.chosen_hyper_parameters}"
+                "Configuration %s: %s " "with %s - " "Best parameters: %s",
+                i + 1,
+                result.environment.__class__.__name__,
+                result.policy.__class__.__name__,
+                result.chosen_hyper_parameters,
             )
 
         return results
 
     except Exception as e:
-        logger.error(f"PBS hyperparameter optimization failed: {e}")
+        logger.error("PBS hyperparameter optimization failed: %s", e)
         raise RuntimeError(f"PBS hyperparameter optimization failed: {e}") from e
 
     finally:
@@ -441,4 +458,4 @@ def run_hyperparameter_optimization_pbs(
         try:
             optimizer.cleanup()
         except Exception as cleanup_error:
-            logger.warning(f"Error during optimizer cleanup: {cleanup_error}")
+            logger.warning("Error during optimizer cleanup: %s", cleanup_error)

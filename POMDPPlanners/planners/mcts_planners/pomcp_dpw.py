@@ -23,20 +23,11 @@ Classes:
     POMCP_DPW: Monte Carlo Tree Search planner with double progressive widening extending POMCP
 """
 
-import random
-import time
-from math import floor
 from pathlib import Path
 from typing import Any, Optional
 
-import numpy as np
 
 # Python 3.9 compatibility - KW_ONLY was introduced in Python 3.10
-try:
-    from dataclasses import KW_ONLY
-except ImportError:
-    # For Python 3.9 compatibility, define KW_ONLY as None
-    KW_ONLY = None  # type: ignore[misc]
 
 from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
 from POMDPPlanners.core.environment import Environment, SpaceType
@@ -96,8 +87,7 @@ class POMCP_DPW(PathSimulationPolicy):
         debug: Enable debug logging if True
 
     Example:
-        >>> import numpy as np
-        >>> import random
+        >>>         >>> import random
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.core.belief import get_initial_belief
         >>> from POMDPPlanners.planners.planners_utils.dpw import ActionSampler

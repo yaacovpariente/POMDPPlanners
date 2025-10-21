@@ -5,13 +5,11 @@ This test module validates that all environment configurations in the experiment
 directory can be instantiated and provide valid POMDP environments and beliefs.
 """
 
-import os
+
 import random
-import sys
-from pathlib import Path
+import traceback
 
 import numpy as np
-import pytest
 
 from POMDPPlanners.configs.environment_configs import (
     EnvironmentConfigsAPI,
@@ -586,7 +584,6 @@ def main():
             passed += 1
         except Exception as e:
             print(f"  ❌ {method_name} failed: {e}")
-            import traceback
 
             traceback.print_exc()
 

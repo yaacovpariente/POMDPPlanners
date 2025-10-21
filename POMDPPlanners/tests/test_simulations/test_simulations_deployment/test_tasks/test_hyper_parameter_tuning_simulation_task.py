@@ -2,22 +2,22 @@ import tempfile
 from pathlib import Path
 from typing import List, cast
 
-import numpy as np
 import pytest
 
-from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
-    History,
     NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterFeature,
     HyperParameterOptimizationDirection,
+    OptimizedPolicyResult,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
@@ -802,9 +802,6 @@ def test_run_function_return_type_explicitly(environment, hyper_parameters):
     result = task.run()
 
     # Explicit type checking
-    from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-        OptimizedPolicyResult,
-    )
 
     assert isinstance(result, OptimizedPolicyResult)
     assert isinstance(result.environment, Environment)
@@ -1583,7 +1580,6 @@ def test_study_storage_initialization(environment, hyper_parameters, temp_cache_
     assert task.study_storage is not None
 
     # Verify study_storage is DiskCacheDB
-    from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
 
     assert isinstance(task.study_storage, DiskCacheDB)
 

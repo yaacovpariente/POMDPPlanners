@@ -15,50 +15,11 @@ from typing import cast
 from unittest.mock import Mock, patch
 
 import numpy as np
+import pandas as pd
 import pytest
 
-# Set seeds for reproducible tests
-np.random.seed(42)
-random.seed(42)
-
-import pandas as pd
-
-# Define InvalidPolicy at module level to avoid pickling issues
-from POMDPPlanners.core.policy import Policy
-
-
-class InvalidPolicy(Policy):
-    """Mock invalid policy class that accepts any arguments but fails to work properly"""
-
-    def __init__(self, environment=None, discount_factor=0.95, **kwargs):
-        # Initialize with minimal Policy requirements
-        # Use dummy values if not provided
-        if environment is None:
-            from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-
-            environment = TigerPOMDP(discount_factor=discount_factor, name="DummyTiger")
-        super().__init__(
-            environment=environment,
-            discount_factor=discount_factor,
-            name="InvalidPolicy",
-        )
-
-    def action(self, belief):
-        # This will fail during optimization as intended
-        raise NotImplementedError("Invalid policy cannot select actions")
-
-    @classmethod
-    def get_space_info(cls):
-        """Return space info for invalid policy - this will cause issues during optimization"""
-        from POMDPPlanners.core.policy import PolicySpaceInfo, SpaceType
-
-        return PolicySpaceInfo(
-            action_space=SpaceType.DISCRETE,
-            observation_space=SpaceType.DISCRETE,
-        )
-
-
 from POMDPPlanners.core.belief import get_initial_belief
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
     NumericalHyperParameter,
@@ -83,8 +44,42 @@ from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
     optimize_planner_hyperparameters_pbs,
 )
 
+# Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
+
+
+class InvalidPolicy(Policy):
+    """Mock invalid policy class that accepts any arguments but fails to work properly"""
+
+    def __init__(self, environment=None, discount_factor=0.95, **kwargs):
+        # Initialize with minimal Policy requirements
+        # Use dummy values if not provided
+        if environment is None:
+            environment = TigerPOMDP(discount_factor=discount_factor, name="DummyTiger")
+        super().__init__(
+            environment=environment,
+            discount_factor=discount_factor,
+            name="InvalidPolicy",
+        )
+
+    def action(self, belief):
+        # This will fail during optimization as intended
+        raise NotImplementedError("Invalid policy cannot select actions")
+
+    @classmethod
+    def get_space_info(cls):
+        """Return space info for invalid policy - this will cause issues during optimization"""
+        return PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.DISCRETE,
+        )
+
+
+def test_optimize_and_evaluate_planners_basic_functionality():
+    """Test basic functionality of optimize_and_evaluate_planners function."""
+    # Test implementation here
+    pass
 
 
 @pytest.fixture
@@ -2316,10 +2311,6 @@ class TestHyperParamRunnerUseCases:
 
         Test type: integration
         """
-        from POMDPPlanners.core.belief import get_initial_belief
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-
         # Mock heavy computation parts for speed
         with (
             patch(
@@ -2440,9 +2431,6 @@ class TestHyperParamRunnerUseCases:
 
         Test type: unit
         """
-        from POMDPPlanners.core.belief import get_initial_belief
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 
         env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
         initial_belief = get_initial_belief(env, n_particles=10)
@@ -2525,8 +2513,6 @@ class TestHyperParamRunnerUseCases:
 
         Test type: unit
         """
-        from POMDPPlanners.core.belief import get_initial_belief
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
         env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
         initial_belief = get_initial_belief(env, n_particles=10)
@@ -2756,9 +2742,6 @@ class TestHyperParamRunnerUseCases:
 
         Test type: unit
         """
-        from POMDPPlanners.core.belief import get_initial_belief
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 
         env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
         initial_belief = get_initial_belief(env, n_particles=10)
@@ -2817,8 +2800,6 @@ class TestHyperParamRunnerUseCases:
 
         Test type: unit
         """
-        from POMDPPlanners.core.belief import get_initial_belief
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
         env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
         initial_belief = get_initial_belief(env, n_particles=10)
@@ -2913,9 +2894,6 @@ class TestHyperParamRunnerUseCases:
 
         Test type: integration
         """
-        from POMDPPlanners.core.belief import get_initial_belief
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 
         # Test with real classes but mocked computation
         with (

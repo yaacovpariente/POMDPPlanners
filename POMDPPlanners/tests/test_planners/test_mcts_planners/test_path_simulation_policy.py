@@ -14,8 +14,14 @@ from unittest.mock import Mock, patch
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.belief import Belief, WeightedParticleBelief, is_terminal_belief
-from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
+from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.environment import (
+    Environment,
+    SpaceInfo,
+    SpaceType,
+    StateTransitionModel,
+    ObservationModel,
+)
 from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
@@ -40,17 +46,11 @@ class MockEnvironment(Environment):
         )
 
     def state_transition_model(self, state, action):
-        from unittest.mock import Mock
-        from POMDPPlanners.core.environment import StateTransitionModel
-
         mock_model = Mock(spec=StateTransitionModel)
         mock_model.probability.return_value = 1.0
         return mock_model
 
     def observation_model(self, next_state, action):
-        from unittest.mock import Mock
-        from POMDPPlanners.core.environment import ObservationModel
-
         mock_model = Mock(spec=ObservationModel)
         mock_model.probability.return_value = 1.0
         return mock_model

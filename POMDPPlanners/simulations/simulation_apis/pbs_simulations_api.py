@@ -136,8 +136,12 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
         self.logger = get_logger(name="pbs_simulations_api", output_dir=cache_dir_path, debug=debug)
         self.logger.info("Initialized PBSSimulationsAPI")
         self.logger.debug(
-            f"PBS Config: queue={queue}, n_workers={n_workers}, cores={cores}, "
-            f"memory={memory}, walltime={walltime}"
+            "PBS Config: queue=%s, n_workers=%s, cores=%s, memory=%s, walltime=%s",
+            queue,
+            n_workers,
+            cores,
+            memory,
+            walltime,
         )
 
     def run_multiple_environments_and_policies(
@@ -229,10 +233,13 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
             True
         """
         self.logger.info(
-            f"Starting PBS cluster simulation with {len(environment_run_params)} environment configurations"
+            "Starting PBS cluster simulation with %d environment configurations",
+            len(environment_run_params),
         )
         self.logger.debug(
-            f"Simulation Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}"
+            "Simulation Parameters: alpha=%s, confidence_interval=%s",
+            alpha,
+            confidence_interval_level,
         )
 
         task_manager_config = PBSConfig(
@@ -389,7 +396,8 @@ class PBSSimulationsAPI(SimulationsAPIInterface):
                 policies and their best hyperparameters.
         """
         self.logger.info(
-            f"Starting hyperparameter optimization on PBS cluster with {len(environment_run_params)} configurations"
+            "Starting hyperparameter optimization on PBS cluster with %d configurations",
+            len(environment_run_params),
         )
 
         if cache_dir_path is None:

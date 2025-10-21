@@ -303,7 +303,7 @@ class TaskManagerExternalDB(TaskManager):
             >>> results[0]
             'result'
         """
-        self.logger.info(f"Starting to process {len(tasks)} tasks")
+        self.logger.info("Starting to process %s tasks", len(tasks))
         # Lists to store results and track which tasks need to be run
         results: List[Any] = [None] * len(tasks)
         tasks_to_run: List[SimulationTask] = []
@@ -321,14 +321,17 @@ class TaskManagerExternalDB(TaskManager):
                 task_indices.append(i)
 
         self.logger.info(
-            f"Cache status: {cached_tasks} tasks cached, {len(tasks_to_run)} tasks uncached out of {len(tasks)} total tasks"
+            "Cache status: %s tasks cached, %s tasks uncached out of %s total tasks",
+            cached_tasks,
+            len(tasks_to_run),
+            len(tasks),
         )
 
         # Run only the tasks that weren't in cache
         if tasks_to_run:
-            self.logger.info(f"Running {len(tasks_to_run)} uncached tasks")
+            self.logger.info("Running %s uncached tasks", len(tasks_to_run))
             new_results = self._run_tasks(tasks_to_run)
-            self.logger.info(f"Completed {len(new_results)} tasks")
+            self.logger.info("Completed %s tasks", len(new_results))
 
             if len(new_results) != len(tasks_to_run):
                 raise ValueError("new_results and tasks_to_run must have the same length")
@@ -341,7 +344,7 @@ class TaskManagerExternalDB(TaskManager):
                 results[idx] = result
                 # Cache the new result
                 task_id = tasks[idx].get_config_id()
-                self.logger.debug(f"Storing task {idx} in cache with config_id: {task_id}")
+                self.logger.debug("Storing task %s in cache with config_id: %s", idx, task_id)
                 self.cache_db.set(task_id, result)
 
         # Filter out failed tasks and their identifiers
@@ -354,14 +357,14 @@ class TaskManagerExternalDB(TaskManager):
             else:
                 task_id = tasks[i].get_config_id()
                 self.logger.warning(
-                    f"Task {i} (config_id: {task_id}) failed - returned None result"
+                    "Task %s (config_id: %s) failed - returned None result", i, task_id
                 )
 
         n_failed_tasks = len(tasks) - len(successful_results)
-        self.logger.info(f"{len(successful_results)} tasks completed successfully")
+        self.logger.info("%s tasks completed successfully", len(successful_results))
 
         if n_failed_tasks > 0:
-            self.logger.warning(f"{n_failed_tasks} tasks failed.")
+            self.logger.warning("%s tasks failed.", n_failed_tasks)
 
         return successful_results, successful_identifiers
 

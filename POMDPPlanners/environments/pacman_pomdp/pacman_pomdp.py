@@ -13,19 +13,14 @@ Classes:
     PacManPOMDP: The main POMDP environment implementation
 """
 
-import math
-import os
-import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-import matplotlib.animation as animation
-import matplotlib.pyplot as plt
 import numpy as np
 from PIL import Image, ImageDraw
 
-from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
+from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     ObservationModel,

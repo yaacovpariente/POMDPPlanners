@@ -8,13 +8,11 @@ This module tests the Continuous Light Dark POMDP environment, focusing on:
 """
 
 import random
+import time
 
 import numpy as np
 import pytest
-
-# Set seeds for reproducible tests
-np.random.seed(42)
-random.seed(42)
+from scipy.stats import multivariate_normal
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
@@ -24,7 +22,20 @@ from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
+    StateTransitionModel,
+    RewardModelType,
 )
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
+    ContinuousLightDarkNormalNoiseObservationModel,
+)
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
+    ContinuousLightDarkDecayingHitProbabilityRewardModel,
+    ContinuousLDDangerousStatesRewardModel,
+)
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 
 @pytest.fixture
@@ -419,9 +430,6 @@ def test_compute_metrics():
     )
 
     # Create test histories
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.simulation import History, StepData
-
     # Create a simple belief for testing
     def create_test_belief(state):
         return WeightedParticleBelief(
@@ -540,9 +548,6 @@ def test_continuous_light_dark_pomdp_state_transition_model(
     state = np.array([5, 5])
     action = np.array([0, 1])
     dist = env.state_transition_model(state, action)
-    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
-        StateTransitionModel,
-    )
 
     assert isinstance(dist, StateTransitionModel)
     next_state = dist.sample()
@@ -558,9 +563,6 @@ def test_continuous_light_dark_pomdp_observation_model(
     next_state = np.array([5, 5])
     action = np.array([0, 1])
     dist = env.observation_model(next_state, action)
-    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
-        ContinuousLightDarkNormalNoiseObservationModel,
-    )
 
     assert isinstance(dist, ContinuousLightDarkNormalNoiseObservationModel)
     observation = dist.sample()
@@ -604,9 +606,6 @@ def test_continuous_light_dark_pomdp_is_terminal(base_continuous_light_dark_pomd
 
 def test_continuous_light_dark_pomdp_compute_metrics(base_continuous_light_dark_pomdp):
     env = base_continuous_light_dark_pomdp
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
-    from POMDPPlanners.core.simulation import History, StepData
 
     def create_test_belief(state):
         return WeightedParticleBelief(
@@ -689,13 +688,6 @@ def test_continuous_light_dark_pomdp_compute_metrics(base_continuous_light_dark_
 
 def test_decaying_hit_probability_reward_model():
     """Test that the environment uses the decaying hit probability reward model when specified."""
-    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
-        RewardModelType,
-    )
-    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
-        ContinuousLightDarkDecayingHitProbabilityRewardModel,
-    )
-
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
         state_transition_cov_matrix=np.eye(2),
@@ -716,13 +708,6 @@ def test_decaying_hit_probability_reward_model():
 
 def test_dangerous_states_reward_model():
     """Test that the environment uses the dangerous states reward model when specified."""
-    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
-        RewardModelType,
-    )
-    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
-        ContinuousLDDangerousStatesRewardModel,
-    )
-
     env = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
         state_transition_cov_matrix=np.eye(2),
@@ -1096,7 +1081,6 @@ class TestVisualizePath:
         first_mtime = cache_path.stat().st_mtime
 
         # Small delay to ensure different modification time
-        import time
 
         time.sleep(0.1)
 
@@ -1302,9 +1286,6 @@ def test_beacon_proximity_observation_covariance_changes():
 
     Test type: unit
     """
-    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
-        ContinuousLightDarkNormalNoiseObservationModel,
-    )
 
     # Set up test parameters
     observation_cov_matrix = np.eye(2) * 4.0  # Base covariance matrix
@@ -1379,9 +1360,6 @@ def test_beacon_proximity_with_multiple_beacons():
 
     Test type: unit
     """
-    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
-        ContinuousLightDarkNormalNoiseObservationModel,
-    )
 
     observation_cov_matrix = np.eye(2) * 2.0
     grid_size = 11
@@ -1462,11 +1440,6 @@ def test_observation_model_probability_function():
 
     Test type: unit
     """
-    from scipy.stats import multivariate_normal
-
-    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
-        ContinuousLightDarkNormalNoiseObservationModel,
-    )
 
     # Set up test parameters
     next_state = np.array([5.0, 3.0])
@@ -1542,9 +1515,6 @@ def test_observation_model_probability_with_beacon_proximity():
 
     Test type: unit
     """
-    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
-        ContinuousLightDarkNormalNoiseObservationModel,
-    )
 
     next_state = np.array([0.5, 0.5])  # Close to beacon at (0,0)
     action = np.array([0, 0])
@@ -1607,9 +1577,6 @@ def test_observation_model_probability_edge_cases():
 
     Test type: unit
     """
-    from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
-        ContinuousLightDarkNormalNoiseObservationModel,
-    )
 
     next_state = np.array([5.0, 5.0])
     action = np.array([0, 0])

@@ -25,13 +25,16 @@ Classes:
 """
 
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, cast
 
 import matplotlib.animation as animation
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import numpy as np
 
-from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
+from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     ObservationModel,
@@ -525,16 +528,11 @@ class PushPOMDP(DiscreteActionsEnvironment):
         rewards = [step.reward for step in history]
 
         # Set up the plot
-        from matplotlib.figure import Figure
-        from matplotlib.axes import Axes
-
-        from typing import cast
-
         fig: Figure
         ax: Axes
         fig_temp, ax_temp = plt.subplots(figsize=(12, 10))
-        fig = cast(Figure, fig_temp)
-        ax = cast(Axes, ax_temp)
+        fig = cast(Figure, fig_temp)  # type: ignore[reportUnboundVariable]
+        ax = cast(Axes, ax_temp)  # type: ignore[reportUnboundVariable]
         ax.set_xlim(-0.5, self.grid_size + 0.5)
         ax.set_ylim(-0.5, self.grid_size + 0.5)
         ax.set_aspect("equal")
@@ -595,8 +593,6 @@ class PushPOMDP(DiscreteActionsEnvironment):
                 ax.scatter(obs_x, obs_y, s=1, c="red", label="Obstacles")
 
         # Initialize path traces
-        from matplotlib.lines import Line2D
-        from typing import cast
 
         robot_path_line = cast(
             Line2D, ax.plot([], [], "b-", alpha=0.4, linewidth=2, label="Robot Path")[0]

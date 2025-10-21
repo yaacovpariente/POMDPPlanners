@@ -10,20 +10,24 @@ This module tests the simulator functionality, focusing on:
 import random
 import shutil
 import tempfile
+import gc
+import psutil
+import mlflow
+import logging
+import time
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
-from distributed import Client as DaskClient
 
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.simulation import EnvironmentRunParams, History, StepData
 from POMDPPlanners.core.policy import PolicyRunData
-from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment
-from unittest.mock import Mock
-from typing import cast, Dict
+from unittest.mock import Mock, patch
+from typing import cast
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDPDiscreteActions,
 )
@@ -34,6 +38,9 @@ from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     DaskConfig,
     JoblibConfig,
+)
+from POMDPPlanners.simulations.simulations_deployment.tasks import (
+    EpisodeSimulationTask,
 )
 from POMDPPlanners.simulations.simulator import POMDPSimulator
 
@@ -65,8 +72,6 @@ def temp_cache_dir():
     try:
         if temp_path.exists():
             # Force close any open file handles
-            import gc
-
             gc.collect()
             # Try to remove the directory
             shutil.rmtree(temp_path, ignore_errors=True)
@@ -721,8 +726,6 @@ def test_pomdp_simulator_mlflow_tracking_configures_experiment_directory(
     Test type: unit
     """
     # ARRANGE: Setup test configuration and expected MLflow paths
-    import mlflow
-
     experiment_name = "TestMLflowSetup"
     expected_mlruns_path = temp_cache_dir / "mlruns"
 
@@ -985,10 +988,6 @@ def test_create_simulation_tasks(simulator):
     assert len(task_identifiers) == 2
 
     # Each task should be an EpisodeSimulationTask
-    from POMDPPlanners.simulations.simulations_deployment.tasks import (
-        EpisodeSimulationTask,
-    )
-
     assert isinstance(tasks, list)
     assert len(tasks) == 2
     for task in tasks:
@@ -1210,7 +1209,6 @@ def test_create_simulation_tasks_length_verification(simulator):
     assert len(task_identifiers4) == expected_length_case4
 
     # Verify that all tasks are EpisodeSimulationTask instances
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 
     for task in tasks1 + tasks2 + tasks3 + tasks4:
         assert isinstance(task, EpisodeSimulationTask)
@@ -1546,9 +1544,6 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
     test_policy_dir.mkdir(parents=True, exist_ok=True)
 
     # Create realistic test history that mimics what the simulator produces
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.simulation import StepData
-
     # Create history data with realistic light-dark movements
     history_data = []
     current_pos = np.array([1.0, 1.0])  # Start position
@@ -1818,8 +1813,6 @@ def test_simulator_cache_episode_visualizations_method_integration(temp_cache_di
     test_policy_dir.mkdir(parents=True, exist_ok=True)
 
     # Create sample histories with minimal valid data for visualization
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.simulation import StepData
 
     # Create sample history entries with all required fields
     sample_states = [np.array([0.0, 0.0]), np.array([1.0, 0.0]), np.array([2.0, 0.0])]
@@ -1943,8 +1936,6 @@ def test_simulator_visualization_error_handling_with_continuous_light_dark(
     Test type: unit
     """
     # ARRANGE: Setup simulator with logging capture
-    import logging
-    from unittest.mock import patch
 
     simulator = POMDPSimulator(
         task_manager_config=JoblibConfig(n_jobs=1),
@@ -1968,8 +1959,6 @@ def test_simulator_visualization_error_handling_with_continuous_light_dark(
     test_policy_dir.mkdir(parents=True, exist_ok=True)
 
     # Create minimal test history
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.simulation import StepData
 
     sample_state = np.array([0.0, 0.0])
     belief = WeightedParticleBelief(
@@ -2069,8 +2058,6 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
     )
 
     # Create test results structure
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.simulation import StepData
 
     # Create sample history
     sample_state = np.array([0.0, 0.0])
@@ -2111,7 +2098,6 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
     ]
 
     # ACT: Call the function with visualization caching enabled
-    import mlflow
 
     with simulator:
         with mlflow.start_run(run_name="cache_directory_test"):
@@ -2213,8 +2199,6 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
     )
 
     # Create test histories
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.simulation import StepData
 
     def create_test_history(env_name):
         sample_state = np.array([0.0, 0.0])
@@ -2266,7 +2250,6 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
     ]
 
     # ACT: Call the function with parallel execution
-    import mlflow
 
     with simulator:
         with mlflow.start_run(run_name="parallel_execution_test"):
@@ -2344,8 +2327,6 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
     )
 
     # Create test results
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.simulation import StepData
 
     sample_state = np.array([0.0, 0.0])
     belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
@@ -2385,7 +2366,6 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
     ]
 
     # ACT: Call the function within MLflow context
-    import mlflow
 
     with simulator:
         with mlflow.start_run(run_name="visualization_test"):
@@ -2463,8 +2443,6 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
     )
 
     # Create test results
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.simulation import StepData
 
     sample_state = np.array([0.0, 0.0])
     belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
@@ -2504,7 +2482,6 @@ def test_create_and_log_environment_visualizations_cache_cleanup(temp_cache_dir)
     ]
 
     # ACT: Call the function with MLflow context
-    import mlflow
 
     with simulator:
         with mlflow.start_run(run_name="cache_cleanup_test"):
@@ -2567,8 +2544,6 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
     )
 
     # Create test results
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.simulation import StepData
 
     sample_state = np.array([0.0, 0.0])
     belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
@@ -2608,7 +2583,6 @@ def test_create_and_log_environment_visualizations_disabled_caching(temp_cache_d
     ]
 
     # ACT: Call the function with caching disabled
-    import mlflow
 
     with simulator:
         with mlflow.start_run(run_name="disabled_caching_test"):
@@ -2640,8 +2614,6 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
     Test type: unit
     """
     # ARRANGE: Setup simulator with logging capture
-    import logging
-    from unittest.mock import patch
 
     simulator = POMDPSimulator(
         task_manager_config=JoblibConfig(n_jobs=1),
@@ -2673,8 +2645,6 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
     )
 
     # Create test results
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.simulation import StepData
 
     sample_state = np.array([0.0, 0.0])
     belief = WeightedParticleBelief(particles=[sample_state], log_weights=np.array([0.5]))
@@ -2720,7 +2690,6 @@ def test_create_and_log_environment_visualizations_error_handling(temp_cache_dir
         side_effect=Exception("Test visualization error"),
     ):
         # This should not raise an exception, but should handle errors gracefully
-        import mlflow
 
         with patch.object(simulator.logger, "warning") as mock_warning:
             with simulator:
@@ -2765,7 +2734,6 @@ def test_create_and_log_environment_visualizations_empty_results(temp_cache_dir)
     env_run_params = []
 
     # ACT: Call the function with empty results
-    import mlflow
 
     with simulator:
         with mlflow.start_run(run_name="empty_results_test"):
@@ -2880,8 +2848,6 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
         )
 
     # Ensure all logs are flushed before checking log files
-    import logging
-    import time
 
     # Flush all handlers in the logging system
     for logger_name in logging.Logger.manager.loggerDict:
@@ -2990,11 +2956,6 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
 # ==============================================================================
 # These tests help identify specific sources of memory leaks in the simulator.
 # Tests that fail indicate components that need memory management fixes.
-
-
-import gc
-import psutil
-import mlflow
 
 
 class MemoryTracker:

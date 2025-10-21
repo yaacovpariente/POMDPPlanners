@@ -1,12 +1,16 @@
+import gc
 import os
+import time
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+import psutil
 from dask.cache import Cache
 from dask.distributed import Client, Future, LocalCluster
 from dask_jobqueue.pbs import PBSCluster
 from joblib import Memory, Parallel, delayed
+from joblib.externals.loky import get_reusable_executor
 from tqdm import tqdm
 
 from POMDPPlanners.core.simulation import (
@@ -244,13 +248,12 @@ class JoblibTaskManager(TaskManagerExternalDB):
         if result is not None:
             self.cache_db.set(task.get_config_id(), result)
         else:
-            self.logger.warning(f"Task {task.get_config_id()} returned None result")
+            self.logger.warning("Task %s returned None result", task.get_config_id())
 
         return result
 
     def _run_tasks(self, tasks: List[SimulationTask]) -> list:
         """Run tasks in parallel using joblib."""
-        import time
 
         # Log system information and setup
         self._log_system_info()
@@ -265,17 +268,16 @@ class JoblibTaskManager(TaskManagerExternalDB):
             return results
 
         except Exception as e:
-            self.logger.error(f"Error during parallel processing: {str(e)}")
+            self.logger.error("Error during parallel processing: %s", str(e))
             raise e
 
     def _log_parallel_processing_setup(self, tasks: List[SimulationTask]) -> None:
         """Log parallel processing setup information."""
-        self.logger.info(f"Starting parallel processing with {self.n_jobs} jobs")
-        self.logger.info(f"Processing {len(tasks)} tasks using joblib")
+        self.logger.info("Starting parallel processing with %d jobs", self.n_jobs)
+        self.logger.info("Processing %d tasks using joblib", len(tasks))
 
     def _create_progress_callback(self, tasks: List[SimulationTask], start_time: float):
         """Create a custom tqdm callback that logs progress to logger."""
-        import time
 
         def tqdm_logger_callback(tqdm_obj):
             """Custom tqdm callback to log progress to logger."""
@@ -289,7 +291,11 @@ class JoblibTaskManager(TaskManagerExternalDB):
                 ):
                     elapsed = time.time() - start_time
                     self.logger.info(
-                        f"Progress: {current_progress}/{len(tasks)} tasks completed ({current_progress/len(tasks)*100:.1f}%) - Elapsed: {elapsed:.1f}s"
+                        "Progress: %d/%d tasks completed (%.1f%%) - Elapsed: %.1fs",
+                        current_progress,
+                        len(tasks),
+                        current_progress / len(tasks) * 100,
+                        elapsed,
                     )
                     last_logged = current_progress
                 yield i
@@ -298,7 +304,6 @@ class JoblibTaskManager(TaskManagerExternalDB):
 
     def _execute_tasks_parallel(self, tasks: List[SimulationTask], start_time: float) -> list:
         """Execute tasks in parallel using joblib with progress tracking."""
-        import time
 
         # Use tqdm with custom callback for logging
         with tqdm(tasks, desc="Running tasks") as pbar:
@@ -311,8 +316,6 @@ class JoblibTaskManager(TaskManagerExternalDB):
 
     def _log_completion_statistics(self, results: list, start_time: float) -> None:
         """Log completion statistics and cache information."""
-        import time
-
         end_time = time.time()
         total_time = end_time - start_time
 
@@ -320,11 +323,11 @@ class JoblibTaskManager(TaskManagerExternalDB):
         successful_results = [r for r in results if r is not None]
         failed_count = len(results) - len(successful_results)
 
-        self.logger.info(f"Parallel processing completed in {total_time:.2f}s")
-        self.logger.info(f"Results: {len(successful_results)} successful, {failed_count} failed")
+        self.logger.info("Parallel processing completed in %.2fs", total_time)
+        self.logger.info("Results: %d successful, %d failed", len(successful_results), failed_count)
 
         if failed_count > 0:
-            self.logger.warning(f"{failed_count} tasks failed during parallel processing")
+            self.logger.warning("%d tasks failed during parallel processing", failed_count)
 
         # Log cache statistics
         self._log_cache_statistics()
@@ -340,16 +343,14 @@ class JoblibTaskManager(TaskManagerExternalDB):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit with proper resource cleanup."""
-        import gc
 
         # Shutdown loky worker pool to prevent orphaned processes
         try:
-            from joblib.externals.loky import get_reusable_executor
 
             get_reusable_executor().shutdown(wait=True, kill_workers=True)
             self.logger.debug("Shut down loky worker pool")
         except Exception as e:
-            self.logger.warning(f"Error shutting down loky executor: {e}")
+            self.logger.warning("Error shutting down loky executor: %s", e)
 
         # Clear joblib Memory cache to free cached function results
         if hasattr(self, "memory") and self.memory is not None:
@@ -357,7 +358,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
                 self.memory.clear()
                 self.logger.debug("Cleared joblib Memory cache")
             except Exception as e:
-                self.logger.warning(f"Error clearing joblib Memory cache: {e}")
+                self.logger.warning("Error clearing joblib Memory cache: %s", e)
 
         # Force garbage collection to clean up joblib parallel backend resources
         gc.collect()
@@ -367,9 +368,6 @@ class JoblibTaskManager(TaskManagerExternalDB):
 
     def _log_system_info(self):
         """Log system information for debugging and monitoring."""
-        import os
-
-        import psutil
 
         try:
             cpu_count = psutil.cpu_count()
@@ -377,18 +375,20 @@ class JoblibTaskManager(TaskManagerExternalDB):
             process = psutil.Process(os.getpid())
 
             self.logger.info(
-                f"System Info - CPU cores: {cpu_count}, "
-                f"Memory: {memory.total / (1024**3):.1f}GB total, "
-                f"{memory.available / (1024**3):.1f}GB available"
+                "System Info - CPU cores: %d, Memory: %.1fGB total, %.1fGB available",
+                cpu_count,
+                memory.total / (1024**3),
+                memory.available / (1024**3),
             )
             self.logger.info(
-                f"Process Info - PID: {process.pid}, "
-                f"Memory usage: {process.memory_info().rss / (1024**2):.1f}MB"
+                "Process Info - PID: %d, Memory usage: %.1fMB",
+                process.pid,
+                process.memory_info().rss / (1024**2),
             )
         except ImportError:
             self.logger.warning("psutil not available - skipping system info logging")
         except Exception as e:
-            self.logger.warning(f"Could not log system info: {str(e)}")
+            self.logger.warning("Could not log system info: %s", str(e))
 
     def _log_cache_statistics(self):
         """Log cache statistics for performance monitoring."""
@@ -396,19 +396,19 @@ class JoblibTaskManager(TaskManagerExternalDB):
             # Get joblib cache statistics
             cache_stats = self.memory.get_stats()  # type: ignore  # pylint: disable=no-member
             self.logger.info(
-                f"Joblib Cache Stats - "
-                f"Cache hits: {cache_stats.get('hits', 0)}, "
-                f"Cache misses: {cache_stats.get('misses', 0)}"
+                "Joblib Cache Stats - Cache hits: %d, Cache misses: %d",
+                cache_stats.get("hits", 0),
+                cache_stats.get("misses", 0),
             )
 
             # Calculate hit rate
             total_requests = cache_stats.get("hits", 0) + cache_stats.get("misses", 0)
             if total_requests > 0:
                 hit_rate = cache_stats.get("hits", 0) / total_requests * 100
-                self.logger.info(f"Cache hit rate: {hit_rate:.1f}%")
+                self.logger.info("Cache hit rate: %.1f%%", hit_rate)
 
         except Exception as e:
-            self.logger.warning(f"Could not log cache statistics: {str(e)}")
+            self.logger.warning("Could not log cache statistics: %s", str(e))
 
 
 class PBSTaskManager(DaskTaskManager):
@@ -694,7 +694,6 @@ class SequentialTaskManager(JoblibTaskManager):
 
     def _run_tasks(self, tasks: List[SimulationTask]) -> list:
         """Run tasks in sequential."""
-        import time
 
         start_time = time.time()
 
@@ -716,13 +715,13 @@ class SequentialTaskManager(JoblibTaskManager):
             successful_results = [r for r in results if r is not None]
             failed_count = len(results) - len(successful_results)
 
-            self.logger.info(f"Sequential processing completed in {total_time:.2f}s")
+            self.logger.info("Sequential processing completed in %.2fs", total_time)
             self.logger.info(
-                f"Results: {len(successful_results)} successful, {failed_count} failed"
+                "Results: %d successful, %d failed", len(successful_results), failed_count
             )
 
             if failed_count > 0:
-                self.logger.warning(f"{failed_count} tasks failed during sequential processing")
+                self.logger.warning("%d tasks failed during sequential processing", failed_count)
 
             # Log cache statistics
             self._log_cache_statistics()
@@ -730,5 +729,5 @@ class SequentialTaskManager(JoblibTaskManager):
             return results
 
         except Exception as e:
-            self.logger.error(f"Error during sequential processing: {str(e)}")
+            self.logger.error("Error during sequential processing: %s", str(e))
             raise e

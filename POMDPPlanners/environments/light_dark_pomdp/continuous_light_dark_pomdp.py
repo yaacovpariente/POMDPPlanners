@@ -27,16 +27,11 @@ Classes:
 """
 
 from enum import Enum
-from pathlib import Path
 from typing import Any, List, Tuple
 
-import matplotlib.animation as animation
-import matplotlib.pyplot as plt
 import numpy as np
 from scipy.stats import multivariate_normal
 
-from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
     ObservationModel,

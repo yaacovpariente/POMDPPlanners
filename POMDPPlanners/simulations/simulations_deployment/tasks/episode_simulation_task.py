@@ -1,5 +1,3 @@
-import hashlib
-import json
 import logging
 import random
 import time
@@ -75,13 +73,18 @@ class EpisodeSimulationTask(SimulationTask):
 
         # Log task creation using the logger property
         self.logger.debug(
-            f"Creating EpisodeSimulationTask with episode_id={self.episode_id}, episode_number={self.episode_number}"
+            "Creating EpisodeSimulationTask with episode_id=%s, episode_number=%s",
+            self.episode_id,
+            self.episode_number,
         )
         self.logger.debug(
-            f"Task parameters: num_steps={self.num_steps}, seed={self.seed}, discount_factor={self.discount_factor}"
+            "Task parameters: num_steps=%s, seed=%s, discount_factor=%s",
+            self.num_steps,
+            self.seed,
+            self.discount_factor,
         )
-        self.logger.debug(f"Cache directory: {self.cache_dir}")
-        self.logger.debug(f"Generated cache key: {self._cache_key}")
+        self.logger.debug("Cache directory: %s", self.cache_dir)
+        self.logger.debug("Generated cache key: %s", self._cache_key)
 
     @property
     def logger(self) -> logging.Logger:
@@ -236,8 +239,11 @@ class EpisodeSimulationTask(SimulationTask):
     def _log_episode_start(self) -> None:
         """Log episode start information."""
         self.logger.info(
-            f"[EPISODE_{self.episode_id:03d}] Starting episode simulation "
-            f"(num={self.episode_number}, steps={self.num_steps}, seed={self.seed})"
+            "[EPISODE_%03d] Starting episode simulation " "(num=%s, steps=%s, seed=%s)",
+            self.episode_id,
+            self.episode_number,
+            self.num_steps,
+            self.seed,
         )
 
     def _log_debug_configuration(self) -> None:
@@ -246,23 +252,44 @@ class EpisodeSimulationTask(SimulationTask):
             return
 
         self.logger.debug(
-            f"[EPISODE_{self.episode_id:03d}] Environment: {self.environment.name} (config_id: {self.environment.config_id})"
+            "[EPISODE_%03d] Environment: %s (config_id: %s)",
+            self.episode_id,
+            self.environment.name,
+            self.environment.config_id,
         )
         self.logger.debug(
-            f"[EPISODE_{self.episode_id:03d}] Policy: {self.policy.name} (config_id: {self.policy.config_id})"
+            "[EPISODE_%03d] Policy: %s (config_id: %s)",
+            self.episode_id,
+            self.policy.name,
+            self.policy.config_id,
         )
         self.logger.debug(
-            f"[EPISODE_{self.episode_id:03d}] Initial belief: {self.initial_belief.config_id}"
+            "[EPISODE_%03d] Initial belief: %s",
+            self.episode_id,
+            self.initial_belief.config_id,
         )
         self.logger.debug(
-            f"[EPISODE_{self.episode_id:03d}] Configuration: discount_factor={self.discount_factor}"
+            "[EPISODE_%03d] Configuration: discount_factor=%s",
+            self.episode_id,
+            self.discount_factor,
         )
         self.logger.debug(
-            f"[EPISODE_{self.episode_id:03d}] Debug mode: {self.debug}, Console output: {self.console_output}"
+            "[EPISODE_%03d] Debug mode: %s, Console output: %s",
+            self.episode_id,
+            self.debug,
+            self.console_output,
         )
         if self.cache_dir:
-            self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Cache directory: {self.cache_dir}")
-        self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Cache key: {self._cache_key}")
+            self.logger.debug(
+                "[EPISODE_%03d] Cache directory: %s",
+                self.episode_id,
+                self.cache_dir,
+            )
+        self.logger.debug(
+            "[EPISODE_%03d] Cache key: %s",
+            self.episode_id,
+            self._cache_key,
+        )
 
     def _setup_random_seed(self) -> Any:
         """Set random seed and return previous state for restoration.
@@ -270,7 +297,11 @@ class EpisodeSimulationTask(SimulationTask):
         Returns:
             Previous numpy random state for later restoration.
         """
-        self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Setting random seed to {self.seed}")
+        self.logger.debug(
+            "[EPISODE_%03d] Setting random seed to %s",
+            self.episode_id,
+            self.seed,
+        )
         state = np.random.get_state()
         random.seed(self.seed)
         np.random.seed(self.seed)
@@ -282,9 +313,15 @@ class EpisodeSimulationTask(SimulationTask):
         Args:
             state: Previously saved numpy random state.
         """
-        self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Restoring random state")
+        self.logger.debug(
+            "[EPISODE_%03d] Restoring random state",
+            self.episode_id,
+        )
         np.random.set_state(state)
-        self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Random state restored")
+        self.logger.debug(
+            "[EPISODE_%03d] Random state restored",
+            self.episode_id,
+        )
 
     def _execute_episode(self) -> Union[History, None]:
         """Execute the episode simulation.
@@ -292,7 +329,10 @@ class EpisodeSimulationTask(SimulationTask):
         Returns:
             Simulation history or None if execution fails.
         """
-        self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Starting episode simulation...")
+        self.logger.debug(
+            "[EPISODE_%03d] Starting episode simulation...",
+            self.episode_id,
+        )
 
         # Ensure attributes are not None before executing episode
         if self.environment is None or self.policy is None or self.initial_belief is None:
@@ -343,14 +383,24 @@ class EpisodeSimulationTask(SimulationTask):
             total_reward, actual_steps, reached_terminal = self._extract_episode_metrics(result)
 
             self.logger.info(
-                f"[EPISODE_{self.episode_id:03d}] Completed successfully "
-                f"(reward={total_reward:.4f}, steps={actual_steps}, terminal={reached_terminal})"
+                "[EPISODE_%03d] Completed successfully " "(reward=%.4f, steps=%s, terminal=%s)",
+                self.episode_id,
+                total_reward,
+                actual_steps,
+                reached_terminal,
             )
 
             if self.debug:
-                self.logger.debug(f"[EPISODE_{self.episode_id:03d}] Result type: {type(result)}")
+                self.logger.debug(
+                    "[EPISODE_%03d] Result type: %s",
+                    self.episode_id,
+                    type(result),
+                )
         else:
-            self.logger.warning(f"[EPISODE_{self.episode_id:03d}] Episode returned None result")
+            self.logger.warning(
+                "[EPISODE_%03d] Episode returned None result",
+                self.episode_id,
+            )
 
     def _log_episode_error(self, error: Exception) -> None:
         """Log episode execution error.
@@ -358,8 +408,15 @@ class EpisodeSimulationTask(SimulationTask):
         Args:
             error: Exception that occurred during execution.
         """
-        self.logger.error(f"[EPISODE_{self.episode_id:03d}] Error running episode: {error}")
-        self.logger.exception(f"[EPISODE_{self.episode_id:03d}] Full exception details:")
+        self.logger.error(
+            "[EPISODE_%03d] Error running episode: %s",
+            self.episode_id,
+            error,
+        )
+        self.logger.exception(
+            "[EPISODE_%03d] Full exception details:",
+            self.episode_id,
+        )
 
     def _log_execution_time(self, start_time: float) -> None:
         """Log total execution time.
@@ -370,7 +427,9 @@ class EpisodeSimulationTask(SimulationTask):
         end_time = time.time()
         execution_time = end_time - start_time
         self.logger.info(
-            f"[EPISODE_{self.episode_id:03d}] Execution completed in {execution_time:.4f} seconds"
+            "[EPISODE_%03d] Execution completed in %.4f seconds",
+            self.episode_id,
+            execution_time,
         )
 
     def __eq__(self, other: object) -> bool:

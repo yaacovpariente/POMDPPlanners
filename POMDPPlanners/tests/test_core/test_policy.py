@@ -17,6 +17,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import Belief
+from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     Environment,
     ObservationModel,
@@ -25,7 +26,7 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, PolicyRunData
-from POMDPPlanners.utils.logger import get_logger, reset_logger_state
+from POMDPPlanners.utils.logger import reset_logger_state
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -45,13 +46,9 @@ class MockEnvironment(Environment):
         )  # Use individual logger for tests
 
     def state_transition_model(self, state, action):
-        from POMDPPlanners.core.environment import StateTransitionModel
-
         return Mock(spec=StateTransitionModel)
 
     def observation_model(self, next_state, action):
-        from POMDPPlanners.core.environment import ObservationModel
-
         return Mock(spec=ObservationModel)
 
     def reward(self, state, action):
@@ -61,13 +58,9 @@ class MockEnvironment(Environment):
         return False
 
     def initial_state_dist(self):
-        from POMDPPlanners.core.distributions import Distribution
-
         return Mock(spec=Distribution)
 
     def initial_observation_dist(self):
-        from POMDPPlanners.core.distributions import Distribution
-
         return Mock(spec=Distribution)
 
     def is_equal_observation(self, observation1, observation2):

@@ -15,9 +15,12 @@ Classes:
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, cast
 
 from matplotlib import animation
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -518,11 +521,6 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         if not str(cache_path).endswith(".gif"):
             raise ValueError("cache_path must end with .gif")
 
-        from matplotlib.figure import Figure
-        from matplotlib.axes import Axes
-
-        from typing import cast
-
         fig: Figure
         ax: Axes
         fig_temp, ax_temp = plt.subplots(figsize=(10, 8))
@@ -563,8 +561,6 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         ax.axvline(x=float(exit_x), color="gold", linewidth=3, alpha=0.7, label="Exit")  # type: ignore[arg-type]
 
         # Initialize robot position
-        from matplotlib.lines import Line2D
-
         robot_scatter = ax.scatter([], [], s=150, c="blue", marker="o", zorder=5, label="Robot")
         path_line = cast(Line2D, ax.plot([], [], "b-", alpha=0.5, linewidth=2, label="Path")[0])
 

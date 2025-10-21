@@ -7,23 +7,26 @@ This module tests the Discrete Light Dark POMDP environment, focusing on:
 - Terminal conditions
 """
 
+import copy
 import random
+from typing import cast
 
 import numpy as np
 import pytest
 
-# Set seeds for reproducible tests
-np.random.seed(42)
-random.seed(42)
-
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import ObservationModel
-from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
+from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
+    DiscreteLDObservationModel,
 )
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 
 @pytest.fixture
@@ -417,7 +420,6 @@ class TestDiscreteLightDarkPOMDPEquality:
 
         Test type: unit
         """
-        import copy
 
         copied_env = copy.deepcopy(base_light_dark_environment)
         assert copied_env == base_light_dark_environment
@@ -949,10 +951,6 @@ def test_observation_model():
 
     # Check that the correct state has highest probability
     # Cast to specific type to access distribution attribute
-    from typing import cast
-    from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
-        DiscreteLDObservationModel,
-    )
 
     typed_dist = cast(DiscreteLDObservationModel, dist)
 
@@ -1112,10 +1110,6 @@ def test_compute_metrics():
     env = DiscreteLightDarkPOMDP(discount_factor=0.95)
 
     # Create test histories
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
-    from POMDPPlanners.core.simulation import History, StepData
-
     # Create a simple belief for testing
     def create_test_belief(state):
         return WeightedParticleBelief(

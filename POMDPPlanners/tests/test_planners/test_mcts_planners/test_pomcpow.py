@@ -12,12 +12,6 @@ import random
 import numpy as np
 import pytest
 
-# Set seeds for reproducible tests
-np.random.seed(42)
-random.seed(42)
-
-from anytree import PostOrderIter
-
 from POMDPPlanners.core.belief import (
     WeightedParticleBelief,
     WeightedParticleBeliefStateUpdate,
@@ -34,11 +28,17 @@ from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.planners.planners_utils.dpw import (
     ActionSampler,
     action_progressive_widening,
+    ucb1_exploration,
 )
+from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
 from POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils import (
     validate_tree_structure_with_progressive_widening,
 )
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 
 class MockActionSampler(ActionSampler):
@@ -371,7 +371,6 @@ def test_explored_action_node_ucb_selection(planner, belief):
         action_node.visit_count = visit_count
 
     # Use the function from dpw module directly
-    from POMDPPlanners.planners.planners_utils.dpw import ucb1_exploration
 
     selected_action_node = ucb1_exploration(
         belief_node=belief_node, exploration_constant=planner.exploration_constant
@@ -392,9 +391,6 @@ def test_rollout(planner):
     Test type: unit
     """
     # Test the random_rollout_action_sampler function that POMCPOW uses
-    from POMDPPlanners.planners.planners_utils.rollout import (
-        random_rollout_action_sampler,
-    )
 
     state = "tiger_left"
     depth = 0
@@ -420,9 +416,6 @@ def test_rollout_terminal_state(planner):
     Test type: unit
     """
     # Test the random_rollout_action_sampler function with terminal state
-    from POMDPPlanners.planners.planners_utils.rollout import (
-        random_rollout_action_sampler,
-    )
 
     # Create a mock terminal state
     original_is_terminal = planner.environment.is_terminal
@@ -455,9 +448,6 @@ def test_rollout_max_depth(planner):
     Test type: unit
     """
     # Test the random_rollout_action_sampler function with max depth
-    from POMDPPlanners.planners.planners_utils.rollout import (
-        random_rollout_action_sampler,
-    )
 
     state = "tiger_left"
     depth = planner.depth + 1  # This is 4 (planner.depth = 3)
@@ -641,7 +631,6 @@ def test_belief_node_data_structure(planner, belief):
     for action_node in belief_node.children:
         for child_belief_node in action_node.children:
             # Check that the belief is a WeightedParticleBeliefStateUpdate instance
-            from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
 
             assert isinstance(child_belief_node.belief, WeightedParticleBeliefStateUpdate)
             assert hasattr(child_belief_node.belief, "particles")
@@ -714,8 +703,6 @@ def test_tree_structure_after_construction(
     """
 
     root_belief_node = planner._learn_tree(belief=belief)
-
-    from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
 
     validate_tree_structure_with_progressive_widening(
         root_belief_node=root_belief_node,
@@ -836,7 +823,6 @@ def test_pomcpow_tree_structure_construction(
     root_belief_node = planner._learn_tree(belief=belief)
 
     # ASSERT: Use shared validation function with POMCPOW-specific belief type
-    from POMDPPlanners.core.belief import WeightedParticleBeliefStateUpdate
 
     validate_tree_structure_with_progressive_widening(
         root_belief_node=root_belief_node,

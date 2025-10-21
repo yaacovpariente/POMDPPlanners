@@ -2,12 +2,12 @@ import random
 import shutil
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, call, patch
+from unittest.mock import Mock, patch
 
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief, Belief
+from POMDPPlanners.core.belief import Belief, get_initial_belief
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
@@ -324,8 +324,6 @@ class TestVisualizePlannerEpisode:
         )
 
         # Create a proper belief for testing using the environment's initial state distribution
-        from POMDPPlanners.core.belief import get_initial_belief
-
         belief = get_initial_belief(env, n_particles=20)  # Reduced for testing
 
         # Mock the environment's cache_visualization to avoid file I/O
@@ -621,8 +619,6 @@ class TestVisualizePlannerEpisode:
         )
 
         # Create a proper belief for testing using the environment's initial state distribution
-        from POMDPPlanners.core.belief import get_initial_belief
-
         belief = get_initial_belief(env, n_particles=20)  # Reduced for testing
 
         # Mock visualization to avoid file I/O
@@ -974,8 +970,6 @@ class TestVisualizePlannerEpisode:
         )
 
         # Create proper belief
-        from POMDPPlanners.core.belief import get_initial_belief
-
         belief = get_initial_belief(env, n_particles=10)  # Minimal for testing
 
         # Mock visualization to avoid file I/O

@@ -7,8 +7,7 @@ maintained for backward compatibility.
 """
 
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
-from POMDPPlanners.core.simulation.hyperparameter_tuning import ParameterToOptimizeMapper
+from typing import Dict, List, Optional, Tuple
 from POMDPPlanners.configs.experiment_configs import AverageReturnParameterToOptimizeMapper
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
@@ -32,12 +31,7 @@ from POMDPPlanners.configs.experiment_configs import (
 from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.utils.logger import get_logger
 import pandas as pd
-from typing import Type
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import TaskManagerConfig
-from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows import (
-    OptimizationEvaluationLocalWorkflow as LocalWorkflow,
-    OptimizationEvaluationPBSWorkflow as PBSWorkflow,
-)
 
 logger = get_logger(__name__)
 
@@ -59,10 +53,10 @@ def optimize_and_evaluate_multiple_environments_and_policies(
 ) -> Tuple[Dict[str, Dict[str, list]], pd.DataFrame]:
     """Optimize and evaluate multiple POMDP planners on multiple environments and policies."""
     if verbose:
-        logger.info(f"Optimizing {len(configs)} environments and policies")
+        logger.info("Optimizing %s environments and policies", len(configs))
 
     if debug:
-        logger.debug(f"Optimizing {len(configs)} environments and policies")
+        logger.debug("Optimizing %s environments and policies", len(configs))
 
     if cache_dir is None:
         cache_dir = Path(f"./{experiment_name.lower().replace(' ', '_')}_results")
@@ -223,10 +217,10 @@ def run_comprehensive_benchmark_hyperparameter_optimization_local(
 #     """Optimize and evaluate multiple POMDP planners on multiple environments and policies.
 #     """
 #     if verbose:
-#         logger.info(f"Optimizing {len(configs)} environments and policies")
+#         logger.info("Optimizing %s environments and policies", len(configs))
 
 #     if debug:
-#         logger.debug(f"Optimizing {len(configs)} environments and policies")
+#         logger.debug("Optimizing %s environments and policies", len(configs))
 
 #     if cache_dir is None:
 #         cache_dir = Path(f"./{experiment_name.lower().replace(' ', '_')}_results")

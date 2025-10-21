@@ -7,24 +7,21 @@ This module tests the Safety Ant Velocity POMDP environment, focusing on:
 - Terminal conditions
 """
 
-import random
 from unittest.mock import Mock
 
 import numpy as np
 import pytest
 
-# Set seeds for reproducible tests
-np.random.seed(42)
-random.seed(42)
-
 from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
+from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import (
     SafeAntVelocityObservation,
     SafeAntVelocityPOMDP,
     SafeAntVelocityStateTransition,
 )
+
+# Set seeds for reproducible tests
 
 
 @pytest.fixture

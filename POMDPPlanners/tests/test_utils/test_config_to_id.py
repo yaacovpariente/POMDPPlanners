@@ -1,5 +1,9 @@
 import numpy as np
 
+from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
+from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.utils.config_to_id import config_to_id, NumpyEncoder
 
 
@@ -491,8 +495,6 @@ class TestConfigToIdIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-
         # Create noise covariance matrix
         noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
 
@@ -538,8 +540,6 @@ class TestConfigToIdIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-
         # Create different configurations
         configs = []
 
@@ -594,9 +594,6 @@ class TestConfigToIdIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-
         # Create environment (using TigerPOMDP which has discrete observations compatible with POMCP)
         env = TigerPOMDP(discount_factor=0.99)
 
@@ -655,8 +652,6 @@ class TestConfigToIdIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.core.belief import WeightedParticleBelief
-
         # Create particles and weights
         particles1 = [np.array([1.0, 2.0]), np.array([3.0, 4.0]), np.array([5.0, 6.0])]
         particles2 = [np.array([1.0, 2.0]), np.array([3.0, 4.0]), np.array([5.0, 6.0])]
@@ -690,8 +685,6 @@ class TestConfigToIdIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.core.belief import WeightedParticleBelief
-
         beliefs = []
 
         # Belief 1: Base configuration
@@ -744,8 +737,6 @@ class TestConfigToIdIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-
         # Create comprehensive POMDP configuration
         noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
 
@@ -811,9 +802,6 @@ class TestConfigToIdIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-        from POMDPPlanners.core.belief import WeightedParticleBelief
-
         # Create POMDP components with config_id attributes
         noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
         env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
@@ -851,8 +839,6 @@ class TestConfigToIdIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-
         noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
         env = CartPolePOMDP(discount_factor=0.99, noise_cov=noise_cov)
 

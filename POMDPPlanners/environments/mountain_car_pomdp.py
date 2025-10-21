@@ -25,12 +25,10 @@ from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
 import matplotlib
-
-matplotlib.use("Agg")  # Use non-interactive backend
-import matplotlib.pyplot as plt
 import numpy as np
 import scipy.stats
-from matplotlib.animation import FuncAnimation
+
+matplotlib.use("Agg")  # Use non-interactive backend
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (

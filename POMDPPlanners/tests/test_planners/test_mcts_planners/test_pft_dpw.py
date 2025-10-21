@@ -1,18 +1,15 @@
 import random
-from typing import Any
 
 import numpy as np
 import pytest
 
-from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
-from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.tree import BeliefNode
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
 from POMDPPlanners.planners.planners_utils.dpw import (
-    ActionSampler,
     action_progressive_widening,
 )
 from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler

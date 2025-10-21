@@ -6,20 +6,14 @@ including tests for all planner configuration methods and their hyperparameter r
 
 from unittest.mock import Mock
 
-import numpy as np
-import pytest
 
 from POMDPPlanners.configs.planners_hyperparam_configs import PlannersHyperparamConfigs
-from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceInfo, SpaceType
+from POMDPPlanners.core.environment import SpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import (
-    CategoricalHyperParameter,
     NumericalHyperParameter,
 )
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
-)
-from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
-    DiscreteLightDarkPOMDP,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler, UnitCircleActionSampler

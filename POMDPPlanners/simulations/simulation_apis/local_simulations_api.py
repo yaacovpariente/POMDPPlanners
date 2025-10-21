@@ -1,24 +1,13 @@
-import importlib
-import inspect
-import os
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Tuple
-
-if TYPE_CHECKING:
-    from POMDPPlanners.utils.hyperparameter_tuning_and_eval import HyperParamPlannerConfig
+from typing import Dict, List, Optional, Sequence, Tuple
 
 import pandas as pd
 
-from POMDPPlanners.core.belief import Belief, get_initial_belief
-from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
+from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.simulation import (
-    CategoricalHyperParameter,
     EnvironmentRunParams,
-    NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-    HyperParameterOptimizationDirection,
     HyperParameterRunParams,
     HyperParamPlannerConfigGenerator,
     OptimizedPolicyResult,
@@ -210,10 +199,14 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             True
         """
         self.logger.info(
-            f"Starting simulation run with {len(environment_run_params)} environment configurations"
+            "Starting simulation run with %s environment configurations",
+            len(environment_run_params),
         )
         self.logger.debug(
-            f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}"
+            "Parameters: alpha=%s, confidence_interval=%s, n_jobs=%s",
+            alpha,
+            confidence_interval_level,
+            n_jobs,
         )
 
         task_manager_config = JoblibConfig(n_jobs=n_jobs, clear_cache_on_start=clear_cache_on_start)
@@ -335,7 +328,10 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
         """
         self.logger.info("Starting simulation run with initial debug run")
         self.logger.debug(
-            f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}"
+            "Parameters: alpha=%s, confidence_interval=%s, n_jobs=%s",
+            alpha,
+            confidence_interval_level,
+            n_jobs,
         )
 
         # Create debug configurations
@@ -350,7 +346,8 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             for config in environment_run_params
         ]
         self.logger.info(
-            f"Created debug configurations with {len(environment_run_params_debug)} environments"
+            "Created debug configurations with %s environments",
+            len(environment_run_params_debug),
         )
 
         # Run debug simulation with separate experiment name to avoid conflicts
@@ -578,11 +575,15 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             - Supports both numerical and categorical hyperparameters
         """
         self.logger.info(
-            f"Starting hyperparameter optimization for {len(environment_run_params)} configurations"
+            "Starting hyperparameter optimization for %s configurations",
+            len(environment_run_params),
         )
         self.logger.debug(
-            f"Parameters: experiment_name={experiment_name}, n_jobs={n_jobs}, "
-            f"confidence_interval={confidence_interval_level}, alpha={alpha}"
+            "Parameters: experiment_name=%s, n_jobs=%s, " "confidence_interval=%s, alpha=%s",
+            experiment_name,
+            n_jobs,
+            confidence_interval_level,
+            alpha,
         )
 
         # Set up cache directory
@@ -611,22 +612,26 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             results = optimizer.optimize(environment_run_params)
 
             self.logger.info(
-                f"Hyperparameter optimization completed successfully. "
-                f"Optimized {len(results)} out of {len(environment_run_params)} configurations"
+                "Hyperparameter optimization completed successfully. "
+                "Optimized %s out of %s configurations",
+                len(results),
+                len(environment_run_params),
             )
 
             # Log summary of results
             for i, result in enumerate(results):
                 self.logger.info(
-                    f"Configuration {i+1}: {result.environment.__class__.__name__} "
-                    f"with {result.policy.__class__.__name__} - "
-                    f"Best parameters: {result.chosen_hyper_parameters}"
+                    "Configuration %s: %s " "with %s - " "Best parameters: %s",
+                    i + 1,
+                    result.environment.__class__.__name__,
+                    result.policy.__class__.__name__,
+                    result.chosen_hyper_parameters,
                 )
 
             return results
 
         except Exception as e:
-            self.logger.error(f"Hyperparameter optimization failed: {e}")
+            self.logger.error("Hyperparameter optimization failed: %s", e)
             raise RuntimeError(f"Hyperparameter optimization failed: {e}") from e
 
         finally:
@@ -634,7 +639,7 @@ class LocalSimulationsAPI(SimulationsAPIInterface):
             try:
                 optimizer.cleanup()
             except Exception as cleanup_error:
-                self.logger.warning(f"Error during optimizer cleanup: {cleanup_error}")
+                self.logger.warning("Error during optimizer cleanup: %s", cleanup_error)
 
     def run_hyperparameter_tuning_experiment_with_benchmarks(
         self,

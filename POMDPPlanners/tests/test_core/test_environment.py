@@ -9,18 +9,13 @@ This module tests the environment base classes, focusing on:
 
 import random
 from pathlib import Path
-from typing import Any, List, Optional
+from typing import List, Optional
 
 import numpy as np
 import pytest
 
-# Set seeds for reproducible tests
-np.random.seed(42)
-random.seed(42)
-
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
-    DiscreteActionsEnvironment,
     Environment,
     ObservationModel,
     SpaceInfo,
@@ -29,6 +24,10 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.utils.logger import reset_logger_state
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 
 class MockDistribution(Distribution):

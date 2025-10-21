@@ -1,15 +1,22 @@
-from pathlib import Path
 from unittest.mock import patch
 
 import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.environment import DiscreteActionsEnvironment
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
+from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+from POMDPPlanners.utils.action_samplers import DiscreteActionSampler, UnitCircleActionSampler
+from experiments.configs.environments_configs import (
+    environment_instances,
+    belief_instances,
+    EnvironmentConfigsAPI,
+)
 
 
 def create_test_belief():
@@ -307,10 +314,6 @@ def test_episode_simulation_task_value_error_logging(caplog, environment, policy
 
     Test type: unit
     """
-    from POMDPPlanners.simulations.simulations_deployment.tasks import (
-        EpisodeSimulationTask,
-    )
-
     belief = create_test_belief()
 
     # Create a real environment and patch it to cause an error during execution
@@ -353,10 +356,6 @@ def test_episode_simulation_task_runtime_error_logging(caplog, environment, poli
 
     Test type: unit
     """
-    from POMDPPlanners.simulations.simulations_deployment.tasks import (
-        EpisodeSimulationTask,
-    )
-
     belief = create_test_belief()
 
     # Create a real environment and patch it to cause a RuntimeError during execution
@@ -399,10 +398,6 @@ def test_episode_simulation_task_type_error_logging(caplog, environment, policy)
 
     Test type: unit
     """
-    from POMDPPlanners.simulations.simulations_deployment.tasks import (
-        EpisodeSimulationTask,
-    )
-
     belief = create_test_belief()
 
     # Create a real environment and patch it to cause a TypeError during execution
@@ -443,9 +438,6 @@ def test_episode_simulation_task_custom_exception_logging(caplog, environment, p
 
     Test type: unit
     """
-    from POMDPPlanners.simulations.simulations_deployment.tasks import (
-        EpisodeSimulationTask,
-    )
 
     # Create a custom exception class
     class CustomTestException(Exception):
@@ -495,10 +487,6 @@ def test_episode_simulation_task_logging_includes_traceback(caplog, environment,
 
     Test type: unit
     """
-    from POMDPPlanners.simulations.simulations_deployment.tasks import (
-        EpisodeSimulationTask,
-    )
-
     belief = create_test_belief()
 
     # Create a real environment and patch it to cause an exception during execution
@@ -546,9 +534,6 @@ def test_episode_simulation_task_error_written_to_log_file(tmp_path, environment
 
     Test type: integration
     """
-    from POMDPPlanners.simulations.simulations_deployment.tasks import (
-        EpisodeSimulationTask,
-    )
 
     belief = create_test_belief()
 
@@ -614,9 +599,6 @@ def create_pomcpow_action_sampler(environment):
     Returns:
         ActionSampler appropriate for the environment's action space
     """
-    from POMDPPlanners.utils.action_samplers import DiscreteActionSampler, UnitCircleActionSampler
-    from POMDPPlanners.core.environment import DiscreteActionsEnvironment
-
     # For discrete action environments, use DiscreteActionSampler
     if isinstance(environment, DiscreteActionsEnvironment):
         return DiscreteActionSampler(actions=environment.get_actions())
@@ -637,9 +619,6 @@ def test_episode_simulation_task_pomcpow_tiger():
 
     Test type: integration
     """
-    from experiments.configs.environments_configs import environment_instances, belief_instances
-    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 
     # Get environment and belief
     environment = environment_instances["tiger"]
@@ -696,9 +675,6 @@ def test_episode_simulation_task_pomcpow_cartpole():
 
     Test type: integration
     """
-    from experiments.configs.environments_configs import environment_instances, belief_instances
-    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 
     # Get environment and belief
     environment = environment_instances["cartpole"]
@@ -755,9 +731,6 @@ def test_episode_simulation_task_pomcpow_mountain_car():
 
     Test type: integration
     """
-    from experiments.configs.environments_configs import environment_instances, belief_instances
-    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 
     # Get environment and belief
     environment = environment_instances["mountain_car"]
@@ -814,9 +787,6 @@ def test_episode_simulation_task_pomcpow_push():
 
     Test type: integration
     """
-    from experiments.configs.environments_configs import environment_instances, belief_instances
-    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 
     # Get environment and belief
     environment = environment_instances["push"]
@@ -873,9 +843,6 @@ def test_episode_simulation_task_pomcpow_safety_ant_velocity():
 
     Test type: integration
     """
-    from experiments.configs.environments_configs import environment_instances, belief_instances
-    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 
     # Get environment and belief
     environment = environment_instances["safety_ant_velocity"]
@@ -932,9 +899,6 @@ def test_episode_simulation_task_pomcpow_discrete_light_dark():
 
     Test type: integration
     """
-    from experiments.configs.environments_configs import environment_instances, belief_instances
-    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 
     # Get environment and belief
     environment = environment_instances["discrete_light_dark"]
@@ -991,9 +955,6 @@ def test_episode_simulation_task_pomcpow_continuous_light_dark():
 
     Test type: integration
     """
-    from experiments.configs.environments_configs import environment_instances, belief_instances
-    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 
     # Get environment and belief
     environment = environment_instances["continuous_light_dark"]
@@ -1050,14 +1011,6 @@ def test_episode_simulation_task_pomcpow_all_compatible_environments():
 
     Test type: integration
     """
-    from experiments.configs.environments_configs import (
-        environment_instances,
-        belief_instances,
-        EnvironmentConfigsAPI,
-    )
-    from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
-    from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
-
     # Get all compatible environments
     policy_space_info = POMCPOW.get_space_info()
     compatible_envs = EnvironmentConfigsAPI.get_compatible_environments(policy_space_info)

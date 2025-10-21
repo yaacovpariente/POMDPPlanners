@@ -1,5 +1,3 @@
-import pytest
-from unittest.mock import Mock, PropertyMock
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     CategoricalHyperParameter,
     NumericalHyperParameter,
@@ -7,7 +5,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     HyperParameterOptimizationDirection,
 )
-from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.policy import Policy
 
@@ -211,8 +209,6 @@ class TestHyperParameterRunParamsIdUniqueness:
         # Create simple objects with config_id properties that return strings
         class MockEnv(Environment):
             def __init__(self):
-                from POMDPPlanners.core.environment import SpaceInfo, SpaceType
-
                 super().__init__(
                     discount_factor=0.95,
                     name="mock_env",
@@ -285,8 +281,6 @@ class TestHyperParameterRunParamsIdUniqueness:
 
         class MockEnv(Environment):
             def __init__(self):
-                from POMDPPlanners.core.environment import SpaceInfo, SpaceType
-
                 super().__init__(
                     discount_factor=0.95,
                     name="mock_env",
@@ -363,8 +357,6 @@ class TestHyperParameterRunParamsIdUniqueness:
 
         class MockEnv(Environment):
             def __init__(self):
-                from POMDPPlanners.core.environment import SpaceInfo, SpaceType
-
                 super().__init__(
                     discount_factor=0.95,
                     name="mock_env",
@@ -443,8 +435,6 @@ class TestHyperParameterRunParamsIdUniqueness:
 
         class MockEnv(Environment):
             def __init__(self):
-                from POMDPPlanners.core.environment import SpaceInfo, SpaceType
-
                 super().__init__(
                     discount_factor=0.95,
                     name="mock_env",

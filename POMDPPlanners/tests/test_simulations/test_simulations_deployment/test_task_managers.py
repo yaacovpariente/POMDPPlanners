@@ -1,6 +1,8 @@
 import shutil
 import tempfile
 import time
+import warnings
+import os
 from pathlib import Path
 
 import numpy as np
@@ -15,9 +17,11 @@ from POMDPPlanners.simulations.simulations_deployment.task_managers import (
     DaskTaskManager,
     JoblibTaskManager,
     PBSTaskManager,
+    SequentialTaskManager,
     TaskManagerType,
 )
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
+from unittest.mock import Mock, patch, MagicMock
 
 
 def create_test_belief():
@@ -38,8 +42,6 @@ def temp_cache_dir():
         shutil.rmtree(temp_dir)
     except PermissionError:
         # If we still can't delete, log a warning but don't fail the test
-        import warnings
-
         warnings.warn(f"Could not delete temporary directory {temp_dir}")
 
 
@@ -305,8 +307,6 @@ def test_joblib_task_manager_cache(cache_db, environment, policy):
             task_manager.clear_cache()
         except PermissionError:
             # If we can't clear the cache, log a warning but continue with the test
-            import warnings
-
             warnings.warn("Could not clear cache due to file being in use, continuing with test")
 
         result3, ids3 = task_manager.run_tasks([task], [task_identifier])
@@ -331,9 +331,6 @@ def test_joblib_task_manager_logging(cache_db, environment, policy, temp_cache_d
 
     Test type: unit
     """
-    import os
-    from pathlib import Path
-
     # Create a specific log directory for this test
     log_dir = Path(temp_cache_dir) / "test_logs"
     log_dir.mkdir(exist_ok=True)
@@ -379,9 +376,6 @@ def test_joblib_task_manager_logging_with_multiple_tasks(
 
     Test type: integration
     """
-    import os
-    from pathlib import Path
-
     # Create a specific log directory for this test
     log_dir = Path(temp_cache_dir) / "test_logs_multi"
     log_dir.mkdir(exist_ok=True)
@@ -499,9 +493,6 @@ def test_dask_task_manager_failed_tasks_not_cached(environment, policy):
 
 
 # Tests for SequentialTaskManager
-from POMDPPlanners.simulations.simulations_deployment.task_managers import (
-    SequentialTaskManager,
-)
 
 
 def test_sequential_task_manager_initialization(cache_db):
@@ -630,8 +621,6 @@ def test_sequential_task_manager_cache(cache_db, environment, policy):
             task_manager.clear_cache()
         except PermissionError:
             # If we can't clear the cache, log a warning but continue with the test
-            import warnings
-
             warnings.warn("Could not clear cache due to file being in use, continuing with test")
 
         # Create a new task with identical parameters (since the previous task was cleaned up)
@@ -666,9 +655,6 @@ def test_sequential_task_manager_logging(cache_db, environment, policy, temp_cac
 
     Test type: unit
     """
-    import os
-    from pathlib import Path
-
     # Create a specific log directory for this test
     log_dir = Path(temp_cache_dir) / "test_sequential_logs"
     log_dir.mkdir(exist_ok=True)
@@ -714,9 +700,6 @@ def test_sequential_task_manager_logging_with_multiple_tasks(
 
     Test type: integration
     """
-    import os
-    from pathlib import Path
-
     # Create a specific log directory for this test
     log_dir = Path(temp_cache_dir) / "test_sequential_logs_multi"
     log_dir.mkdir(exist_ok=True)
@@ -1054,7 +1037,6 @@ def test_pbs_task_manager_missing_dependency():
 
     Test type: unit
     """
-    from unittest.mock import MagicMock, patch
 
     manager = PBSTaskManager(queue="default")
 
@@ -1398,7 +1380,6 @@ def test_joblib_task_manager_log_cache_statistics_current_behavior(cache_db):
 
     Test type: unit
     """
-    from unittest.mock import patch
 
     with JoblibTaskManager(cache_db=cache_db) as task_manager:
         with patch.object(task_manager.logger, "warning") as mock_warning:
@@ -1424,7 +1405,6 @@ def test_joblib_task_manager_log_cache_statistics_normal(cache_db):
 
     Test type: unit
     """
-    from unittest.mock import Mock, patch
 
     with JoblibTaskManager(cache_db=cache_db) as task_manager:
         # Mock cache statistics
@@ -1470,7 +1450,6 @@ def test_joblib_task_manager_log_cache_statistics_zero_requests(cache_db):
 
     Test type: unit
     """
-    from unittest.mock import Mock, patch
 
     with JoblibTaskManager(cache_db=cache_db) as task_manager:
         # Mock cache statistics with zero requests
@@ -1515,7 +1494,6 @@ def test_joblib_task_manager_log_cache_statistics_exception_handling(cache_db):
 
     Test type: unit
     """
-    from unittest.mock import Mock, patch
 
     with JoblibTaskManager(cache_db=cache_db) as task_manager:
         # Mock get_stats to raise an exception
@@ -1548,7 +1526,6 @@ def test_joblib_task_manager_log_cache_statistics_different_hit_rates(cache_db):
 
     Test type: unit
     """
-    from unittest.mock import Mock, patch
 
     with JoblibTaskManager(cache_db=cache_db) as task_manager:
         test_cases = [
@@ -1592,7 +1569,6 @@ def test_joblib_task_manager_log_cache_statistics_missing_keys(cache_db):
 
     Test type: unit
     """
-    from unittest.mock import Mock, patch
 
     with JoblibTaskManager(cache_db=cache_db) as task_manager:
         # Mock cache statistics with missing keys
@@ -1637,7 +1613,6 @@ def test_sequential_task_manager_log_cache_statistics_inheritance(cache_db):
 
     Test type: unit
     """
-    from unittest.mock import Mock, patch
 
     with SequentialTaskManager(cache_db=cache_db) as task_manager:
         # Mock cache statistics
@@ -1683,7 +1658,6 @@ def test_joblib_task_manager_log_cache_statistics_precision(cache_db):
 
     Test type: unit
     """
-    from unittest.mock import Mock, patch
 
     with JoblibTaskManager(cache_db=cache_db) as task_manager:
         # Mock cache statistics that result in fractional hit rate

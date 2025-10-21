@@ -30,11 +30,11 @@ def run_parallel_locally(
     Returns:
         List of results from each function call
     """
-    logger.info(f"Starting parallel execution with {len(kwargs_list)} tasks using {n_jobs} jobs")
+    logger.info("Starting parallel execution with %s tasks using %s jobs", len(kwargs_list), n_jobs)
 
     # Set up caching if cache_dir is provided
     if cache_dir is not None:
-        logger.info(f"Using cache directory: {cache_dir}")
+        logger.info("Using cache directory: %s", cache_dir)
         memory = Memory(cache_dir, verbose=0)
         func = memory.cache(func)
 
@@ -46,7 +46,7 @@ def run_parallel_locally(
         )
     )
 
-    logger.info(f"All parallel tasks completed")
+    logger.info("All parallel tasks completed")
     return results
 
 
@@ -83,7 +83,7 @@ def run_distributed(
             logger.info("Starting local Ray cluster")
             ray.init(namespace=namespace, runtime_env=runtime_env)
         else:
-            logger.info(f"Connecting to Ray cluster at {address}")
+            logger.info("Connecting to Ray cluster at %s", address)
             ray.init(address=address, namespace=namespace, runtime_env=runtime_env)
 
     # Create a Ray remote function from the input function
@@ -91,8 +91,8 @@ def run_distributed(
     def remote_func(**kwargs):
         return func(**kwargs)
 
-    logger.info(f"Starting distributed execution with {len(kwargs_list)} tasks")
-    logger.info(f"Resources per task: {num_cpus} CPUs, {num_gpus} GPUs")
+    logger.info("Starting distributed execution with %s tasks", len(kwargs_list))
+    logger.info("Resources per task: %s CPUs, %s GPUs", num_cpus, num_gpus)
 
     # Submit all tasks
     futures = [remote_func.remote(**kwargs) for kwargs in kwargs_list]  # type: ignore[attr-defined]
