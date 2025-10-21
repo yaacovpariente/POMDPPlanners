@@ -87,7 +87,8 @@ class POMCP_DPW(PathSimulationPolicy):
         debug: Enable debug logging if True
 
     Example:
-        >>>         >>> import random
+        >>> import random
+        >>> import numpy as np
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
         >>> from POMDPPlanners.core.belief import get_initial_belief
         >>> from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
