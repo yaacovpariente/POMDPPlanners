@@ -1,5 +1,6 @@
 import logging
 import random
+import time
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
@@ -22,9 +23,16 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     OptimizedPolicyResult,
 )
 from POMDPPlanners.core.simulation.simulation_configs import EnvironmentRunParams
+from POMDPPlanners.simulations.simulation_statistics import (
+    compute_statistics_environment_policy_pair,
+)
+from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
+from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+    JoblibConfig,
+)
+from POMDPPlanners.simulations.simulator import POMDPSimulator
 from POMDPPlanners.utils.config_to_id import config_to_id
 from POMDPPlanners.utils.logger import get_logger
-from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
 
 HyperParameterFeature = Union[CategoricalHyperParameter, NumericalHyperParameter]
 
@@ -72,12 +80,6 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.alpha = alpha
         self.seed = seed
         self.use_queue_logger = use_queue_logger
-        # Import locally to avoid circular imports
-        from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
-            JoblibConfig,
-        )
-        from POMDPPlanners.simulations.simulator import POMDPSimulator
-
         # Create task manager config for joblib
         task_manager_config = JoblibConfig(n_jobs=n_jobs)
 
@@ -138,8 +140,6 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         Raises:
             Exception: If optimization encounters critical errors
         """
-        import time
-
         start_time = time.time()
 
         # Store current random state
@@ -147,7 +147,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
         try:
             # Set random seed for reproducibility
-            self.logger.debug(f"Setting random seed to {self.seed}")
+            self.logger.debug("Setting random seed to %s", self.seed)
             random.seed(self.seed)
             np.random.seed(self.seed)
 
@@ -182,9 +182,9 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
         # Log task configuration details
         self.logger.info(
-            f"Environment: {self.environment.name} (config_id: {self.environment.config_id})"
+            "Environment: %s (config_id: %s)", self.environment.name, self.environment.config_id
         )
-        self.logger.info(f"Policy class: {self.policy_cls.__name__}")
+        self.logger.info("Policy class: %s", self.policy_cls.__name__)
 
         # Log all parameters to optimize
         params_str = ", ".join(
@@ -193,23 +193,23 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 for param_name, direction in self.parameters_to_optimize
             ]
         )
-        self.logger.info(f"Parameters to optimize: {params_str}")
+        self.logger.info("Parameters to optimize: %s", params_str)
 
-        self.logger.info(f"Hyperparameters: {[param.name for param in self.hyper_parameters]}")
+        self.logger.info("Hyperparameters: %s", [param.name for param in self.hyper_parameters])
         self.logger.info(
-            f"Configuration: num_episodes={self.num_episodes}, num_steps={self.num_steps}"
+            "Configuration: num_episodes=%s, num_steps=%s", self.num_episodes, self.num_steps
         )
         self.logger.info(
-            f"Parallel jobs: {self.n_jobs}, confidence_interval={self.confidence_interval_level}"
+            "Parallel jobs: %s, confidence_interval=%s", self.n_jobs, self.confidence_interval_level
         )
-        self.logger.info(f"Seed: {self.seed}")
+        self.logger.info("Seed: %s", self.seed)
 
         if self.cache_dir:
-            self.logger.info(f"Cache directory: {self.cache_dir}")
-        self.logger.info(f"Task config ID: {self.get_config_id()}")
+            self.logger.info("Cache directory: %s", self.cache_dir)
+        self.logger.info("Task config ID: %s", self.get_config_id())
 
         # Log the configured number of trials
-        self.logger.info(f"Running optimization with {self.n_trials} trials")
+        self.logger.info("Running optimization with %d trials", self.n_trials)
 
     def _create_policy_parameter_suggestions(
         self, trial: FrozenTrial, hyperparameters: Sequence[HyperParameterFeature]
@@ -261,10 +261,6 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         Raises:
             ValueError: If target optimization parameters not found in statistics
         """
-        from POMDPPlanners.simulations.simulation_statistics import (
-            compute_statistics_environment_policy_pair,
-        )
-
         trial_id = str(trial._trial_id)
         if self.study_storage is not None and self.study_storage.is_key_in_cache(trial_id):
             stored_params = self.study_storage.get(trial_id)
@@ -332,7 +328,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             return metric_values
 
         except Exception as e:
-            self.logger.error(f"Error in evaluation function for trial {trial_id}: {e}")
+            self.logger.error("Error in evaluation function for trial %d: %s", trial_id, e)
             raise e
 
     def _compute_pareto_scores(self, study, pareto_trials=None) -> Dict[int, float]:
@@ -345,8 +341,6 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         Returns:
             Dict mapping trial number to aggregated Pareto score
         """
-        import optuna
-
         # Use provided pareto_trials if available, otherwise use all trials
         trials_to_score = pareto_trials if pareto_trials is not None else study.trials
 
@@ -422,7 +416,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                     trial, self.hyper_parameters
                 )
 
-                self.logger.debug(f"Trial {trial.number}: Testing parameters {policy_params}")
+                self.logger.debug("Trial %d: Testing parameters %s", trial.number, policy_params)
 
                 # Create policy instance with suggested parameters
                 policy = self.policy_cls(**policy_params)
@@ -430,7 +424,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 # Evaluate and store metrics - actual values stored in trial.user_attrs
                 metric_values = self._evaluate_policy_configuration(policy, trial)
 
-                self.logger.info(f"Trial {trial.number} completed with metrics: {metric_values}")
+                self.logger.info("Trial %d completed with metrics: %s", trial.number, metric_values)
 
                 # Return metrics as tuple in the order specified by parameters_to_optimize
                 # This allows Optuna to intelligently guide the hyperparameter search
@@ -441,7 +435,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 return metric_tuple
 
             except Exception as e:
-                self.logger.error(f"Error in objective function for trial {trial.number}: {e}")
+                self.logger.error("Error in objective function for trial %d: %s", trial.number, e)
                 self.logger.exception("Full exception details:")
                 raise e
 
@@ -458,14 +452,12 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         Returns:
             optuna.Study: Completed multi-objective optimization study
         """
-        import optuna
-
         # Create and run the optimization study with multiple objectives
         self.logger.info("Creating Optuna study for multi-objective optimization...")
 
         # Create study with directions for each parameter to optimize
         directions = [direction.value for _, direction in self.parameters_to_optimize]
-        self.logger.info(f"Optimization directions: {directions}")
+        self.logger.info("Optimization directions: %s", directions)
 
         study = optuna.create_study(directions=directions)
 
@@ -474,7 +466,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
         # Log optimization completion
         self.logger.info("Optimization completed successfully!")
-        self.logger.info(f"Found {len(study.best_trials)} Pareto-optimal trials")
+        self.logger.info("Found %d Pareto-optimal trials", len(study.best_trials))
 
         return study
 
@@ -491,11 +483,11 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         Returns:
             OptimizedPolicyResult: NamedTuple containing optimization results
         """
-        self.logger.info(f"Total optimization time: {optimization_time:.4f} seconds")
+        self.logger.info("Total optimization time: %.4f seconds", optimization_time)
 
         # Get Pareto-optimal trials from Optuna
         pareto_trials = study.best_trials
-        self.logger.info(f"Optuna identified {len(pareto_trials)} Pareto-optimal trials")
+        self.logger.info("Optuna identified %d Pareto-optimal trials", len(pareto_trials))
 
         # Compute Pareto scores only for the Pareto-optimal trials
         pareto_scores = self._compute_pareto_scores(study, pareto_trials)
@@ -505,13 +497,13 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         best_trial = study.trials[best_trial_num]
         best_score = pareto_scores[best_trial_num]
 
-        self.logger.info(f"Best trial: {best_trial_num} with Pareto score: {best_score:.4f}")
+        self.logger.info("Best trial: %d with Pareto score: %.4f", best_trial_num, best_score)
 
         # Log individual metrics for best trial
         for param_name, direction in self.parameters_to_optimize:
             metric_key = f"metric_{param_name}"
             metric_value = best_trial.user_attrs.get(metric_key)
-            self.logger.info(f"  {param_name} ({direction.value}): {metric_value}")
+            self.logger.info("  %s (%s): %s", param_name, direction.value, metric_value)
 
         # Create the optimized policy with best parameters
         best_policy_params = {
@@ -571,14 +563,12 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         Returns:
             None: Indicates optimization failure
         """
-        import time
-
-        self.logger.error(f"Hyperparameter optimization failed: {exception}")
+        self.logger.error("Hyperparameter optimization failed: %s", exception)
         self.logger.exception("Full exception details:")
 
         # Log total execution time even for failures
         optimization_time = time.time() - start_time
-        self.logger.error(f"Failed optimization time: {optimization_time:.4f} seconds")
+        self.logger.error("Failed optimization time: %.4f seconds", optimization_time)
 
         raise exception
 
@@ -698,8 +688,8 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             raise ValueError(f"num_steps must be positive, got {num_steps}")
 
         # Log after validation
-        self.logger.info(f"Starting {num_episodes} episodes with {num_steps} steps each")
-        self.logger.info(f"Environment: {environment.name}, Policy: {policy.name}")
+        self.logger.info("Starting %d episodes with %d steps each", num_episodes, num_steps)
+        self.logger.info("Environment: %s, Policy: %s", environment.name, policy.name)
 
         # Create EnvironmentRunParams for the simulator
         env_run_params = [
@@ -722,7 +712,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
 
         # Extract histories from results
         histories = results[environment.name][policy.name]
-        self.logger.info(f"All episodes completed for {environment.name} with {policy.name}")
+        self.logger.info("All episodes completed for %s with %s", environment.name, policy.name)
 
         return histories
 

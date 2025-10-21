@@ -4,19 +4,31 @@ import numpy as np
 import pytest
 from anytree import PostOrderIter
 
-from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.core.belief import (
+    UnweightedParticleBeliefStateUpdate,
+    WeightedParticleBelief,
+    get_initial_belief,
+)
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
+from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
+    ContinuousLightDarkPOMDP,
+    ContinuousLightDarkPOMDPDiscreteActions,
+    RewardModelType,
+)
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp_dpw import POMCP_DPW
 from POMDPPlanners.planners.planners_utils.dpw import (
     ActionSampler,
     action_progressive_widening,
+    ucb1_exploration,
 )
+from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
 from POMDPPlanners.tests.test_planners.test_mcts_planners.test_utils import (
     validate_tree_structure_with_progressive_widening,
 )
+from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
 
 np.random.seed(42)
 random.seed(42)
@@ -373,8 +385,6 @@ def test_explored_action_node_ucb_selection(planner, belief):
         action_node.visit_count = visit_count
 
     # Use the function from dpw module directly
-    from POMDPPlanners.planners.planners_utils.dpw import ucb1_exploration
-
     selected_action_node = ucb1_exploration(
         belief_node=belief_node, exploration_constant=planner.exploration_constant
     )
@@ -384,10 +394,6 @@ def test_explored_action_node_ucb_selection(planner, belief):
 
 def test_rollout(planner):
     # Test the random_rollout_action_sampler function that POMCP_DPW uses
-    from POMDPPlanners.planners.planners_utils.rollout import (
-        random_rollout_action_sampler,
-    )
-
     state = "tiger_left"
     depth = 0
     return_value = random_rollout_action_sampler(
@@ -402,10 +408,6 @@ def test_rollout(planner):
 
 def test_rollout_terminal_state(planner):
     # Test the random_rollout_action_sampler function with terminal state
-    from POMDPPlanners.planners.planners_utils.rollout import (
-        random_rollout_action_sampler,
-    )
-
     # Create a mock terminal state
     original_is_terminal = planner.environment.is_terminal
     planner.environment.is_terminal = lambda state: True
@@ -427,10 +429,6 @@ def test_rollout_terminal_state(planner):
 
 def test_rollout_max_depth(planner):
     # Test the random_rollout_action_sampler function with max depth
-    from POMDPPlanners.planners.planners_utils.rollout import (
-        random_rollout_action_sampler,
-    )
-
     state = "tiger_left"
     depth = planner.depth + 1  # This is 4 (planner.depth = 3)
     max_depth = depth  # Set max_depth to match the depth being tested
@@ -542,8 +540,6 @@ def test_belief_node_data_structure(planner, belief):
     for action_node in belief_node.children:
         for child_belief_node in action_node.children:
             # Check that the belief is an UnweightedParticleBeliefStateUpdate instance (POMCP tradition)
-            from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-
             assert isinstance(child_belief_node.belief, UnweightedParticleBeliefStateUpdate)
             assert hasattr(child_belief_node.belief, "particles")
             assert isinstance(child_belief_node.belief.particles, list)
@@ -687,8 +683,6 @@ def test_pomcp_dpw_vs_pomcp_differences(planner, belief):
 
 def test_unweighted_particle_belief_usage(planner, belief):
     """Test that POMCP_DPW properly uses unweighted particle beliefs in observation nodes."""
-    from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-
     belief_node = BeliefNode(belief=belief, observation=None)
     state = belief.sample()
 
@@ -845,8 +839,6 @@ def test_pomcp_dpw_tree_structure_construction(
     root_belief_node = planner._learn_tree(belief=belief)
 
     # ASSERT: Use shared validation function with POMCP_DPW-specific belief type
-    from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-
     validate_tree_structure_with_progressive_widening(
         root_belief_node=root_belief_node,
         planner=planner,
@@ -864,11 +856,6 @@ def test_pomcp_dpw_tree_structure_construction(
 
 def test_numpy_array_observation_comparison():
     """Test that POMCP_DPW correctly handles numpy array observation comparisons."""
-    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
-        ContinuousLightDarkPOMDPDiscreteActions,
-        RewardModelType,
-    )
-
     # Create a minimal environment for testing
     environment = ContinuousLightDarkPOMDPDiscreteActions(
         discount_factor=0.95,
@@ -914,8 +901,6 @@ def test_numpy_array_observation_comparison():
     )
 
     # Create minimal belief
-    from POMDPPlanners.core.belief import UnweightedParticleBeliefStateUpdate
-
     belief = UnweightedParticleBeliefStateUpdate(particles=[np.array([0.0, 0.0])])
 
     # Test the simulate_state_path method with numpy observations
@@ -996,11 +981,6 @@ def test_pomcp_dpw_config_id_different_action_sampler_values():
 
     Test type: unit
     """
-    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
-        ContinuousLightDarkPOMDP,
-    )
-    from POMDPPlanners.utils.action_samplers import UnitCircleActionSampler
-
     # Create continuous environment for testing
     continuous_environment = ContinuousLightDarkPOMDP(
         discount_factor=0.99,

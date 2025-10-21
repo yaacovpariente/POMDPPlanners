@@ -1,8 +1,6 @@
-import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
-import numpy as np
 from diskcache import Cache
 
 from POMDPPlanners.core.simulation import DataBaseInterface
@@ -52,7 +50,7 @@ class DiskCacheDB(DataBaseInterface):
                 return None
             return data
         except Exception as e:
-            self.logger.error(f"Error retrieving from cache: {e}")
+            self.logger.error("Error retrieving from cache: %s", e)
             return None
 
     def is_key_in_cache(self, key: str) -> bool:
@@ -76,7 +74,7 @@ class DiskCacheDB(DataBaseInterface):
         try:
             self.cache.set(key, value)
         except Exception as e:
-            self.logger.error(f"Error storing in cache: {e}")
+            self.logger.error("Error storing in cache: %s", e)
 
     def clear(self):
         """Clear all entries from the cache."""

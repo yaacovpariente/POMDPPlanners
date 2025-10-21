@@ -9,14 +9,11 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import Optional
-from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
-import pandas as pd
 import pytest
 
 from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows import (
-    OptimizationEvaluationWorkflow,
     OptimizationEvaluationLocalWorkflow,
     OptimizationEvaluationDaskWorkflow,
     OptimizationEvaluationPBSWorkflow,
@@ -32,11 +29,9 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     NumericalHyperParameter,
 )
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 
 np.random.seed(42)
 random.seed(42)
@@ -394,8 +389,6 @@ class IntegerActionSampler(ActionSampler):
         self.actions = actions
 
     def sample(self, belief_node=None):
-        import random
-
         # Return integer index instead of string action
         return random.randint(0, len(self.actions) - 1)
 

@@ -1,12 +1,17 @@
 from abc import ABC, abstractmethod
+from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, cast
 
+import logging
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 
-from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
+from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     Environment,
@@ -17,7 +22,6 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.config_to_id import config_to_id
-from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
 class BaseLightDarkPOMDP(Environment, ABC):
@@ -244,11 +248,6 @@ class BaseLightDarkPOMDP(Environment, ABC):
         # Control belief particles color
         belief_particles_color = "#FFFF00"  # Yellow color
 
-        from matplotlib.figure import Figure
-        from matplotlib.axes import Axes
-
-        from typing import cast
-
         fig: Figure
         ax: Axes
         fig_temp, ax_temp = plt.subplots(figsize=(10, 8))
@@ -318,10 +317,8 @@ class BaseLightDarkPOMDP(Environment, ABC):
             ax.scatter(self.obstacles[0], self.obstacles[1], color="black", label="Obstacles")
 
         # Initialize the agent's position and path line
-        from matplotlib.lines import Line2D as Line2DType
-
-        agent = cast(Line2DType, ax.plot([], [], "ro", markersize=10)[0])
-        path_line = cast(Line2DType, ax.plot([], [], "r-", alpha=0.5, linewidth=2)[0])
+        agent = cast(Line2D, ax.plot([], [], "ro", markersize=10)[0])
+        path_line = cast(Line2D, ax.plot([], [], "r-", alpha=0.5, linewidth=2)[0])
         # Initialize the action arrow
         arrow = plt.arrow(
             0,
@@ -362,8 +359,6 @@ class BaseLightDarkPOMDP(Environment, ABC):
             belief_scatters.append(scatter)
 
         # Create a proper legend entry for belief particles
-        from matplotlib.lines import Line2D
-
         legend_element = Line2D(
             [],
             [],
@@ -512,8 +507,6 @@ class BaseLightDarkPOMDP(Environment, ABC):
         """Generate a deterministic identifier based on environment configuration.
         This implementation ensures that the config_id is invariant to the order of beacons and obstacles.
         """
-        import logging
-        from enum import Enum
 
         def serialize_value(value, key=None):
             if isinstance(value, np.ndarray):

@@ -24,9 +24,12 @@ Classes:
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple, cast
 
 import matplotlib.animation as animation
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from matplotlib.lines import Line2D
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -945,9 +948,6 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 beliefs.append(None)
 
         # Set up the figure and axis with extra space for legend
-        from matplotlib.figure import Figure
-        from matplotlib.axes import Axes
-
         fig: Figure
         ax: Axes
         fig, ax = plt.subplots(figsize=(14, 8))  # type: ignore[assignment]
@@ -999,9 +999,6 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 danger_patches.append(circle)
 
         # Initialize animated elements
-        from matplotlib.lines import Line2D
-        from typing import cast
-
         robot_agent = cast(Line2D, ax.plot([], [], "ro", markersize=12, label="Robot")[0])
         opponent_agent = cast(Line2D, ax.plot([], [], "bo", markersize=12, label="Opponent")[0])
         robot_path_line = cast(
@@ -1302,4 +1299,4 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         anim.save(cache_path, writer="pillow", fps=1)
         plt.close(fig)
 
-        self.logger.info(f"Saved LaserTag visualization to {cache_path}")
+        self.logger.info("Saved LaserTag visualization to %s", cache_path)

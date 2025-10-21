@@ -8,17 +8,15 @@ This module tests the LaserTag POMDP environment, focusing on:
 """
 
 import random
+from collections import Counter
 from pathlib import Path
+from typing import cast
 
 import numpy as np
 import pytest
 
-# Set seeds for reproducible tests
-np.random.seed(42)
-random.seed(42)
-
 from POMDPPlanners.core.belief import WeightedParticleBelief
-from POMDPPlanners.core.distributions import DiscreteDistribution
+from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.laser_tag_pomdp import (
@@ -32,6 +30,10 @@ from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
 from POMDPPlanners.utils.logger import get_logger
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 
 class RandomPolicy(Policy):
@@ -54,8 +56,6 @@ class RandomPolicy(Policy):
     @classmethod
     def get_space_info(cls):
         """Return space info from environment."""
-        from POMDPPlanners.core.environment import SpaceType
-
         return PolicySpaceInfo(
             action_space=SpaceType.DISCRETE, observation_space=SpaceType.CONTINUOUS
         )
@@ -209,8 +209,6 @@ class TestLaserTagStateTransition:
 
         # Count opponent positions
         opponent_positions = [s.opponent for s in samples]
-        from collections import Counter
-
         pos_counts = Counter(opponent_positions)
 
         # Opponent should prefer moving toward robot (should prefer North: (4,5))
@@ -784,8 +782,6 @@ class TestLaserTagPOMDP:
         )
 
         # Test with non-Path cache_path
-        from typing import cast
-
         with pytest.raises(TypeError, match="cache_path must be a Path object"):
             env.cache_visualization(non_empty_history.history, cast(Path, "invalid_path"))
 

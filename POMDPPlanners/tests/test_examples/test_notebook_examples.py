@@ -11,12 +11,11 @@ Test categories:
 - Notebook integration with documentation system
 """
 
-import pytest
-import subprocess
-import sys
-import tempfile
 import json
+import tempfile
 from pathlib import Path
+
+import pytest
 
 
 class TestNotebookExamples:
@@ -62,7 +61,6 @@ class TestNotebookExamples:
         assert notebook_path.exists(), "basic_usage.ipynb does not exist"
 
         # Try to load the notebook as JSON to validate structure
-        import json
 
         with open(notebook_path) as f:
             notebook_data = json.load(f)
@@ -85,8 +83,6 @@ class TestNotebookExamples:
         notebook_path = examples_dir / "hyperparameter_tuning.ipynb"
         assert notebook_path.exists(), "hyperparameter_tuning.ipynb does not exist"
 
-        import json
-
         with open(notebook_path) as f:
             notebook_data = json.load(f)
 
@@ -106,8 +102,6 @@ class TestNotebookExamples:
         """
         notebook_path = examples_dir / "planners_comparison.ipynb"
         assert notebook_path.exists(), "planners_comparison.ipynb does not exist"
-
-        import json
 
         with open(notebook_path) as f:
             notebook_data = json.load(f)
@@ -129,7 +123,6 @@ class TestNotebookExamples:
         notebook_files = list(examples_dir.glob("*.ipynb"))
 
         for notebook_path in notebook_files:
-            import json
 
             with open(notebook_path) as f:
                 notebook_data = json.load(f)
@@ -163,7 +156,6 @@ class TestNotebookExamples:
         notebook_files = list(examples_dir.glob("*.ipynb"))
 
         for notebook_path in notebook_files:
-            import json
 
             with open(notebook_path) as f:
                 notebook_data = json.load(f)

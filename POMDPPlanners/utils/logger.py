@@ -7,7 +7,7 @@ import time
 from datetime import datetime
 from logging.handlers import QueueHandler
 from pathlib import Path
-from typing import Any, Dict, Optional, Deque
+from typing import Any, Dict, Optional
 
 
 class QueueLoggerManager:
@@ -468,7 +468,7 @@ def _create_individual_logger(
 
         # Only log to console if console_output is enabled
         if console_output:
-            logger.info(f"Logging to file: {log_file}")
+            logger.info("Logging to file: %s", log_file)
 
     return logger
 
@@ -525,7 +525,6 @@ def reset_logger_state():
         _queue_logger_manager = None
 
     # Clear all loggers that start with "queue." to reset state
-    import logging
 
     loggers_to_clear = []
     for name in logging.Logger.manager.loggerDict.keys():

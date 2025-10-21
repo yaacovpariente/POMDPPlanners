@@ -5,9 +5,6 @@ from typing import Dict, List, Tuple, Optional
 
 import pandas as pd
 
-from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import EnvironmentRunParams
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
@@ -112,10 +109,13 @@ def run_multiple_environments_and_policies_local_run(
         True
     """
     logger.info(
-        f"Starting simulation run with {len(environment_run_params)} environment configurations"
+        "Starting simulation run with %s environment configurations", len(environment_run_params)
     )
     logger.debug(
-        f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}"
+        "Parameters: alpha=%s, confidence_interval=%s, n_jobs=%s",
+        alpha,
+        confidence_interval_level,
+        n_jobs,
     )
 
     task_manager_config = JoblibConfig(n_jobs=n_jobs, clear_cache_on_start=clear_cache_on_start)
@@ -248,13 +248,19 @@ def run_multiple_environments_and_policies_pbs_run(
         True
     """
     logger.info(
-        f"Starting PBS cluster simulation with {len(environment_run_params)} environment configurations"
+        "Starting PBS cluster simulation with %s environment configurations",
+        len(environment_run_params),
     )
     logger.debug(
-        f"PBS Parameters: queue={queue}, n_workers={n_workers}, cores={cores}, memory={memory}, walltime={walltime}"
+        "PBS Parameters: queue=%s, n_workers=%s, cores=%s, memory=%s, walltime=%s",
+        queue,
+        n_workers,
+        cores,
+        memory,
+        walltime,
     )
     logger.debug(
-        f"Simulation Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}"
+        "Simulation Parameters: alpha=%s, confidence_interval=%s", alpha, confidence_interval_level
     )
 
     task_manager_config = PBSConfig(

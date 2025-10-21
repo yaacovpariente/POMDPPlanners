@@ -1,9 +1,9 @@
-import os
 import random
+import shutil
 import tempfile
 import time
 from pathlib import Path
-from typing import Dict, List, cast
+from typing import List, cast
 from unittest.mock import MagicMock, Mock, patch
 
 import numpy as np
@@ -11,7 +11,6 @@ import pandas as pd
 import pytest
 
 from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.simulation import EnvironmentRunParams, NumericalHyperParameter
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfig,
@@ -23,6 +22,7 @@ from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
 from POMDPPlanners.simulations.simulation_apis.pbs_simulations_api import PBSSimulationsAPI
+from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import PBSConfig
 
 np.random.seed(42)
 random.seed(42)
@@ -39,8 +39,6 @@ def temp_cache_dir():
         time.sleep(0.1)
         # Ensure cleanup happens even if test fails
         try:
-            import shutil
-
             shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception:
             pass
@@ -284,12 +282,6 @@ class TestPBSSimulationsAPIIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-        from POMDPPlanners.core.belief import get_initial_belief
-        from POMDPPlanners.core.simulation import EnvironmentRunParams
-        from unittest.mock import patch, Mock
-
         # Create test environment and policy
         tiger = TigerPOMDP(discount_factor=0.95)
         policy = POMCP(
@@ -341,10 +333,6 @@ class TestPBSSimulationsAPIIntegration:
             # Verify the simulator was called with correct PBS config
             mock_simulator.assert_called_once()
             call_args = mock_simulator.call_args[1]
-
-            from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
-                PBSConfig,
-            )
 
             task_manager_config = call_args["task_manager_config"]
 

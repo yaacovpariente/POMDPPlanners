@@ -1,6 +1,8 @@
 import cProfile
+import gc
 import hashlib
 import io
+import pstats
 import shutil
 import tempfile
 from abc import ABC, abstractmethod
@@ -176,7 +178,6 @@ class BaseSimulator(ABC):
         """Context manager exit."""
         # Ensure MLflow runs are properly ended
         try:
-            import mlflow
 
             if mlflow.active_run() is not None:
                 mlflow.end_run()
@@ -238,24 +239,20 @@ class BaseSimulator(ABC):
         if not self.profiler:
             return
 
-        import pstats
-
         s = io.StringIO()
         ps = pstats.Stats(self.profiler, stream=s).sort_stats("cumulative")
         ps.print_stats(self.profiling_output_limit)  # Show all functions, no restriction
 
         profiling_output = s.getvalue()
-        self.logger.info(f"Profiling results (all functions):\n{profiling_output}")
+        self.logger.info("Profiling results (all functions):\n%s", profiling_output)
 
         # Save profiling results to file if cache directory is available
         if self.cache_dir_path:
             profiling_file = self.cache_dir_path / "profiling_results.txt"
             with open(profiling_file, "w") as f:
-                import pstats
-
                 ps = pstats.Stats(self.profiler, stream=f).sort_stats("cumulative")
                 ps.print_stats(self.profiling_output_limit)  # Show all functions, no restriction
-            self.logger.info(f"Detailed profiling results saved to: {profiling_file}")
+            self.logger.info("Detailed profiling results saved to: %s", profiling_file)
 
     def cleanup_mlflow_runs(self) -> None:
         """Clean up any active MLflow runs.
@@ -265,7 +262,6 @@ class BaseSimulator(ABC):
         of a context manager.
         """
         try:
-            import mlflow
 
             if mlflow.active_run() is not None:
                 mlflow.end_run()
@@ -336,7 +332,7 @@ class BaseSimulator(ABC):
                 for run_params in environment_run_params
             ]
         )
-        self.logger.info(f"Running comparison with:\n{env_algo_info}")
+        self.logger.info("Running comparison with:\n%s", env_algo_info)
 
     def _log_mlflow_comparison_parameters(
         self,
@@ -464,7 +460,6 @@ class BaseSimulator(ABC):
             persistent_cache_dir: Path,
         ) -> Path:
             # Set up MLflow context in the worker process
-            import mlflow
 
             mlflow.set_tracking_uri(tracking_uri)
             mlflow.set_experiment(experiment_name)
@@ -591,10 +586,12 @@ class BaseSimulator(ABC):
         for result, (env_name, policy_name) in zip(results_list, task_identifiers):
             if env_name in results and policy_name in results[env_name]:
                 results[env_name][policy_name].append(result)
-                self.logger.debug(f"Added result for {env_name} with {policy_name}")
+                self.logger.debug("Added result for %s with %s", env_name, policy_name)
             else:
                 self.logger.warning(
-                    f"Received result for unknown env-policy pair: {env_name}, {policy_name}"
+                    "Received result for unknown env-policy pair: %s, %s",
+                    env_name,
+                    policy_name,
                 )
 
         # Verify each policy has the expected number of results
@@ -603,8 +600,11 @@ class BaseSimulator(ABC):
                 result = results[env.name][policy.name]
                 if len(result) != num_episodes:
                     self.logger.warning(
-                        f"Policy {policy.name} in environment {env.name} has {len(result)} results, "
-                        f"expected {num_episodes}"
+                        "Policy %s in environment %s has %s results, " "expected %s",
+                        policy.name,
+                        env.name,
+                        len(result),
+                        num_episodes,
                     )
 
         return results
@@ -752,7 +752,7 @@ class BaseSimulator(ABC):
                     ci_width = metric.upper_confidence_bound - metric.lower_confidence_bound
                     mlflow.log_metric(f"{metric_prefix}_{metric.name}_ci_width", ci_width)
 
-        self.logger.info(f"Logged metrics for {len(metrics)} environments")
+        self.logger.info("Logged metrics for %s environments", len(metrics))
 
     def _create_environment_visualizations(
         self,
@@ -923,8 +923,10 @@ class POMDPSimulator(BaseSimulator):
                     total_tasks += 1
 
         self.logger.info(
-            f"Created {total_tasks} simulation tasks across {len(set(params.environment.name for params in environment_run_params))} "
-            f"environments and {len(set(p.name for params in environment_run_params for p in params.policies))} policies"
+            "Created %s simulation tasks across %s " "environments and %s policies",
+            total_tasks,
+            len(set(params.environment.name for params in environment_run_params)),
+            len(set(p.name for params in environment_run_params for p in params.policies)),
         )
 
         return simulation_tasks, task_identifiers
@@ -997,7 +999,6 @@ class POMDPSimulator(BaseSimulator):
         cache_visualizations: bool,
     ) -> None:
         """Create and save visualizations for a specific environment."""
-        import gc
 
         # Don't create env_dir since the entire results_dir is already the environment directory
         # env_dir = results_dir / env_name
@@ -1077,4 +1078,4 @@ class POMDPSimulator(BaseSimulator):
                     cache_path=cache_path,
                 )
             except Exception as e:
-                self.logger.warning(f"Visualization failed for episode {episode_idx}: {str(e)}")
+                self.logger.warning("Visualization failed for episode %s: %s", episode_idx, str(e))

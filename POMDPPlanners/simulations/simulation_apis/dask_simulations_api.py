@@ -205,10 +205,14 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
             True
         """
         self.logger.info(
-            f"Starting simulation run with {len(environment_run_params)} environment configurations"
+            "Starting simulation run with %d environment configurations",
+            len(environment_run_params),
         )
         self.logger.debug(
-            f"Parameters: alpha={alpha}, confidence_interval={confidence_interval_level}, n_jobs={n_jobs}"
+            "Parameters: alpha=%s, confidence_interval=%s, n_jobs=%s",
+            alpha,
+            confidence_interval_level,
+            n_jobs,
         )
 
         task_manager_config = DaskConfig(
@@ -358,11 +362,15 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
             RuntimeError: If optimization fails for any configuration.
         """
         self.logger.info(
-            f"Starting hyperparameter optimization for {len(environment_run_params)} configurations"
+            "Starting hyperparameter optimization for %d configurations",
+            len(environment_run_params),
         )
         self.logger.debug(
-            f"Parameters: experiment_name={experiment_name}, n_jobs={n_jobs}, "
-            f"confidence_interval={confidence_interval_level}, alpha={alpha}"
+            "Parameters: experiment_name=%s, n_jobs=%s, confidence_interval=%s, alpha=%s",
+            experiment_name,
+            n_jobs,
+            confidence_interval_level,
+            alpha,
         )
 
         # Set up cache directory
@@ -393,21 +401,25 @@ class DaskSimulationsAPI(SimulationsAPIInterface):
             results = optimizer.optimize(environment_run_params)
 
             self.logger.info(
-                f"Hyperparameter optimization completed successfully. "
-                f"Optimized {len(results)} out of {len(environment_run_params)} configurations"
+                "Hyperparameter optimization completed successfully. "
+                "Optimized %d out of %d configurations",
+                len(results),
+                len(environment_run_params),
             )
 
             for i, result in enumerate(results):
                 self.logger.info(
-                    f"Configuration {i+1}: {result.environment.__class__.__name__} "
-                    f"with {result.policy.__class__.__name__} - "
-                    f"Best parameters: {result.chosen_hyper_parameters}"
+                    "Configuration %d: %s with %s - Best parameters: %s",
+                    i + 1,
+                    result.environment.__class__.__name__,
+                    result.policy.__class__.__name__,
+                    result.chosen_hyper_parameters,
                 )
 
             return results
 
         except Exception as e:
-            self.logger.error(f"Hyperparameter optimization failed: {e}")
+            self.logger.error("Hyperparameter optimization failed: %s", e)
             raise RuntimeError(f"Hyperparameter optimization failed: {e}") from e
 
         finally:

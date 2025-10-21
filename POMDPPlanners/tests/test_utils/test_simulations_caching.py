@@ -11,12 +11,12 @@ This module tests the caching functionality for simulation results, focusing on:
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, cast
+from typing import List, cast
 from unittest.mock import Mock, patch
 
 import pytest
 
-from POMDPPlanners.core.simulation.history import History, StepData
+from POMDPPlanners.core.simulation.history import History
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.belief import Belief

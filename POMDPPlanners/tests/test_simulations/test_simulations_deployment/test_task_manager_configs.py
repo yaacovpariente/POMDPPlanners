@@ -4,7 +4,6 @@ This module contains comprehensive tests for the task manager configuration
 classes and their factory methods.
 """
 
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest

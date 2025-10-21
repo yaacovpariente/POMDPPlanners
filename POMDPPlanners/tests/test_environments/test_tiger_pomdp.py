@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
+from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
@@ -395,7 +395,6 @@ class TestTigerPOMDPMetrics:
 
         Test type: unit
         """
-        from POMDPPlanners.core.simulation import History, StepData
 
         # Create histories where agent always opens correct door
         histories = []
@@ -464,7 +463,6 @@ class TestTigerPOMDPMetrics:
 
         Test type: unit
         """
-        from POMDPPlanners.core.simulation import History, StepData
 
         # Create histories where agent always opens wrong door
         histories = []
@@ -531,7 +529,6 @@ class TestTigerPOMDPMetrics:
 
         Test type: unit
         """
-        from POMDPPlanners.core.simulation import History, StepData
 
         # Create histories with mixed success/failure
         histories = []
@@ -620,7 +617,6 @@ def test_metrics_confidence_intervals(tiger_pomdp):
 
     Test type: unit
     """
-    from POMDPPlanners.core.simulation import History, StepData
 
     # Create diverse performance histories with different outcomes
     histories = []

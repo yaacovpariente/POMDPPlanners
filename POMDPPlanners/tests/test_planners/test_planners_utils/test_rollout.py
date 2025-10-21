@@ -12,15 +12,15 @@ import random
 import numpy as np
 import pytest
 
-# Set seeds for reproducible tests
-np.random.seed(42)
-random.seed(42)
-
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
 from POMDPPlanners.planners.planners_utils.rollout import random_rollout_action_sampler
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 
 class MockActionSampler(ActionSampler):
@@ -442,13 +442,6 @@ def test_basic_tiger_rollout_usage_example():
 
     Test type: example
     """
-    import numpy as np
-
-    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-    from POMDPPlanners.planners.planners_utils.rollout import (
-        random_rollout_action_sampler,
-    )
 
     # Simple action sampler for Tiger POMDP (from docstring)
     class TigerActionSampler(ActionSampler):
@@ -497,13 +490,6 @@ def test_cartpole_rollout_usage_example():
 
     Test type: example
     """
-    import numpy as np
-
-    from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-    from POMDPPlanners.planners.planners_utils.rollout import (
-        random_rollout_action_sampler,
-    )
 
     class CartPoleActionSampler(ActionSampler):
         def sample(self, belief_node=None):
@@ -544,13 +530,6 @@ def test_multiple_rollouts_usage_example():
 
     Test type: integration
     """
-    import numpy as np
-
-    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-    from POMDPPlanners.planners.planners_utils.rollout import (
-        random_rollout_action_sampler,
-    )
 
     class SanityActionSampler(ActionSampler):
         def sample(self, belief_node=None):
@@ -599,13 +578,6 @@ def test_rollout_depth_comparison_usage_example():
 
     Test type: example
     """
-    import numpy as np
-
-    from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-    from POMDPPlanners.planners.planners_utils.rollout import (
-        random_rollout_action_sampler,
-    )
 
     class SanityActionSampler(ActionSampler):
         def sample(self, belief_node=None):
@@ -654,13 +626,6 @@ def test_informed_action_sampler_usage_example():
 
     Test type: example
     """
-    import numpy as np
-
-    from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-    from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-    from POMDPPlanners.planners.planners_utils.rollout import (
-        random_rollout_action_sampler,
-    )
 
     class TigerActionSampler(ActionSampler):
         def sample(self, belief_node=None):

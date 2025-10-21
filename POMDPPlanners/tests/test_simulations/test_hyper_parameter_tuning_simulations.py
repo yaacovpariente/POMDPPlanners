@@ -38,6 +38,12 @@ from POMDPPlanners.simulations.simulations_deployment.task_manager_configs impor
     JoblibConfig,
     PBSConfig,
 )
+from POMDPPlanners.simulations.simulations_deployment.tasks import (
+    HyperParameterTuningSimulationTask,
+)
+from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+from POMDPPlanners.simulations.simulations_deployment.task_managers import PBSTaskManager
+import warnings
 
 np.random.seed(42)
 random.seed(42)
@@ -249,10 +255,6 @@ class TestHyperParameterOptimizerTaskCreation:
             assert isinstance(identifier, str)
 
         # Check that each item is a HyperParameterTuningSimulationTask
-        from POMDPPlanners.simulations.simulations_deployment.tasks import (
-            HyperParameterTuningSimulationTask,
-        )
-
         for task in tasks:
             assert isinstance(task, HyperParameterTuningSimulationTask)
 
@@ -282,10 +284,6 @@ class TestHyperParameterOptimizerTaskCreation:
         assert len(tasks) == len(single_config)
 
         # Check that each task is a HyperParameterTuningSimulationTask
-        from POMDPPlanners.simulations.simulations_deployment.tasks import (
-            HyperParameterTuningSimulationTask,
-        )
-
         for task in tasks:
             assert isinstance(task, HyperParameterTuningSimulationTask)
 
@@ -293,10 +291,6 @@ class TestHyperParameterOptimizerTaskCreation:
         # but the structure should be correct
         if task_results:
             # If there are results, they should be OptimizedPolicyResult instances
-            from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-                OptimizedPolicyResult,
-            )
-
             for result in task_results:
                 assert isinstance(result, OptimizedPolicyResult)
 
@@ -411,10 +405,6 @@ class TestHyperParameterOptimizerHelperMethods:
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
 
         # Create a real task that would have metadata
-        from POMDPPlanners.simulations.simulations_deployment.tasks import (
-            HyperParameterTuningSimulationTask,
-        )
-
         task = HyperParameterTuningSimulationTask(
             environment=real_optimized_policy_result.environment,
             belief=get_initial_belief(real_optimized_policy_result.environment, n_particles=10),
@@ -439,10 +429,6 @@ class TestHyperParameterOptimizerHelperMethods:
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
 
         # Create a real task
-        from POMDPPlanners.simulations.simulations_deployment.tasks import (
-            HyperParameterTuningSimulationTask,
-        )
-
         task = HyperParameterTuningSimulationTask(
             environment=real_environment,
             belief=get_initial_belief(real_environment, n_particles=10),
@@ -1023,7 +1009,6 @@ class TestHyperParameterOptimizerMLFlowIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
 
         optimizer = HyperParameterOptimizer(
             cache_dir_path=temp_cache_dir,
@@ -1360,7 +1345,6 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
 
         Test type: unit
         """
-        from POMDPPlanners.simulations.simulations_deployment.task_managers import PBSTaskManager
 
         # Create a PBSTaskManager with dashboard_prefix (but don't initialize)
         # We override _initialize_client to avoid actual cluster creation
@@ -1416,7 +1400,6 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
 
         Test type: integration
         """
-        import warnings
 
         pbs_config = PBSConfig(
             queue="default",
@@ -1500,7 +1483,6 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
             # (e.g., PBS not available, which is expected in CI/CD)
             error_str = str(e).lower()
             if "pbs" in error_str or "qsub" in error_str or "scheduler" in error_str:
-                import warnings
 
                 warnings.warn(
                     f"PBS cluster creation skipped - PBS environment not available: {e}",
@@ -1556,7 +1538,6 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
             # Handle PBS environment not being available
             error_str = str(e).lower()
             if "pbs" in error_str or "qsub" in error_str or "scheduler" in error_str:
-                import warnings
 
                 warnings.warn(
                     f"PBS cluster creation skipped - PBS environment not available: {e}",
@@ -1587,7 +1568,6 @@ class TestHyperParameterOptimizationPBSIntegration:
             run_hyperparameter_optimization_pbs,
         )
         from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
         from POMDPPlanners.core.belief import get_initial_belief
         from POMDPPlanners.core.simulation import NumericalHyperParameter
         from POMDPPlanners.core.simulation.hyperparameter_tuning import (

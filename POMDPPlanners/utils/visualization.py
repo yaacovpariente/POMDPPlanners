@@ -10,11 +10,9 @@ import plotly.graph_objects as go
 import seaborn as sns
 from joblib import Parallel, delayed
 from plotly.subplots import make_subplots
-
-matplotlib.use("Agg")  # Use non-interactive backend
 import mlflow
 
-from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
+from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.cost import belief_expectation_cost_particle_belief
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.policy import Policy
@@ -24,6 +22,8 @@ from POMDPPlanners.core.simulation import (
     history_to_discounted_return_value,
 )
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
+
+matplotlib.use("Agg")  # Use non-interactive backend
 
 # Set up logger
 logger = logging.getLogger(__name__)
@@ -480,7 +480,7 @@ def plot_policies_comparison_on_environment(
                 plt.close()
 
             except Exception as e:
-                logger.warning(f"Error creating plot for {env_name} - {metric_name}: {str(e)}")
+                logger.warning("Error creating plot for %s - %s: %s", env_name, metric_name, str(e))
                 plt.close()  # Make sure to close the figure even if there's an error
                 continue
 

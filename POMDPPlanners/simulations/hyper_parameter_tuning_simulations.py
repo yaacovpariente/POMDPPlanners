@@ -133,13 +133,9 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     OptimizedPolicyResult,
 )
-from POMDPPlanners.simulations.simulations_deployment.cache_dbs import DiskCacheDB
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
     TaskManagerConfig,
-)
-from POMDPPlanners.simulations.simulations_deployment.task_managers import (
-    SequentialTaskManager,
 )
 from POMDPPlanners.simulations.simulations_deployment.tasks.hyper_parameter_tuning_simulation_task import (
     HyperParameterTuningSimulationTask,
@@ -323,8 +319,6 @@ class HyperParameterOptimizer:
 
         # Clean up any active MLflow runs
         try:
-            import mlflow
-
             if mlflow.active_run() is not None:
                 mlflow.end_run()
         except Exception:
@@ -399,13 +393,14 @@ class HyperParameterOptimizer:
             return []
 
         logger.info(
-            f"Starting optimization for {len(configs)} configurations using stub interface with MLflow tracking"
+            "Starting optimization for %s configurations using stub interface with MLflow tracking",
+            len(configs),
         )
 
         # Prepare MLflow session and execute optimization tasks
         self._prepare_mlflow_session()
 
-        with mlflow.start_run(run_name=f"optimize_batch_{len(configs)}_configs"):
+        with mlflow.start_run(run_name="optimize_batch_%s_configs" % len(configs)):
             # Log batch-level information
             self._log_batch_level_parameters(configs)
 
@@ -419,7 +414,7 @@ class HyperParameterOptimizer:
             self._log_batch_level_summary(configs, results)
 
         logger.info(
-            f"All {len(configs)} configurations optimized successfully with MLflow tracking"
+            "All %s configurations optimized successfully with MLflow tracking", len(configs)
         )
         return results
 
@@ -478,8 +473,11 @@ class HyperParameterOptimizer:
         # Process each successful result
         for original_index, config, task, task_result in successful_configs_with_index:
             logger.info(
-                f"Processing results for configuration {original_index+1}/{len(configs)}: "
-                f"{config.environment.__class__.__name__} with {config.hyper_param_planner_config.policy_cls.__name__}"
+                "Processing results for configuration %s/%s: %s with %s",
+                original_index + 1,
+                len(configs),
+                config.environment.__class__.__name__,
+                config.hyper_param_planner_config.policy_cls.__name__,
             )
 
             # Log this configuration's results to MLflow
@@ -535,7 +533,9 @@ class HyperParameterOptimizer:
                 # Log success and return result
                 best_value = self._get_best_value_from_task(task)
                 logger.info(
-                    f"Configuration {original_index+1} optimized successfully. Best value: {best_value}"
+                    "Configuration %s optimized successfully. Best value: %s",
+                    original_index + 1,
+                    best_value,
                 )
                 return task_result
 
@@ -787,7 +787,7 @@ class HyperParameterOptimizer:
     def _log_configuration_failure(self, original_index: int, exception: Exception) -> None:
         mlflow.log_metric("optimization_success", 0.0)
         mlflow.log_param("error_message", str(exception))
-        logger.error(f"Optimization failed for configuration {original_index+1}: {exception}")
+        logger.error("Optimization failed for configuration %s: %s", original_index + 1, exception)
 
     def _log_batch_level_summary(
         self, configs: List[HyperParameterRunParams], results: List

@@ -11,9 +11,17 @@ import random
 
 import numpy as np
 import pytest
+from unittest.mock import Mock
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
-from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
+from POMDPPlanners.core.distributions import DiscreteDistribution
+from POMDPPlanners.core.environment import (
+    Environment,
+    ObservationModel,
+    SpaceInfo,
+    SpaceType,
+    StateTransitionModel,
+)
 from POMDPPlanners.core.tree import (
     ActionNode,
     BeliefNode,
@@ -35,9 +43,6 @@ class MockEnvironment(Environment):
         return state
 
     def observation_model(self, next_state, action):
-        from unittest.mock import Mock
-        from POMDPPlanners.core.environment import ObservationModel
-
         mock_model = Mock(spec=ObservationModel)
         mock_model.probability.return_value = 1.0
         return mock_model
@@ -56,21 +61,14 @@ class MockEnvironment(Environment):
 
     def initial_state_dist(self):
         """Return initial state distribution."""
-        from POMDPPlanners.core.distributions import DiscreteDistribution
-
         return DiscreteDistribution(values=[0], probs=np.array([1.0]))
 
     def initial_observation_dist(self):
         """Return initial observation distribution."""
-        from POMDPPlanners.core.distributions import DiscreteDistribution
-
         return DiscreteDistribution(values=["obs"], probs=np.array([1.0]))
 
     def state_transition_model(self, state, action):
         """Return state transition model."""
-        from unittest.mock import Mock
-        from POMDPPlanners.core.environment import StateTransitionModel
-
         mock_model = Mock(spec=StateTransitionModel)
         mock_model.probability.return_value = 1.0
         return mock_model
