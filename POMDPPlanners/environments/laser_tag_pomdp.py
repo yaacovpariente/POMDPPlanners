@@ -156,6 +156,85 @@ class LaserTagStateTransition(StateTransitionModel):
         else:
             return self.state.robot
 
+    def _create_position(
+        self, fixed_coord: int, moving_coord: int, is_horizontal: bool
+    ) -> Tuple[int, int]:
+        """Create a position tuple based on axis orientation."""
+        if is_horizontal:
+            return (fixed_coord, moving_coord)  # (row, col)
+        else:
+            return (moving_coord, fixed_coord)  # (row, col)
+
+    def _calculate_directional_moves(
+        self, opponent_coord: int, robot_coord: int, fixed_coord: int, is_horizontal: bool
+    ) -> List[Tuple[Tuple[int, int], float]]:
+        """Calculate movement probabilities for one axis (horizontal or vertical)."""
+        moves = []
+
+        if robot_coord > opponent_coord:  # Robot is ahead
+            toward_pos = self._create_position(fixed_coord, opponent_coord + 1, is_horizontal)
+            away_pos = self._create_position(fixed_coord, opponent_coord - 1, is_horizontal)
+            toward_prob, away_prob = 0.4, 0.0
+        elif robot_coord < opponent_coord:  # Robot is behind
+            toward_pos = self._create_position(fixed_coord, opponent_coord - 1, is_horizontal)
+            away_pos = self._create_position(fixed_coord, opponent_coord + 1, is_horizontal)
+            toward_prob, away_prob = 0.4, 0.0
+        else:  # Same position on this axis
+            toward_pos = self._create_position(fixed_coord, opponent_coord + 1, is_horizontal)
+            away_pos = self._create_position(fixed_coord, opponent_coord - 1, is_horizontal)
+            toward_prob, away_prob = 0.0, 0.0
+
+        if self._is_valid_position(toward_pos):
+            moves.append((toward_pos, toward_prob))
+        if self._is_valid_position(away_pos):
+            moves.append((away_pos, away_prob))
+
+        return moves
+
+    def _get_horizontal_moves(
+        self, robot_col: int, opp_row: int, opp_col: int
+    ) -> List[Tuple[Tuple[int, int], float]]:
+        """Get opponent's horizontal (column) movement options."""
+        return self._calculate_directional_moves(
+            opponent_coord=opp_col,
+            robot_coord=robot_col,
+            fixed_coord=opp_row,
+            is_horizontal=True,
+        )
+
+    def _get_vertical_moves(
+        self, robot_row: int, opp_row: int, opp_col: int
+    ) -> List[Tuple[Tuple[int, int], float]]:
+        """Get opponent's vertical (row) movement options."""
+        return self._calculate_directional_moves(
+            opponent_coord=opp_row,
+            robot_coord=robot_row,
+            fixed_coord=opp_col,
+            is_horizontal=False,
+        )
+
+    def _normalize_move_probabilities(
+        self,
+        directional_moves: List[Tuple[Tuple[int, int], float]],
+        stay_position: Tuple[int, int],
+        stay_prob: float,
+    ) -> List[Tuple[Tuple[int, int], float]]:
+        """Normalize movement probabilities and handle blocked moves."""
+        # Add stay option
+        move_probs = directional_moves + [(stay_position, stay_prob)]
+
+        # Calculate actual total probability
+        actual_total = sum(prob for _, prob in move_probs if prob > 0)
+
+        # Redistribute remaining probability to staying if moves are blocked
+        if actual_total < 1.0:
+            stay_index = len(move_probs) - 1
+            current_pos, current_stay_prob = move_probs[stay_index]
+            move_probs[stay_index] = (current_pos, current_stay_prob + (1.0 - actual_total))
+
+        # Filter out zero probability moves
+        return [(pos, prob) for pos, prob in move_probs if prob > 0]
+
     def _get_opponent_move_probabilities(
         self, robot_pos: Tuple[int, int]
     ) -> List[Tuple[Tuple[int, int], float]]:
@@ -170,92 +249,12 @@ class LaserTagStateTransition(StateTransitionModel):
         robot_row, robot_col = robot_pos
         opp_row, opp_col = current_opp
 
-        # Calculate movement preferences
-        x_moves = []  # Column movements
-        y_moves = []  # Row movements
+        # Get movement options for each axis
+        x_moves = self._get_horizontal_moves(robot_col, opp_row, opp_col)
+        y_moves = self._get_vertical_moves(robot_row, opp_row, opp_col)
 
-        # X-direction (column) movements
-        if robot_col > opp_col:  # Robot is east, opponent should move east
-            east_pos = (opp_row, opp_col + 1)
-            if self._is_valid_position(east_pos):
-                x_moves.append((east_pos, 0.4))  # Move toward robot
-            west_pos = (opp_row, opp_col - 1)
-            if self._is_valid_position(west_pos):
-                x_moves.append((west_pos, 0.0))  # Move away from robot gets remaining prob
-        elif robot_col < opp_col:  # Robot is west, opponent should move west
-            west_pos = (opp_row, opp_col - 1)
-            if self._is_valid_position(west_pos):
-                x_moves.append((west_pos, 0.4))  # Move toward robot
-            east_pos = (opp_row, opp_col + 1)
-            if self._is_valid_position(east_pos):
-                x_moves.append((east_pos, 0.0))  # Move away from robot gets remaining prob
-        else:  # Same column
-            east_pos = (opp_row, opp_col + 1)
-            if self._is_valid_position(east_pos):
-                x_moves.append((east_pos, 0.0))
-            west_pos = (opp_row, opp_col - 1)
-            if self._is_valid_position(west_pos):
-                x_moves.append((west_pos, 0.0))
-
-        # Y-direction (row) movements
-        if robot_row > opp_row:  # Robot is south, opponent should move south
-            south_pos = (opp_row + 1, opp_col)
-            if self._is_valid_position(south_pos):
-                y_moves.append((south_pos, 0.4))  # Move toward robot
-            north_pos = (opp_row - 1, opp_col)
-            if self._is_valid_position(north_pos):
-                y_moves.append((north_pos, 0.0))  # Move away from robot gets remaining prob
-        elif robot_row < opp_row:  # Robot is north, opponent should move north
-            north_pos = (opp_row - 1, opp_col)
-            if self._is_valid_position(north_pos):
-                y_moves.append((north_pos, 0.4))  # Move toward robot
-            south_pos = (opp_row + 1, opp_col)
-            if self._is_valid_position(south_pos):
-                y_moves.append((south_pos, 0.0))  # Move away from robot gets remaining prob
-        else:  # Same row
-            north_pos = (opp_row - 1, opp_col)
-            if self._is_valid_position(north_pos):
-                y_moves.append((north_pos, 0.0))
-            south_pos = (opp_row + 1, opp_col)
-            if self._is_valid_position(south_pos):
-                y_moves.append((south_pos, 0.0))
-
-        # Combine moves and normalize probabilities
-        move_probs = []
-        total_x_prob = 0.4 if any(prob > 0 for _, prob in x_moves) else 0.0
-        total_y_prob = 0.4 if any(prob > 0 for _, prob in y_moves) else 0.0
-        stay_prob = 0.2
-
-        # Add x-direction moves
-        for pos, prob in x_moves:
-            if prob > 0:  # Toward robot
-                move_probs.append((pos, prob))
-            elif total_x_prob > 0:  # Away from robot gets remaining x-prob
-                remaining_x_prob = 0.0  # No probability for away moves in Julia model
-                move_probs.append((pos, remaining_x_prob))
-
-        # Add y-direction moves
-        for pos, prob in y_moves:
-            if prob > 0:  # Toward robot
-                move_probs.append((pos, prob))
-            elif total_y_prob > 0:  # Away from robot gets remaining y-prob
-                remaining_y_prob = 0.0  # No probability for away moves in Julia model
-                move_probs.append((pos, remaining_y_prob))
-
-        # Add stay probability
-        move_probs.append((current_opp, stay_prob))
-
-        # Normalize probabilities to handle blocked moves
-        actual_total = sum(prob for _, prob in move_probs if prob > 0)
-        if actual_total < 1.0:
-            # Redistribute remaining probability to staying
-            stay_index = len(move_probs) - 1
-            move_probs[stay_index] = (current_opp, stay_prob + (1.0 - actual_total))
-
-        # Filter out zero probability moves
-        move_probs = [(pos, prob) for pos, prob in move_probs if prob > 0]
-
-        return move_probs
+        # Combine and normalize
+        return self._normalize_move_probabilities(x_moves + y_moves, current_opp, stay_prob=0.2)
 
     def sample(self, n_samples: int = 1) -> List[LaserTagState]:
         """Sample next states from the transition model."""
