@@ -1,7 +1,7 @@
 """Module for RockSample POMDP environment.
 
 This module provides the RockSample POMDP environment implementation based on the
-classic rock sampling problem, aligned with the Julia RockSample.jl implementation.
+classic rock sampling problem.
 
 The environment involves a robot navigating a grid world with rocks that are either
 good or bad. The robot must use a noisy sensor to determine rock quality and decide
@@ -196,7 +196,7 @@ class RockSampleObservationModel(ObservationModel):
 
 
 class RockSamplePOMDP(DiscreteActionsEnvironment):
-    """RockSample POMDP environment aligned with Julia RockSample.jl.
+    """RockSample POMDP environment
 
     This environment implements the classic rock sampling problem where a robot
     must navigate a grid, use sensors to evaluate rocks, and decide which ones
