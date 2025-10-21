@@ -881,8 +881,8 @@ def test_numpy_array_observation_comparison():
     obs3 = np.array([0.6, 0.5])
 
     # Test observation equality
-    assert environment.is_equal_observation(obs1, obs2) == True
-    assert environment.is_equal_observation(obs1, obs3) == False
+    assert environment.is_equal_observation(obs1, obs2) is True
+    assert environment.is_equal_observation(obs1, obs3) is False
 
     # Test that POMCP_DPW can handle these observations
     action_sampler = MockActionSampler(["up", "down"])

@@ -696,13 +696,13 @@ class TestOptimizeAndEvaluatePlannersPBS:
         assert pbs_call_kwargs["walltime"] == "08:00:00"
         assert pbs_call_kwargs["job_extra"] == job_extra
         assert pbs_call_kwargs["n_jobs"] == 8
-        assert pbs_call_kwargs["enable_dashboard"] == False
+        assert pbs_call_kwargs["enable_dashboard"] is False
         assert pbs_call_kwargs["dashboard_address"] == "127.0.0.1"
         assert pbs_call_kwargs["dashboard_port"] == 8888
         assert pbs_call_kwargs["dashboard_prefix"] == "/custom"
         assert pbs_call_kwargs["confidence_interval_level"] == 0.9
         assert pbs_call_kwargs["alpha"] == 0.01
-        assert pbs_call_kwargs["debug"] == True
+        assert pbs_call_kwargs["debug"] is True
 
         # Verify evaluation was called with custom parameters
         mock_evaluate.assert_called_once()
@@ -713,7 +713,7 @@ class TestOptimizeAndEvaluatePlannersPBS:
         assert eval_call_kwargs["n_jobs"] == 4
         assert eval_call_kwargs["confidence_interval_level"] == 0.9
         assert eval_call_kwargs["alpha"] == 0.01
-        assert eval_call_kwargs["debug"] == True
+        assert eval_call_kwargs["debug"] is True
 
         # Verify PBS configuration in result summary
         pbs_config = result["summary"]["pbs_configuration"]
@@ -992,7 +992,7 @@ class TestOptimizeAndEvaluatePlannersPBS:
         assert call_kwargs["walltime"] == "01:00:00"
         assert call_kwargs["job_extra"] is None
         assert call_kwargs["n_jobs"] == -1  # optimization_n_jobs default
-        assert call_kwargs["enable_dashboard"] == True
+        assert call_kwargs["enable_dashboard"] is True
         assert call_kwargs["dashboard_address"] == "0.0.0.0"
         assert call_kwargs["dashboard_port"] == 8787
         assert call_kwargs["dashboard_prefix"] is None
@@ -1467,7 +1467,7 @@ class TestOptimizePlannerHyperparametersPBS:
         assert task_manager_config.processes == 2
         assert task_manager_config.walltime == "04:00:00"
         assert task_manager_config.job_extra == job_extra
-        assert task_manager_config.enable_dashboard == False
+        assert task_manager_config.enable_dashboard is False
         assert task_manager_config.dashboard_address == "127.0.0.1"
         assert task_manager_config.dashboard_port == 8888
         assert task_manager_config.dashboard_prefix == "/custom"
@@ -1657,7 +1657,7 @@ class TestOptimizePlannerHyperparametersPBS:
         assert task_manager_config.processes == 1  # Default
         assert task_manager_config.walltime == "01:00:00"  # Default
         assert task_manager_config.job_extra is None  # Default
-        assert task_manager_config.enable_dashboard == True  # Default
+        assert task_manager_config.enable_dashboard is True  # Default
         assert task_manager_config.dashboard_address == "0.0.0.0"  # Default
         assert task_manager_config.dashboard_port == 8787  # Default
 
@@ -1795,13 +1795,13 @@ class TestEvaluateOptimizedPlanner:
         call_kwargs = mock_simulator_class.call_args[1]
         assert call_kwargs["cache_dir_path"] == temp_dir
         assert call_kwargs["experiment_name"] == "planner_evaluation"
-        assert call_kwargs["debug"] == False
+        assert call_kwargs["debug"] is False
 
         # Verify evaluation was run
         mock_simulator.compare_multiple_environments_policies.assert_called_once()
         eval_kwargs = mock_simulator.compare_multiple_environments_policies.call_args[1]
         assert eval_kwargs["n_jobs"] == 1
-        assert eval_kwargs["cache_visualizations"] == True
+        assert eval_kwargs["cache_visualizations"] is True
 
         # Verify results
         assert results == mock_episode_results
@@ -1851,7 +1851,7 @@ class TestEvaluateOptimizedPlanner:
         # Verify simulator creation with custom parameters
         call_kwargs = mock_simulator_class.call_args[1]
         assert call_kwargs["experiment_name"] == "CustomEvaluation"
-        assert call_kwargs["debug"] == True
+        assert call_kwargs["debug"] is True
 
         # Verify evaluation run params
         eval_call_args = mock_simulator.compare_multiple_environments_policies.call_args
@@ -2417,7 +2417,7 @@ class TestHyperParamRunnerUseCases:
             assert opt_call_kwargs["n_jobs"] == 2  # Function uses n_jobs, not optimization_n_jobs
             assert opt_call_kwargs["confidence_interval_level"] == 0.9
             assert opt_call_kwargs["alpha"] == 0.1
-            assert opt_call_kwargs["debug"] == True
+            assert opt_call_kwargs["debug"] is True
 
     def test_optimize_planner_hyperparameters_edge_cases(self, temp_dir):
         """Test optimize_planner_hyperparameters with edge cases and error conditions.
@@ -2576,7 +2576,7 @@ class TestHyperParamRunnerUseCases:
             mock_sim.assert_called_once()
             call_kwargs = mock_sim.call_args[1]
             assert call_kwargs["experiment_name"] == "custom_debug_evaluation"
-            assert call_kwargs["debug"] == True
+            assert call_kwargs["debug"] is True
 
     def test_create_numerical_hyperparameter_ranges_comprehensive(self):
         """Test create_numerical_hyperparameter_ranges with comprehensive scenarios.

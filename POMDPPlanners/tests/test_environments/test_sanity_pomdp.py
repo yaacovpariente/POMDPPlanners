@@ -150,7 +150,7 @@ class TestSanityPOMDPEquality:
         """
         assert sanity_pomdp != "not an environment"
         assert sanity_pomdp != 42
-        assert sanity_pomdp != None
+        assert sanity_pomdp is not None
 
 
 class TestSanityPOMDPConfigId:

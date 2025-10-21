@@ -123,7 +123,7 @@ class TestCartPolePOMDPEquality:
         """
         assert base_cartpole_environment != "not an environment"
         assert base_cartpole_environment != 42
-        assert base_cartpole_environment != None
+        assert base_cartpole_environment is not None
 
     def test_missing_attributes(self, base_cartpole_environment: CartPolePOMDP):
         """Test equality when attributes are missing.

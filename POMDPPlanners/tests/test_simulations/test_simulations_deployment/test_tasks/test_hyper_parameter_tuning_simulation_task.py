@@ -123,8 +123,8 @@ def test_hyper_parameter_tuning_task_creation(environment, hyper_parameters, tem
         ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
     ]
     assert task.cache_dir == temp_cache_dir
-    assert task.debug == False
-    assert task.console_output == False
+    assert task.debug is False
+    assert task.console_output is False
     assert task.n_jobs == 1
     assert task.confidence_interval_level == 0.95
     assert task.alpha == 0.05
