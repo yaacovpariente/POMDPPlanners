@@ -33,7 +33,7 @@ class DiskCacheDB(DataBaseInterface):
             eviction_policy=eviction_policy,
         )
 
-        self.logger = get_logger(name=f"disk_cache_db", debug=debug, output_dir=Path(cache_dir))
+        self.logger = get_logger(name="disk_cache_db", debug=debug, output_dir=Path(cache_dir))
 
     def get(self, key: str) -> Any:
         """Retrieve a value from the cache.

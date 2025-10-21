@@ -11,6 +11,7 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import List, cast
+from unittest.mock import Mock, patch
 
 import mlflow
 import numpy as np
@@ -28,6 +29,15 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     OptimizedPolicyResult,
 )
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
+    PBSConfig,
+)
+from POMDPPlanners.simulations.simulations_deployment.task_managers import (
+    PBSTaskManager,
+)
+from POMDPPlanners.simulations.workflows.optimization import (
+    run_hyperparameter_optimization_pbs,
+)
 from POMDPPlanners.planners.sparse_sampling_planner import (
     StandardSparseSamplingDiscreteActionsPlanner,
 )
@@ -1412,11 +1422,7 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
         try:
             # Attempt to create task manager
             with pbs_config.create_task_manager() as tm:
-                # Import here to access PBS-specific attributes
-                from POMDPPlanners.simulations.simulations_deployment.task_managers import (
-                    PBSTaskManager,
-                )
-
+                # Access PBS-specific attributes
                 task_manager = cast(PBSTaskManager, tm)
                 # If we get here, dashboard_prefix is supported
                 assert task_manager.dashboard_prefix == "/test-prefix"
@@ -1457,11 +1463,7 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
         # Create and cleanup cluster using context manager
         try:
             with pbs_config.create_task_manager() as tm:
-                # Import here to access PBS-specific attributes
-                from POMDPPlanners.simulations.simulations_deployment.task_managers import (
-                    PBSTaskManager,
-                )
-
+                # Access PBS-specific attributes
                 task_manager = cast(PBSTaskManager, tm)
                 # Verify cluster was created
                 assert task_manager.client is not None, "Client should be initialized"
@@ -1517,11 +1519,7 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
 
         try:
             with pbs_config.create_task_manager() as tm:
-                # Import here to access PBS-specific attributes
-                from POMDPPlanners.simulations.simulations_deployment.task_managers import (
-                    PBSTaskManager,
-                )
-
+                # Access PBS-specific attributes
                 task_manager = cast(PBSTaskManager, tm)
                 # Verify cluster was created
                 assert task_manager.client is not None
@@ -1564,19 +1562,6 @@ class TestHyperParameterOptimizationPBSIntegration:
 
         Test type: integration
         """
-        from POMDPPlanners.simulations.workflows.optimization import (
-            run_hyperparameter_optimization_pbs,
-        )
-        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-        from POMDPPlanners.core.belief import get_initial_belief
-        from POMDPPlanners.core.simulation import NumericalHyperParameter
-        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
-            HyperParameterRunParams,
-            HyperParameterOptimizationDirection,
-            HyperParamPlannerConfig,
-        )
-        from unittest.mock import patch, Mock
-
         # Create test environment
         tiger = TigerPOMDP(discount_factor=0.95)
         initial_belief = get_initial_belief(tiger, n_particles=5)
@@ -1631,10 +1616,6 @@ class TestHyperParameterOptimizationPBSIntegration:
             # Verify optimizer was called with correct PBS config
             mock_optimizer_class.assert_called_once()
             call_kwargs = mock_optimizer_class.call_args[1]
-
-            from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
-                PBSConfig,
-            )
 
             task_manager_config = call_kwargs["task_manager_config"]
 

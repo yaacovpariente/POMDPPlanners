@@ -7,6 +7,7 @@ This module tests the MountainCar POMDP environment, focusing on:
 - Terminal conditions
 """
 
+import copy
 import random
 
 import numpy as np
@@ -744,8 +745,6 @@ class TestMountainCarPOMDPEquality:
 
         Test type: unit
         """
-        import copy
-
         copied_env = copy.deepcopy(base_mountain_car_environment)
         assert copied_env == base_mountain_car_environment
         assert base_mountain_car_environment == copied_env  # Test symmetry

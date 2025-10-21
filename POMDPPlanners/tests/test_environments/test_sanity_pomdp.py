@@ -8,6 +8,7 @@ This module tests the Sanity POMDP environment, focusing on:
 """
 
 import random
+from pathlib import Path
 from unittest.mock import Mock
 
 import numpy as np
@@ -83,8 +84,6 @@ class TestSanityPOMDPInitialization:
 
         Test type: unit
         """
-        from pathlib import Path
-
         output_dir = Path("/tmp/test_output")
         env = SanityPOMDP(discount_factor=0.95, output_dir=output_dir)
         assert env.output_dir == output_dir

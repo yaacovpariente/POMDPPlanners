@@ -7,6 +7,7 @@ This module tests the CartPole POMDP environment, focusing on:
 - Terminal conditions
 """
 
+import copy
 import random
 
 import numpy as np
@@ -158,8 +159,6 @@ class TestCartPolePOMDPEquality:
 
         Test type: unit
         """
-        import copy
-
         copied_env = copy.deepcopy(base_cartpole_environment)
         assert copied_env == base_cartpole_environment
         assert base_cartpole_environment == copied_env  # Test symmetry

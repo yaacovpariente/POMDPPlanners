@@ -5,6 +5,7 @@ implementations (LocalSimulationsAPI, DaskSimulationsAPI, PBSSimulationsAPI).
 """
 
 import pytest
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -41,8 +42,6 @@ def temp_cache_dir():
         time.sleep(0.1)
         # Ensure cleanup happens even if test fails
         try:
-            import shutil
-
             shutil.rmtree(temp_dir, ignore_errors=True)
         except Exception:
             pass

@@ -125,7 +125,7 @@ class TestEnvironmentConfigs:
 
         # Verify types
         assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert hasattr(belief, "particles"), f"Belief should have particles attribute"
+        assert hasattr(belief, "particles"), "Belief should have particles attribute"
 
         # Verify basic properties
         assert pomdp.discount_factor is not None
@@ -153,7 +153,7 @@ class TestEnvironmentConfigs:
 
         # Verify types
         assert isinstance(pomdp, Environment), f"Expected Environment, got {type(pomdp)}"
-        assert hasattr(belief, "particles"), f"Belief should have particles attribute"
+        assert hasattr(belief, "particles"), "Belief should have particles attribute"
 
         # Verify basic properties
         assert pomdp.discount_factor is not None
