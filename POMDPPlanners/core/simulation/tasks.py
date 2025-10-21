@@ -243,7 +243,7 @@ class TaskManagerExternalDB(TaskManager):
             logging.Logger: Configured logger instance
         """
         return get_logger(
-            name=f"task_manager",
+            name="task_manager",
             debug=self.logger_debug,
             output_dir=self.cache_dir,
             use_queue=self.use_queue_logger,

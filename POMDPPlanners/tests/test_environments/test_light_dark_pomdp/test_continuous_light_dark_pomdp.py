@@ -9,11 +9,15 @@ This module tests the Continuous Light Dark POMDP environment, focusing on:
 
 import random
 import time
+from typing import cast
 
 import numpy as np
 import pytest
 from scipy.stats import multivariate_normal
 
+from POMDPPlanners.configs.environment_configs import (
+    RiskAverseEnvironmentConfigsAPI,
+)
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.policy import PolicyRunData
@@ -21,8 +25,9 @@ from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
-    StateTransitionModel,
+    ContinuousLightDarkStateTransitionModel,
     RewardModelType,
+    StateTransitionModel,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
     ContinuousLightDarkNormalNoiseObservationModel,
@@ -1698,10 +1703,6 @@ def test_risk_averse_environment_config_start_state_validity():
 
     Test type: integration
     """
-    from POMDPPlanners.configs.environment_configs import (
-        RiskAverseEnvironmentConfigsAPI,
-    )
-
     # Test the configuration that was causing the issue in visualization example
     env_configs = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95)
     (
@@ -1710,11 +1711,6 @@ def test_risk_averse_environment_config_start_state_validity():
     ) = env_configs.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=50)
 
     # Cast to specific type to access attributes
-    from typing import cast
-    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
-        ContinuousLightDarkPOMDPDiscreteActions,
-    )
-
     light_dark_env_typed = cast(ContinuousLightDarkPOMDPDiscreteActions, light_dark_env)
 
     # Check that start state is not terminal
@@ -1734,7 +1730,7 @@ def test_risk_averse_environment_config_start_state_validity():
 
     # The main test has passed - start state is not terminal and obstacles are far enough away
     # This is sufficient to catch the original issue where start state was within obstacle radius
-    print(f"✓ RiskAverseEnvironmentConfigsAPI configuration is valid - start state not terminal")
+    print("✓ RiskAverseEnvironmentConfigsAPI configuration is valid - start state not terminal")
 
 
 def test_environment_configuration_obstacle_placement():
@@ -1824,10 +1820,6 @@ def test_continuous_light_dark_state_transition_model_sample_returns_list_of_num
 
     Test type: unit
     """
-    from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
-        ContinuousLightDarkStateTransitionModel,
-    )
-
     # Set up test parameters
     state = np.array([2.0, 3.0])
     action = np.array([1.0, -0.5])

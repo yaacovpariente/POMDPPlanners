@@ -25,6 +25,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfig,
 )
 from POMDPPlanners.core.simulation.simulation_configs import (
+    EvaluationExperimentConfigCreator,
     PlannerGenerator,
     EnvironmentRunParams,
 )
@@ -1206,10 +1207,6 @@ class TestAllBenchmarkEnvironmentsOnPlannerGeneratorsExperimentConfigCreator:
         )
 
         # Test that it's an instance of the parent class
-        from POMDPPlanners.core.simulation.simulation_configs import (
-            EvaluationExperimentConfigCreator,
-        )
-
         assert isinstance(creator, EvaluationExperimentConfigCreator)
 
         # Test that the inherited method works

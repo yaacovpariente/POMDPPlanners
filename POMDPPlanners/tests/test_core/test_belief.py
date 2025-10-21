@@ -2416,13 +2416,13 @@ def test_weighted_particle_belief_immutable_updates_usage_example():
     assert len(child_beliefs) == 2, f"Expected 2 child beliefs, got {len(child_beliefs)}"
 
     for child_belief in child_beliefs:
-        assert len(child_belief.particles) == 2, f"Each child should have 2 particles"
-        assert len(child_belief.weights) == 2, f"Each child should have 2 weights"
-        assert child_belief.weights[-1] > 0, f"New particle should have positive weight"
+        assert len(child_belief.particles) == 2, "Each child should have 2 particles"
+        assert len(child_belief.weights) == 2, "Each child should have 2 weights"
+        assert child_belief.weights[-1] > 0, "New particle should have positive weight"
 
     # Original belief should remain unchanged
-    assert len(belief.particles) == 1, f"Original belief should still have 1 particle"
-    assert len(belief.weights) == 1, f"Original belief should still have 1 weight"
+    assert len(belief.particles) == 1, "Original belief should still have 1 particle"
+    assert len(belief.weights) == 1, "Original belief should still have 1 weight"
 
 
 def test_weighted_particle_belief_update_strategies_comparison_usage_example():
@@ -2497,12 +2497,12 @@ def test_weighted_particle_belief_mcts_integration_usage_example():
 
     # Verify tree structure
     assert len(belief_nodes) == 2, f"Expected 2 belief nodes, got {len(belief_nodes)}"
-    assert len(action_node.children) == 2, f"Action node should have 2 children"
+    assert len(action_node.children) == 2, "Action node should have 2 children"
 
     for belief_node in belief_nodes:
-        assert len(belief_node.belief.particles) == 5, f"Each child belief should have 5 particles"
-        assert belief_node.parent == action_node, f"Belief node should be child of action node"
-        assert belief_node.observation in possible_observations, f"Invalid observation"
+        assert len(belief_node.belief.particles) == 5, "Each child belief should have 5 particles"
+        assert belief_node.parent == action_node, "Belief node should be child of action node"
+        assert belief_node.observation in possible_observations, "Invalid observation"
 
 
 def test_weighted_particle_belief_weighted_sampling_usage_example():
@@ -2592,13 +2592,13 @@ def test_weighted_particle_belief_custom_particle_types_usage_example():
     # Verify results (from docstring)
     assert isinstance(sampled_state, np.ndarray), f"Expected numpy array, got {type(sampled_state)}"
     assert sampled_state.shape == (4,), f"Expected shape (4,), got {sampled_state.shape}"
-    assert len(new_belief.particles) == 4, f"Expected 4 particles after update"
-    assert len(new_belief.weights) == 4, f"Expected 4 weights after update"
+    assert len(new_belief.particles) == 4, "Expected 4 particles after update"
+    assert len(new_belief.weights) == 4, "Expected 4 weights after update"
 
     # All particles should be numpy arrays
     for particle in new_belief.particles:
-        assert isinstance(particle, np.ndarray), f"All particles should be numpy arrays"
-        assert particle.shape == (4,), f"All particles should have shape (4,)"
+        assert isinstance(particle, np.ndarray), "All particles should be numpy arrays"
+        assert particle.shape == (4,), "All particles should have shape (4,)"
 
 
 # UnweightedParticleBeliefStateUpdate Usage Example Tests

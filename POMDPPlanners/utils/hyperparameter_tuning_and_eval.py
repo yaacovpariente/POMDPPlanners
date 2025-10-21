@@ -40,6 +40,7 @@ from POMDPPlanners.simulations.simulations_deployment.task_manager_configs impor
     PBSConfig,
 )
 from POMDPPlanners.simulations.simulator import POMDPSimulator
+from POMDPPlanners.planners import POLICY_REGISTRY
 
 # Set up logger for this module
 # The logger will output messages based on the logging level configured by the user
@@ -1339,8 +1340,6 @@ def evaluate_optimized_planner(
     _log_simulator_creation(eval_cache_dir, experiment_name, debug)
 
     # Create task manager config for joblib
-    from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
-
     task_manager_config = JoblibConfig(n_jobs=n_jobs)
 
     with POMDPSimulator(
@@ -1466,8 +1465,6 @@ def evaluate_multiple_optimized_planners(
         logger.debug("Experiment name: %s, Task manager: JoblibConfig", experiment_name)
 
     # Create task manager config for joblib
-    from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
-
     task_manager_config = JoblibConfig(n_jobs=n_jobs)
 
     with POMDPSimulator(
@@ -1704,8 +1701,6 @@ def get_benchmark_hyperparameter_planners(
             >>> print(f"Compatible planners: {[p.__name__ for p in compatible_planners]}")
             Compatible planners: ['POMCP', 'StandardSparseSamplingDiscreteActionsPlanner', 'SparsePFT', 'POMCPOW', 'PFT_DPW', 'POMCP_DPW', 'DiscreteActionSequencesPlanner']
     """
-    from POMDPPlanners.planners import POLICY_REGISTRY
-
     if debug:
         logger.debug("Finding compatible planners for environment: %s", env.name)
         logger.debug(

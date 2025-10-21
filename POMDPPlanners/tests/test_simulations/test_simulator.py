@@ -17,6 +17,8 @@ import psutil
 import mlflow
 import logging
 import time
+import inspect
+from inspect import signature
 from pathlib import Path
 
 import numpy as np
@@ -1366,7 +1368,7 @@ def test_simulator_writes_files_to_output_directory(temp_cache_dir):
             [d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32]
         )  # MLflow run IDs are 32 chars
 
-    assert len(run_dirs) >= 1, f"No MLflow run directories found in experiment directories"
+    assert len(run_dirs) >= 1, "No MLflow run directories found in experiment directories"
 
     # 4. Verify artifacts directory exists in at least one run
     artifacts_found = False
@@ -1622,8 +1624,6 @@ def test_simulator_caches_visualizations_with_continuous_light_dark_pomdp(
     ), "cache_visualization should be callable"
 
     # 3. Test that the method signature is compatible with simulator expectations
-    from inspect import signature
-
     cache_viz_sig = signature(environment.cache_visualization)
     param_names = list(cache_viz_sig.parameters.keys())
 
@@ -2125,7 +2125,7 @@ def test_create_and_log_environment_visualizations_creates_cache_directory(
         for exp_dir in experiment_dirs:
             run_dirs.extend([d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32])
 
-        assert len(run_dirs) >= 1, f"No MLflow run directories found in experiment directories"
+        assert len(run_dirs) >= 1, "No MLflow run directories found in experiment directories"
 
         # Verify at least one run has artifacts directory
         artifacts_found = False
@@ -2277,7 +2277,7 @@ def test_create_and_log_environment_visualizations_parallel_execution(temp_cache
     for exp_dir in experiment_dirs:
         run_dirs.extend([d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32])
 
-    assert len(run_dirs) >= 1, f"No MLflow run directories found in experiment directories"
+    assert len(run_dirs) >= 1, "No MLflow run directories found in experiment directories"
 
     # Verify at least one run has artifacts directory
     artifacts_found = False
@@ -2393,7 +2393,7 @@ def test_create_and_log_environment_visualizations_mlflow_integration(temp_cache
     for exp_dir in experiment_dirs:
         run_dirs.extend([d for d in exp_dir.iterdir() if d.is_dir() and len(d.name) == 32])
 
-    assert len(run_dirs) >= 1, f"No MLflow run directories found in experiment directories"
+    assert len(run_dirs) >= 1, "No MLflow run directories found in experiment directories"
 
     # Verify at least one run has artifacts directory
     artifacts_found = False

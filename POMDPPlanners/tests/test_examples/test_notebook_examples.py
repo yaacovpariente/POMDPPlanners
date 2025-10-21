@@ -17,6 +17,11 @@ from pathlib import Path
 
 import pytest
 
+try:
+    import papermill as pm
+except ImportError:
+    pm = None
+
 
 class TestNotebookExamples:
     """Test cases for Jupyter notebook examples."""
@@ -189,9 +194,7 @@ class TestNotebookExamples:
         notebook_path = examples_dir / "basic_usage.ipynb"
         assert notebook_path.exists(), "basic_usage.ipynb does not exist"
 
-        try:
-            import papermill as pm
-        except ImportError:
+        if pm is None:
             pytest.skip("papermill not available for smoke tests")
 
         # Load notebook to check structure

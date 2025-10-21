@@ -1,3 +1,4 @@
+import gc
 import logging
 import random
 import shutil
@@ -125,8 +126,6 @@ def temp_cache_dir():
         try:
             if temp_cache_dir.exists():
                 # Force close any open file handles
-                import gc
-
                 gc.collect()
                 # Try to remove the directory
                 shutil.rmtree(temp_cache_dir, ignore_errors=True)

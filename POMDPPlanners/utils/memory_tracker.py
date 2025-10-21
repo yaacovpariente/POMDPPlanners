@@ -314,7 +314,7 @@ class MemoryTracker:
                         f"{cp['percent']:.1f}% at {cp['timestamp']:.2f}s\n"
                     )
 
-                f.write(f"\nSummary:\n")
+                f.write("\nSummary:\n")
                 f.write("-" * 20 + "\n")
                 f.write(f"Peak Usage: {self.get_peak_usage():.1f} MB\n")
                 f.write(f"Total Growth: {self.get_memory_growth():.1f} MB\n")

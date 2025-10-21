@@ -6,6 +6,7 @@ import random
 from pathlib import Path
 
 import numpy as np
+import POMDPPlanners
 from packaging import version
 
 np.random.seed(42)
@@ -24,8 +25,6 @@ def test_package_installed():
     Test type: unit
     """
     try:
-        import POMDPPlanners
-
         assert POMDPPlanners.__version__ == "0.1.0"
     except ImportError as e:
         raise AssertionError(f"Failed to import POMDPPlanners: {e}")
