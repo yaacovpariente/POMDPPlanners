@@ -14,7 +14,7 @@ Key Features:
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type, cast
 
 import pandas as pd
 
@@ -1147,6 +1147,139 @@ def optimize_planner_hyperparameters_pbs(
         return []
 
 
+def _log_evaluation_start(
+    eval_cache_dir: Path,
+    policy_name: str,
+    num_episodes: int,
+    num_steps: int,
+    n_jobs: int,
+    debug: bool,
+    verbose: bool,
+) -> None:
+    """Log evaluation start information."""
+    if debug:
+        logger.debug("Evaluation cache directory: %s", eval_cache_dir)
+        logger.debug(
+            "Evaluation parameters: %d episodes, %d steps, %d jobs", num_episodes, num_steps, n_jobs
+        )
+    if verbose:
+        logger.info("Evaluating policy '%s' on %d episodes...", policy_name, num_episodes)
+
+
+def _log_simulator_creation(eval_cache_dir: Path, experiment_name: str, debug: bool) -> None:
+    """Log simulator creation information."""
+    if debug:
+        logger.debug("Creating POMDPSimulator with cache_dir: %s", eval_cache_dir)
+        logger.debug("Experiment name: %s, Task manager: JoblibConfig", experiment_name)
+
+
+def _log_evaluation_results(results: Dict, statistics_df: pd.DataFrame, debug: bool) -> None:
+    """Log evaluation results summary."""
+    if debug:
+        logger.debug(
+            "Evaluation completed, received results for %d environments",
+            len(results) if results else 0,
+        )
+        if statistics_df is not None:
+            logger.debug("Statistics DataFrame shape: %s", statistics_df.shape)
+
+
+def _display_key_metrics(policy_stats: pd.DataFrame, verbose: bool, debug: bool) -> None:
+    """Display key metrics from policy statistics."""
+    if "metric" in policy_stats.columns:
+        key_metrics = ["average_return", "return_cvar", "average_actual_num_steps"]
+        logger.info("\n📈 KEY METRICS:")
+        logger.info("-" * 40)
+
+        for _, row in policy_stats.iterrows():
+            metric_name = row["metric"]
+            if metric_name in key_metrics:
+                logger.info(
+                    "%s: %8.3f [%6.3f, %6.3f]",
+                    metric_name,
+                    row["value"],
+                    row["lower_confidence_bound"],
+                    row["upper_confidence_bound"],
+                )
+    else:
+        logger.info("Available statistics for policy:")
+        for col in policy_stats.columns:
+            if col != "policy":
+                values = policy_stats[col][0] if len(policy_stats) > 0 else None
+                if values is not None and isinstance(values, (int, float)):
+                    logger.info("%s: %8.3f", col, values)
+
+
+def _display_statistics_summary(
+    env_name: str,
+    policy_name: str,
+    policy_histories: List,
+    statistics_df: pd.DataFrame,
+    num_steps: int,
+    eval_cache_dir: Path,
+    verbose: bool,
+    debug: bool,
+) -> None:
+    """Display comprehensive evaluation summary."""
+    logger.info("\n📊 EVALUATION SUMMARY")
+    logger.info("-" * 40)
+    logger.info("Environment: %s", env_name)
+    logger.info("Policy: %s", policy_name)
+    logger.info("Episodes completed: %d", len(policy_histories))
+    logger.info("Steps per episode: %d", num_steps)
+
+    # Display key statistics
+    if not statistics_df.empty:
+        if verbose:
+            logger.info("\n📊 Statistics DataFrame columns: %s", list(statistics_df.columns))
+            logger.info("📊 Statistics DataFrame shape: %s", statistics_df.shape)
+
+        if debug:
+            logger.debug("Processing statistics DataFrame with %d rows", len(statistics_df))
+            logger.debug("DataFrame columns: %s", list(statistics_df.columns))
+
+        if "policy" in statistics_df.columns:
+            policy_stats = statistics_df[statistics_df["policy"] == policy_name]
+            if not policy_stats.empty:
+                # Type assertion: boolean indexing always returns DataFrame
+                _display_key_metrics(cast(pd.DataFrame, policy_stats), verbose, debug)
+        else:
+            logger.info("\n📈 AVAILABLE STATISTICS:")
+            logger.info("-" * 40)
+            logger.info("DataFrame columns: %s", list(statistics_df.columns))
+            logger.info("First few rows:")
+            logger.info(statistics_df.head())
+
+    # Calculate basic episode statistics
+    if debug:
+        logger.debug("Calculating episode statistics for %d episodes", len(policy_histories))
+
+    episode_returns = []
+    episode_lengths = []
+
+    for history in policy_histories:
+        valid_rewards = [step.reward for step in history.history if step.reward is not None]
+        episode_returns.append(sum(valid_rewards) if valid_rewards else 0.0)
+        episode_lengths.append(len(history.history))
+
+    if debug:
+        logger.debug(
+            "Episode returns: %d values, lengths: %d values",
+            len(episode_returns),
+            len(episode_lengths),
+        )
+
+    logger.info("\n📋 EPISODE STATISTICS:")
+    logger.info("-" * 40)
+    logger.info("Average return: %8.3f", sum(episode_returns) / len(episode_returns))
+    logger.info("Best return: %8.3f", max(episode_returns))
+    logger.info("Worst return: %8.3f", min(episode_returns))
+    logger.info("Average length: %8.1f", sum(episode_lengths) / len(episode_lengths))
+
+    logger.info("\n💾 Results saved to: %s", eval_cache_dir)
+    logger.info("🔍 MLflow UI: cd %s && mlflow ui", eval_cache_dir)
+
+
 def evaluate_optimized_planner(
     environment: Environment,
     optimized_policy: Policy,
@@ -1186,14 +1319,10 @@ def evaluate_optimized_planner(
     eval_cache_dir = cache_dir
     eval_cache_dir.mkdir(parents=True, exist_ok=True)
 
-    if debug:
-        logger.debug("Evaluation cache directory: %s", eval_cache_dir)
-        logger.debug(
-            "Evaluation parameters: %d episodes, %d steps, %d jobs", num_episodes, num_steps, n_jobs
-        )
-
-    if verbose:
-        logger.info("Evaluating policy '%s' on %d episodes...", optimized_policy.name, num_episodes)
+    # Log evaluation start
+    _log_evaluation_start(
+        eval_cache_dir, optimized_policy.name, num_episodes, num_steps, n_jobs, debug, verbose
+    )
 
     # Create environment run parameters for evaluation
     eval_params = [
@@ -1206,10 +1335,8 @@ def evaluate_optimized_planner(
         )
     ]
 
-    # Run evaluation using POMDPSimulator
-    if debug:
-        logger.debug("Creating POMDPSimulator with cache_dir: %s", eval_cache_dir)
-        logger.debug("Experiment name: %s, Task manager: JoblibConfig", experiment_name)
+    # Log simulator creation
+    _log_simulator_creation(eval_cache_dir, experiment_name, debug)
 
     # Create task manager config for joblib
     from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
@@ -1226,9 +1353,6 @@ def evaluate_optimized_planner(
     ) as simulator:
         if debug:
             logger.debug("POMDPSimulator created successfully, starting evaluation...")
-
-        # Run the evaluation
-        if debug:
             logger.debug("Running evaluation with POMDPSimulator...")
 
         results, statistics_df = simulator.compare_multiple_environments_policies(
@@ -1239,13 +1363,7 @@ def evaluate_optimized_planner(
             cache_visualizations=True,
         )
 
-        if debug:
-            logger.debug(
-                "Evaluation completed, received results for %d environments",
-                len(results) if results else 0,
-            )
-            if statistics_df is not None:
-                logger.debug("Statistics DataFrame shape: %s", statistics_df.shape)
+        _log_evaluation_results(results, statistics_df, debug)
 
         # Display evaluation summary if verbose
         if verbose:
@@ -1254,111 +1372,16 @@ def evaluate_optimized_planner(
 
             if env_name in results and policy_name in results[env_name]:
                 policy_histories = results[env_name][policy_name]
-
-                logger.info("\n📊 EVALUATION SUMMARY")
-                logger.info("-" * 40)
-                logger.info("Environment: %s", env_name)
-                logger.info("Policy: %s", policy_name)
-                logger.info("Episodes completed: %d", len(policy_histories))
-                logger.info("Steps per episode: %d", num_steps)
-
-                # Display key statistics
-                if not statistics_df.empty:
-                    if verbose:
-                        logger.info(
-                            "\n📊 Statistics DataFrame columns: %s", list(statistics_df.columns)
-                        )
-                        logger.info("📊 Statistics DataFrame shape: %s", statistics_df.shape)
-
-                    if debug:
-                        logger.debug(
-                            "Processing statistics DataFrame with %d rows", len(statistics_df)
-                        )
-                        logger.debug("DataFrame columns: %s", list(statistics_df.columns))
-
-                    # Check if DataFrame has expected structure
-                    if "policy" in statistics_df.columns:
-                        policy_stats = statistics_df[statistics_df["policy"] == policy_name]
-                        if not policy_stats.empty:
-                            logger.info("\n📈 KEY METRICS:")
-                            logger.info("-" * 40)
-
-                            # Check if metric column exists
-                            if "metric" in statistics_df.columns:
-                                # Show important metrics
-                                key_metrics = [
-                                    "average_return",
-                                    "return_cvar",
-                                    "average_actual_num_steps",
-                                ]
-                                for _, row in policy_stats.iterrows():
-                                    metric_name = row["metric"]
-                                    if metric_name in key_metrics:
-                                        value = row["value"]
-                                        ci_lower = row["lower_confidence_bound"]
-                                        ci_upper = row["upper_confidence_bound"]
-                                        logger.info(
-                                            "%s: %8.3f [%6.3f, %6.3f]",
-                                            metric_name,
-                                            value,
-                                            ci_lower,
-                                            ci_upper,
-                                        )
-                            else:
-                                # Alternative: display all available statistics
-                                logger.info("Available statistics for %s:", policy_name)
-                                for col in policy_stats.columns:
-                                    if col != "policy":
-                                        values = (
-                                            policy_stats[col][0] if len(policy_stats) > 0 else None
-                                        )
-                                        if values is not None and isinstance(values, (int, float)):
-                                            logger.info("%s: %8.3f", col, values)
-                    else:
-                        # DataFrame doesn't have expected structure, show what we have
-                        logger.info("\n📈 AVAILABLE STATISTICS:")
-                        logger.info("-" * 40)
-                        logger.info("DataFrame columns: %s", list(statistics_df.columns))
-                        logger.info("First few rows:")
-                        logger.info(statistics_df.head())
-
-                # Calculate basic episode statistics
-                if debug:
-                    logger.debug(
-                        "Calculating episode statistics for %d episodes", len(policy_histories)
-                    )
-
-                episode_returns = []
-                episode_lengths = []
-
-                for history in policy_histories:
-                    # Filter out None rewards and handle edge cases
-                    valid_rewards = [
-                        step.reward for step in history.history if step.reward is not None
-                    ]
-                    if valid_rewards:
-                        episode_returns.append(sum(valid_rewards))
-                    else:
-                        episode_returns.append(0.0)  # Default value if no valid rewards
-
-                    episode_lengths.append(len(history.history))
-
-                if debug:
-                    logger.debug(
-                        "Episode returns: %d values, lengths: %d values",
-                        len(episode_returns),
-                        len(episode_lengths),
-                    )
-
-                logger.info("\n📋 EPISODE STATISTICS:")
-                logger.info("-" * 40)
-                logger.info("Average return: %8.3f", sum(episode_returns) / len(episode_returns))
-                logger.info("Best return: %8.3f", max(episode_returns))
-                logger.info("Worst return: %8.3f", min(episode_returns))
-                logger.info("Average length: %8.1f", sum(episode_lengths) / len(episode_lengths))
-
-                logger.info("\n💾 Results saved to: %s", eval_cache_dir)
-                logger.info("🔍 MLflow UI: cd %s && mlflow ui", eval_cache_dir)
+                _display_statistics_summary(
+                    env_name,
+                    policy_name,
+                    policy_histories,
+                    statistics_df,
+                    num_steps,
+                    eval_cache_dir,
+                    verbose,
+                    debug,
+                )
 
     if debug:
         logger.debug("Single evaluation completed, returning results and statistics")
