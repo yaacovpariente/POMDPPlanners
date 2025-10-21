@@ -37,11 +37,11 @@ jobs:
 
     - name: Run linting inside Docker
       run: |
-        docker run --rm pomdpplanners-test:latest pylint POMDPPlanners/core/ POMDPPlanners/environments/ POMDPPlanners/planners/ POMDPPlanners/simulations/ POMDPPlanners/utils/ POMDPPlanners/configs/ --exit-zero
+        docker run --rm --entrypoint pylint pomdpplanners-test:latest POMDPPlanners/core/ POMDPPlanners/environments/ POMDPPlanners/planners/ POMDPPlanners/simulations/ POMDPPlanners/utils/ POMDPPlanners/configs/ --exit-zero
 
     - name: Run code formatting check inside Docker
       run: |
-        docker run --rm pomdpplanners-test:latest black --check POMDPPlanners/core/ POMDPPlanners/environments/ POMDPPlanners/planners/ POMDPPlanners/simulations/ POMDPPlanners/utils/ POMDPPlanners/configs/
+        docker run --rm --entrypoint black pomdpplanners-test:latest --check POMDPPlanners/core/ POMDPPlanners/environments/ POMDPPlanners/planners/ POMDPPlanners/simulations/ POMDPPlanners/utils/ POMDPPlanners/configs/
 
     - name: Set up Python for pyright
       uses: actions/setup-python@v4
@@ -67,23 +67,23 @@ jobs:
 
     - name: Run unit tests inside Docker (excluding slow tests)
       run: |
-        docker run --rm pomdpplanners-test:latest pytest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing -m "not slow"
+        docker run --rm --entrypoint pytest pomdpplanners-test:latest POMDPPlanners/tests/ -v --cov=POMDPPlanners --cov-report=xml --cov-report=term-missing -m "not slow"
 
     - name: Run notebook smoke tests inside Docker
       run: |
-        docker run --rm pomdpplanners-test:latest pytest POMDPPlanners/tests/test_examples/test_notebook_examples.py -v -m "smoke" --tb=short
+        docker run --rm --entrypoint pytest pomdpplanners-test:latest POMDPPlanners/tests/test_examples/test_notebook_examples.py -v -m "smoke" --tb=short
       continue-on-error: true  # Don't fail CI if smoke tests have issues, but show results
 
     - name: Run doctests inside Docker
       run: |
-        docker run --rm pomdpplanners-test:latest pytest --doctest-modules POMDPPlanners/core/ POMDPPlanners/environments/ POMDPPlanners/planners/ POMDPPlanners/simulations/ POMDPPlanners/utils/ POMDPPlanners/configs/ -v
+        docker run --rm --entrypoint pytest pomdpplanners-test:latest --doctest-modules POMDPPlanners/core/ POMDPPlanners/environments/ POMDPPlanners/planners/ POMDPPlanners/simulations/ POMDPPlanners/utils/ POMDPPlanners/configs/ -v
 
 
     # Visualization examples removed - legacy files not available
 
     - name: Build documentation inside Docker
       run: |
-        docker run --rm -w /app/docs pomdpplanners-test:latest sphinx-build -b html . _build/html
+        docker run --rm --entrypoint sphinx-build pomdpplanners-test:latest -b html docs docs/_build/html
       continue-on-error: true  # Don't fail the build if docs have warnings
 
     - name: Build and push production image
