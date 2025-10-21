@@ -13,8 +13,6 @@ The LaserTag problem features:
 - Step cost for each movement action
 - Opponent moves with 0.4 prob toward robot in x-dir, 0.4 prob toward robot in y-dir, 0.2 prob stay
 
-Based on the LaserTag.jl implementation from: https://github.com/JuliaPOMDP/LaserTag.jl
-
 Classes:
     LaserTagState: State representation with robot and opponent positions
     LaserTagStateTransition: State transition model for robot and opponent movement
@@ -240,7 +238,7 @@ class LaserTagStateTransition(StateTransitionModel):
     ) -> List[Tuple[Tuple[int, int], float]]:
         """Get opponent's movement probabilities based on robot position.
 
-        Uses Julia LaserTag.jl movement model:
+        Uses the following movement model:
         - 0.4 probability to move in x-direction (toward/away from robot)
         - 0.4 probability to move in y-direction (toward/away from robot)
         - 0.2 probability to stay in place
