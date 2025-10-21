@@ -15,7 +15,7 @@ Classes:
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
 from PIL import Image, ImageDraw
@@ -855,14 +855,184 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         """Check if two observations are equal."""
         return observation1 == observation2
 
+    def _check_episode_win_status(self, final_state: PacManState) -> int:
+        """Check if the episode was won (all pellets collected and terminal)."""
+        won = final_state.terminal and len(final_state.pellets) == 0
+        return 1 if won else 0
+
+    def _count_pellets_collected(self, final_state: PacManState) -> int:
+        """Count the number of pellets collected during the episode."""
+        initial_pellets = len(self.initial_pellets)
+        remaining_pellets = len(final_state.pellets)
+        return initial_pellets - remaining_pellets
+
+    def _calculate_manhattan_distance(self, pos1: Tuple[int, int], pos2: Tuple[int, int]) -> float:
+        """Calculate Manhattan distance between two positions."""
+        return float(abs(pos1[0] - pos2[0]) + abs(pos1[1] - pos2[1]))
+
+    def _get_closest_ghost_distance(
+        self, pacman_pos: Tuple[int, int], ghost_positions: Sequence[Tuple[int, int]]
+    ) -> Optional[float]:
+        """Get the distance to the closest ghost from PacMan's position."""
+        if not ghost_positions:
+            return None
+
+        ghost_distances = [
+            self._calculate_manhattan_distance(pacman_pos, ghost_pos)
+            for ghost_pos in ghost_positions
+        ]
+        return min(ghost_distances)
+
+    def _is_collision(
+        self, pacman_pos: Tuple[int, int], ghost_positions: Sequence[Tuple[int, int]]
+    ) -> bool:
+        """Check if PacMan is at the same position as any ghost."""
+        return pacman_pos in ghost_positions
+
+    def _collect_step_distances_and_collisions(self, history: History) -> Tuple[List[float], int]:
+        """Collect distances to closest ghost and collision count from episode history."""
+        episode_distances = []
+        episode_collisions = 0
+
+        for step_data in history.history:
+            if isinstance(step_data.state, PacManState):
+                pacman_pos = step_data.state.pacman_pos
+                ghost_positions = step_data.state.ghost_positions
+
+                # Track distance to closest ghost
+                closest_distance = self._get_closest_ghost_distance(pacman_pos, ghost_positions)
+                if closest_distance is not None:
+                    episode_distances.append(closest_distance)
+
+                # Count collisions
+                if self._is_collision(pacman_pos, ghost_positions):
+                    episode_collisions += 1
+
+        return episode_distances, episode_collisions
+
+    def _process_episode_metrics(self, history: History) -> Dict[str, Any]:
+        """Process metrics for a single episode."""
+        metrics_data = {
+            "episode_length": len(history.history),
+            "won": 0,
+            "pellets_collected": 0,
+            "avg_distance": None,
+            "collisions": 0,
+        }
+
+        if not history.history:
+            return metrics_data
+
+        final_state = history.history[-1].state
+
+        if not isinstance(final_state, PacManState):
+            return metrics_data
+
+        # Calculate win status and pellets collected
+        metrics_data["won"] = self._check_episode_win_status(final_state)
+        metrics_data["pellets_collected"] = self._count_pellets_collected(final_state)
+
+        # Collect distances and collisions from episode steps
+        episode_distances, episode_collisions = self._collect_step_distances_and_collisions(history)
+
+        if episode_distances:
+            metrics_data["avg_distance"] = float(np.mean(episode_distances))
+
+        metrics_data["collisions"] = episode_collisions
+        return metrics_data
+
+    def _create_metric_value(self, name: str, values: List[float]) -> Optional[MetricValue]:
+        """Create a MetricValue with confidence intervals."""
+        if not values:
+            return None
+
+        avg_value = float(np.mean(values))
+        ci_low, ci_high = confidence_interval(values)
+        return MetricValue(
+            name=name,
+            value=avg_value,
+            lower_confidence_bound=ci_low,
+            upper_confidence_bound=ci_high,
+        )
+
+    def _collect_distances_per_ghost_from_episode(self, history: History) -> List[List[float]]:
+        """Collect distances to each ghost for all steps in an episode.
+
+        Returns a list where index i contains all distances to ghost i throughout the episode.
+        """
+        ghost_distances_per_episode: List[List[float]] = [[] for _ in range(self.num_ghosts)]
+
+        for step_data in history.history:
+            if isinstance(step_data.state, PacManState):
+                pacman_pos = step_data.state.pacman_pos
+                for ghost_id, ghost_pos in enumerate(step_data.state.ghost_positions):
+                    if ghost_id < len(ghost_distances_per_episode):
+                        distance = self._calculate_manhattan_distance(pacman_pos, ghost_pos)
+                        ghost_distances_per_episode[ghost_id].append(distance)
+
+        return ghost_distances_per_episode
+
+    def _calculate_average_distances_per_ghost(
+        self, ghost_distances_per_episode: List[List[float]]
+    ) -> List[float]:
+        """Calculate average distance to each ghost for an episode."""
+        return [
+            float(np.mean(dist_list)) if dist_list else 0.0
+            for dist_list in ghost_distances_per_episode
+        ]
+
+    def _aggregate_episode_distances_by_ghost(self, histories: List[History]) -> List[List[float]]:
+        """Aggregate average distances per ghost across all episodes.
+
+        Returns a list where index i contains average distances to ghost i from each episode.
+        """
+        per_ghost_avg_distances: List[List[float]] = []
+
+        for history in histories:
+            if not history.history:
+                continue
+
+            ghost_distances = self._collect_distances_per_ghost_from_episode(history)
+            episode_ghost_avgs = self._calculate_average_distances_per_ghost(ghost_distances)
+            per_ghost_avg_distances.append(episode_ghost_avgs)
+
+        return per_ghost_avg_distances
+
+    def _create_metrics_for_each_ghost(
+        self, per_ghost_avg_distances: List[List[float]]
+    ) -> List[MetricValue]:
+        """Create MetricValue objects for each ghost's distance statistics."""
+        metrics = []
+
+        for ghost_id in range(self.num_ghosts):
+            ghost_distance_values = [
+                episode_avgs[ghost_id]
+                for episode_avgs in per_ghost_avg_distances
+                if ghost_id < len(episode_avgs)
+            ]
+            metric = self._create_metric_value(
+                f"avg_pacman_ghost_{ghost_id}_distance", ghost_distance_values
+            )
+            if metric:
+                metrics.append(metric)
+
+        return metrics
+
+    def _compute_per_ghost_distance_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute per-ghost distance metrics for multi-ghost scenarios."""
+        per_ghost_avg_distances = self._aggregate_episode_distances_by_ghost(histories)
+
+        if not per_ghost_avg_distances:
+            return []
+
+        return self._create_metrics_for_each_ghost(per_ghost_avg_distances)
+
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         """Compute environment-specific metrics."""
         if not histories:
             return []
 
-        metrics = []
-
-        # Calculate win rate (all pellets collected)
+        # Collect metrics from all episodes
         wins = []
         pellets_collected = []
         episode_lengths = []
@@ -870,174 +1040,34 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         collision_encounters = []
 
         for history in histories:
-            episode_lengths.append(len(history.history))
-            final_state = history.history[-1].state if history.history else None
+            episode_data = self._process_episode_metrics(history)
+            episode_lengths.append(episode_data["episode_length"])
+            wins.append(episode_data["won"])
+            pellets_collected.append(episode_data["pellets_collected"])
+            collision_encounters.append(episode_data["collisions"])
 
-            if isinstance(final_state, PacManState):
-                # Check if won (no pellets remaining)
-                won = final_state.terminal and len(final_state.pellets) == 0
-                wins.append(1 if won else 0)
+            if episode_data["avg_distance"] is not None:
+                pacman_ghost_distances.append(episode_data["avg_distance"])
 
-                # Count pellets collected
-                initial_pellets = len(self.initial_pellets)
-                remaining_pellets = len(final_state.pellets)
-                collected = initial_pellets - remaining_pellets
-                pellets_collected.append(collected)
+        # Create standard metrics using helper
+        metrics = []
+        metric_definitions = [
+            ("win_rate", wins),
+            ("avg_pellets_collected", pellets_collected),
+            ("avg_episode_length", episode_lengths),
+            ("avg_pacman_closest_ghost_distance", pacman_ghost_distances),
+            ("avg_collision_encounters", collision_encounters),
+        ]
 
-                # Calculate average distance between PacMan and closest ghost throughout episode
-                # and count collision encounters
-                episode_distances = []
-                episode_collisions = 0
-                per_ghost_distances: List[List[float]] = [
-                    [] for _ in range(len(self.initial_ghost_positions))
-                ]
-
-                for step_data in history.history:
-                    if isinstance(step_data.state, PacManState):
-                        pacman_pos = step_data.state.pacman_pos
-
-                        # Calculate distances to all ghosts
-                        ghost_distances = []
-                        for i, ghost_pos in enumerate(step_data.state.ghost_positions):
-                            distance = abs(pacman_pos[0] - ghost_pos[0]) + abs(
-                                pacman_pos[1] - ghost_pos[1]
-                            )
-                            ghost_distances.append(distance)
-
-                            # Track per-ghost distances
-                            if i < len(per_ghost_distances):
-                                per_ghost_distances[i].append(distance)
-
-                        # Use minimum distance (closest ghost)
-                        min_distance = min(ghost_distances) if ghost_distances else 0
-                        episode_distances.append(min_distance)
-
-                        # Count collision encounters (when PacMan and any ghost are at same position)
-                        if pacman_pos in step_data.state.ghost_positions:
-                            episode_collisions += 1
-
-                if episode_distances:
-                    avg_distance = float(np.mean(episode_distances))
-                    pacman_ghost_distances.append(avg_distance)
-
-                collision_encounters.append(episode_collisions)
-            else:
-                wins.append(0)
-                pellets_collected.append(0)
-                collision_encounters.append(0)
-
-        if wins:
-            win_rate = float(np.mean(wins))
-            ci_low, ci_high = confidence_interval(wins)
-            metrics.append(
-                MetricValue(
-                    name="win_rate",
-                    value=win_rate,
-                    lower_confidence_bound=ci_low,
-                    upper_confidence_bound=ci_high,
-                )
-            )
-
-        if pellets_collected:
-            avg_pellets = float(np.mean(pellets_collected))
-            ci_low, ci_high = confidence_interval(pellets_collected)
-            metrics.append(
-                MetricValue(
-                    name="avg_pellets_collected",
-                    value=avg_pellets,
-                    lower_confidence_bound=ci_low,
-                    upper_confidence_bound=ci_high,
-                )
-            )
-
-        if episode_lengths:
-            avg_length = float(np.mean(episode_lengths))
-            ci_low, ci_high = confidence_interval(episode_lengths)
-            metrics.append(
-                MetricValue(
-                    name="avg_episode_length",
-                    value=avg_length,
-                    lower_confidence_bound=ci_low,
-                    upper_confidence_bound=ci_high,
-                )
-            )
-
-        # Average distance between PacMan and closest ghost metric
-        if pacman_ghost_distances:
-            avg_distance = float(np.mean(pacman_ghost_distances))
-            ci_low, ci_high = confidence_interval(pacman_ghost_distances)
-            metrics.append(
-                MetricValue(
-                    name="avg_pacman_closest_ghost_distance",
-                    value=avg_distance,
-                    lower_confidence_bound=ci_low,
-                    upper_confidence_bound=ci_high,
-                )
-            )
-
-        # Collision encounters metric
-        if collision_encounters:
-            avg_collisions = float(np.mean(collision_encounters))
-            ci_low, ci_high = confidence_interval(collision_encounters)
-            metrics.append(
-                MetricValue(
-                    name="avg_collision_encounters",
-                    value=avg_collisions,
-                    lower_confidence_bound=ci_low,
-                    upper_confidence_bound=ci_high,
-                )
-            )
+        for name, values in metric_definitions:
+            metric = self._create_metric_value(name, values)
+            if metric:
+                metrics.append(metric)
 
         # Multi-ghost specific metrics
         if self.num_ghosts > 1:
-            # Add per-ghost distance metrics
-            per_ghost_avg_distances: List[List[float]] = []
-            for history in histories:
-                if history.history:
-                    ghost_distances_per_episode: List[List[float]] = [
-                        [] for _ in range(self.num_ghosts)
-                    ]
-
-                    for step_data in history.history:
-                        if isinstance(step_data.state, PacManState):
-                            pacman_pos = step_data.state.pacman_pos
-                            for i, ghost_pos in enumerate(step_data.state.ghost_positions):
-                                if i < len(ghost_distances_per_episode):
-                                    ghost_distance: float = float(
-                                        abs(pacman_pos[0] - ghost_pos[0])
-                                        + abs(pacman_pos[1] - ghost_pos[1])
-                                    )
-                                    ghost_distances_per_episode[i].append(ghost_distance)
-
-                    # Calculate average distance per ghost for this episode
-                    episode_ghost_avgs: List[float] = []
-                    for ghost_dist_list in ghost_distances_per_episode:
-                        if ghost_dist_list:
-                            episode_ghost_avgs.append(float(np.mean(ghost_dist_list)))
-                        else:
-                            episode_ghost_avgs.append(0.0)
-
-                    per_ghost_avg_distances.append(episode_ghost_avgs)
-
-            # Create metrics for each ghost
-            if per_ghost_avg_distances:
-                for ghost_id in range(self.num_ghosts):
-                    ghost_distance_values: List[float] = [
-                        episode_avgs[ghost_id]
-                        for episode_avgs in per_ghost_avg_distances
-                        if ghost_id < len(episode_avgs)
-                    ]
-                    if ghost_distance_values:
-                        avg_distance = float(np.mean(ghost_distance_values))
-                        ci_low, ci_high = confidence_interval(ghost_distance_values)
-                        metrics.append(
-                            MetricValue(
-                                name=f"avg_pacman_ghost_{ghost_id}_distance",
-                                value=avg_distance,
-                                lower_confidence_bound=ci_low,
-                                upper_confidence_bound=ci_high,
-                            )
-                        )
+            per_ghost_metrics = self._compute_per_ghost_distance_metrics(histories)
+            metrics.extend(per_ghost_metrics)
 
         return metrics
 
