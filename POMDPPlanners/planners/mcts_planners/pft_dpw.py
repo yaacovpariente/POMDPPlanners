@@ -110,7 +110,7 @@ class PFT_DPW(DoubleProgressiveWideningMCTSPolicy):
         >>> # Planner space information
         >>> space_info = PFT_DPW.get_space_info()
         >>> space_info.action_space.name
-        'CONTINUOUS'
+        'MIXED'
     """
 
     def __init__(
