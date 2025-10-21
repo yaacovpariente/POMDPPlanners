@@ -678,6 +678,127 @@ class AgentPath:
     n_particles: int
 
 
+def _log_or_print(logger: Optional[logging.Logger], message: str, level: str = "warning") -> None:
+    """Log message or print if logger is None."""
+    if logger:
+        if level == "warning":
+            logger.warning(message)
+        elif level == "info":
+            logger.info(message)
+    else:
+        print(f"Warning: {message}" if level == "warning" else message)
+
+
+def _validate_plot_policy_returns_inputs(
+    env: Environment,
+    agent_paths: List[AgentPath],
+    dir_path: Path,
+    n_samples: int,
+    n_jobs: int,
+    logger: Optional[logging.Logger],
+) -> None:
+    """Validate inputs for plot_policy_returns function."""
+    # Type validation
+    if not isinstance(env, Environment):
+        raise TypeError("env must be an instance of Environment")
+    if not isinstance(agent_paths, list):
+        raise TypeError("agent_paths must be a list")
+    if not isinstance(dir_path, Path):
+        raise TypeError("dir_path must be a Path object")
+    if not isinstance(n_samples, int):
+        raise TypeError("n_samples must be an integer")
+    if not isinstance(n_jobs, int):
+        raise TypeError("n_jobs must be an integer")
+    if logger is not None and not isinstance(logger, logging.Logger):
+        raise TypeError("logger must be a logging.Logger instance or None")
+
+    # Value validation
+    if not agent_paths:
+        raise ValueError("agent_paths cannot be empty")
+    if n_samples <= 0:
+        raise ValueError("n_samples must be greater than 0")
+    if n_jobs < -1:
+        raise ValueError("n_jobs must be -1 or greater")
+
+
+def _validate_agent_path(path: AgentPath, index: int) -> None:
+    """Validate a single AgentPath object."""
+    if not isinstance(path, AgentPath):
+        raise TypeError(f"agent_paths[{index}] must be an instance of AgentPath")
+    if not isinstance(path.name, str):
+        raise TypeError(f"agent_paths[{index}].name must be a string")
+    if not isinstance(path.state_sequence, list):
+        raise TypeError(f"agent_paths[{index}].state_sequence must be a list")
+    if not isinstance(path.action_sequence, list):
+        raise TypeError(f"agent_paths[{index}].action_sequence must be a list")
+    if not isinstance(path.n_particles, int):
+        raise TypeError(f"agent_paths[{index}].n_particles must be an integer")
+    if path.n_particles <= 0:
+        raise ValueError(f"agent_paths[{index}].n_particles must be greater than 0")
+    if len(path.state_sequence) != len(path.action_sequence):
+        raise ValueError(f"agent_paths[{index}] has mismatched state and action sequence lengths")
+
+
+def _test_environment_reward_function(
+    env: Environment, agent_paths: List[AgentPath], logger: Optional[logging.Logger]
+) -> None:
+    """Test environment reward function with first path to catch issues early."""
+    if not agent_paths:
+        return
+
+    test_state = agent_paths[0].state_sequence[0]
+    test_action = agent_paths[0].action_sequence[0]
+    try:
+        test_reward = env.reward(test_state, test_action)
+        if not np.isfinite(test_reward):
+            _log_or_print(
+                logger, f"Environment reward function returned invalid value: {test_reward}"
+            )
+        elif abs(test_reward) > 1e6:
+            _log_or_print(
+                logger, f"Environment reward function returned extreme value: {test_reward}"
+            )
+    except Exception as e:
+        _log_or_print(logger, f"Environment reward function failed: {e}")
+
+
+def _validate_and_clip_reward(
+    reward: float, path_name: str, step: Optional[int], logger: Optional[logging.Logger]
+) -> float:
+    """Validate reward value and clip if necessary."""
+    step_info = f" at step {step}" if step is not None else ""
+
+    if not np.isfinite(reward):
+        _log_or_print(logger, f"Invalid reward {reward}{step_info} for path {path_name}")
+        return 0.0
+    elif abs(reward) > 1e6:
+        _log_or_print(logger, f"Extreme reward {reward}{step_info} for path {path_name}")
+        return float(np.clip(reward, -1e6, 1e6))
+
+    return reward
+
+
+def _validate_returns_range(
+    returns: np.ndarray, path_name: str, logger: Optional[logging.Logger]
+) -> bool:
+    """Validate returns have reasonable range. Returns True if valid, False otherwise."""
+    if len(returns) == 0:
+        return False
+
+    min_val = float(np.min(returns))
+    max_val = float(np.max(returns))
+
+    # If the range is extremely large or small, skip plotting
+    if max_val - min_val > 1e6 or (max_val - min_val < 1e-10 and max_val - min_val > 0):
+        _log_or_print(
+            logger,
+            f"Returns for {path_name} have extreme range [{min_val}, {max_val}]. Skipping this path.",
+        )
+        return False
+
+    return True
+
+
 def plot_policy_returns(
     env: Environment,
     agent_paths: List[AgentPath],
@@ -702,75 +823,17 @@ def plot_policy_returns(
         TypeError: If any of the input parameters are of incorrect type
     """
     # Input validation
-    if not isinstance(env, Environment):
-        raise TypeError("env must be an instance of Environment")
-    if not isinstance(agent_paths, list):
-        raise TypeError("agent_paths must be a list")
-    if not isinstance(dir_path, Path):
-        raise TypeError("dir_path must be a Path object")
-    if not isinstance(n_samples, int):
-        raise TypeError("n_samples must be an integer")
-    if not isinstance(n_jobs, int):
-        raise TypeError("n_jobs must be an integer")
-    if logger is not None and not isinstance(logger, logging.Logger):
-        raise TypeError("logger must be a logging.Logger instance or None")
-
-    if not agent_paths:
-        raise ValueError("agent_paths cannot be empty")
-    if n_samples <= 0:
-        raise ValueError("n_samples must be greater than 0")
-    if n_jobs < -1:
-        raise ValueError("n_jobs must be -1 or greater")
+    _validate_plot_policy_returns_inputs(env, agent_paths, dir_path, n_samples, n_jobs, logger)
 
     # Validate each agent path
     for i, path in enumerate(agent_paths):
-        if not isinstance(path, AgentPath):
-            raise TypeError(f"agent_paths[{i}] must be an instance of AgentPath")
-        if not isinstance(path.name, str):
-            raise TypeError(f"agent_paths[{i}].name must be a string")
-        if not isinstance(path.state_sequence, list):
-            raise TypeError(f"agent_paths[{i}].state_sequence must be a list")
-        if not isinstance(path.action_sequence, list):
-            raise TypeError(f"agent_paths[{i}].action_sequence must be a list")
-        if not isinstance(path.n_particles, int):
-            raise TypeError(f"agent_paths[{i}].n_particles must be an integer")
-        if path.n_particles <= 0:
-            raise ValueError(f"agent_paths[{i}].n_particles must be greater than 0")
-        if len(path.state_sequence) != len(path.action_sequence):
-            raise ValueError(f"agent_paths[{i}] has mismatched state and action sequence lengths")
+        _validate_agent_path(path, i)
 
     # Create directory if it doesn't exist
     dir_path.mkdir(parents=True, exist_ok=True)
 
     # Test environment reward function with first path to catch issues early
-    if agent_paths:
-        test_state = agent_paths[0].state_sequence[0]
-        test_action = agent_paths[0].action_sequence[0]
-        try:
-            test_reward = env.reward(test_state, test_action)
-            if not np.isfinite(test_reward):
-                if logger:
-                    logger.warning(
-                        f"Environment reward function returned invalid value: {test_reward}"
-                    )
-                else:
-                    print(
-                        f"Warning: Environment reward function returned invalid value: {test_reward}"
-                    )
-            elif abs(test_reward) > 1e6:
-                if logger:
-                    logger.warning(
-                        f"Environment reward function returned extreme value: {test_reward}"
-                    )
-                else:
-                    print(
-                        f"Warning: Environment reward function returned extreme value: {test_reward}"
-                    )
-        except Exception as e:
-            if logger:
-                logger.warning(f"Environment reward function failed: {e}")
-            else:
-                print(f"Warning: Environment reward function failed: {e}")
+    _test_environment_reward_function(env, agent_paths, logger)
 
     def simulate_sequence(agent_path: AgentPath):
         total_reward: float = 0.0
@@ -790,44 +853,12 @@ def plot_policy_returns(
                 belief=belief, action=agent_path.action_sequence[i], env=env
             )
 
-            # Validate step reward to prevent extreme values
-            if not np.isfinite(step_reward):
-                if logger:
-                    logger.warning(
-                        f"Invalid step reward {step_reward} at step {i} for path {agent_path.name}"
-                    )
-                else:
-                    print(
-                        f"Warning: Invalid step reward {step_reward} at step {i} for path {agent_path.name}"
-                    )
-                step_reward = 0.0  # Default to 0 for invalid rewards
-            elif abs(step_reward) > 1e6:
-                if logger:
-                    logger.warning(
-                        f"Extreme step reward {step_reward} at step {i} for path {agent_path.name}"
-                    )
-                else:
-                    print(
-                        f"Warning: Extreme step reward {step_reward} at step {i} for path {agent_path.name}"
-                    )
-                step_reward = np.clip(step_reward, -1e6, 1e6)  # Clip extreme values
-
+            # Validate and clip step reward
+            step_reward = _validate_and_clip_reward(step_reward, agent_path.name, i, logger)
             total_reward += step_reward
 
         # Final validation of total reward
-        if not np.isfinite(total_reward):
-            if logger:
-                logger.warning(f"Invalid total reward {total_reward} for path {agent_path.name}")
-            else:
-                print(f"Warning: Invalid total reward {total_reward} for path {agent_path.name}")
-            total_reward = 0.0
-        elif abs(total_reward) > 1e6:
-            if logger:
-                logger.warning(f"Extreme total reward {total_reward} for path {agent_path.name}")
-            else:
-                print(f"Warning: Extreme total reward {total_reward} for path {agent_path.name}")
-            total_reward = np.clip(total_reward, -1e6, 1e6)
-
+        total_reward = _validate_and_clip_reward(total_reward, agent_path.name, None, logger)
         return total_reward
 
     def run_simulation(path_idx):
@@ -862,55 +893,33 @@ def plot_policy_returns(
         # Remove NaN and inf values
         valid_mask = np.isfinite(returns_array)
         if not np.any(valid_mask):
-            if logger:
-                logger.warning(
-                    f"All returns for {agent_path.name} are invalid (NaN/inf). Skipping this path."
-                )
-            else:
-                print(
-                    f"Warning: All returns for {agent_path.name} are invalid (NaN/inf). Skipping this path."
-                )
+            _log_or_print(
+                logger,
+                f"All returns for {agent_path.name} are invalid (NaN/inf). Skipping this path.",
+            )
             continue
 
         valid_returns = returns_array[valid_mask]
 
-        # Check for reasonable bounds to prevent extreme bin calculations
-        if len(valid_returns) > 0:
-            min_val: float = float(np.min(valid_returns))
-            max_val: float = float(np.max(valid_returns))
+        # Validate returns range
+        if not _validate_returns_range(valid_returns, agent_path.name, logger):
+            continue
 
-            # If the range is extremely large or small, skip plotting
-            if max_val - min_val > 1e6 or (max_val - min_val < 1e-10 and max_val - min_val > 0):
-                if logger:
-                    logger.warning(
-                        f"Returns for {agent_path.name} have extreme range [{min_val}, {max_val}]. Skipping this path."
-                    )
-                else:
-                    print(
-                        f"Warning: Returns for {agent_path.name} have extreme range [{min_val}, {max_val}]. Skipping this path."
-                    )
-                continue
-
-            # Use explicit bins to prevent automatic bin calculation issues
-            try:
-                sns.histplot(
-                    data=valid_returns,
-                    label=agent_path.name,
-                    alpha=0.5,
-                    color=colors[i % len(colors)],
-                    bins=50,
-                )
-                valid_paths_plotted += 1
-            except Exception as e:
-                if logger:
-                    logger.warning(
-                        f"Failed to plot histogram for {agent_path.name}: {e}. Skipping this path."
-                    )
-                else:
-                    print(
-                        f"Warning: Failed to plot histogram for {agent_path.name}: {e}. Skipping this path."
-                    )
-                continue
+        # Use explicit bins to prevent automatic bin calculation issues
+        try:
+            sns.histplot(
+                data=valid_returns,
+                label=agent_path.name,
+                alpha=0.5,
+                color=colors[i % len(colors)],
+                bins=50,
+            )
+            valid_paths_plotted += 1
+        except Exception as e:
+            _log_or_print(
+                logger, f"Failed to plot histogram for {agent_path.name}: {e}. Skipping this path."
+            )
+            continue
 
     # Check if we have any valid paths to plot
     if valid_paths_plotted == 0:
@@ -922,14 +931,9 @@ def plot_policy_returns(
             va="center",
             transform=plt.gca().transAxes,  # type: ignore[attr-defined]
         )
-        if logger:
-            logger.warning(
-                "No valid data could be plotted. Check the simulation results for issues."
-            )
-        else:
-            print(
-                "Warning: No valid data could be plotted. Check the simulation results for issues."
-            )
+        _log_or_print(
+            logger, "No valid data could be plotted. Check the simulation results for issues."
+        )
     else:
         plt.xlabel("Total Reward")
         plt.ylabel("Count")
