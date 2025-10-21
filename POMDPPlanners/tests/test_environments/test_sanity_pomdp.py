@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
+from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.sanity_pomdp import (
     SanityInitialObservationDist,

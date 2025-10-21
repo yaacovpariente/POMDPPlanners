@@ -18,7 +18,7 @@ Functions:
 
 import random
 from abc import ABC, abstractmethod
-from typing import Any, Optional, Tuple, Iterable, Dict, Hashable, List, Union
+from typing import Any, Optional, Tuple, Dict, Hashable, List, Union
 
 import numpy as np
 

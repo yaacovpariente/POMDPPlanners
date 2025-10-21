@@ -21,7 +21,6 @@ import pytest
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import (
-    CategoricalHyperParameter,
     NumericalHyperParameter,
 )
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (

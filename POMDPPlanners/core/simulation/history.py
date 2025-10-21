@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, List, NamedTuple, Optional, Union
+from typing import TYPE_CHECKING, Any, List, NamedTuple, Union
 
 import numpy as np
 

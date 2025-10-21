@@ -6,7 +6,6 @@ and benchmarking experiments.
 """
 
 from unittest.mock import Mock, patch
-from typing import List
 
 import numpy as np
 import pytest

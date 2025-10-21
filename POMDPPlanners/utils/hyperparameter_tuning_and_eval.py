@@ -14,7 +14,7 @@ Key Features:
 
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Type, Union
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import pandas as pd
 
@@ -30,7 +30,6 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
     HyperParameterRunParams,
     OptimizedPolicyResult,
-    HyperParameterFeature,
     HyperParamPlannerConfig,
 )
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
@@ -39,9 +38,6 @@ from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
     PBSConfig,
-)
-from POMDPPlanners.simulations.simulations_deployment.task_managers import (
-    TaskManagerType,
 )
 from POMDPPlanners.simulations.simulator import POMDPSimulator
 
@@ -463,11 +459,17 @@ def optimize_and_evaluate_planners_pbs(
     if verbose:
         planner_names = [config.policy_cls.__name__ for config in planner_configs]
         logger.info(
-            f"Starting PBS hyperparameter optimization and evaluation for {len(planner_configs)} planners: {planner_names}"
+            "Starting PBS hyperparameter optimization and evaluation for %d planners: %s",
+            len(planner_configs),
+            planner_names,
         )
         logger.info("Environment: %s", environment.name)
         logger.info(
-            f"PBS Configuration: queue={queue}, workers={n_workers}, cores={cores}, memory={memory}"
+            "PBS Configuration: queue=%s, workers=%d, cores=%d, memory=%s",
+            queue,
+            n_workers,
+            cores,
+            memory,
         )
         logger.info(
             "Optimization: %d trials per planner, %d episodes, %d steps",
@@ -485,7 +487,7 @@ def optimize_and_evaluate_planners_pbs(
 
     if debug:
         logger.debug(
-            f"Starting PBS optimization with {len(planner_configs)} planner configurations"
+            "Starting PBS optimization with %d planner configurations", len(planner_configs)
         )
         for i, config in enumerate(planner_configs):
             logger.debug(
@@ -834,7 +836,11 @@ def optimize_planner_hyperparameters(
         total_hyperparams = sum(len(config.hyper_parameters) for config in planner_configs)
         planner_names = [config.policy_cls.__name__ for config in planner_configs]
         logger.info(
-            f"Optimizing {len(planner_configs)} planners ({planner_names}) with {total_hyperparams} total hyperparameters using {n_trials} trials each..."
+            "Optimizing %d planners (%s) with %d total hyperparameters using %d trials each...",
+            len(planner_configs),
+            planner_names,
+            total_hyperparams,
+            n_trials,
         )
 
     if debug:
@@ -884,7 +890,7 @@ def optimize_planner_hyperparameters(
         for i, planner_config in enumerate(planner_configs):
             logger.info("  - Planner %d: %s", i + 1, planner_config.policy_cls.__name__)
             logger.info(
-                f"    Hyperparameters: {[hp.name for hp in planner_config.hyper_parameters]}"
+                "    Hyperparameters: %s", [hp.name for hp in planner_config.hyper_parameters]
             )
         logger.info("  - Environment: %s", environment.name)
         logger.info("  - Trials per planner: %d", n_trials)
@@ -898,7 +904,8 @@ def optimize_planner_hyperparameters(
 
     if debug:
         logger.debug(
-            f"Optimization completed, received {len(optimization_results) if optimization_results else 0} results"
+            "Optimization completed, received %d results",
+            len(optimization_results) if optimization_results else 0,
         )
 
     # Return all results
@@ -1027,10 +1034,17 @@ def optimize_planner_hyperparameters_pbs(
         total_hyperparams = sum(len(config.hyper_parameters) for config in planner_configs)
         planner_names = [config.policy_cls.__name__ for config in planner_configs]
         logger.info(
-            f"Optimizing {len(planner_configs)} planners ({planner_names}) with {total_hyperparams} total hyperparameters using PBS cluster..."
+            "Optimizing %d planners (%s) with %d total hyperparameters using PBS cluster...",
+            len(planner_configs),
+            planner_names,
+            total_hyperparams,
         )
         logger.info(
-            f"PBS Configuration: queue={queue}, workers={n_workers}, cores={cores}, memory={memory}"
+            "PBS Configuration: queue=%s, workers=%d, cores=%d, memory=%s",
+            queue,
+            n_workers,
+            cores,
+            memory,
         )
         logger.info("Walltime: %s, trials per planner: %d", walltime, n_trials)
 
@@ -1096,7 +1110,7 @@ def optimize_planner_hyperparameters_pbs(
         for i, planner_config in enumerate(planner_configs):
             logger.info("  - Planner %d: %s", i + 1, planner_config.policy_cls.__name__)
             logger.info(
-                f"    Hyperparameters: {[hp.name for hp in planner_config.hyper_parameters]}"
+                "    Hyperparameters: %s", [hp.name for hp in planner_config.hyper_parameters]
             )
         logger.info("  - Environment: %s", environment.name)
         logger.info("  - Trials per planner: %d", n_trials)
@@ -1114,7 +1128,8 @@ def optimize_planner_hyperparameters_pbs(
 
     if debug:
         logger.debug(
-            f"PBS optimization completed, received {len(optimization_results) if optimization_results else 0} results"
+            "PBS optimization completed, received %d results",
+            len(optimization_results) if optimization_results else 0,
         )
 
     # Return all results
@@ -1174,7 +1189,7 @@ def evaluate_optimized_planner(
     if debug:
         logger.debug("Evaluation cache directory: %s", eval_cache_dir)
         logger.debug(
-            f"Evaluation parameters: {num_episodes} episodes, {num_steps} steps, {n_jobs} jobs"
+            "Evaluation parameters: %d episodes, %d steps, %d jobs", num_episodes, num_steps, n_jobs
         )
 
     if verbose:
@@ -1226,7 +1241,8 @@ def evaluate_optimized_planner(
 
         if debug:
             logger.debug(
-                f"Evaluation completed, received results for {len(results) if results else 0} environments"
+                "Evaluation completed, received results for %d environments",
+                len(results) if results else 0,
             )
             if statistics_df is not None:
                 logger.debug("Statistics DataFrame shape: %s", statistics_df.shape)
@@ -1250,13 +1266,13 @@ def evaluate_optimized_planner(
                 if not statistics_df.empty:
                     if verbose:
                         logger.info(
-                            f"\n📊 Statistics DataFrame columns: {list(statistics_df.columns)}"
+                            "\n📊 Statistics DataFrame columns: %s", list(statistics_df.columns)
                         )
                         logger.info("📊 Statistics DataFrame shape: %s", statistics_df.shape)
 
                     if debug:
                         logger.debug(
-                            f"Processing statistics DataFrame with {len(statistics_df)} rows"
+                            "Processing statistics DataFrame with %d rows", len(statistics_df)
                         )
                         logger.debug("DataFrame columns: %s", list(statistics_df.columns))
 
@@ -1282,7 +1298,11 @@ def evaluate_optimized_planner(
                                         ci_lower = row["lower_confidence_bound"]
                                         ci_upper = row["upper_confidence_bound"]
                                         logger.info(
-                                            f"{metric_name:25}: {value:8.3f} [{ci_lower:6.3f}, {ci_upper:6.3f}]"
+                                            "%s: %8.3f [%6.3f, %6.3f]",
+                                            metric_name,
+                                            value,
+                                            ci_lower,
+                                            ci_upper,
                                         )
                             else:
                                 # Alternative: display all available statistics
@@ -1305,7 +1325,7 @@ def evaluate_optimized_planner(
                 # Calculate basic episode statistics
                 if debug:
                     logger.debug(
-                        f"Calculating episode statistics for {len(policy_histories)} episodes"
+                        "Calculating episode statistics for %d episodes", len(policy_histories)
                     )
 
                 episode_returns = []
@@ -1325,7 +1345,9 @@ def evaluate_optimized_planner(
 
                 if debug:
                     logger.debug(
-                        f"Episode returns: {len(episode_returns)} values, lengths: {len(episode_lengths)} values"
+                        "Episode returns: %d values, lengths: %d values",
+                        len(episode_returns),
+                        len(episode_lengths),
                     )
 
                 logger.info("\n📋 EPISODE STATISTICS:")
@@ -1386,13 +1408,13 @@ def evaluate_multiple_optimized_planners(
     if debug:
         logger.debug("Evaluation cache directory: %s", eval_cache_dir)
         logger.debug(
-            f"Evaluation parameters: {num_episodes} episodes, {num_steps} steps, {n_jobs} jobs"
+            "Evaluation parameters: %d episodes, %d steps, %d jobs", num_episodes, num_steps, n_jobs
         )
 
     if verbose:
         policy_names = [policy.name for policy in optimized_policies]
         logger.info(
-            f"Evaluating {len(optimized_policies)} policies on {num_episodes} episodes each..."
+            "Evaluating %d policies on %d episodes each...", len(optimized_policies), num_episodes
         )
         logger.info("Policies: %s", policy_names)
 
@@ -1450,7 +1472,8 @@ def evaluate_multiple_optimized_planners(
 
         if debug:
             logger.debug(
-                f"Evaluation completed, received results for {len(results) if results else 0} environments"
+                "Evaluation completed, received results for %d environments",
+                len(results) if results else 0,
             )
             if statistics_df is not None:
                 logger.debug("Statistics DataFrame shape: %s", statistics_df.shape)
@@ -1476,7 +1499,9 @@ def evaluate_multiple_optimized_planners(
                     # Calculate basic episode statistics
                     if debug:
                         logger.debug(
-                            f"Calculating episode statistics for {policy_name}: {len(policy_histories)} episodes"
+                            "Calculating episode statistics for %s: %d episodes",
+                            policy_name,
+                            len(policy_histories),
                         )
 
                     episode_returns = []
@@ -1496,7 +1521,10 @@ def evaluate_multiple_optimized_planners(
 
                     if debug:
                         logger.debug(
-                            f"Policy {policy_name}: {len(episode_returns)} returns, {len(episode_lengths)} lengths"
+                            "Policy %s: %d returns, %d lengths",
+                            policy_name,
+                            len(episode_returns),
+                            len(episode_lengths),
                         )
 
                     logger.info("\n📋 %s STATISTICS:", policy_name)
@@ -1511,8 +1539,8 @@ def evaluate_multiple_optimized_planners(
                         "Average length: %8.1f", sum(episode_lengths) / len(episode_lengths)
                     )
 
-            logger.info(f"\n💾 Results saved to: {eval_cache_dir}")
-            logger.info(f"🔍 MLflow UI: cd {eval_cache_dir} && mlflow ui")
+            logger.info("\n💾 Results saved to: %s", eval_cache_dir)
+            logger.info("🔍 MLflow UI: cd %s && mlflow ui", eval_cache_dir)
 
     if debug:
         logger.debug("Multiple evaluation completed, returning results and statistics")
@@ -1658,7 +1686,9 @@ def get_benchmark_hyperparameter_planners(
     if debug:
         logger.debug("Finding compatible planners for environment: %s", env.name)
         logger.debug(
-            f"Environment spaces - action: {env.space_info.action_space.value}, obs: {env.space_info.observation_space.value}"
+            "Environment spaces - action: %s, obs: %s",
+            env.space_info.action_space.value,
+            env.space_info.observation_space.value,
         )
 
     compatible_planners = []
@@ -1674,7 +1704,7 @@ def get_benchmark_hyperparameter_planners(
             if planner_space_info is None:
                 if debug:
                     logger.debug(
-                        f"Skipping {planner_name}: no space info available (likely abstract class)"
+                        "Skipping %s: no space info available (likely abstract class)", planner_name
                     )
                 continue
 
@@ -1683,7 +1713,10 @@ def get_benchmark_hyperparameter_planners(
 
             if debug:
                 logger.debug(
-                    f"Checking {planner_name}: action={planner_action_space.value}, obs={planner_obs_space.value}"
+                    "Checking %s: action=%s, obs=%s",
+                    planner_name,
+                    planner_action_space.value,
+                    planner_obs_space.value,
                 )
 
             # Check action space compatibility
@@ -1699,7 +1732,10 @@ def get_benchmark_hyperparameter_planners(
             else:
                 if debug:
                     logger.debug(
-                        f"✗ {planner_name} not compatible (action: {action_compatible}, obs: {obs_compatible})"
+                        "✗ %s not compatible (action: %s, obs: %s)",
+                        planner_name,
+                        action_compatible,
+                        obs_compatible,
                     )
 
         except Exception as e:
@@ -1710,7 +1746,10 @@ def get_benchmark_hyperparameter_planners(
     if verbose:
         compatible_names = [p.__name__ for p in compatible_planners]
         logger.info(
-            f"Found {len(compatible_planners)} compatible planners for {env.name}: {compatible_names}"
+            "Found %d compatible planners for %s: %s",
+            len(compatible_planners),
+            env.name,
+            compatible_names,
         )
 
     return compatible_planners

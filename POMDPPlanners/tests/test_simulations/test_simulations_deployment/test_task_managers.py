@@ -2,7 +2,6 @@ import shutil
 import tempfile
 import time
 import warnings
-import os
 from pathlib import Path
 
 import numpy as np
@@ -21,7 +20,7 @@ from POMDPPlanners.simulations.simulations_deployment.task_managers import (
     TaskManagerType,
 )
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 
 def create_test_belief():
@@ -1388,10 +1387,15 @@ def test_joblib_task_manager_log_cache_statistics_current_behavior(cache_db):
             # Verify that warning was called once
             assert mock_warning.call_count == 1
 
-            # Check the warning message
-            warning_message = mock_warning.call_args_list[0][0][0]
-            assert "Could not log cache statistics" in warning_message
-            assert "'Memory' object has no attribute 'get_stats'" in warning_message
+            # Check the warning message (lazy % formatting)
+            warning_format = mock_warning.call_args_list[0][0][0]
+            warning_args = (
+                mock_warning.call_args_list[0][0][1]
+                if len(mock_warning.call_args_list[0][0]) > 1
+                else ""
+            )
+            assert "Could not log cache statistics" in warning_format
+            assert "'Memory' object has no attribute 'get_stats'" in warning_args
 
 
 def test_joblib_task_manager_log_cache_statistics_normal(cache_db):
@@ -1416,27 +1420,29 @@ def test_joblib_task_manager_log_cache_statistics_normal(cache_db):
         with patch.object(task_manager.logger, "info") as mock_info:
             task_manager._log_cache_statistics()
 
-            # Check that the specific cache statistics messages were logged
-            logged_messages = [call[0][0] for call in mock_info.call_args_list]
+            # Check that the specific cache statistics messages were logged (lazy % formatting)
+            # Extract format strings and arguments
+            cache_stats_call = None
+            hit_rate_call = None
 
-            # Find the cache stats message
-            cache_stats_message = None
-            hit_rate_message = None
-
-            for msg in logged_messages:
-                if "Joblib Cache Stats" in msg:
-                    cache_stats_message = msg
-                elif "Cache hit rate:" in msg:
-                    hit_rate_message = msg
+            for call in mock_info.call_args_list:
+                format_str = call[0][0]
+                if "Joblib Cache Stats" in format_str:
+                    cache_stats_call = call
+                elif "Cache hit rate:" in format_str:
+                    hit_rate_call = call
 
             # Verify cache stats message
-            assert cache_stats_message is not None
-            assert "Cache hits: 8" in cache_stats_message
-            assert "Cache misses: 2" in cache_stats_message
+            assert cache_stats_call is not None
+            assert "Cache hits: %d" in cache_stats_call[0][0]
+            assert "Cache misses: %d" in cache_stats_call[0][0]
+            assert cache_stats_call[0][1] == 8  # hits
+            assert cache_stats_call[0][2] == 2  # misses
 
             # Verify hit rate message
-            assert hit_rate_message is not None
-            assert "Cache hit rate: 80.0%" in hit_rate_message
+            assert hit_rate_call is not None
+            assert "Cache hit rate: %.1f%%" in hit_rate_call[0][0]
+            assert hit_rate_call[0][1] == 80.0
 
 
 def test_joblib_task_manager_log_cache_statistics_zero_requests(cache_db):
@@ -1461,26 +1467,26 @@ def test_joblib_task_manager_log_cache_statistics_zero_requests(cache_db):
         with patch.object(task_manager.logger, "info") as mock_info:
             task_manager._log_cache_statistics()
 
-            # Check that the specific cache statistics messages were logged
-            logged_messages = [call[0][0] for call in mock_info.call_args_list]
+            # Check that the specific cache statistics messages were logged (lazy % formatting)
+            cache_stats_call = None
+            hit_rate_call = None
 
-            # Find the cache stats message
-            cache_stats_message = None
-            hit_rate_message = None
-
-            for msg in logged_messages:
-                if "Joblib Cache Stats" in msg:
-                    cache_stats_message = msg
-                elif "Cache hit rate:" in msg:
-                    hit_rate_message = msg
+            for call in mock_info.call_args_list:
+                format_str = call[0][0]
+                if "Joblib Cache Stats" in format_str:
+                    cache_stats_call = call
+                elif "Cache hit rate:" in format_str:
+                    hit_rate_call = call
 
             # Verify cache stats message
-            assert cache_stats_message is not None
-            assert "Cache hits: 0" in cache_stats_message
-            assert "Cache misses: 0" in cache_stats_message
+            assert cache_stats_call is not None
+            assert "Cache hits: %d" in cache_stats_call[0][0]
+            assert "Cache misses: %d" in cache_stats_call[0][0]
+            assert cache_stats_call[0][1] == 0  # hits
+            assert cache_stats_call[0][2] == 0  # misses
 
             # Verify no hit rate message (should be None)
-            assert hit_rate_message is None
+            assert hit_rate_call is None
 
 
 def test_joblib_task_manager_log_cache_statistics_exception_handling(cache_db):
@@ -1509,10 +1515,15 @@ def test_joblib_task_manager_log_cache_statistics_exception_handling(cache_db):
             # Verify that warning was called once
             assert mock_warning.call_count == 1
 
-            # Check the warning message
-            warning_message = mock_warning.call_args_list[0][0][0]
-            assert "Could not log cache statistics" in warning_message
-            assert "Cache stats unavailable" in warning_message
+            # Check the warning message (lazy % formatting)
+            warning_format = mock_warning.call_args_list[0][0][0]
+            warning_args = (
+                mock_warning.call_args_list[0][0][1]
+                if len(mock_warning.call_args_list[0][0]) > 1
+                else ""
+            )
+            assert "Could not log cache statistics" in warning_format
+            assert "Cache stats unavailable" in warning_args
 
 
 def test_joblib_task_manager_log_cache_statistics_different_hit_rates(cache_db):
@@ -1529,11 +1540,11 @@ def test_joblib_task_manager_log_cache_statistics_different_hit_rates(cache_db):
 
     with JoblibTaskManager(cache_db=cache_db) as task_manager:
         test_cases = [
-            ({"hits": 0, "misses": 10}, "0.0%"),  # 0% hit rate
-            ({"hits": 5, "misses": 5}, "50.0%"),  # 50% hit rate
-            ({"hits": 10, "misses": 0}, "100.0%"),  # 100% hit rate
-            ({"hits": 3, "misses": 7}, "30.0%"),  # 30% hit rate
-            ({"hits": 7, "misses": 3}, "70.0%"),  # 70% hit rate
+            ({"hits": 0, "misses": 10}, 0.0),  # 0% hit rate
+            ({"hits": 5, "misses": 5}, 50.0),  # 50% hit rate
+            ({"hits": 10, "misses": 0}, 100.0),  # 100% hit rate
+            ({"hits": 3, "misses": 7}, 30.0),  # 30% hit rate
+            ({"hits": 7, "misses": 3}, 70.0),  # 70% hit rate
         ]
 
         for cache_stats, expected_hit_rate in test_cases:
@@ -1543,19 +1554,18 @@ def test_joblib_task_manager_log_cache_statistics_different_hit_rates(cache_db):
             with patch.object(task_manager.logger, "info") as mock_info:
                 task_manager._log_cache_statistics()
 
-                # Check that the specific hit rate message was logged
-                logged_messages = [call[0][0] for call in mock_info.call_args_list]
-
-                # Find the hit rate message
-                hit_rate_message = None
-                for msg in logged_messages:
-                    if "Cache hit rate:" in msg:
-                        hit_rate_message = msg
+                # Check that the specific hit rate message was logged (lazy % formatting)
+                hit_rate_call = None
+                for call in mock_info.call_args_list:
+                    format_str = call[0][0]
+                    if "Cache hit rate:" in format_str:
+                        hit_rate_call = call
                         break
 
                 # Verify hit rate calculation
-                assert hit_rate_message is not None
-                assert f"Cache hit rate: {expected_hit_rate}" in hit_rate_message
+                assert hit_rate_call is not None
+                assert "Cache hit rate: %.1f%%" in hit_rate_call[0][0]
+                assert hit_rate_call[0][1] == expected_hit_rate
 
 
 def test_joblib_task_manager_log_cache_statistics_missing_keys(cache_db):
@@ -1580,26 +1590,26 @@ def test_joblib_task_manager_log_cache_statistics_missing_keys(cache_db):
         with patch.object(task_manager.logger, "info") as mock_info:
             task_manager._log_cache_statistics()
 
-            # Check that the specific cache statistics messages were logged
-            logged_messages = [call[0][0] for call in mock_info.call_args_list]
+            # Check that the specific cache statistics messages were logged (lazy % formatting)
+            cache_stats_call = None
+            hit_rate_call = None
 
-            # Find the cache stats message
-            cache_stats_message = None
-            hit_rate_message = None
-
-            for msg in logged_messages:
-                if "Joblib Cache Stats" in msg:
-                    cache_stats_message = msg
-                elif "Cache hit rate:" in msg:
-                    hit_rate_message = msg
+            for call in mock_info.call_args_list:
+                format_str = call[0][0]
+                if "Joblib Cache Stats" in format_str:
+                    cache_stats_call = call
+                elif "Cache hit rate:" in format_str:
+                    hit_rate_call = call
 
             # Verify cache stats message uses default values
-            assert cache_stats_message is not None
-            assert "Cache hits: 0" in cache_stats_message
-            assert "Cache misses: 0" in cache_stats_message
+            assert cache_stats_call is not None
+            assert "Cache hits: %d" in cache_stats_call[0][0]
+            assert "Cache misses: %d" in cache_stats_call[0][0]
+            assert cache_stats_call[0][1] == 0  # hits
+            assert cache_stats_call[0][2] == 0  # misses
 
             # Verify no hit rate message (should be None due to zero total)
-            assert hit_rate_message is None
+            assert hit_rate_call is None
 
 
 def test_sequential_task_manager_log_cache_statistics_inheritance(cache_db):
@@ -1624,27 +1634,28 @@ def test_sequential_task_manager_log_cache_statistics_inheritance(cache_db):
         with patch.object(task_manager.logger, "info") as mock_info:
             task_manager._log_cache_statistics()
 
-            # Check that the specific cache statistics messages were logged
-            logged_messages = [call[0][0] for call in mock_info.call_args_list]
+            # Check that the specific cache statistics messages were logged (lazy % formatting)
+            cache_stats_call = None
+            hit_rate_call = None
 
-            # Find the cache stats message
-            cache_stats_message = None
-            hit_rate_message = None
-
-            for msg in logged_messages:
-                if "Joblib Cache Stats" in msg:
-                    cache_stats_message = msg
-                elif "Cache hit rate:" in msg:
-                    hit_rate_message = msg
+            for call in mock_info.call_args_list:
+                format_str = call[0][0]
+                if "Joblib Cache Stats" in format_str:
+                    cache_stats_call = call
+                elif "Cache hit rate:" in format_str:
+                    hit_rate_call = call
 
             # Verify cache stats message
-            assert cache_stats_message is not None
-            assert "Cache hits: 6" in cache_stats_message
-            assert "Cache misses: 4" in cache_stats_message
+            assert cache_stats_call is not None
+            assert "Cache hits: %d" in cache_stats_call[0][0]
+            assert "Cache misses: %d" in cache_stats_call[0][0]
+            assert cache_stats_call[0][1] == 6  # hits
+            assert cache_stats_call[0][2] == 4  # misses
 
             # Verify hit rate message
-            assert hit_rate_message is not None
-            assert "Cache hit rate: 60.0%" in hit_rate_message
+            assert hit_rate_call is not None
+            assert "Cache hit rate: %.1f%%" in hit_rate_call[0][0]
+            assert hit_rate_call[0][1] == 60.0
 
 
 def test_joblib_task_manager_log_cache_statistics_precision(cache_db):
@@ -1669,36 +1680,34 @@ def test_joblib_task_manager_log_cache_statistics_precision(cache_db):
         with patch.object(task_manager.logger, "info") as mock_info:
             task_manager._log_cache_statistics()
 
-            # Check that the specific hit rate message was logged
-            logged_messages = [call[0][0] for call in mock_info.call_args_list]
-
-            # Find the hit rate message
-            hit_rate_message = None
-            for msg in logged_messages:
-                if "Cache hit rate:" in msg:
-                    hit_rate_message = msg
+            # Check that the specific hit rate message was logged (lazy % formatting)
+            hit_rate_call = None
+            for call in mock_info.call_args_list:
+                format_str = call[0][0]
+                if "Cache hit rate:" in format_str:
+                    hit_rate_call = call
                     break
 
             # Check hit rate formatting
-            assert hit_rate_message is not None
-            assert "Cache hit rate: 25.0%" in hit_rate_message
+            assert hit_rate_call is not None
+            assert "Cache hit rate: %.1f%%" in hit_rate_call[0][0]
+            assert hit_rate_call[0][1] == 25.0
 
             # Test another fractional case
             mock_cache_stats = {"hits": 1, "misses": 2}  # 33.333...% hit rate
             setattr(task_manager.memory, "get_stats", Mock(return_value=mock_cache_stats))
             task_manager._log_cache_statistics()
 
-            # Get updated messages
-            logged_messages = [call[0][0] for call in mock_info.call_args_list]
+            # Get updated messages (check the last call which is the second _log_cache_statistics)
+            hit_rate_call = None
+            for call in mock_info.call_args_list:
+                format_str = call[0][0]
+                if "Cache hit rate:" in format_str:
+                    hit_rate_call = call  # Get the last occurrence
 
-            # Find the second hit rate message
-            hit_rate_message = None
-            for msg in logged_messages:
-                if "Cache hit rate: 33.3%" in msg:
-                    hit_rate_message = msg
-                    break
-
-            assert hit_rate_message is not None
+            assert hit_rate_call is not None
+            assert "Cache hit rate: %.1f%%" in hit_rate_call[0][0]
+            assert abs(hit_rate_call[0][1] - 33.3) < 0.1  # Allow small floating point error
 
 
 # ==============================================================================

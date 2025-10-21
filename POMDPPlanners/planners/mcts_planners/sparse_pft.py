@@ -4,10 +4,10 @@ from typing import Any, Optional, Tuple
 
 import numpy as np
 
-from POMDPPlanners.core.belief import Belief, is_terminal_belief
-from POMDPPlanners.core.cost import belief_expectation_cost_particle_belief, belief_expectation_cost
+from POMDPPlanners.core.belief import is_terminal_belief
+from POMDPPlanners.core.cost import belief_expectation_cost
 from POMDPPlanners.core.environment import DiscreteActionsEnvironment, SpaceType
-from POMDPPlanners.core.policy import Policy, PolicySpaceInfo
+from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.tree import (
     ActionNode,
     BeliefNode,

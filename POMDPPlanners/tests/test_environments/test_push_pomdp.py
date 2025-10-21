@@ -7,7 +7,6 @@ This module tests the Push POMDP environment, focusing on:
 """
 
 import random
-from pathlib import Path
 
 import numpy as np
 import pytest

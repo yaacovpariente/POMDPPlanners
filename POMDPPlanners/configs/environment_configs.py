@@ -20,7 +20,6 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocity
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.utils.weighted_particle_beliefs import (
     WeightedParticleBeliefContinuousLightDarkFullCoverage,
-    WeightedParticleBeliefDiscreteLightDarkFullCoverage,
 )
 
 

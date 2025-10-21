@@ -12,8 +12,7 @@ This module tests the planner evaluation workflow functionality, focusing on:
 import pytest
 import pandas as pd
 from pathlib import Path
-from typing import List
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from POMDPPlanners.core.simulation.simulation_configs import EnvironmentRunParams
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (

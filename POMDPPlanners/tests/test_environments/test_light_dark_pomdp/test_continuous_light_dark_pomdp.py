@@ -16,8 +16,7 @@ from scipy.stats import multivariate_normal
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
-from POMDPPlanners.core.environment import ObservationModel, SpaceInfo, SpaceType
-from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
+from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,

@@ -238,13 +238,15 @@ class Environment(ABC):
         self.use_queue_logger = use_queue_logger
 
         self.logger.info(
-            f"Initializing {self.name} environment with discount factor {self.discount_factor}"
+            "Initializing %s environment with discount factor %s", self.name, self.discount_factor
         )
         self.logger.debug(
-            f"Space info: action_space={self.space_info.action_space}, observation_space={self.space_info.observation_space}"
+            "Space info: action_space=%s, observation_space=%s",
+            self.space_info.action_space,
+            self.space_info.observation_space,
         )
         if self.reward_range is not None:
-            self.logger.debug(f"Reward range: {self.reward_range}")
+            self.logger.debug("Reward range: %s", self.reward_range)
 
     def _validate_reward_range(
         self, reward_range: Optional[Tuple[float, float]]

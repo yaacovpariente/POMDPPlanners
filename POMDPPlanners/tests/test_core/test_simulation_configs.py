@@ -1,9 +1,8 @@
 """Tests for simulation configuration classes."""
 
-import pytest
 from POMDPPlanners.core.simulation.simulation_configs import EnvironmentRunParams
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.planners.open_loop_planners.discrete_action_sequences_planner import (
     DiscreteActionSequencesPlanner,
 )

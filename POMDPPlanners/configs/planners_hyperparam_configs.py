@@ -2,7 +2,6 @@ from typing import List, Optional
 
 from POMDPPlanners.core.environment import Environment
 from POMDPPlanners.core.simulation import (
-    CategoricalHyperParameter,
     NumericalHyperParameter,
 )
 from POMDPPlanners.planners.mcts_planners.pft_dpw import PFT_DPW

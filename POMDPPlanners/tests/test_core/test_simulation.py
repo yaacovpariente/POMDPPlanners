@@ -8,10 +8,9 @@ This module tests the simulation functionality, focusing on:
 """
 
 import random
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, cast
 
 import numpy as np
-import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.simulation import History, StepData, TaskManagerExternalDB

@@ -121,7 +121,7 @@ class Policy(ABC):
         self._verify_environment_compatibility()
 
         # Initialize logger with the policy's name and user-specified settings
-        self.logger.info(f"Initialized policy: {self.name} (debug={self.debug})")
+        self.logger.info("Initialized policy: %s (debug=%s)", self.name, self.debug)
 
     def _verify_environment_compatibility(self) -> None:
         """Verify that the policy is compatible with the environment."""
