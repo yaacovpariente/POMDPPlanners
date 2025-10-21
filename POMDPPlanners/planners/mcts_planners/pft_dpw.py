@@ -32,7 +32,7 @@ from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.planners.mcts_planners.path_simulations_policy import (
-    ProgressiveWideningMCTSPolicy,
+    DoubleProgressiveWideningMCTSPolicy,
 )
 from POMDPPlanners.planners.planners_utils.dpw import (
     ActionSampler,
@@ -40,7 +40,7 @@ from POMDPPlanners.planners.planners_utils.dpw import (
 )
 
 
-class PFT_DPW(ProgressiveWideningMCTSPolicy):
+class PFT_DPW(DoubleProgressiveWideningMCTSPolicy):
     """PFT-DPW (Progressive Function Transfer with Double Progressive Widening) Algorithm.
 
     PFT-DPW is a Monte Carlo Tree Search algorithm designed for continuous action spaces
