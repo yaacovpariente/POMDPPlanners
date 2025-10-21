@@ -358,7 +358,7 @@ class TestEnvironmentRunParamsHashAndEquality:
 
         assert params != "not_an_environment_run_params"
         assert params != 42
-        assert params != None
+        assert params is not None
 
     def test_usable_in_set(self):
         """Test that EnvironmentRunParams can be used in sets correctly.

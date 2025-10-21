@@ -713,7 +713,7 @@ class TestMountainCarPOMDPEquality:
         """
         assert base_mountain_car_environment != "not an environment"
         assert base_mountain_car_environment != 42
-        assert base_mountain_car_environment != None
+        assert base_mountain_car_environment is not None
 
     def test_missing_attributes(self, base_mountain_car_environment: MountainCarPOMDP):
         """Test equality when attributes are missing.

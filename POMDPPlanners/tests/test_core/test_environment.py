@@ -224,7 +224,7 @@ def test_non_environment_comparison(base_environment: MockEnvironment):
     """
     assert base_environment != "not an environment"
     assert base_environment != 42
-    assert base_environment != None
+    assert base_environment is not None
 
 
 def test_missing_attribute(base_environment: MockEnvironment):

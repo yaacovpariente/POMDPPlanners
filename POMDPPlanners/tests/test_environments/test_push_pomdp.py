@@ -50,14 +50,14 @@ class TestPushPOMDP:
     def test_obstacle_collision_detection(self):
         """Test that obstacle collision detection works correctly."""
         # Position in obstacle
-        assert self.env._is_colliding_with_obstacle(np.array([3.0, 3.0])) == True
-        assert self.env._is_colliding_with_obstacle(np.array([3.2, 3.2])) == True  # Within radius
-        assert self.env._is_colliding_with_obstacle(np.array([2.8, 3.1])) == True  # Within radius
+        assert self.env._is_colliding_with_obstacle(np.array([3.0, 3.0])) is True
+        assert self.env._is_colliding_with_obstacle(np.array([3.2, 3.2])) is True  # Within radius
+        assert self.env._is_colliding_with_obstacle(np.array([2.8, 3.1])) is True  # Within radius
 
         # Position outside obstacle
-        assert self.env._is_colliding_with_obstacle(np.array([1.0, 1.0])) == False
-        assert self.env._is_colliding_with_obstacle(np.array([5.0, 5.0])) == False
-        assert self.env._is_colliding_with_obstacle(np.array([3.6, 3.6])) == False  # Outside radius
+        assert self.env._is_colliding_with_obstacle(np.array([1.0, 1.0])) is False
+        assert self.env._is_colliding_with_obstacle(np.array([5.0, 5.0])) is False
+        assert self.env._is_colliding_with_obstacle(np.array([3.6, 3.6])) is False  # Outside radius
 
     def test_reward_difference_obstacle_vs_safe(self):
         """Test that rewards in obstacle states are lower than in safe states."""

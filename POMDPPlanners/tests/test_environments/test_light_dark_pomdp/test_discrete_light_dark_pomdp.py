@@ -368,7 +368,7 @@ class TestDiscreteLightDarkPOMDPEquality:
         """
         assert base_light_dark_environment != "not an environment"
         assert base_light_dark_environment != 42
-        assert base_light_dark_environment != None
+        assert base_light_dark_environment is not None
 
     def test_missing_attributes(self, base_light_dark_environment: DiscreteLightDarkPOMDP):
         """Test equality when attributes are missing.

@@ -1321,8 +1321,8 @@ def test_beacon_proximity_observation_covariance_changes():
     )
 
     # Verify near_beacon flag is set correctly
-    assert obs_model_near.near_beacon == True, "Should detect proximity to beacon at (0,0)"
-    assert obs_model_far.near_beacon == False, "Should not detect proximity to any beacon"
+    assert obs_model_near.near_beacon is True, "Should detect proximity to beacon at (0,0)"
+    assert obs_model_far.near_beacon is False, "Should not detect proximity to any beacon"
 
     # Verify covariance matrix changes
     expected_near_cov = observation_cov_matrix * 0.5  # Reduced by half when near beacon
@@ -1347,7 +1347,7 @@ def test_beacon_proximity_observation_covariance_changes():
     )
 
     # At exactly beacon_radius distance, should be considered "near" (<=)
-    assert obs_model_boundary.near_beacon == True, "Should detect proximity at exact beacon radius"
+    assert obs_model_boundary.near_beacon is True, "Should detect proximity at exact beacon radius"
     assert np.array_equal(
         obs_model_boundary.observation_cov_matrix, expected_near_cov
     ), "Observation covariance should be reduced at exact beacon radius boundary"
