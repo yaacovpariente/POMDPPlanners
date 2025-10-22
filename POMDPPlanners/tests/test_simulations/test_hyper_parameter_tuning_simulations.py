@@ -46,13 +46,11 @@ from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import (
 )
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     JoblibConfig,
-    PBSConfig,
 )
 from POMDPPlanners.simulations.simulations_deployment.tasks import (
     HyperParameterTuningSimulationTask,
 )
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
-from POMDPPlanners.simulations.simulations_deployment.task_managers import PBSTaskManager
 import warnings
 
 np.random.seed(42)
