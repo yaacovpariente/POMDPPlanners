@@ -24,7 +24,7 @@ Factory Functions:
 from typing import Any, Dict, Type
 
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
@@ -34,8 +34,10 @@ from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp impor
 )
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarPOMDP
 from POMDPPlanners.environments.pacman_pomdp import PacManPOMDP
-from POMDPPlanners.environments.push_pomdp import PushPOMDP
-from POMDPPlanners.environments.rock_sample_pomdp import RockSamplePOMDP
+from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
+from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
+    RockSamplePOMDP,
+)
 from POMDPPlanners.environments.safety_ant_velocity_pomdp import SafeAntVelocityPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
