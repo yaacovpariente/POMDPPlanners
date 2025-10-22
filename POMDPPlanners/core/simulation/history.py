@@ -6,13 +6,6 @@ import numpy as np
 if TYPE_CHECKING:
     from POMDPPlanners.core.belief import Belief
     from POMDPPlanners.core.policy import PolicyRunData
-else:
-    from POMDPPlanners.core.belief import WeightedParticleBelief
-    from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
-
-# Import these unconditionally since they're used at runtime
-from POMDPPlanners.core.belief import WeightedParticleBelief
-from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
 
 
 class StepData(NamedTuple):
@@ -251,6 +244,8 @@ class History:
                 belief_type = step_data["belief"]["type"]
                 # Import the belief class dynamically
                 if belief_type == "WeightedParticleBelief":
+                    from POMDPPlanners.core.belief import WeightedParticleBelief
+
                     step_data["belief"] = WeightedParticleBelief(
                         particles=step_data["belief"]["particles"],
                         log_weights=np.array(step_data["belief"]["log_weights"]),
@@ -261,6 +256,8 @@ class History:
         # Handle policy_run_data deserialization
         policy_run_data = data.get("policy_run_data", None)
         if isinstance(policy_run_data, dict):
+            from POMDPPlanners.core.policy import PolicyInfoVariable, PolicyRunData
+
             info_variables = [
                 PolicyInfoVariable(name=iv["name"], value=iv["value"])
                 for iv in policy_run_data.get("info_variables", [])
