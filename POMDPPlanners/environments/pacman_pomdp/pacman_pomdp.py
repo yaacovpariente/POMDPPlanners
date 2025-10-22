@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
 import numpy as np
-from PIL import Image, ImageDraw
 
 from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import (
@@ -1072,221 +1071,29 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         return metrics
 
     def visualize_path(self, path: List[PacManState], actions: List[int], cache_path: Path):
-        """Visualize PacMan path through the maze using sprite-based rendering."""
-        if not isinstance(cache_path, Path):
-            raise TypeError("cache_path must be a Path object")
+        """Visualize PacMan path through the maze using sprite-based rendering.
 
-        # Constants for sprite rendering
-        TILE_SIZE = 32
+        Args:
+            path: List of states representing the path through the maze
+            actions: List of actions taken at each step
+            cache_path: Path where the GIF should be saved
+        """
+        from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import PacManVisualizer
 
-        # Get sprite directory (relative to this module)
-        module_dir = Path(__file__).parent
-        sprite_dir = module_dir / "img"
-
-        def _colorize_sprite(image, color):
-            """Apply color tint to sprite image."""
-            # Create a colored overlay
-            overlay = Image.new("RGBA", image.size, color)
-
-            # Blend the overlay with the original image
-            # This creates a tinted version while preserving the original alpha
-            result = Image.blend(image.convert("RGBA"), overlay, 0.3)
-
-            # Preserve original alpha channel
-            result.putalpha(image.split()[-1])
-            return result
-
-        def load_sprites():
-            """Load sprite images with fallback to simple colored shapes."""
-            sprites = {}
-
-            # Try to load PacMan sprite - prioritize the new pacman_head.jpg
-            pacman_head_path = sprite_dir / "pacman_head.jpg"
-            pacman_png_path = sprite_dir / "pocman.png"
-
-            if pacman_head_path.exists():
-                sprites["pacman"] = (
-                    Image.open(pacman_head_path).convert("RGBA").resize((TILE_SIZE, TILE_SIZE))
-                )
-            elif pacman_png_path.exists():
-                sprites["pacman"] = (
-                    Image.open(pacman_png_path).convert("RGBA").resize((TILE_SIZE, TILE_SIZE))
-                )
-            else:
-                # Create simple yellow circle for PacMan
-                img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))  # type: ignore[arg-type]
-                draw = ImageDraw.Draw(img)
-                draw.ellipse([4, 4, TILE_SIZE - 4, TILE_SIZE - 4], fill=(255, 255, 0, 255))
-                sprites["pacman"] = img
-
-            # Load multiple ghost sprites with different colors
-            ghost_colors = [
-                (255, 0, 0, 255),  # Red ghost
-                (0, 255, 0, 255),  # Green ghost
-                (0, 0, 255, 255),  # Blue ghost
-                (255, 0, 255, 255),  # Magenta ghost
-                (255, 165, 0, 255),  # Orange ghost
-                (0, 255, 255, 255),  # Cyan ghost
-                (255, 255, 0, 255),  # Yellow ghost
-                (128, 0, 128, 255),  # Purple ghost
-            ]
-
-            ghost_path = sprite_dir / "ghosts.png"
-            if ghost_path.exists():
-                base_ghost = Image.open(ghost_path).convert("RGBA")
-                for i, color in enumerate(ghost_colors):
-                    # Create colored version of ghost sprite
-                    colored_ghost = _colorize_sprite(base_ghost, color)
-                    sprites[f"ghost_{i}"] = colored_ghost.resize((TILE_SIZE, TILE_SIZE))
-            else:
-                # Create colored rectangles for each ghost
-                for i, color in enumerate(ghost_colors):
-                    img = Image.new("RGBA", (TILE_SIZE, TILE_SIZE), (0, 0, 0, 0))  # type: ignore[arg-type]
-                    draw = ImageDraw.Draw(img)
-                    draw.rectangle([4, 4, TILE_SIZE - 4, TILE_SIZE - 4], fill=color)
-                    sprites[f"ghost_{i}"] = img
-
-            return sprites
-
-        def render_frame(state: PacManState, step_num: int, action_name: str = ""):
-            """Render a single frame as PIL Image."""
-            rows, cols = self.maze_size
-            canvas = Image.new(
-                "RGBA", (cols * TILE_SIZE, rows * TILE_SIZE + 60)
-            )  # Extra space for text
-            draw = ImageDraw.Draw(canvas)
-
-            # Draw background and maze
-            for r in range(rows):
-                for c in range(cols):
-                    x, y = c * TILE_SIZE, r * TILE_SIZE
-
-                    # Check if this position is a wall
-                    if (r, c) in self.walls:
-                        # Wall = dark blue block
-                        draw.rectangle([x, y, x + TILE_SIZE, y + TILE_SIZE], fill=(20, 20, 80, 255))
-                    else:
-                        # Floor = black
-                        draw.rectangle([x, y, x + TILE_SIZE, y + TILE_SIZE], fill=(0, 0, 0, 255))
-
-                    # Draw pellets
-                    if (r, c) in state.pellets:
-                        # Small white dot for pellet
-                        cx, cy = x + TILE_SIZE // 2, y + TILE_SIZE // 2
-                        rdot = 4
-                        draw.ellipse(
-                            [cx - rdot, cy - rdot, cx + rdot, cy + rdot],
-                            fill=(255, 255, 255, 255),
-                        )
-
-            # Draw sprites
-            sprites = load_sprites()
-
-            # Draw all ghosts with different colors
-            for i, ghost_pos in enumerate(state.ghost_positions):
-                gr, gc = ghost_pos
-                if 0 <= gr < rows and 0 <= gc < cols:
-                    ghost_x, ghost_y = gc * TILE_SIZE, gr * TILE_SIZE
-                    ghost_sprite_key = f"ghost_{i % 8}"  # Cycle through 8 colors
-                    if ghost_sprite_key in sprites:
-                        canvas.paste(
-                            sprites[ghost_sprite_key],
-                            (ghost_x, ghost_y),
-                            sprites[ghost_sprite_key],
-                        )
-
-            # Draw PacMan (last so it can overlap with ghost if collision)
-            pr, pc = state.pacman_pos
-            if 0 <= pr < rows and 0 <= pc < cols:
-                pacman_x, pacman_y = pc * TILE_SIZE, pr * TILE_SIZE
-                if state.pacman_pos in state.ghost_positions:
-                    # Collision with any ghost - draw enhanced explosion effect
-                    draw.ellipse(
-                        [
-                            pacman_x,
-                            pacman_y,
-                            pacman_x + TILE_SIZE,
-                            pacman_y + TILE_SIZE,
-                        ],
-                        fill=(255, 0, 0, 200),
-                    )
-                    # Add multiple explosion symbols for multi-ghost collision effect
-                    num_colliding_ghosts = sum(
-                        1 for ghost_pos in state.ghost_positions if ghost_pos == state.pacman_pos
-                    )
-                    explosion_text = "💥" * min(num_colliding_ghosts, 3)  # Limit to 3 symbols
-                    draw.text(
-                        (pacman_x + 2, pacman_y + 2),
-                        explosion_text,
-                        fill=(255, 255, 255),
-                    )
-                else:
-                    canvas.paste(sprites["pacman"], (pacman_x, pacman_y), sprites["pacman"])
-
-            # Add text overlay at bottom
-            text_y = rows * TILE_SIZE + 5
-            draw.text((5, text_y), f"Step {step_num}: {action_name}", fill=(255, 255, 255))
-            draw.text(
-                (5, text_y + 15),
-                f"Score: {state.score}, Pellets: {len(state.pellets)}",
-                fill=(255, 255, 255),
-            )
-
-            # Add terminal state message
-            if state.terminal:
-                if len(state.pellets) == 0:
-                    draw.text((5, text_y + 30), "🎉 YOU WIN! 🎉", fill=(0, 255, 0))
-                else:
-                    draw.text((5, text_y + 30), "👻 GAME OVER! 👻", fill=(255, 0, 0))
-
-            return canvas
-
-        # Generate all frames
-        frames = []
-        for i, state in enumerate(path):
-            if i < len(actions):
-                action_name = self.action_names[actions[i]]
-            else:
-                action_name = "Terminal"
-
-            frame = render_frame(state, i + 1, action_name)
-            frames.append(frame)
-
-        # Save as animated GIF
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-
-        if frames:
-            # Save animated GIF
-            frames[0].save(
-                cache_path,
-                save_all=True,
-                append_images=frames[1:],
-                duration=1000,  # 1 second per frame
-                loop=0,
-            )
-            print(f"Sprite-based visualization saved as GIF: {cache_path}")
-        else:
-            print("No frames generated for visualization")
+        visualizer = PacManVisualizer(self)
+        visualizer.visualize_path(path, actions, cache_path)
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
-        """Cache visualization of episode history."""
-        if not isinstance(history, List):
-            raise TypeError("history must be a List object")
-        if not history:
-            raise ValueError("Cannot visualize empty history")
-        for step in history:
-            if not isinstance(step, StepData):
-                raise TypeError("history must be a List of StepData objects")
-        if not isinstance(cache_path, Path):
-            raise TypeError("cache_path must be a Path object")
-        if not str(cache_path).endswith(".gif"):
-            raise ValueError("cache_path must end with .gif")
+        """Cache visualization of episode history.
 
-        # Extract path and actions
-        path = [step.state for step in history]
-        actions = [step.action for step in history[:-1]]  # Last step has no action
+        Args:
+            history: List of StepData objects representing the episode
+            cache_path: Path where the GIF should be saved
+        """
+        from POMDPPlanners.environments.pacman_pomdp.pacman_visualizer import PacManVisualizer
 
-        self.visualize_path(path, actions, cache_path)
+        visualizer = PacManVisualizer(self)
+        visualizer.cache_visualization(history, cache_path)
 
 
 def create_simple_maze_pacman(
