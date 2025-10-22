@@ -15,13 +15,8 @@ Classes:
 import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List, Optional, Tuple, cast
+from typing import Any, List, Optional, Tuple
 
-from matplotlib import animation
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-from matplotlib.lines import Line2D
-import matplotlib.pyplot as plt
 import numpy as np
 
 from POMDPPlanners.core.distributions import DiscreteDistribution
@@ -33,6 +28,9 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (
+    RockSampleVisualizer,
+)
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
@@ -514,242 +512,28 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
         return metrics
 
-    def visualize_path(self, path: List[RockSampleState], actions: List[int], cache_path: Path):
-        """Visualize robot path through the environment."""
-        if not isinstance(cache_path, Path):
-            raise TypeError("cache_path must be a Path object")
-        if not str(cache_path).endswith(".gif"):
-            raise ValueError("cache_path must end with .gif")
-
-        fig: Figure
-        ax: Axes
-        fig_temp, ax_temp = plt.subplots(figsize=(10, 8))
-        fig = cast(Figure, fig_temp)
-        ax = cast(Axes, ax_temp)
-        ax.set_xlim(-0.5, self.map_size[1] - 0.5)
-        ax.set_ylim(self.map_size[0] - 0.5, -0.5)  # Flip y-axis for standard grid display
-        ax.set_aspect("equal")
-        ax.grid(True, alpha=0.3)
-        ax.set_xlabel("Column")
-        ax.set_ylabel("Row")
-        ax.set_title("RockSample POMDP Episode Visualization")
-
-        # Initialize empty scatter plots for rocks (will be updated dynamically)
-        rock_scatters = []
-        for i, rock_pos in enumerate(self.rock_positions):
-            scatter = ax.scatter([], [], s=200, marker="s", alpha=0.7, label=f"Rock {i}")
-            rock_scatters.append(scatter)
-
-        # Plot dangerous areas as red circles
-        danger_patches = []
-        for i, danger_center in enumerate(self.dangerous_areas):
-            row, col = danger_center
-            circle = plt.Circle(  # type: ignore[attr-defined]
-                (col, row),
-                float(self.dangerous_area_radius),  # type: ignore[arg-type]
-                facecolor="red",
-                edgecolor="none",
-                alpha=0.3,
-                label="Dangerous Areas" if i == 0 else "",
-            )  # Only label first area
-            ax.add_patch(circle)
-            if i == 0:  # Keep reference for legend
-                danger_patches.append(circle)
-
-        # Plot exit zone
-        exit_x = self.map_size[1] - 0.5
-        ax.axvline(x=float(exit_x), color="gold", linewidth=3, alpha=0.7, label="Exit")  # type: ignore[arg-type]
-
-        # Initialize robot position
-        robot_scatter = ax.scatter([], [], s=150, c="blue", marker="o", zorder=5, label="Robot")
-        path_line = cast(Line2D, ax.plot([], [], "b-", alpha=0.5, linewidth=2, label="Path")[0])
-
-        # Initialize action arrow
-        arrow = ax.annotate(
-            "",
-            xy=(0, 0),
-            xytext=(0, 0),
-            arrowprops={"arrowstyle": "->", "color": "red", "lw": 2},
-            zorder=6,
-        )
-
-        # Action text
-        action_text = ax.text(
-            0.02,
-            0.98,
-            "",
-            transform=ax.transAxes,
-            bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.8},
-            verticalalignment="top",
-        )
-
-        # Sample result text (success/failure indicator)
-        sample_text = ax.text(
-            0.02,
-            0.02,
-            "",
-            transform=ax.transAxes,
-            fontsize=20,
-            fontweight="bold",
-            horizontalalignment="left",
-            verticalalignment="bottom",
-            bbox={
-                "boxstyle": "round,pad=0.5",
-                "facecolor": "gold",
-                "edgecolor": "red",
-                "linewidth": 3,
-                "alpha": 0.9,
-            },
-            color="red",
-            visible=False,
-        )
-
-        ax.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
-
-        def animate(frame):
-            if frame >= len(path):
-                return tuple(
-                    [robot_scatter, path_line, arrow, action_text, sample_text] + rock_scatters
-                )
-
-            state = path[frame]
-            robot_pos = state.robot_pos
-
-            # Update rock colors based on current state
-            for i, rock_pos in enumerate(self.rock_positions):
-                if i < len(state.rocks):
-                    color = "green" if state.rocks[i] else "red"
-                    rock_scatters[i].set_offsets([[rock_pos[1], rock_pos[0]]])
-                    rock_scatters[i].set_color(color)
-
-            # Update robot position (handle terminal state)
-            if robot_pos == (-1, -1):
-                # Robot has exited - don't show it
-                robot_scatter.set_offsets(np.empty((0, 2)))
-                # Hide arrow and sample text for terminal state
-                arrow.set_visible(False)
-                sample_text.set_visible(False)
-            else:
-                robot_scatter.set_offsets([[robot_pos[1], robot_pos[0]]])
-
-                # Update action arrow
-                if frame < len(actions):
-                    action = actions[frame]
-                    dx, dy = self.action_to_vector.get(action, (0, 0))
-
-                    # Only show arrow for movement actions (not sample or check)
-                    if dx != 0 or dy != 0:
-                        # Position arrow from robot position
-                        x, y = robot_pos[1], robot_pos[0]  # Convert to plot coordinates
-                        # Scale arrow for better visibility
-                        arrow_scale = 0.4
-                        arrow.set_position((x, y))
-                        arrow.xy = (x + dx * arrow_scale, y + dy * arrow_scale)
-                        arrow.set_visible(True)
-                    else:
-                        # Hide arrow for non-movement actions
-                        arrow.set_visible(False)
-                else:
-                    # Hide arrow when no action
-                    arrow.set_visible(False)
-
-            # Update path
-            valid_positions = [
-                pos for pos in [p.robot_pos for p in path[: frame + 1]] if pos != (-1, -1)
-            ]
-            if valid_positions:
-                path_x = [pos[1] for pos in valid_positions]
-                path_y = [pos[0] for pos in valid_positions]
-                path_line.set_data(path_x, path_y)
-
-            # Update action text and sample result
-            if frame < len(actions):
-                action = actions[frame]
-                action_name = self.action_names[action]
-                action_text.set_text(f"Step: {frame+1}/{len(path)}\nAction: {action_name}")
-
-                # Check for sample action and determine success/failure
-                if action == 0:  # Sample action
-                    robot_row, robot_col = robot_pos
-                    sample_success = False
-
-                    # Check if robot is on a rock position
-                    for i, rock_pos in enumerate(self.rock_positions):
-                        if (robot_row, robot_col) == rock_pos:
-                            # Check if the rock is good (True)
-                            if state.rocks[i]:
-                                sample_success = True
-                            break
-
-                    if sample_success:
-                        sample_text.set_text("★ VALUABLE! ★")
-                        sample_text.set_bbox(
-                            {
-                                "boxstyle": "round,pad=0.5",
-                                "facecolor": "lightgreen",
-                                "edgecolor": "green",
-                                "linewidth": 3,
-                                "alpha": 0.9,
-                            }
-                        )
-                        sample_text.set_color("darkgreen")
-                        sample_text.set_visible(True)
-                    else:
-                        sample_text.set_text("✗ WORTHLESS! ✗")
-                        sample_text.set_bbox(
-                            {
-                                "boxstyle": "round,pad=0.5",
-                                "facecolor": "lightcoral",
-                                "edgecolor": "red",
-                                "linewidth": 3,
-                                "alpha": 0.9,
-                            }
-                        )
-                        sample_text.set_color("darkred")
-                        sample_text.set_visible(True)
-                else:
-                    # Hide sample result for non-sample actions
-                    sample_text.set_visible(False)
-            else:
-                action_text.set_text(f"Step: {frame+1}/{len(path)}\nAction: Terminal")
-                sample_text.set_visible(False)
-
-            return tuple(
-                [robot_scatter, path_line, arrow, action_text, sample_text] + rock_scatters
-            )
-
-        ani = animation.FuncAnimation(
-            fig, animate, frames=len(path), interval=1000, blit=False, repeat=False
-        )
-
-        plt.tight_layout()
-
-        # Save animation
-        if cache_path is not None:
-            cache_path.parent.mkdir(parents=True, exist_ok=True)
-            ani.save(cache_path, writer="pillow", fps=1)
-
-        plt.close()
-
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
-        """Cache visualization of episode history."""
-        if not isinstance(history, List):
-            raise TypeError("history must be a List object")
-        if not history:
-            raise ValueError("Cannot visualize empty history")
-        for step in history:
-            if not isinstance(step, StepData):
-                raise TypeError("history must be a List of StepData objects")
-        if not isinstance(cache_path, Path):
-            raise TypeError("cache_path must be a Path object")
-        if not str(cache_path).endswith(".gif"):
-            raise ValueError("cache_path must end with .gif")
+        """Cache visualization of episode history.
 
-        # Extract path and actions
-        path = [step.state for step in history]
-        actions = [step.action for step in history[:-1]]  # Last step has no action
+        Args:
+            history: Episode history containing states, actions, and rewards
+            cache_path: Path where to save the visualization (must end with .gif)
+        """
+        visualizer = RockSampleVisualizer(self)
+        visualizer.create_visualization(history, cache_path)
 
-        self.visualize_path(path, actions, cache_path)
+    def visualize_path(
+        self, path: List["RockSampleState"], actions: List[int], cache_path: Path
+    ) -> None:
+        """Visualize robot path through the environment.
+
+        Args:
+            path: List of states representing the path
+            actions: List of actions taken at each state
+            cache_path: Path where to save the animation (must end with .gif)
+        """
+        visualizer = RockSampleVisualizer(self)
+        visualizer.visualize_path(path, actions, cache_path)
 
 
 def create_random_rock_sample(
