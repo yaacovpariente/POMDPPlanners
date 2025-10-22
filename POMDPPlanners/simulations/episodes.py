@@ -1,13 +1,167 @@
 import copy
 from logging import Logger
 from time import time
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.policy import Policy, PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.utils.logger import get_logger
+
+
+def _validate_episode_inputs(
+    environment: Environment,
+    policy: Policy,
+    initial_belief: Belief,
+    num_steps: int,
+) -> None:
+    if environment is None:
+        raise ValueError("environment cannot be None")
+    if policy is None:
+        raise ValueError("policy cannot be None")
+    if initial_belief is None:
+        raise ValueError("initial_belief cannot be None")
+    if num_steps is None:
+        raise ValueError("num_steps cannot be None")
+
+    if not isinstance(environment, Environment):
+        raise TypeError(f"environment must be an instance of Environment, got {type(environment)}")
+    if not isinstance(policy, Policy):
+        raise TypeError(f"policy must be an instance of Policy, got {type(policy)}")
+    if not isinstance(initial_belief, Belief):
+        raise TypeError(f"initial_belief must be an instance of Belief, got {type(initial_belief)}")
+    if not isinstance(num_steps, int):
+        raise TypeError(f"num_steps must be an integer, got {type(num_steps)}")
+    if num_steps <= 0:
+        raise ValueError(f"num_steps must be positive, got {num_steps}")
+
+    if not hasattr(environment, "state_transition_model") or not hasattr(
+        environment, "observation_model"
+    ):
+        raise ValueError("environment must implement state_transition_model and observation_model")
+    if not hasattr(policy, "action"):
+        raise ValueError("policy must implement action method")
+    if not hasattr(initial_belief, "sample") or not hasattr(initial_belief, "update"):
+        raise ValueError("initial_belief must implement sample and update methods")
+
+
+def _create_terminal_step_data(state, belief: Belief) -> StepData:
+    return StepData(
+        state=state,
+        action=None,
+        next_state=None,
+        observation=None,
+        reward=None,
+        belief=belief,
+    )
+
+
+def _execute_action_selection(
+    policy: Policy, belief: Belief, i: int
+) -> Tuple[List, PolicyRunData, float, float]:
+    actions_start_time = time()
+    actions, policy_run_data = policy.action(belief)
+    actions_time = time() - actions_start_time
+    average_action_time = 0.0
+    average_action_time = (average_action_time * (i - 1) + actions_time) / (i - 1 + len(actions))
+    return actions, policy_run_data, actions_time, average_action_time
+
+
+def _compute_reward(
+    environment: Environment, state, action, i: int, average_reward_time: float
+) -> Tuple[float, float]:
+    reward_start_time = time()
+    reward = environment.reward(state, action)
+    reward_time = time() - reward_start_time
+    average_reward_time = (average_reward_time * (i - 1) + reward_time) / i
+    return reward, average_reward_time
+
+
+def _sample_next_state(
+    environment: Environment, state, action, i: int, average_state_sampling_time: float
+) -> Tuple:
+    state_sampling_start_time = time()
+    next_state = environment.state_transition_model(state, action).sample()[0]
+    state_sampling_time = time() - state_sampling_start_time
+    average_state_sampling_time = (average_state_sampling_time * (i - 1) + state_sampling_time) / i
+    return next_state, average_state_sampling_time
+
+
+def _sample_observation(
+    environment: Environment, next_state, action, i: int, average_observation_time: float
+) -> Tuple:
+    observation_start_time = time()
+    observation = environment.observation_model(next_state, action).sample()[0]
+    observation_time = time() - observation_start_time
+    average_observation_time = (average_observation_time * (i - 1) + observation_time) / i
+    return observation, average_observation_time
+
+
+def _update_belief(
+    belief: Belief,
+    action,
+    observation,
+    environment: Environment,
+    next_state,
+    i: int,
+    average_belief_update_time: float,
+) -> Tuple[Belief, float]:
+    belief_update_start_time = time()
+    belief = belief.update(
+        action=action,
+        observation=observation,
+        pomdp=environment,
+        state=next_state,
+    )
+    belief_update_time = time() - belief_update_start_time
+    average_belief_update_time = (average_belief_update_time * (i - 1) + belief_update_time) / i
+    return belief, average_belief_update_time
+
+
+def _process_single_step(
+    environment: Environment,
+    state,
+    action,
+    belief: Belief,
+    i: int,
+    average_reward_time: float,
+    average_state_sampling_time: float,
+    average_observation_time: float,
+    average_belief_update_time: float,
+) -> Tuple:
+    reward, average_reward_time = _compute_reward(
+        environment, state, action, i, average_reward_time
+    )
+    next_state, average_state_sampling_time = _sample_next_state(
+        environment, state, action, i, average_state_sampling_time
+    )
+    observation, average_observation_time = _sample_observation(
+        environment, next_state, action, i, average_observation_time
+    )
+
+    step_data = StepData(
+        state=state,
+        action=action,
+        next_state=next_state,
+        observation=observation,
+        reward=reward,
+        belief=belief,
+    )
+
+    belief, average_belief_update_time = _update_belief(
+        belief, action, observation, environment, next_state, i, average_belief_update_time
+    )
+
+    return (
+        step_data,
+        next_state,
+        belief,
+        average_reward_time,
+        average_state_sampling_time,
+        average_observation_time,
+        average_belief_update_time,
+    )
 
 
 def run_episode(
@@ -89,45 +243,13 @@ def run_episode(
         ...     print(f"Step {i}: state={step.state}, action={step.action}, reward={step.reward}")  # doctest: +ELLIPSIS
         Step 0: state=..., action=..., reward=...
     """
-    # Input validation
-    if environment is None:
-        raise ValueError("environment cannot be None")
-    if policy is None:
-        raise ValueError("policy cannot be None")
-    if initial_belief is None:
-        raise ValueError("initial_belief cannot be None")
-    if num_steps is None:
-        raise ValueError("num_steps cannot be None")
-
-    if not isinstance(environment, Environment):
-        raise TypeError(f"environment must be an instance of Environment, got {type(environment)}")
-    if not isinstance(policy, Policy):
-        raise TypeError(f"policy must be an instance of Policy, got {type(policy)}")
-    if not isinstance(initial_belief, Belief):
-        raise TypeError(f"initial_belief must be an instance of Belief, got {type(initial_belief)}")
-    if not isinstance(num_steps, int):
-        raise TypeError(f"num_steps must be an integer, got {type(num_steps)}")
-    if num_steps <= 0:
-        raise ValueError(f"num_steps must be positive, got {num_steps}")
-
-    # Validate that environment and policy are compatible
-    if not hasattr(environment, "state_transition_model") or not hasattr(
-        environment, "observation_model"
-    ):
-        raise ValueError("environment must implement state_transition_model and observation_model")
-    if not hasattr(policy, "action"):
-        raise ValueError("policy must implement action method")
-    if not hasattr(initial_belief, "sample") or not hasattr(initial_belief, "update"):
-        raise ValueError("initial_belief must implement sample and update methods")
+    _validate_episode_inputs(environment, policy, initial_belief, num_steps)
 
     if logger is None:
-        logger = get_logger(
-            name=f"episode.{environment.name}.{policy.name}",
-        )
+        logger = get_logger(name=f"episode.{environment.name}.{policy.name}")
 
     logger.debug("Starting episode with %d steps", num_steps)
 
-    # Initialize timing metrics with deterministic values
     average_state_sampling_time = 0.0
     average_action_time = 0.0
     average_observation_time = 0.0
@@ -142,71 +264,41 @@ def run_episode(
     history = []
     policy_run_data_list = []
     i = 1
+
     while i <= num_steps:
         if environment.is_terminal(state=state):
             reach_terminal_state = True
-            history.append(
-                StepData(
-                    state=state,
-                    action=None,
-                    next_state=None,
-                    observation=None,
-                    reward=None,
-                    belief=belief,
-                )
-            )
+            history.append(_create_terminal_step_data(state, belief))
             break
 
-        actions_start_time = time()
-        actions, policy_run_data = policy.action(belief)  # TODO: bug here
-        actions_time = time() - actions_start_time
+        actions, policy_run_data, actions_time, _ = _execute_action_selection(policy, belief, i)
         policy_run_data_list.append(policy_run_data)
-
         average_action_time = (average_action_time * (i - 1) + actions_time) / (
             i - 1 + len(actions)
         )
 
         for action in actions:
-            reward_start_time = time()
-            reward = environment.reward(state, action)
-            reward_time = time() - reward_start_time
-            average_reward_time = (average_reward_time * (i - 1) + reward_time) / i
-
-            state_sampling_start_time = time()
-            next_state = environment.state_transition_model(state, action).sample()[0]
-            state_sampling_time = time() - state_sampling_start_time
-            average_state_sampling_time = (
-                average_state_sampling_time * (i - 1) + state_sampling_time
-            ) / i
-
-            observation_start_time = time()
-            observation = environment.observation_model(next_state, action).sample()[0]
-            observation_time = time() - observation_start_time
-            average_observation_time = (average_observation_time * (i - 1) + observation_time) / i
-
-            history.append(
-                StepData(
-                    state=state,
-                    action=action,
-                    next_state=next_state,
-                    observation=observation,
-                    reward=reward,
-                    belief=belief,
-                )
+            (
+                step_data,
+                next_state,
+                belief,
+                average_reward_time,
+                average_state_sampling_time,
+                average_observation_time,
+                average_belief_update_time,
+            ) = _process_single_step(
+                environment,
+                state,
+                action,
+                belief,
+                i,
+                average_reward_time,
+                average_state_sampling_time,
+                average_observation_time,
+                average_belief_update_time,
             )
 
-            belief_update_start_time = time()
-            belief = belief.update(
-                action=action,
-                observation=observation,
-                pomdp=environment,
-                state=next_state,
-            )
-            belief_update_time = time() - belief_update_start_time
-            average_belief_update_time = (
-                average_belief_update_time * (i - 1) + belief_update_time
-            ) / i
-
+            history.append(step_data)
             actual_num_steps += 1
             state = next_state
             i += 1
