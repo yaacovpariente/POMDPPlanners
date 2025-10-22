@@ -1,17 +1,11 @@
 from abc import ABC, abstractmethod
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Tuple, cast
+from typing import Any, List, Optional, Tuple
 
 import logging
-import matplotlib.animation as animation
-import matplotlib.pyplot as plt
 import numpy as np
-from matplotlib.axes import Axes
-from matplotlib.figure import Figure
-from matplotlib.lines import Line2D
 
-from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution, Distribution
 from POMDPPlanners.core.environment import (
     Environment,
@@ -21,6 +15,9 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_visualizer import (
+    LightDarkPOMDPVisualizer,
+)
 from POMDPPlanners.utils.config_to_id import config_to_id
 
 
@@ -302,265 +299,36 @@ class BaseLightDarkPOMDP(Environment, ABC):
         agent_belief_path: List[DiscreteDistribution],
         actions: List[str],
         cache_path: Path,
-    ):
-        if not isinstance(cache_path, Path):
-            raise TypeError("cache_path must be a Path object")
-        if not str(cache_path).endswith(".gif"):
-            raise ValueError("cache_path must end with .gif")
+    ) -> None:
+        """Create and save an animated visualization of the agent's path.
 
-        # Control belief particles color
-        belief_particles_color = "#FFFF00"  # Yellow color
+        Args:
+            path: List of state positions (2D numpy arrays) along the agent's trajectory.
+            agent_belief_path: List of belief distributions at each step.
+            actions: List of actions taken at each step.
+            cache_path: Path where to save the visualization (must end with .gif).
 
-        fig: Figure
-        ax: Axes
-        fig_temp, ax_temp = plt.subplots(figsize=(10, 8))
-        fig = cast(Figure, fig_temp)
-        ax = cast(Axes, ax_temp)
-        ax.set_xlim(-1, self.grid_size + 1)
-        ax.set_ylim(-1, self.grid_size + 1)
-        ax.set_xticks(np.arange(-1, self.grid_size + 1, 1))  # type: ignore[arg-type]
-        ax.set_yticks(np.arange(-1, self.grid_size + 1, 1))  # type: ignore[arg-type]
-        ax.set_facecolor("#696969")  # Darker grey
-        ax.grid(False)  # Remove the grid from the background
-
-        # Plot circles around beacons with white background and light fade effect
-        for i in range(self.beacons.shape[1]):
-            beacon_x, beacon_y = self.beacons[0, i], self.beacons[1, i]
-            # Create multiple circles with exponential decay for realistic light fade
-            for j in range(15):  # More circles for smoother gradient
-                radius = self.beacon_radius + j * 0.05  # Smaller radius increments
-                # Exponential decay for more realistic light fade
-                alpha = 0.9 * np.exp(-j * 0.3)  # Exponential decay from 0.9 to near 0
-                circle = plt.Circle(  # type: ignore[attr-defined]
-                    (beacon_x, beacon_y),
-                    float(radius),  # type: ignore[arg-type]
-                    facecolor="white",
-                    edgecolor="none",
-                    alpha=float(alpha),
-                )
-                ax.add_patch(circle)
-
-        # Plot the beacons
-        ax.scatter(
-            self.beacons[0],
-            self.beacons[1],
-            color="blue",
-            marker="^",
-            s=100,
-            label="Beacons",
-        )
-        # Plot the goal state
-        ax.scatter(
-            self.goal_state[0],
-            self.goal_state[1],
-            color="green",
-            marker="*",
-            s=200,
-            label="Goal State",
-        )
-        # Plot the start state
-        ax.scatter(self.start_state[0], self.start_state[1], color="red", label="Start State")
-        # Plot circles around obstacles with transparent red background
-        for i in range(self.obstacles.shape[1]):  # obstacles.shape[1] is number of obstacles
-            obstacle_x, obstacle_y = (
-                self.obstacles[0, i],
-                self.obstacles[1, i],
-            )  # obstacles[0,i] is x, obstacles[1,i] is y
-            circle = plt.Circle(  # type: ignore[attr-defined]
-                (obstacle_x, obstacle_y),
-                float(self.obstacle_radius),  # type: ignore[arg-type]
-                facecolor="red",
-                edgecolor="none",
-                alpha=0.3,
-            )
-            ax.add_patch(circle)
-
-        # Plot the obstacles
-        if self.obstacles.size > 0:
-            ax.scatter(self.obstacles[0], self.obstacles[1], color="black", label="Obstacles")
-
-        # Initialize the agent's position and path line
-        agent = cast(Line2D, ax.plot([], [], "ro", markersize=10)[0])
-        path_line = cast(Line2D, ax.plot([], [], "r-", alpha=0.5, linewidth=2)[0])
-        # Initialize the action arrow
-        arrow = plt.arrow(
-            0,
-            0,
-            0,
-            0,
-            color="red",
-            width=0.1,
-            head_width=0.3,
-            head_length=0.3,
-            length_includes_head=True,
-        )
-        # Initialize belief particles scatter plots for different time steps
-        belief_scatters = []
-        max_history = min(len(path), 10)  # Show up to 10 previous time steps
-        # Create gradient from yellow to red
-        yellow_color = np.array([1.0, 1.0, 0.0])  # Yellow RGB
-        red_color = np.array([1.0, 0.0, 0.0])  # Red RGB
-        colors = []
-        for i in range(max_history):
-            # Interpolate between yellow (current) and red (old)
-            t = (max_history - 1 - i) / max_history  # 0 for current, 1 for oldest
-            color = yellow_color * (1 - t) + red_color * t
-            # Apply additional intensity decay
-            alpha_factor = 0.1 + 0.9 * (i / max_history)  # 0.1 to 1.0 - more extreme decay
-            color = color * alpha_factor
-            colors.append(color)
-
-        for i in range(max_history):
-            scatter = ax.scatter(
-                [],
-                [],
-                c=[colors[i]],
-                alpha=0.6 + 0.3 * (i / max_history),
-                s=50,
-                label="",
-            )
-            belief_scatters.append(scatter)
-
-        # Create a proper legend entry for belief particles
-        legend_element = Line2D(
-            [],
-            [],
-            marker="o",
-            color=belief_particles_color,
-            markersize=8,
-            alpha=0.7,
-            linestyle="",
-            label="Belief Particles",
-        )
-        ax.add_artist(legend_element)
-
-        def init():
-            agent.set_data([], [])
-            path_line.set_data([], [])
-            arrow.set_data(x=0, y=0, dx=0, dy=0)
-            for scatter in belief_scatters:
-                scatter.set_offsets(np.empty((0, 2)))
-                scatter.set_sizes([])
-            return [agent, path_line, arrow] + belief_scatters
-
-        def update(frame):
-            # Update current position
-            x = float(path[frame][0])
-            y = float(path[frame][1])
-            agent.set_data([x], [y])
-
-            # Update path line up to current position
-            path_x = [float(p[0]) for p in path[: frame + 1]]
-            path_y = [float(p[1]) for p in path[: frame + 1]]
-            path_line.set_data(path_x, path_y)
-
-            # Update action arrow based on the action vector
-            if frame < len(actions):
-                action = actions[frame]
-                if action is None:
-                    # Handle None actions (e.g., terminal step)
-                    dx, dy = 0, 0
-                elif isinstance(action, str):
-                    dx, dy = self.action_to_vector[action]
-                else:
-                    dx, dy = action
-                arrow.set_data(x=x, y=y, dx=dx, dy=dy)
-            else:
-                arrow.set_data(x=x, y=y, dx=0, dy=0)
-
-            # Update belief particles with history
-            for i, scatter in enumerate(belief_scatters):
-                history_frame = frame - (len(belief_scatters) - 1 - i)
-                if history_frame >= 0 and history_frame < len(agent_belief_path):
-                    belief = agent_belief_path[history_frame]
-                    if len(belief.values) > 0:
-                        # Convert belief values to array of positions
-                        positions = np.array(belief.values)
-                        # Scale probabilities to reasonable sizes for visualization (multiply by 200)
-                        sizes = np.array(belief.probs) * 600
-                        scatter.set_offsets(positions)
-                        scatter.set_sizes(sizes)
-                    else:
-                        scatter.set_offsets(np.empty((0, 2)))
-                        scatter.set_sizes([])
-                else:
-                    scatter.set_offsets(np.empty((0, 2)))
-                    scatter.set_sizes([])
-
-            return [agent, path_line, arrow] + belief_scatters
-
-        ani = animation.FuncAnimation(
-            fig, update, frames=len(path), init_func=init, blit=True, repeat=False
-        )
-        plt.legend(bbox_to_anchor=(1.05, 1), loc="upper left")
-        plt.title("Agent Path")
-        plt.tight_layout()
-
-        # Save the animation
-        if cache_path is not None:
-            ani.save(cache_path, writer="pillow", fps=2)  # Use pillow instead of ffmpeg
-
-        plt.close()
+        Raises:
+            TypeError: If cache_path is not a Path object.
+            ValueError: If cache_path doesn't end with .gif.
+        """
+        visualizer = LightDarkPOMDPVisualizer(self)
+        visualizer.visualize_path(path, agent_belief_path, actions, cache_path)
 
     def cache_visualization(self, history: List[StepData], cache_path: Path) -> None:
         """Cache visualization of agent's path and belief.
 
         Args:
-            history: List of step data from an episode
-            cache_path: Path where to save the visualization
+            history: List of step data from an episode.
+            cache_path: Path where to save the visualization.
 
         Raises:
-            ValueError: If history is empty or contains invalid data
+            TypeError: If history is not a List or contains non-StepData objects,
+                or if cache_path is not a Path object.
+            ValueError: If history is empty or contains invalid data.
         """
-        if not isinstance(history, List):
-            raise TypeError("history must be a List object")
-        if not history:
-            raise ValueError("Cannot visualize empty history")
-        for step in history:
-            if not isinstance(step, StepData):
-                raise TypeError("history must be a List of StepData objects")
-        if not isinstance(cache_path, Path):
-            raise TypeError("cache_path must be a Path object")
-
-        # Extract data with validation
-        agent_path = []
-        agent_belief_path: List[DiscreteDistribution] = []
-        actions = []
-
-        for step in history:
-            if (
-                not hasattr(step, "state")
-                or not hasattr(step, "belief")
-                or not hasattr(step, "action")
-            ):
-                raise ValueError(f"History step missing required attributes: {step}")
-
-            agent_path.append(step.state)
-            if isinstance(step.belief, WeightedParticleBelief):
-                agent_belief_path.append(step.belief.to_unique_support_distribution())
-            else:
-                particles = [step.belief.sample() for _ in range(20)]
-                weights = np.ones(len(particles)) / len(particles)
-                discrete_distribution = DiscreteDistribution(values=particles, probs=weights)
-                agent_belief_path.append(discrete_distribution)
-
-            actions.append(step.action)
-
-        # Validate all lists have same length
-        if not (len(agent_path) == len(agent_belief_path) == len(actions)):
-            raise ValueError(
-                f"Mismatched lengths: path={len(agent_path)}, belief={len(agent_belief_path)}, actions={len(actions)}"
-            )
-
-        # Create directory if it doesn't exist
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-
-        self.visualize_path(
-            path=agent_path,
-            agent_belief_path=agent_belief_path,
-            actions=actions,
-            cache_path=cache_path,
-        )
+        visualizer = LightDarkPOMDPVisualizer(self)
+        visualizer.cache_visualization(history, cache_path)
 
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return np.array_equal(observation1, observation2)
