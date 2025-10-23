@@ -1,7 +1,7 @@
 import copy
 from logging import Logger
 from time import time
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
@@ -46,122 +46,202 @@ def _validate_episode_inputs(
         raise ValueError("initial_belief must implement sample and update methods")
 
 
-def _create_terminal_step_data(state, belief: Belief) -> StepData:
-    return StepData(
-        state=state,
-        action=None,
-        next_state=None,
-        observation=None,
-        reward=None,
-        belief=belief,
-    )
+class EpisodeRunner:
+    """Executes a single POMDP episode and collects performance metrics."""
 
+    def __init__(
+        self,
+        environment: Environment,
+        policy: Policy,
+        initial_belief: Belief,
+        num_steps: int,
+        logger: Optional[Logger] = None,
+    ):
+        _validate_episode_inputs(environment, policy, initial_belief, num_steps)
 
-def _execute_action_selection(
-    policy: Policy, belief: Belief, i: int
-) -> Tuple[List, PolicyRunData, float, float]:
-    actions_start_time = time()
-    actions, policy_run_data = policy.action(belief)
-    actions_time = time() - actions_start_time
-    average_action_time = 0.0
-    average_action_time = (average_action_time * (i - 1) + actions_time) / (i - 1 + len(actions))
-    return actions, policy_run_data, actions_time, average_action_time
+        self.environment = environment
+        self.policy = policy
+        self.num_steps = num_steps
+        self.logger = logger or get_logger(f"episode.{environment.name}.{policy.name}")
 
+        # Episode state
+        self.belief = copy.deepcopy(initial_belief)
+        self.state = initial_belief.sample()
+        self.history = []
+        self.policy_run_data = []
+        self.current_step = 0
+        self.reach_terminal_state = False
 
-def _compute_reward(
-    environment: Environment, state, action, i: int, average_reward_time: float
-) -> Tuple[float, float]:
-    reward_start_time = time()
-    reward = environment.reward(state, action)
-    reward_time = time() - reward_start_time
-    average_reward_time = (average_reward_time * (i - 1) + reward_time) / i
-    return reward, average_reward_time
+        # Timing metrics (updated incrementally)
+        self.average_action_time = 0.0
+        self.average_reward_time = 0.0
+        self.average_state_sampling_time = 0.0
+        self.average_observation_time = 0.0
+        self.average_belief_update_time = 0.0
 
+    def run(self) -> History:
+        """Execute the episode and return history with metrics."""
+        self.logger.debug("Starting episode with %d steps", self.num_steps)
 
-def _sample_next_state(
-    environment: Environment, state, action, i: int, average_state_sampling_time: float
-) -> Tuple:
-    state_sampling_start_time = time()
-    next_state = environment.state_transition_model(state, action).sample()[0]
-    state_sampling_time = time() - state_sampling_start_time
-    average_state_sampling_time = (average_state_sampling_time * (i - 1) + state_sampling_time) / i
-    return next_state, average_state_sampling_time
+        while self._should_continue():
+            self._execute_policy_step()
 
+        self._log_completion()
+        return self._build_history()
 
-def _sample_observation(
-    environment: Environment, next_state, action, i: int, average_observation_time: float
-) -> Tuple:
-    observation_start_time = time()
-    observation = environment.observation_model(next_state, action).sample()[0]
-    observation_time = time() - observation_start_time
-    average_observation_time = (average_observation_time * (i - 1) + observation_time) / i
-    return observation, average_observation_time
+    def _should_continue(self) -> bool:
+        """Check if episode should continue."""
+        if self.current_step >= self.num_steps:
+            return False
 
+        if self.environment.is_terminal(self.state):
+            self.reach_terminal_state = True
+            self._add_terminal_step()
+            return False
 
-def _update_belief(
-    belief: Belief,
-    action,
-    observation,
-    environment: Environment,
-    next_state,
-    i: int,
-    average_belief_update_time: float,
-) -> Tuple[Belief, float]:
-    belief_update_start_time = time()
-    belief = belief.update(
-        action=action,
-        observation=observation,
-        pomdp=environment,
-        state=next_state,
-    )
-    belief_update_time = time() - belief_update_start_time
-    average_belief_update_time = (average_belief_update_time * (i - 1) + belief_update_time) / i
-    return belief, average_belief_update_time
+        return True
 
+    def _execute_policy_step(self) -> None:
+        """Execute one policy action selection and all resulting actions."""
+        actions, policy_run_data = self._select_actions()
+        self.policy_run_data.append(policy_run_data)
 
-def _process_single_step(
-    environment: Environment,
-    state,
-    action,
-    belief: Belief,
-    i: int,
-    average_reward_time: float,
-    average_state_sampling_time: float,
-    average_observation_time: float,
-    average_belief_update_time: float,
-) -> Tuple:
-    reward, average_reward_time = _compute_reward(
-        environment, state, action, i, average_reward_time
-    )
-    next_state, average_state_sampling_time = _sample_next_state(
-        environment, state, action, i, average_state_sampling_time
-    )
-    observation, average_observation_time = _sample_observation(
-        environment, next_state, action, i, average_observation_time
-    )
+        for action in actions:
+            if self.current_step >= self.num_steps:
+                break
+            self._execute_single_action(action)
+            self.current_step += 1
 
-    step_data = StepData(
-        state=state,
-        action=action,
-        next_state=next_state,
-        observation=observation,
-        reward=reward,
-        belief=belief,
-    )
+    def _select_actions(self) -> Tuple[List, PolicyRunData]:
+        """Select actions using policy and update timing."""
+        start_time = time()
+        actions, policy_run_data = self.policy.action(self.belief)
+        elapsed = time() - start_time
 
-    belief, average_belief_update_time = _update_belief(
-        belief, action, observation, environment, next_state, i, average_belief_update_time
-    )
+        # Update average action time accounting for multiple actions
+        step_count = self.current_step if self.current_step > 0 else 1
+        total_actions = step_count - 1 + len(actions)
+        self.average_action_time = (
+            self.average_action_time * (step_count - 1) + elapsed
+        ) / total_actions
 
-    return (
-        step_data,
-        next_state,
-        belief,
-        average_reward_time,
-        average_state_sampling_time,
-        average_observation_time,
-        average_belief_update_time,
-    )
+        return actions, policy_run_data
+
+    def _execute_single_action(self, action: Any) -> None:
+        """Execute one action: compute reward, sample transition, update belief."""
+        reward = self._compute_reward(action)
+        next_state = self._sample_next_state(action)
+        observation = self._sample_observation(next_state=next_state, action=action)
+
+        self._record_step(action, next_state, observation, reward)
+        self._update_belief(action, observation, next_state)
+
+        self.state = next_state
+
+    def _compute_reward(self, action: Any) -> float:
+        """Compute reward and update timing metric."""
+        start_time = time()
+        reward = self.environment.reward(self.state, action)
+        elapsed = time() - start_time
+
+        step = self.current_step + 1
+        self.average_reward_time = (self.average_reward_time * self.current_step + elapsed) / step
+
+        return reward
+
+    def _sample_next_state(self, action: Any) -> Any:
+        """Sample next state and update timing metric."""
+        start_time = time()
+        next_state = self.environment.state_transition_model(self.state, action).sample()[0]
+        elapsed = time() - start_time
+
+        step = self.current_step + 1
+        self.average_state_sampling_time = (
+            self.average_state_sampling_time * self.current_step + elapsed
+        ) / step
+
+        return next_state
+
+    def _sample_observation(self, next_state: Any, action: Any) -> Any:
+        """Sample observation and update timing metric."""
+        start_time = time()
+        observation = self.environment.observation_model(next_state, action).sample()[0]
+        elapsed = time() - start_time
+
+        step = self.current_step + 1
+        self.average_observation_time = (
+            self.average_observation_time * self.current_step + elapsed
+        ) / step
+
+        return observation
+
+    def _update_belief(self, action: Any, observation: Any, next_state: Any) -> None:
+        """Update belief and update timing metric."""
+        start_time = time()
+        self.belief = self.belief.update(
+            action=action,
+            observation=observation,
+            pomdp=self.environment,
+            state=next_state,
+        )
+        elapsed = time() - start_time
+
+        step = self.current_step + 1
+        self.average_belief_update_time = (
+            self.average_belief_update_time * self.current_step + elapsed
+        ) / step
+
+    def _record_step(self, action: Any, next_state: Any, observation: Any, reward: float) -> None:
+        """Record step data in history."""
+        step_data = StepData(
+            state=self.state,
+            action=action,
+            next_state=next_state,
+            observation=observation,
+            reward=reward,
+            belief=self.belief,
+        )
+        self.history.append(step_data)
+
+    def _add_terminal_step(self) -> None:
+        """Add terminal step to history."""
+        terminal_step = StepData(
+            state=self.state,
+            action=None,
+            next_state=None,
+            observation=None,
+            reward=None,
+            belief=self.belief,
+        )
+        self.history.append(terminal_step)
+
+    def _log_completion(self) -> None:
+        """Log episode completion with timing metrics."""
+        self.logger.debug(
+            "Episode completed with average times: action=%.4fs, "
+            "reward=%.4fs, state_sampling=%.4fs, "
+            "observation=%.4fs, belief_update=%.4fs",
+            self.average_action_time,
+            self.average_reward_time,
+            self.average_state_sampling_time,
+            self.average_observation_time,
+            self.average_belief_update_time,
+        )
+
+    def _build_history(self) -> History:
+        """Construct final History object."""
+        return History(
+            history=self.history,
+            discount_factor=self.environment.discount_factor,
+            average_state_sampling_time=self.average_state_sampling_time,
+            average_action_time=self.average_action_time,
+            average_observation_time=self.average_observation_time,
+            average_belief_update_time=self.average_belief_update_time,
+            average_reward_time=self.average_reward_time,
+            actual_num_steps=self.current_step,
+            reach_terminal_state=self.reach_terminal_state,
+            policy_run_data=self.policy_run_data,
+        )
 
 
 def run_episode(
@@ -243,89 +323,11 @@ def run_episode(
         ...     print(f"Step {i}: state={step.state}, action={step.action}, reward={step.reward}")  # doctest: +ELLIPSIS
         Step 0: state=..., action=..., reward=...
     """
-    _validate_episode_inputs(environment, policy, initial_belief, num_steps)
-
-    if logger is None:
-        logger = get_logger(name=f"episode.{environment.name}.{policy.name}")
-
-    logger.debug("Starting episode with %d steps", num_steps)
-
-    average_state_sampling_time = 0.0
-    average_action_time = 0.0
-    average_observation_time = 0.0
-    average_belief_update_time = 0.0
-    average_reward_time = 0.0
-    actual_num_steps = 0
-    reach_terminal_state = False
-
-    belief = copy.deepcopy(initial_belief)
-    state = belief.sample()
-
-    history = []
-    policy_run_data_list = []
-    i = 1
-
-    while i <= num_steps:
-        if environment.is_terminal(state=state):
-            reach_terminal_state = True
-            history.append(_create_terminal_step_data(state, belief))
-            break
-
-        actions, policy_run_data, actions_time, _ = _execute_action_selection(policy, belief, i)
-        policy_run_data_list.append(policy_run_data)
-        average_action_time = (average_action_time * (i - 1) + actions_time) / (
-            i - 1 + len(actions)
-        )
-
-        for action in actions:
-            (
-                step_data,
-                next_state,
-                belief,
-                average_reward_time,
-                average_state_sampling_time,
-                average_observation_time,
-                average_belief_update_time,
-            ) = _process_single_step(
-                environment,
-                state,
-                action,
-                belief,
-                i,
-                average_reward_time,
-                average_state_sampling_time,
-                average_observation_time,
-                average_belief_update_time,
-            )
-
-            history.append(step_data)
-            actual_num_steps += 1
-            state = next_state
-            i += 1
-
-            if i > num_steps:
-                break
-
-    logger.debug(
-        "Episode completed with average times: action=%.4fs, "
-        "reward=%.4fs, state_sampling=%.4fs, "
-        "observation=%.4fs, belief_update=%.4fs",
-        average_action_time,
-        average_reward_time,
-        average_state_sampling_time,
-        average_observation_time,
-        average_belief_update_time,
+    runner = EpisodeRunner(
+        environment=environment,
+        policy=policy,
+        initial_belief=initial_belief,
+        num_steps=num_steps,
+        logger=logger,
     )
-
-    return History(
-        history=history,
-        discount_factor=environment.discount_factor,
-        average_state_sampling_time=average_state_sampling_time,
-        average_action_time=average_action_time,
-        average_observation_time=average_observation_time,
-        average_belief_update_time=average_belief_update_time,
-        average_reward_time=average_reward_time,
-        actual_num_steps=actual_num_steps,
-        reach_terminal_state=reach_terminal_state,
-        policy_run_data=policy_run_data_list,
-    )
+    return runner.run()
