@@ -13,15 +13,15 @@ import random
 import numpy as np
 import pytest
 
-# Set seeds for reproducible tests
-np.random.seed(42)
-random.seed(42)
-
 from POMDPPlanners.environments.push_pomdp import (
     PushObservation,
     PushPOMDP,
     PushStateTransition,
 )
+
+# Set seeds for reproducible tests
+np.random.seed(42)
+random.seed(42)
 
 
 class TestPushPOMDP:

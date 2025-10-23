@@ -28,8 +28,6 @@ import matplotlib
 import numpy as np
 import scipy.stats
 
-matplotlib.use("Agg")  # Use non-interactive backend
-
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
     DiscreteActionsEnvironment,
@@ -39,6 +37,8 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
     StepData,
 )
+
+matplotlib.use("Agg")  # Use non-interactive backend
 
 
 class MountainCarTransition(StateTransitionModel):
