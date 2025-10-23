@@ -35,7 +35,6 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import LaserTagVisualizer
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
@@ -988,6 +987,11 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             ValueError: If history is empty or contains invalid data
             TypeError: If cache_path is not a Path object or doesn't end with .gif
         """
+        # Lazy import to avoid circular dependency
+        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_visualizer import (
+            LaserTagVisualizer,
+        )
+
         visualizer = LaserTagVisualizer(
             floor_shape=self.floor_shape,
             walls=self.walls,
