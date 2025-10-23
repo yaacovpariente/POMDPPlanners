@@ -1,12 +1,12 @@
 from pathlib import Path
 from typing import Any, List, Tuple, cast
 
-import matplotlib.animation as animation
 import matplotlib.pyplot as plt
-import numpy as np
+from matplotlib import animation
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+import numpy as np
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
@@ -202,7 +202,7 @@ class LightDarkPOMDPVisualizer:
                 arrow.set_data(x=x, y=y, dx=0, dy=0)
             for i, scatter in enumerate(belief_scatters):
                 history_frame = frame - (len(belief_scatters) - 1 - i)
-                if history_frame >= 0 and history_frame < len(agent_belief_path):
+                if 0 <= history_frame < len(agent_belief_path):
                     belief = agent_belief_path[history_frame]
                     if len(belief.values) > 0:
                         positions = np.array(belief.values)
@@ -311,7 +311,7 @@ class LightDarkPOMDPVisualizer:
             actions.append(step.action)
 
         # Validate all lists have same length
-        if not (len(agent_path) == len(agent_belief_path) == len(actions)):
+        if not len(agent_path) == len(agent_belief_path) == len(actions):
             raise ValueError(
                 f"Mismatched lengths: path={len(agent_path)}, belief={len(agent_belief_path)}, actions={len(actions)}"
             )

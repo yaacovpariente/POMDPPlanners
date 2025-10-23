@@ -5,14 +5,16 @@ creating animated GIF visualizations of episodes.
 """
 
 from pathlib import Path
-from typing import List, Set, Tuple
+from typing import List, Set, Tuple, cast
 
-import matplotlib.animation as animation
 import matplotlib.pyplot as plt
-import numpy as np
+from matplotlib import animation
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+import numpy as np
+
+from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagState
 
 from POMDPPlanners.core.simulation import StepData
 
@@ -206,8 +208,6 @@ class LaserTagVisualizer:
             raise ValueError("cache_path must end with .gif")
 
     def _extract_history_data(self, history: List[StepData]) -> Tuple:
-        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagState
-
         robot_path = []
         opponent_path = []
         actions = []
@@ -274,7 +274,6 @@ class LaserTagVisualizer:
             ax.add_patch(circle)
 
     def _create_animated_elements(self, ax: Axes) -> Tuple:
-        from typing import cast
 
         robot_agent = cast(Line2D, ax.plot([], [], "ro", markersize=12, label="Robot")[0])
         opponent_agent = cast(Line2D, ax.plot([], [], "bo", markersize=12, label="Opponent")[0])
@@ -289,7 +288,7 @@ class LaserTagVisualizer:
             "",
             xy=(0, 0),
             xytext=(0, 0),
-            arrowprops=dict(arrowstyle="->", color="red", lw=2),
+            arrowprops={"arrowstyle": "->", "color": "red", "lw": 2},
         )
 
         step_text = ax.text(
@@ -299,7 +298,7 @@ class LaserTagVisualizer:
             transform=ax.transAxes,
             fontsize=12,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+            bbox={"boxstyle": "round", "facecolor": "wheat", "alpha": 0.8},
         )
 
         action_text = ax.text(
@@ -309,7 +308,7 @@ class LaserTagVisualizer:
             transform=ax.transAxes,
             fontsize=10,
             verticalalignment="top",
-            bbox=dict(boxstyle="round", facecolor="lightblue", alpha=0.8),
+            bbox={"boxstyle": "round", "facecolor": "lightblue", "alpha": 0.8},
         )
 
         tag_text = ax.text(
@@ -321,13 +320,13 @@ class LaserTagVisualizer:
             fontweight="bold",
             horizontalalignment="left",
             verticalalignment="bottom",
-            bbox=dict(
-                boxstyle="round,pad=0.5",
-                facecolor="gold",
-                edgecolor="red",
-                linewidth=3,
-                alpha=0.9,
-            ),
+            bbox={
+                "boxstyle": "round,pad=0.5",
+                "facecolor": "gold",
+                "edgecolor": "red",
+                "linewidth": 3,
+                "alpha": 0.9,
+            },
             color="red",
             visible=False,
         )
@@ -368,7 +367,6 @@ class LaserTagVisualizer:
         )
 
     def _update_belief_particles(self, belief, opponent_belief_scatter, robot_belief_scatter):
-        from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagState
 
         if hasattr(belief, "to_unique_support_distribution"):
             unique_belief = belief.to_unique_support_distribution()
@@ -432,13 +430,13 @@ class LaserTagVisualizer:
     def _update_tag_text_success(self, tag_text):
         tag_text.set_text("🏷️ TAGGED! 🏷️")
         tag_text.set_bbox(
-            dict(
-                boxstyle="round,pad=0.5",
-                facecolor="gold",
-                edgecolor="green",
-                linewidth=3,
-                alpha=0.9,
-            )
+            {
+                "boxstyle": "round,pad=0.5",
+                "facecolor": "gold",
+                "edgecolor": "green",
+                "linewidth": 3,
+                "alpha": 0.9,
+            }
         )
         tag_text.set_color("green")
         tag_text.set_visible(True)
@@ -446,13 +444,13 @@ class LaserTagVisualizer:
     def _update_tag_text_failure(self, tag_text):
         tag_text.set_text("❌ MISSED! ❌")
         tag_text.set_bbox(
-            dict(
-                boxstyle="round,pad=0.5",
-                facecolor="lightcoral",
-                edgecolor="red",
-                linewidth=3,
-                alpha=0.9,
-            )
+            {
+                "boxstyle": "round,pad=0.5",
+                "facecolor": "lightcoral",
+                "edgecolor": "red",
+                "linewidth": 3,
+                "alpha": 0.9,
+            }
         )
         tag_text.set_color("darkred")
         tag_text.set_visible(True)
@@ -502,7 +500,7 @@ class LaserTagVisualizer:
                 self._update_belief_particles(
                     beliefs[frame], opponent_belief_scatter, robot_belief_scatter
                 )
-            except:
+            except Exception:
                 opponent_belief_scatter.set_offsets(np.empty((0, 2)))
                 robot_belief_scatter.set_offsets(np.empty((0, 2)))
         else:

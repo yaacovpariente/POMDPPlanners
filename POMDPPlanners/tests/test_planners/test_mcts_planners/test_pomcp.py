@@ -9,6 +9,7 @@ This module tests the POMCP planner, focusing on:
 
 # pylint: disable=protected-access  # Tests need to access protected members
 
+import gc
 import random
 import time
 
@@ -17,6 +18,7 @@ import pytest
 from anytree import PostOrderIter
 
 from POMDPPlanners.core.belief import WeightedParticleBelief, get_initial_belief
+from POMDPPlanners.utils.memory_tracker import MemoryTracker
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
@@ -164,7 +166,7 @@ def test_action_selection(planner, belief, environment):
 
     Test type: unit
     """
-    action, policy_run_data = planner.action(belief)
+    action, _ = planner.action(belief)
     assert isinstance(action, list)
     assert len(action) == 1
     assert action[0] in environment.actions
@@ -182,7 +184,7 @@ def test_search_behavior_with_initial_belief(planner, belief, environment):
     Test type: unit
     """
     # The search method has been removed, so we test the action method instead
-    action, policy_run_data = planner.action(belief)
+    action, _ = planner.action(belief)
     assert isinstance(action, list)
     assert len(action) == 1
     assert action[0] in environment.actions
@@ -217,7 +219,7 @@ def test_integration_with_tiger_pomdp(planner, belief, environment, n_particles)
     """
     current_belief = belief
     for _ in range(5):
-        action, policy_run_data = planner.action(current_belief)
+        action, _ = planner.action(current_belief)
         assert isinstance(action, list)
         assert len(action) == 1
         assert action[0] in environment.actions
@@ -398,7 +400,7 @@ def test_sanity_pomdp_action_selection():
     action_0_count = 0
 
     for _ in range(n_trials):
-        action, policy_run_data = planner.action(belief)
+        action, _ = planner.action(belief)
         assert isinstance(action, list)
         assert len(action) == 1
         if action[0] == 0:  # Count how many times action 0 is selected
@@ -530,7 +532,7 @@ def test_pomcp_config_id_different_depth(
 
 
 def test_pomcp_config_id_consistency_across_evaluations(
-    environment, discount_factor, depth, exploration_constant
+    environment, discount_factor, exploration_constant
 ):
     """Test that config_id remains consistent across different policy evaluations.
 
@@ -558,7 +560,7 @@ def test_pomcp_config_id_consistency_across_evaluations(
     initial_belief = get_initial_belief(environment, n_particles=50)
 
     # Perform multiple policy evaluations
-    for i in range(3):
+    for _ in range(3):
         action, run_data = pomcp.action(initial_belief)
 
         # Check config_id remains the same
@@ -654,12 +656,8 @@ def test_pomcp_config_id_hash_properties(
 # These tests help identify specific sources of memory leaks in POMCP.
 # Tests that fail indicate components that need memory management fixes.
 
-import gc
 
-from POMDPPlanners.utils.memory_tracker import MemoryTracker
-
-
-def test_memory_leak_environment_policy_object_accumulation(environment, discount_factor):
+def test_memory_leak_environment_policy_object_accumulation(discount_factor):
     """
     Purpose: Validates that Environment and Policy objects are properly garbage collected
 
@@ -699,7 +697,7 @@ def test_memory_leak_environment_policy_object_accumulation(environment, discoun
             beliefs.append(belief)
 
             # Simulate some policy usage to build search tree
-            action, _ = policy.action(belief)
+            _, _ = policy.action(belief)
 
         tracker.checkpoint("after_creation")
 

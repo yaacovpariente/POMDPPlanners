@@ -12,11 +12,11 @@ import random
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.distributions import DiscreteDistribution, Numpy2DDistribution
+
 # Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
-
-from POMDPPlanners.core.distributions import DiscreteDistribution, Numpy2DDistribution
 
 
 def test_discrete_distribution_initialization():

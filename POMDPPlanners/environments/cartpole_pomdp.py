@@ -24,7 +24,7 @@ from typing import Any, List, Optional
 import numpy as np
 from numpy.typing import NDArray
 
-import scipy.stats as stats
+from scipy import stats
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.core.environment import (
@@ -248,12 +248,12 @@ class CartPoleInitialStateDistribution(Distribution):
     """
 
     def __init__(self):
-        super().__init__()
+        pass
 
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
         # Generate all samples at once using vectorized uniform distribution
         samples_array = np.random.uniform(low=-0.05, high=0.05, size=(n_samples, 4))
-        return [sample for sample in samples_array]
+        return list(samples_array)
 
 
 class CartPolePOMDP(DiscreteActionsEnvironment):
@@ -354,8 +354,6 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         return CartPoleObservation(next_state=next_state, action=action, noise_cov=self.noise_cov)
 
     def reward(self, state: np.ndarray, action: int) -> float:
-        x, x_dot, theta, theta_dot = state
-
         terminated = self.is_terminal(state)
 
         if not terminated:
@@ -366,7 +364,7 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
         return reward
 
     def is_terminal(self, state: np.ndarray) -> bool:
-        x, x_dot, theta, theta_dot = state
+        x, theta = state[0], state[2]
 
         terminated = bool(
             x < -self.x_threshold

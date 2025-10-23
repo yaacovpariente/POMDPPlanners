@@ -11,7 +11,7 @@ Classes:
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, List, Tuple, cast
 
-import matplotlib.animation as animation
+from matplotlib import animation
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
@@ -209,7 +209,7 @@ class PushPOMDPVisualizer:
             "",
             xy=(0, 0),
             xytext=(0, 0),
-            arrowprops=dict(arrowstyle="->", color="red", lw=3, alpha=0.8),
+            arrowprops={"arrowstyle": "->", "color": "red", "lw": 3, "alpha": 0.8},
             zorder=6,
             visible=False,
         )
@@ -223,7 +223,7 @@ class PushPOMDPVisualizer:
             "",
             transform=ax.transAxes,
             fontsize=12,
-            bbox=dict(boxstyle="round,pad=0.5", facecolor="lightblue", alpha=0.8),
+            bbox={"boxstyle": "round,pad=0.5", "facecolor": "lightblue", "alpha": 0.8},
             verticalalignment="top",
             horizontalalignment="left",
         )
@@ -233,7 +233,7 @@ class PushPOMDPVisualizer:
             "",
             transform=ax.transAxes,
             fontsize=11,
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="lightyellow", alpha=0.8),
+            bbox={"boxstyle": "round,pad=0.3", "facecolor": "lightyellow", "alpha": 0.8},
             verticalalignment="top",
             horizontalalignment="left",
         )
@@ -243,7 +243,7 @@ class PushPOMDPVisualizer:
             "",
             transform=ax.transAxes,
             fontsize=11,
-            bbox=dict(boxstyle="round,pad=0.3", facecolor="lightgreen", alpha=0.8),
+            bbox={"boxstyle": "round,pad=0.3", "facecolor": "lightgreen", "alpha": 0.8},
             verticalalignment="top",
             horizontalalignment="left",
         )
@@ -255,13 +255,13 @@ class PushPOMDPVisualizer:
             fontsize=20,
             fontweight="bold",
             color="darkgreen",
-            bbox=dict(
-                boxstyle="round,pad=1.0",
-                facecolor="lightgreen",
-                edgecolor="darkgreen",
-                linewidth=3,
-                alpha=0.9,
-            ),
+            bbox={
+                "boxstyle": "round,pad=1.0",
+                "facecolor": "lightgreen",
+                "edgecolor": "darkgreen",
+                "linewidth": 3,
+                "alpha": 0.9,
+            },
             horizontalalignment="center",
             verticalalignment="center",
             visible=False,
@@ -275,13 +275,13 @@ class PushPOMDPVisualizer:
             fontsize=16,
             fontweight="bold",
             color="darkred",
-            bbox=dict(
-                boxstyle="round,pad=0.8",
-                facecolor="lightcoral",
-                edgecolor="darkred",
-                linewidth=2,
-                alpha=0.9,
-            ),
+            bbox={
+                "boxstyle": "round,pad=0.8",
+                "facecolor": "lightcoral",
+                "edgecolor": "darkred",
+                "linewidth": 2,
+                "alpha": 0.9,
+            },
             horizontalalignment="center",
             verticalalignment="center",
             visible=False,
