@@ -244,7 +244,7 @@ class TigerPOMDP(DiscreteActionsEnvironment):
 
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,  # Actions are discrete: listen, open_left, open_right
-            observation_space=SpaceType.DISCRETE,  # Observations are discrete: hear_left, hear_right, hear_nothing
+            observation_space=SpaceType.DISCRETE,  # Observations: hear_left, hear_right, hear_nothing
         )
         super().__init__(
             discount_factor=discount_factor,

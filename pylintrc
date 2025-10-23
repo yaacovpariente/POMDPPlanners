@@ -12,6 +12,8 @@ disable=C0111,  # missing-docstring
            R0903,  # too-few-public-methods
            R0913,  # too-many-arguments
            R0914,  # too-many-locals
+           R0917,  # too-many-positional-arguments
+           R0902,  # too-many-instance-attributes
            W0621,  # redefined-outer-name
            E0110,  # abstract-class-instantiated (false positives in factory methods and tests)
 
