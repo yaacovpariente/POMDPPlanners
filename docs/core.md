@@ -107,7 +107,6 @@ This directory contains the foundational abstractions and interfaces for the POM
 - `print_tree()`: Recursive tree printing with node specifications
 - `get_optimal_action_cost_setting()`: Minimum cost action selection
 - `get_optimal_action_reward_setting()`: Maximum reward action selection
-- `sample_belief_node_child()`: Weighted sampling based on visit counts
 
 ### `cost.py` - Cost and Reward Calculations
 
