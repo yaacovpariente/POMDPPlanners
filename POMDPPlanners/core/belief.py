@@ -321,38 +321,10 @@ class WeightedParticleBelief(Belief):
             DiscreteDistribution: A distribution where each particle appears only once,
             with its probability being the sum of all its occurrences in the original belief.
         """
-        # Create a dictionary to store unique particles and their combined weights
-        unique_particles: Dict[Hashable, float] = {}
-
-        # Iterate through particles and their weights
-        for particle, weight in zip(self.particles, self.normalized_weights):
-            # Convert particle to tuple if it's a numpy array for hashability
-            if isinstance(particle, np.ndarray):
-                particle_key: Hashable = tuple(particle.tolist())
-            else:
-                particle_key = particle  # assume hashable
-
-            # Add or update the weight for this particle
-            if particle_key in unique_particles:
-                unique_particles[particle_key] += weight
-            else:
-                unique_particles[particle_key] = weight
-
-        # Convert back to original particle types and create arrays
-        particles: List[Any] = []
-        weights: List[float] = []
-        for particle_key, weight in unique_particles.items():
-            if isinstance(particle_key, tuple):
-                particles.append(np.array(particle_key))
-            else:
-                particles.append(particle_key)
-            weights.append(float(weight))
-
-        # Convert to numpy array and normalize to ensure sum is exactly 1
-        weights_arr = np.array(weights, dtype=float)
-        weights_arr = weights_arr / np.sum(weights_arr)  # Normalize to sum to 1
-
-        return DiscreteDistribution(values=particles, probs=weights_arr)
+        unique_particles, probabilities = get_unique_support(
+            self.particles, self.normalized_weights
+        )
+        return DiscreteDistribution(values=unique_particles, probs=probabilities)
 
     @property
     def config_id(self) -> str:
@@ -762,6 +734,18 @@ class WeightedParticleBeliefStateUpdate(Belief):
 
         return particle
 
+    def to_unique_support_distribution(self) -> "DiscreteDistribution":
+        """Convert the belief to a DiscreteDistribution with unique particles.
+
+        Returns:
+            DiscreteDistribution: A distribution where each particle appears only once,
+            with its probability being the sum of all its occurrences in the original belief.
+        """
+        # Convert weights list to numpy array for get_unique_support
+        weights_arr = np.array(self.weights, dtype=float)
+        unique_particles, probabilities = get_unique_support(self.particles, weights_arr)
+        return DiscreteDistribution(values=unique_particles, probs=probabilities)
+
     @property
     def config_id(self) -> str:
         """Generate a deterministic identifier based on belief configuration.
@@ -1014,6 +998,92 @@ class UnweightedParticleBeliefStateUpdate(Belief):
         }
         config_dict = dict(sorted(config_dict.items()))
         return config_to_id(config_dict)
+
+
+def get_unique_support(
+    particles: List[Any], probabilities: np.ndarray
+) -> Tuple[List[Any], np.ndarray]:
+    """Extract unique particles and their combined probabilities.
+
+    This function takes a list of particles and their associated probabilities,
+    combines probabilities for duplicate particles, and returns unique particles
+    with normalized probabilities.
+
+    Args:
+        particles: List of particles of any type
+        probabilities: Array of probabilities/weights corresponding to each particle
+
+    Returns:
+        Tuple containing:
+            - List of unique particles (preserving original types)
+            - Normalized numpy array of probabilities summing to 1
+
+    Example:
+        >>> particles = [1, 2, 1, 3, 2]
+        >>> probs = np.array([0.2, 0.3, 0.1, 0.2, 0.2])
+        >>> unique_particles, unique_probs = get_unique_support(particles, probs)
+        >>> unique_particles  # [1, 2, 3]
+        [1, 2, 3]
+        >>> np.sum(unique_probs)  # Should be 1.0
+        1.0
+    """
+
+    def _make_hashable(value):
+        """Recursively convert numpy arrays and lists to hashable tuples.
+
+        This is necessary because numpy arrays are not hashable and cannot
+        be used as dictionary keys. Multi-dimensional arrays require recursive
+        conversion since tuple(arr.tolist()) on 2D+ arrays produces tuples
+        containing lists, which are still unhashable.
+        """
+        # Try to hash directly first - if it works, return as-is
+        try:
+            hash(value)
+            return value
+        except TypeError:
+            # Not hashable, need to convert
+            pass
+
+        # Convert based on type
+        if isinstance(value, np.ndarray):
+            # Recursively convert nested arrays to tuples
+            return tuple(_make_hashable(item) for item in value.tolist())
+        elif isinstance(value, (list, tuple)):
+            # Convert lists to tuples, recursively handle nested structures
+            return tuple(_make_hashable(item) for item in value)
+        else:
+            # Shouldn't reach here if hash check worked, but fallback
+            return value
+
+    # Create dictionaries to store unique particles and their combined probabilities
+    # We need to store both the hashable key and the original particle
+    unique_particles_dict: Dict[Hashable, Tuple[Any, float]] = {}
+
+    # Iterate through particles and their probabilities
+    for particle, prob in zip(particles, probabilities):
+        # Convert particle to hashable key
+        particle_key: Hashable = _make_hashable(particle)
+
+        # Add or update the probability for this particle
+        if particle_key in unique_particles_dict:
+            original_particle, combined_prob = unique_particles_dict[particle_key]
+            unique_particles_dict[particle_key] = (original_particle, combined_prob + prob)
+        else:
+            unique_particles_dict[particle_key] = (particle, prob)
+
+    # Convert back to original particle types and create arrays
+    unique_particles_list: List[Any] = []
+    combined_probs: List[float] = []
+    for particle_key, (original_particle, prob) in unique_particles_dict.items():
+        unique_particles_list.append(original_particle)
+        combined_probs.append(float(prob))
+
+    # Convert to numpy array and normalize to ensure sum is exactly 1
+    probabilities_arr = np.array(combined_probs, dtype=float)
+    if len(probabilities_arr) > 0:
+        probabilities_arr = probabilities_arr / np.sum(probabilities_arr)  # Normalize to sum to 1
+
+    return unique_particles_list, probabilities_arr
 
 
 def sample_next_belief(belief: Belief, action: Any, pomdp: "Environment") -> Tuple[Belief, Any]:
