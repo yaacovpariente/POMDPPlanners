@@ -723,6 +723,12 @@ class WeightedParticleBeliefStateUpdate(Belief):
         """
         if state is None:
             raise ValueError("state cannot be None")
+        if action is None:
+            raise ValueError("action cannot be None")
+        if observation is None:
+            raise ValueError("observation cannot be None")
+        if not isinstance(pomdp, Environment):
+            raise TypeError("pomdp must be an instance of Environment")
 
         self.particles.append(state)
         observation_probability = pomdp.observation_model(
