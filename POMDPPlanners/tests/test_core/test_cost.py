@@ -16,6 +16,11 @@ from POMDPPlanners.core.belief import Belief, WeightedParticleBelief
 from POMDPPlanners.core.cost import (
     belief_expectation_cost,
     belief_expectation_cost_particle_belief,
+    belief_expectation_cost_entropy_penalty,
+    belief_expectation_cost_belief_information_gain,
+    particle_belief_expectation_cost_entropy_penalty,
+    particle_belief_expectation_cost_information_gain,
+    particle_belief_entropy,
     belief_expectation_reward,
     belief_expectation_reward_particle_belief,
 )
@@ -94,13 +99,13 @@ def test_belief_expectation_cost_particle_belief_uniform_weights(
 
     Given: WeightedParticleBelief with uniform weights over tiger_left and tiger_right, and "listen" action
     When: belief_expectation_cost_particle_belief is called
-    Then: Returns expected cost of 1.0 (negative of -1.0 listen reward) with entropy_weight=0.0
+    Then: Returns expected cost of 1.0 (negative of -1.0 listen reward)
 
     Test type: unit
     """
     action = "listen"
     cost = belief_expectation_cost_particle_belief(
-        belief=uniform_weighted_belief, action=action, env=tiger_env, entropy_weight=0.0
+        belief=uniform_weighted_belief, action=action, env=tiger_env
     )
 
     # With uniform weights and listen action (reward -1.0 for both states), expected cost is 1.0
@@ -122,7 +127,7 @@ def test_belief_expectation_cost_particle_belief_non_uniform_weights(
     """
     action = "listen"
     cost = belief_expectation_cost_particle_belief(
-        belief=non_uniform_weighted_belief, action=action, env=tiger_env, entropy_weight=0.0
+        belief=non_uniform_weighted_belief, action=action, env=tiger_env
     )
 
     # With listen action (reward -1.0 for both states), expected cost is 1.0 regardless of weights
@@ -146,9 +151,7 @@ def test_belief_expectation_cost_particle_belief_varying_rewards():
 
     env = TigerPOMDP(discount_factor=0.95)
     action = "open_left"
-    cost = belief_expectation_cost_particle_belief(
-        belief=belief, action=action, env=env, entropy_weight=0.0
-    )
+    cost = belief_expectation_cost_particle_belief(belief=belief, action=action, env=env)
 
     # Expected cost = -0.7*(-100.0) - 0.3*(10.0) = 70.0 - 3.0 = 67.0
     # But cost is negative of reward, so: cost = -reward
@@ -157,13 +160,13 @@ def test_belief_expectation_cost_particle_belief_varying_rewards():
     assert cost == pytest.approx(67.0)
 
 
-def test_belief_expectation_cost_particle_belief_with_entropy():
-    """Test cost calculation with entropy weighting.
+def test_belief_expectation_cost_entropy_penalty():
+    """Test cost calculation with entropy penalty.
 
-    Purpose: Validates that entropy weighting is correctly added to the cost calculation
+    Purpose: Validates that entropy penalty is correctly added to the cost calculation
 
     Given: WeightedParticleBelief with uniform weights and entropy_weight=0.1
-    When: belief_expectation_cost_particle_belief is called
+    When: belief_expectation_cost_entropy_penalty is called
     Then: Returns cost including entropy term (expected entropy for uniform distribution is log(2))
 
     Test type: unit
@@ -176,26 +179,50 @@ def test_belief_expectation_cost_particle_belief_with_entropy():
     action = "listen"
     entropy_weight = 0.1
 
-    cost = belief_expectation_cost_particle_belief(
+    cost = particle_belief_expectation_cost_entropy_penalty(
         belief=belief, action=action, env=env, entropy_weight=entropy_weight
     )
 
     # Expected cost = 1.0 (base cost from listen reward -1.0) + 0.1 * entropy
     # For uniform distribution: entropy = -sum(p * log(p)) = -2 * (0.5 * log(0.5)) = log(2)
-    expected_entropy = -np.sum(belief.normalized_weights * np.log(belief.normalized_weights))
+    expected_entropy = particle_belief_entropy(belief=belief)
     expected_cost = 1.0 + entropy_weight * expected_entropy
 
     assert cost == pytest.approx(expected_cost)
 
 
-def test_belief_expectation_cost_particle_belief_negative_entropy_weight():
-    """Test that negative entropy weight raises ValueError.
+def test_belief_expectation_cost_entropy_penalty_zero_weight(tiger_env, uniform_weighted_belief):
+    """Test that entropy penalty with zero weight equals base cost.
 
-    Purpose: Validates that negative entropy weights are rejected
+    Purpose: Validates that zero entropy weight behaves as default (no entropy term added)
 
-    Given: WeightedParticleBelief and entropy_weight=-0.1
-    When: belief_expectation_cost_particle_belief is called
-    Then: Raises ValueError with appropriate message
+    Given: WeightedParticleBelief and entropy_weight=0.0
+    When: belief_expectation_cost_entropy_penalty is called
+    Then: Returns same result as belief_expectation_cost_particle_belief
+
+    Test type: unit
+    """
+    action = "listen"
+    cost_with_entropy_zero = particle_belief_expectation_cost_entropy_penalty(
+        belief=uniform_weighted_belief, action=action, env=tiger_env, entropy_weight=0.0
+    )
+
+    cost_base = belief_expectation_cost_particle_belief(
+        belief=uniform_weighted_belief, action=action, env=tiger_env
+    )
+
+    # Both should be the same when entropy_weight=0.0
+    assert cost_with_entropy_zero == pytest.approx(cost_base)
+
+
+def test_particle_belief_entropy():
+    """Test particle belief entropy calculation.
+
+    Purpose: Validates that entropy is correctly calculated for particle beliefs
+
+    Given: WeightedParticleBelief with uniform weights
+    When: particle_belief_entropy is called
+    Then: Returns entropy value (log(2) for uniform distribution with 2 particles)
 
     Test type: unit
     """
@@ -203,39 +230,12 @@ def test_belief_expectation_cost_particle_belief_negative_entropy_weight():
     log_weights = np.log(np.ones(2) / 2)
     belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
 
-    env = TigerPOMDP(discount_factor=0.95)
-    action = "listen"
+    entropy = particle_belief_entropy(belief=belief)
 
-    with pytest.raises(ValueError, match="Entropy weight must be non-negative"):
-        belief_expectation_cost_particle_belief(
-            belief=belief, action=action, env=env, entropy_weight=-0.1
-        )
-
-
-def test_belief_expectation_cost_particle_belief_zero_entropy_weight(
-    tiger_env, uniform_weighted_belief
-):
-    """Test cost calculation with zero entropy weight (default).
-
-    Purpose: Validates that zero entropy weight behaves as default (no entropy term added)
-
-    Given: WeightedParticleBelief and entropy_weight=0.0 (default)
-    When: belief_expectation_cost_particle_belief is called
-    Then: Returns cost without entropy term
-
-    Test type: unit
-    """
-    action = "listen"
-    cost_with_explicit_zero = belief_expectation_cost_particle_belief(
-        belief=uniform_weighted_belief, action=action, env=tiger_env, entropy_weight=0.0
-    )
-
-    cost_with_default = belief_expectation_cost_particle_belief(
-        belief=uniform_weighted_belief, action=action, env=tiger_env
-    )
-
-    # Both should be the same
-    assert cost_with_explicit_zero == pytest.approx(cost_with_default)
+    # For uniform distribution: entropy = -sum(p * log(p)) = -2 * (0.5 * log(0.5)) = log(2)
+    expected_entropy = -np.sum(belief.normalized_weights * np.log(belief.normalized_weights))
+    assert entropy == pytest.approx(expected_entropy)
+    assert entropy == pytest.approx(np.log(2))
 
 
 def test_belief_expectation_reward_particle_belief_uniform_weights(
@@ -253,7 +253,7 @@ def test_belief_expectation_reward_particle_belief_uniform_weights(
     """
     action = "listen"
     reward = belief_expectation_reward_particle_belief(
-        belief=uniform_weighted_belief, action=action, env=tiger_env, entropy_weight=0.0
+        belief=uniform_weighted_belief, action=action, env=tiger_env
     )
 
     # Reward should be negative of cost
@@ -261,40 +261,60 @@ def test_belief_expectation_reward_particle_belief_uniform_weights(
 
     # Verify it's indeed the negative
     cost = belief_expectation_cost_particle_belief(
-        belief=uniform_weighted_belief, action=action, env=tiger_env, entropy_weight=0.0
+        belief=uniform_weighted_belief, action=action, env=tiger_env
     )
     assert reward == pytest.approx(-cost)
 
 
-def test_belief_expectation_reward_particle_belief_with_entropy():
-    """Test reward calculation with entropy weighting.
+def test_belief_expectation_cost_belief_information_gain():
+    """Test cost calculation with belief information gain.
 
-    Purpose: Validates that reward calculation correctly includes entropy term (as negative)
+    Purpose: Validates that information gain is correctly added to the cost calculation
 
-    Given: WeightedParticleBelief with uniform weights and entropy_weight=0.1
-    When: belief_expectation_reward_particle_belief is called
-    Then: Returns reward with entropy term subtracted (negative of cost with entropy)
+    Given: Current belief, next belief, and entropy_weight=0.1
+    When: belief_expectation_cost_belief_information_gain is called
+    Then: Returns cost including information gain term (entropy difference)
 
     Test type: unit
     """
-    particles = ["tiger_left", "tiger_right"]
-    log_weights = np.log(np.ones(2) / 2)
-    belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+    # Current belief: uniform (high entropy)
+    particles_current = ["tiger_left", "tiger_right"]
+    log_weights_current = np.log(np.ones(2) / 2)
+    belief_current = WeightedParticleBelief(
+        particles=particles_current, log_weights=log_weights_current
+    )
+
+    # Next belief: concentrated (lower entropy) - represents gaining information
+    particles_next = ["tiger_left", "tiger_right"]
+    log_weights_next = np.log(np.array([0.9, 0.1]))
+    belief_next = WeightedParticleBelief(particles=particles_next, log_weights=log_weights_next)
 
     env = TigerPOMDP(discount_factor=0.95)
     action = "listen"
     entropy_weight = 0.1
 
-    reward = belief_expectation_reward_particle_belief(
-        belief=belief, action=action, env=env, entropy_weight=entropy_weight
+    cost = particle_belief_expectation_cost_information_gain(
+        belief=belief_current,
+        action=action,
+        next_belief=belief_next,
+        env=env,
+        entropy_weight=entropy_weight,
     )
 
-    cost = belief_expectation_cost_particle_belief(
-        belief=belief, action=action, env=env, entropy_weight=entropy_weight
+    # Base cost = 1.0 (listen reward -1.0)
+    base_cost = belief_expectation_cost_particle_belief(
+        belief=belief_current, action=action, env=env
     )
+    # Information gain = entropy(next) - entropy(current) = negative (entropy decreased)
+    entropy_current = particle_belief_entropy(belief=belief_current)
+    entropy_next = particle_belief_entropy(belief=belief_next)
+    information_gain = entropy_next - entropy_current
 
-    # Reward should be negative of cost
-    assert reward == pytest.approx(-cost)
+    expected_cost = base_cost + entropy_weight * information_gain
+
+    assert cost == pytest.approx(expected_cost)
+    # Information gain should be negative (entropy decreased, so we gained information)
+    assert information_gain < 0
 
 
 def test_belief_expectation_cost_with_weighted_particle_belief(tiger_env, uniform_weighted_belief):
@@ -310,11 +330,11 @@ def test_belief_expectation_cost_with_weighted_particle_belief(tiger_env, unifor
     """
     action = "listen"
     cost_general = belief_expectation_cost(
-        belief=uniform_weighted_belief, action=action, env=tiger_env, entropy_weight=0.0
+        belief=uniform_weighted_belief, action=action, env=tiger_env
     )
 
     cost_specific = belief_expectation_cost_particle_belief(
-        belief=uniform_weighted_belief, action=action, env=tiger_env, entropy_weight=0.0
+        belief=uniform_weighted_belief, action=action, env=tiger_env
     )
 
     assert cost_general == pytest.approx(cost_specific)
@@ -352,13 +372,9 @@ def test_belief_expectation_reward_with_weighted_particle_belief(
     Test type: unit
     """
     action = "listen"
-    reward = belief_expectation_reward(
-        belief=uniform_weighted_belief, action=action, env=tiger_env, entropy_weight=0.0
-    )
+    reward = belief_expectation_reward(belief=uniform_weighted_belief, action=action, env=tiger_env)
 
-    cost = belief_expectation_cost(
-        belief=uniform_weighted_belief, action=action, env=tiger_env, entropy_weight=0.0
-    )
+    cost = belief_expectation_cost(belief=uniform_weighted_belief, action=action, env=tiger_env)
 
     assert reward == pytest.approx(-cost)
 
@@ -381,6 +397,147 @@ def test_belief_expectation_reward_with_unsupported_belief_type(tiger_env):
         belief_expectation_reward(belief=belief, action=action, env=tiger_env)
 
 
+def test_belief_expectation_cost_entropy_penalty_with_weighted_particle_belief(
+    tiger_env, uniform_weighted_belief
+):
+    """Test general entropy penalty cost function with WeightedParticleBelief.
+
+    Purpose: Validates that belief_expectation_cost_entropy_penalty correctly delegates to particle-specific function
+
+    Given: WeightedParticleBelief with uniform weights
+    When: belief_expectation_cost_entropy_penalty is called
+    Then: Returns same result as particle_belief_expectation_cost_entropy_penalty
+
+    Test type: unit
+    """
+    action = "listen"
+    entropy_weight = 0.1
+
+    cost_general = belief_expectation_cost_entropy_penalty(
+        belief=uniform_weighted_belief, action=action, env=tiger_env, entropy_weight=entropy_weight
+    )
+
+    cost_specific = particle_belief_expectation_cost_entropy_penalty(
+        belief=uniform_weighted_belief, action=action, env=tiger_env, entropy_weight=entropy_weight
+    )
+
+    assert cost_general == pytest.approx(cost_specific)
+
+
+def test_belief_expectation_cost_entropy_penalty_with_unsupported_belief_type(tiger_env):
+    """Test that unsupported belief types raise NotImplementedError in entropy penalty function.
+
+    Purpose: Validates that belief_expectation_cost_entropy_penalty raises error for unsupported belief types
+
+    Given: NonWeightedParticleBelief (not WeightedParticleBelief)
+    When: belief_expectation_cost_entropy_penalty is called
+    Then: Raises NotImplementedError with appropriate message
+
+    Test type: unit
+    """
+    belief = NonWeightedParticleBelief()
+    action = "listen"
+
+    with pytest.raises(NotImplementedError, match="not implemented for this belief type"):
+        belief_expectation_cost_entropy_penalty(
+            belief=belief, action=action, env=tiger_env, entropy_weight=0.1
+        )
+
+
+def test_belief_expectation_cost_belief_information_gain_with_weighted_particle_belief():
+    """Test general information gain cost function with WeightedParticleBelief.
+
+    Purpose: Validates that belief_expectation_cost_belief_information_gain correctly delegates to particle-specific function
+
+    Given: WeightedParticleBelief for both current and next belief
+    When: belief_expectation_cost_belief_information_gain is called
+    Then: Returns same result as particle_belief_expectation_cost_information_gain
+
+    Test type: unit
+    """
+    # Current belief: uniform (high entropy)
+    particles_current = ["tiger_left", "tiger_right"]
+    log_weights_current = np.log(np.ones(2) / 2)
+    belief_current = WeightedParticleBelief(
+        particles=particles_current, log_weights=log_weights_current
+    )
+
+    # Next belief: concentrated (lower entropy)
+    particles_next = ["tiger_left", "tiger_right"]
+    log_weights_next = np.log(np.array([0.9, 0.1]))
+    belief_next = WeightedParticleBelief(particles=particles_next, log_weights=log_weights_next)
+
+    env = TigerPOMDP(discount_factor=0.95)
+    action = "listen"
+    entropy_weight = 0.1
+
+    cost_general = belief_expectation_cost_belief_information_gain(
+        belief=belief_current,
+        action=action,
+        next_belief=belief_next,
+        env=env,
+        entropy_weight=entropy_weight,
+    )
+
+    cost_specific = particle_belief_expectation_cost_information_gain(
+        belief=belief_current,
+        action=action,
+        next_belief=belief_next,
+        env=env,
+        entropy_weight=entropy_weight,
+    )
+
+    assert cost_general == pytest.approx(cost_specific)
+
+
+def test_belief_expectation_cost_belief_information_gain_with_unsupported_belief_type(tiger_env):
+    """Test that unsupported belief types raise NotImplementedError in information gain function.
+
+    Purpose: Validates that belief_expectation_cost_belief_information_gain raises error for unsupported belief types
+
+    Given: NonWeightedParticleBelief for current or next belief
+    When: belief_expectation_cost_belief_information_gain is called
+    Then: Raises NotImplementedError with appropriate message
+
+    Test type: unit
+    """
+    particles = ["tiger_left", "tiger_right"]
+    log_weights = np.log(np.ones(2) / 2)
+    weighted_belief = WeightedParticleBelief(particles=particles, log_weights=log_weights)
+    non_weighted_belief = NonWeightedParticleBelief()
+    action = "listen"
+
+    # Test with unsupported current belief
+    with pytest.raises(NotImplementedError, match="not implemented for this belief type"):
+        belief_expectation_cost_belief_information_gain(
+            belief=non_weighted_belief,
+            action=action,
+            next_belief=weighted_belief,
+            env=tiger_env,
+            entropy_weight=0.1,
+        )
+
+    # Test with unsupported next belief
+    with pytest.raises(NotImplementedError, match="not implemented for this belief type"):
+        belief_expectation_cost_belief_information_gain(
+            belief=weighted_belief,
+            action=action,
+            next_belief=non_weighted_belief,
+            env=tiger_env,
+            entropy_weight=0.1,
+        )
+
+    # Test with both unsupported
+    with pytest.raises(NotImplementedError, match="not implemented for this belief type"):
+        belief_expectation_cost_belief_information_gain(
+            belief=non_weighted_belief,
+            action=action,
+            next_belief=non_weighted_belief,
+            env=tiger_env,
+            entropy_weight=0.1,
+        )
+
+
 def test_belief_expectation_cost_single_particle():
     """Test cost calculation with single particle.
 
@@ -401,22 +558,20 @@ def test_belief_expectation_cost_single_particle():
     env = TigerPOMDP(discount_factor=0.95)
 
     action = "open_right"  # Opening right door when tiger is left gives +10 reward
-    cost = belief_expectation_cost_particle_belief(
-        belief=belief, action=action, env=env, entropy_weight=0.0
-    )
+    cost = belief_expectation_cost_particle_belief(belief=belief, action=action, env=env)
 
     # With single particle, cost should be negative of that particle's reward
     # reward = 10.0, so cost = -10.0
     assert cost == pytest.approx(-10.0)
 
 
-def test_belief_expectation_cost_entropy_maximum_uncertainty():
-    """Test that entropy term is maximized for uniform distribution.
+def test_belief_expectation_cost_entropy_penalty_maximum_uncertainty():
+    """Test that entropy penalty is maximized for uniform distribution.
 
-    Purpose: Validates that entropy calculation correctly identifies maximum uncertainty case
+    Purpose: Validates that entropy penalty correctly identifies maximum uncertainty case
 
     Given: Two beliefs: one uniform (high entropy) and one concentrated (low entropy)
-    When: belief_expectation_cost_particle_belief is called with entropy_weight > 0
+    When: belief_expectation_cost_entropy_penalty is called with entropy_weight > 0
     Then: Uniform belief has higher total cost due to higher entropy
 
     Test type: unit
@@ -439,16 +594,32 @@ def test_belief_expectation_cost_entropy_maximum_uncertainty():
     action = "listen"
     entropy_weight = 0.5
 
-    cost_uniform = belief_expectation_cost_particle_belief(
+    cost_uniform = particle_belief_expectation_cost_entropy_penalty(
         belief=belief_uniform, action=action, env=env, entropy_weight=entropy_weight
     )
 
-    cost_concentrated = belief_expectation_cost_particle_belief(
+    cost_concentrated = particle_belief_expectation_cost_entropy_penalty(
         belief=belief_concentrated, action=action, env=env, entropy_weight=entropy_weight
     )
 
-    # Uniform belief should have higher cost due to higher entropy
+    # Uniform belief should have higher cost due to higher entropy penalty
     assert cost_uniform > cost_concentrated
+
+    # Verify that base costs are the same (since "listen" gives same reward for both states)
+    base_cost_uniform = belief_expectation_cost_particle_belief(
+        belief=belief_uniform, action=action, env=env
+    )
+    base_cost_concentrated = belief_expectation_cost_particle_belief(
+        belief=belief_concentrated, action=action, env=env
+    )
+    assert base_cost_uniform == pytest.approx(base_cost_concentrated)
+
+    # Verify the cost difference is exactly due to entropy difference
+    entropy_uniform = particle_belief_entropy(belief=belief_uniform)
+    entropy_concentrated = particle_belief_entropy(belief=belief_concentrated)
+    expected_cost_difference = entropy_weight * (entropy_uniform - entropy_concentrated)
+    actual_cost_difference = cost_uniform - cost_concentrated
+    assert actual_cost_difference == pytest.approx(expected_cost_difference)
 
 
 def test_belief_expectation_cost_weights_normalization():
@@ -471,9 +642,7 @@ def test_belief_expectation_cost_weights_normalization():
     env = TigerPOMDP(discount_factor=0.95)
     action = "open_left"  # This gives different rewards: -100 for tiger_left, 10 for tiger_right
 
-    cost = belief_expectation_cost_particle_belief(
-        belief=belief, action=action, env=env, entropy_weight=0.0
-    )
+    cost = belief_expectation_cost_particle_belief(belief=belief, action=action, env=env)
 
     # With normalized weights [0.5, 0.5], expected cost = -0.5*(-100.0) - 0.5*(10.0) = 50.0 - 5.0 = 45.0
     # Actually: reward = 0.5*(-100) + 0.5*10 = -50 + 5 = -45, so cost = -(-45) = 45

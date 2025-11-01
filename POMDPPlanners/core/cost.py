@@ -16,8 +16,13 @@ from POMDPPlanners.core.belief import WeightedParticleBelief, Belief
 from POMDPPlanners.core.environment import Environment
 
 
+def particle_belief_entropy(belief: WeightedParticleBelief) -> float:
+    unique_belief = belief.to_unique_support_distribution()
+    return -np.sum(unique_belief.probs * np.log(unique_belief.probs))
+
+
 def belief_expectation_cost_particle_belief(
-    belief: WeightedParticleBelief, action: Any, env: Environment, entropy_weight: float = 0.0
+    belief: WeightedParticleBelief, action: Any, env: Environment
 ) -> float:
     """Calculate expected cost for an action given a weighted particle belief.
 
@@ -32,23 +37,49 @@ def belief_expectation_cost_particle_belief(
     Returns:
         Expected immediate cost (negative of expected reward)
     """
-    if entropy_weight < 0.0:
-        raise ValueError("Entropy weight must be non-negative")
-
     costs = np.array(
         [-env.reward(belief.particles[i], action) for i in range(len(belief.particles))]
     )
     cost_: float = float(np.sum(costs * belief.normalized_weights))
 
-    if entropy_weight > 0.0:
-        entropy_value = -np.sum(belief.normalized_weights * np.log(belief.normalized_weights))
-        cost_ += entropy_weight * entropy_value
-
     return cost_
 
 
+def particle_belief_expectation_cost_entropy_penalty(
+    belief: WeightedParticleBelief,
+    action: Any,
+    env: Environment,
+    entropy_weight: float = 0.0,
+    lower_clip: float = -np.inf,
+    upper_clip: float = np.inf,
+) -> float:
+    cost_ = belief_expectation_cost_particle_belief(belief=belief, action=action, env=env)
+    if entropy_weight > 0.0:
+        entropy_value = particle_belief_entropy(belief=belief)
+        cost_ += entropy_weight * entropy_value
+
+    return np.clip(cost_, lower_clip, upper_clip)
+
+
+def particle_belief_expectation_cost_information_gain(
+    belief: WeightedParticleBelief,
+    action: Any,
+    next_belief: WeightedParticleBelief,
+    env: Environment,
+    entropy_weight: float = 0.0,
+    lower_clip: float = -np.inf,
+    upper_clip: float = np.inf,
+) -> float:
+    cost_ = belief_expectation_cost_particle_belief(belief=belief, action=action, env=env)
+    information_gain = particle_belief_entropy(belief=next_belief) - particle_belief_entropy(
+        belief=belief
+    )
+    total_cost = cost_ + entropy_weight * information_gain
+    return np.clip(total_cost, lower_clip, upper_clip)
+
+
 def belief_expectation_reward_particle_belief(
-    belief: WeightedParticleBelief, action: Any, env: Environment, entropy_weight: float = 0.0
+    belief: WeightedParticleBelief, action: Any, env: Environment
 ) -> float:
     """Calculate expected reward for an action given a weighted particle belief.
 
@@ -63,14 +94,10 @@ def belief_expectation_reward_particle_belief(
     Returns:
         Expected immediate reward
     """
-    return -belief_expectation_cost_particle_belief(
-        belief=belief, env=env, action=action, entropy_weight=entropy_weight
-    )
+    return -belief_expectation_cost_particle_belief(belief=belief, env=env, action=action)
 
 
-def belief_expectation_cost(
-    belief: Belief, action: Any, env: Environment, entropy_weight: float = 0.0
-) -> float:
+def belief_expectation_cost(belief: Belief, action: Any, env: Environment) -> float:
     """Calculate expected cost for an action given a belief.
 
     This function computes the expected immediate cost (negative reward) by
@@ -85,16 +112,12 @@ def belief_expectation_cost(
         Expected immediate cost
     """
     if isinstance(belief, WeightedParticleBelief):
-        return belief_expectation_cost_particle_belief(
-            belief=belief, action=action, env=env, entropy_weight=entropy_weight
-        )
+        return belief_expectation_cost_particle_belief(belief=belief, action=action, env=env)
     else:
         raise NotImplementedError("Belief expectation cost is not implemented for this belief type")
 
 
-def belief_expectation_reward(
-    belief: Belief, action: Any, env: Environment, entropy_weight: float = 0.0
-) -> float:
+def belief_expectation_reward(belief: Belief, action: Any, env: Environment) -> float:
     """Calculate expected reward for an action given a belief.
 
     This function computes the expected immediate reward by taking the weighted
@@ -108,6 +131,54 @@ def belief_expectation_reward(
     Returns:
         Expected immediate reward
     """
-    return -belief_expectation_cost(
-        belief=belief, action=action, env=env, entropy_weight=entropy_weight
-    )
+    return -belief_expectation_cost(belief=belief, action=action, env=env)
+
+
+def belief_expectation_cost_entropy_penalty(
+    belief: Belief,
+    action: Any,
+    env: Environment,
+    entropy_weight: float = 0.0,
+    lower_clip: float = -np.inf,
+    upper_clip: float = np.inf,
+) -> float:
+    if isinstance(belief, WeightedParticleBelief):
+        return particle_belief_expectation_cost_entropy_penalty(
+            belief=belief,
+            action=action,
+            env=env,
+            entropy_weight=entropy_weight,
+            lower_clip=lower_clip,
+            upper_clip=upper_clip,
+        )
+    else:
+        raise NotImplementedError(
+            "Belief expectation cost entropy penalty is not implemented for this belief type"
+        )
+
+
+def belief_expectation_cost_belief_information_gain(
+    belief: Belief,
+    action: Any,
+    next_belief: Belief,
+    env: Environment,
+    entropy_weight: float = 0.0,
+    lower_clip: float = -np.inf,
+    upper_clip: float = np.inf,
+) -> float:
+    if isinstance(belief, WeightedParticleBelief) and isinstance(
+        next_belief, WeightedParticleBelief
+    ):
+        return particle_belief_expectation_cost_information_gain(
+            belief=belief,
+            action=action,
+            next_belief=next_belief,
+            env=env,
+            entropy_weight=entropy_weight,
+            lower_clip=lower_clip,
+            upper_clip=upper_clip,
+        )
+    else:
+        raise NotImplementedError(
+            "Belief expectation cost information gain is not implemented for this belief type"
+        )
