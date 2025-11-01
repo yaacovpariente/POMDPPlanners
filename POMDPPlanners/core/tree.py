@@ -132,9 +132,3 @@ def get_optimal_action_reward_setting(belief_node: BeliefNode) -> Any:
     actions = [child.action for child in belief_node.children]
     q_values = [child.q_value for child in belief_node.children]
     return actions[np.argmax(q_values)]
-
-
-def sample_belief_node_child(action_node: ActionNode) -> BeliefNode:
-    child_visit_counts = np.array([child.visit_count for child in action_node.children])
-    weights = child_visit_counts / sum(child_visit_counts)
-    return np.random.choice(action_node.children, p=weights)
