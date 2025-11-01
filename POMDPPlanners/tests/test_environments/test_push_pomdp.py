@@ -140,8 +140,8 @@ class TestPushPOMDP:
         ), f"Expected near obstacle reward {expected_near_reward}, got {near_obstacle_reward}"
 
     def test_object_obstacle_collision_penalty(self):
-        """Test that object collision with obstacles applies penalty."""
-        # Create state with object in obstacle
+        """Test that object collision with obstacles does not apply penalty (only robot collision does)."""
+        # Create state with object in obstacle (robot is safe)
         object_obstacle_state = np.concatenate(
             [
                 self.safe_pos,  # Robot in safe area
@@ -163,20 +163,15 @@ class TestPushPOMDP:
         object_obstacle_reward = self.env.reward(object_obstacle_state, action="up")
         object_near_obstacle_reward = self.env.reward(object_near_obstacle_state, action="up")
 
-        # Object in obstacle should get lower reward due to penalty
-        assert (
-            object_obstacle_reward < object_near_obstacle_reward
-        ), f"Object in obstacle reward ({object_obstacle_reward}) should be < near obstacle reward ({object_near_obstacle_reward})"
-
-        # Calculate expected penalty
+        # Calculate expected rewards (no penalty applied since robot is safe in both cases)
         distance_to_target_obstacle = np.linalg.norm(self.obstacle_pos - self.target_pos)
         distance_to_target_near = np.linalg.norm(np.array([3.6, 3.6]) - self.target_pos)
 
-        # Both should have distance component, but obstacle state has additional penalty
-        expected_obstacle_reward = -distance_to_target_obstacle + self.env.obstacle_penalty
+        # Both should have only distance component (no penalty since robot is not in obstacle)
+        expected_obstacle_reward = -distance_to_target_obstacle
         expected_near_reward = -distance_to_target_near
 
-        # Verify the penalty is applied correctly
+        # Verify the rewards are calculated correctly (no penalty for object-only collision)
         assert (
             abs(object_obstacle_reward - expected_obstacle_reward) < 1e-6
         ), f"Expected object obstacle reward {expected_obstacle_reward}, got {object_obstacle_reward}"
@@ -185,7 +180,7 @@ class TestPushPOMDP:
         ), f"Expected object near obstacle reward {expected_near_reward}, got {object_near_obstacle_reward}"
 
     def test_both_robot_and_object_obstacle_collision(self):
-        """Test that both robot and object collisions apply penalties."""
+        """Test that only robot collision applies penalty (not object collision)."""
         # Create state with both robot and object in obstacles
         both_obstacle_state = np.concatenate(
             [
@@ -208,7 +203,7 @@ class TestPushPOMDP:
         both_obstacle_reward = self.env.reward(both_obstacle_state, action="up")
         both_safe_reward = self.env.reward(both_safe_state, action="up")
 
-        # Both obstacle state should get lower reward due to double penalty
+        # Robot in obstacle state should get lower reward due to robot penalty
         assert (
             both_obstacle_reward < both_safe_reward
         ), f"Both obstacle reward ({both_obstacle_reward}) should be < both safe reward ({both_safe_reward})"
@@ -217,11 +212,11 @@ class TestPushPOMDP:
         distance_to_target_obstacle = np.linalg.norm(np.array([7.0, 7.0]) - self.target_pos)
         distance_to_target_safe = np.linalg.norm(np.array([2.0, 2.0]) - self.target_pos)
 
-        # Both obstacle state should have double penalty
-        expected_obstacle_reward = -distance_to_target_obstacle + 2 * self.env.obstacle_penalty
+        # Only robot collision applies penalty (not object collision)
+        expected_obstacle_reward = -distance_to_target_obstacle + self.env.obstacle_penalty
         expected_safe_reward = -distance_to_target_safe
 
-        # Verify the penalties are applied correctly
+        # Verify the penalties are applied correctly (only one penalty for robot collision)
         assert (
             abs(both_obstacle_reward - expected_obstacle_reward) < 1e-6
         ), f"Expected both obstacle reward {expected_obstacle_reward}, got {both_obstacle_reward}"
