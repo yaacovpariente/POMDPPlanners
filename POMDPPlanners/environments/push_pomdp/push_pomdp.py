@@ -421,9 +421,6 @@ class PushPOMDP(DiscreteActionsEnvironment):
         if self._is_colliding_with_obstacle(robot_pos):
             reward += self.obstacle_penalty
 
-        if self._is_colliding_with_obstacle(object_pos):
-            reward += self.obstacle_penalty
-
         return float(reward)
 
     def is_terminal(self, state: np.ndarray) -> bool:
