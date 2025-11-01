@@ -8,15 +8,21 @@ Functions:
     belief_expectation_reward: Calculate expected reward from weighted particle belief
 """
 
-from typing import Any
+from typing import Any, Union
 
 import numpy as np
 
-from POMDPPlanners.core.belief import WeightedParticleBelief, Belief
+from POMDPPlanners.core.belief import (
+    WeightedParticleBelief,
+    Belief,
+    WeightedParticleBeliefStateUpdate,
+)
 from POMDPPlanners.core.environment import Environment
 
 
-def particle_belief_entropy(belief: WeightedParticleBelief) -> float:
+def particle_belief_entropy(
+    belief: Union[WeightedParticleBelief, WeightedParticleBeliefStateUpdate],
+) -> float:
     unique_belief = belief.to_unique_support_distribution()
     return -np.sum(unique_belief.probs * np.log(unique_belief.probs))
 
