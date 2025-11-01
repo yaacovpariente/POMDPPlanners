@@ -32,7 +32,7 @@ class TestBaseLightDarkRewardModel:
     def test_abstract_class_cannot_be_instantiated(self):
         """Test that abstract base class cannot be instantiated."""
         with pytest.raises(TypeError):
-            BaseLightDarkRewardModel()  # type: ignore
+            BaseLightDarkRewardModel()  # type: ignore  # pylint: disable=abstract-class-instantiated
 
     def test_input_validation(self):
         """Test input validation for state and action shapes."""

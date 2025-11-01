@@ -32,7 +32,7 @@ class TestTaskManagerConfig:
         Test type: unit
         """
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
-            TaskManagerConfig()  # type: ignore[abstract]
+            TaskManagerConfig()  # type: ignore[abstract]  # pylint: disable=abstract-class-instantiated
 
     def test_create_task_manager_is_abstract(self):
         """Test that create_task_manager is abstract.
@@ -50,7 +50,7 @@ class TestTaskManagerConfig:
             pass
 
         with pytest.raises(TypeError, match="Can't instantiate abstract class"):
-            IncompleteConfig()  # type: ignore[abstract]
+            IncompleteConfig()  # type: ignore[abstract]  # pylint: disable=abstract-class-instantiated
 
 
 class TestDaskConfig:

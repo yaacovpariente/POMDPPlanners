@@ -110,7 +110,7 @@ def test_action_sampler_abstract_class():
     """
     # Should not be able to instantiate ActionSampler directly
     with pytest.raises(TypeError):
-        ActionSampler()  # type: ignore[abstract]
+        ActionSampler()  # type: ignore[abstract]  # pylint: disable=abstract-class-instantiated
 
 
 def test_concrete_action_sampler_implementation(discrete_action_sampler):

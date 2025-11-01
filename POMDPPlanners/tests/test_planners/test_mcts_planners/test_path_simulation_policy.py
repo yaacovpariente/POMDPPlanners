@@ -627,7 +627,7 @@ class TestPathSimulationPolicyAbstractContract:
         with pytest.raises(
             TypeError, match="Can't instantiate abstract class PathSimulationPolicy"
         ):
-            PathSimulationPolicy(  # type: ignore[abstract]
+            PathSimulationPolicy(  # type: ignore[abstract]  # pylint: disable=abstract-class-instantiated
                 environment=discrete_environment,
                 discount_factor=0.95,
                 name="test_policy",
