@@ -16,6 +16,7 @@ Functions:
     get_initial_belief: Create initial belief from environment's initial distribution
 """
 
+import inspect
 import random
 from abc import ABC, abstractmethod
 from typing import Any, Optional, Tuple, Dict, Hashable, List, Union
@@ -66,7 +67,12 @@ class Belief(ABC):
         all_subclasses = get_all_subclasses(cls)
         for subclass in all_subclasses:
             if subclass.__name__ == config.class_name:
-                return subclass(**config.params)
+                # Skip abstract classes - they cannot be instantiated
+                if inspect.isabstract(subclass):
+                    raise ValueError(
+                        f"Belief class '{config.class_name}' is abstract and cannot be instantiated"
+                    )
+                return subclass(**config.params)  # pylint: disable=abstract-class-instantiated
         raise ValueError(f"Belief class '{config.class_name}' not found")
 
     @property
@@ -1024,7 +1030,7 @@ def get_unique_support(
         >>> unique_particles, unique_probs = get_unique_support(particles, probs)
         >>> unique_particles  # [1, 2, 3]
         [1, 2, 3]
-        >>> np.sum(unique_probs)  # Should be 1.0
+        >>> float(np.sum(unique_probs))  # Should be 1.0
         1.0
     """
 
