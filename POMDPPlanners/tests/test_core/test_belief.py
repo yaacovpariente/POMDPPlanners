@@ -19,6 +19,7 @@ from POMDPPlanners.core.belief import (
     UnweightedParticleBeliefStateUpdate,
     WeightedParticleBelief,
     WeightedParticleBeliefStateUpdate,
+    get_unique_support,
     is_terminal_belief,
 )
 from POMDPPlanners.core.config_types import BeliefConfig
@@ -624,6 +625,291 @@ def test_to_DiscreteDistribution_weight_normalization():
     assert np.all(distribution.probs > 0)
     # Check that weights are properly normalized (larger log weight = larger probability)
     assert distribution.probs[2] > distribution.probs[1] > distribution.probs[0]
+
+
+# Tests for get_unique_support function
+def test_get_unique_support_basic():
+    """Test basic get_unique_support functionality with simple particles."""
+    particles = [1, 2, 3]
+    probabilities = np.array([0.2, 0.3, 0.5])
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    # Check that we have the same number of unique particles
+    assert len(unique_particles) == 3
+    # Check that probabilities sum to 1
+    assert np.isclose(np.sum(unique_probs), 1.0)
+    # Check that all particles are present
+    assert set(unique_particles) == set(particles)
+    # Check that probabilities match (may be reordered)
+    assert np.allclose(sorted(unique_probs), sorted(probabilities))
+
+
+def test_get_unique_support_duplicate_particles():
+    """Test get_unique_support with duplicate particles that should be combined."""
+    particles = [1, 1, 2, 2, 2, 3]  # Duplicate particles
+    probabilities = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    # Check that we have only unique particles
+    assert len(unique_particles) == 3
+    # Check that probabilities sum to 1
+    assert np.isclose(np.sum(unique_probs), 1.0)
+    # Check that all unique particles are present
+    assert set(unique_particles) == {1, 2, 3}
+
+    # Find the probabilities for each particle
+    particle_probs = {}
+    for value, prob in zip(unique_particles, unique_probs):
+        particle_probs[value] = prob
+
+    # Check that probabilities for duplicate particles are combined correctly
+    # Particle 1: 0.1 + 0.2 = 0.3, normalized
+    # Particle 2: 0.3 + 0.4 + 0.5 = 1.2, normalized
+    # Particle 3: 0.6, normalized
+    # Total sum before normalization: 0.3 + 1.2 + 0.6 = 2.1
+    assert np.isclose(particle_probs[1], 0.3 / 2.1)
+    assert np.isclose(particle_probs[2], 1.2 / 2.1)
+    assert np.isclose(particle_probs[3], 0.6 / 2.1)
+
+
+def test_get_unique_support_numpy_particles():
+    """Test get_unique_support with numpy array particles."""
+    particles = [np.array([1, 2]), np.array([1, 2]), np.array([3, 4])]  # Duplicate
+    probabilities = np.array([0.1, 0.2, 0.3])
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    # Check that we have only unique particles
+    assert len(unique_particles) == 2
+    # Check that probabilities sum to 1
+    assert np.isclose(np.sum(unique_probs), 1.0)
+
+    # Check that numpy arrays are preserved and duplicates are combined
+    found_12 = False
+    found_34 = False
+    for value, prob in zip(unique_particles, unique_probs):
+        if np.array_equal(value, np.array([1, 2])):
+            found_12 = True
+            assert np.isclose(prob, (0.1 + 0.2) / 0.6)  # Combined and normalized
+        elif np.array_equal(value, np.array([3, 4])):
+            found_34 = True
+            assert np.isclose(prob, 0.3 / 0.6)  # Normalized
+
+    assert found_12 and found_34
+
+
+def test_get_unique_support_mixed_particles():
+    """Test get_unique_support with mixed type particles."""
+    particles = [
+        1,
+        "test",
+        np.array([1, 2]),
+        1,  # Duplicate
+        "test",  # Duplicate
+        np.array([1, 2]),  # Duplicate
+    ]
+    probabilities = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    # Check that we have only unique particles
+    assert len(unique_particles) == 3
+    # Check that probabilities sum to 1
+    assert np.isclose(np.sum(unique_probs), 1.0)
+
+    # Check that all unique particles are present with correct types
+    found_int = False
+    found_str = False
+    found_array = False
+
+    for value, prob in zip(unique_particles, unique_probs):
+        if isinstance(value, int) and value == 1:
+            found_int = True
+            assert np.isclose(prob, (0.1 + 0.4) / 2.1)  # Combined and normalized
+        elif isinstance(value, str) and value == "test":
+            found_str = True
+            assert np.isclose(prob, (0.2 + 0.5) / 2.1)  # Combined and normalized
+        elif isinstance(value, np.ndarray) and np.array_equal(value, np.array([1, 2])):
+            found_array = True
+            assert np.isclose(prob, (0.3 + 0.6) / 2.1)  # Combined and normalized
+
+    assert found_int and found_str and found_array
+
+
+def test_get_unique_support_normalization():
+    """Test that get_unique_support properly normalizes probabilities."""
+    particles = [1, 2, 3]
+    probabilities = np.array([2.0, 4.0, 2.0])  # Unnormalized (sum = 8.0)
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    # Check that probabilities sum to 1
+    assert np.isclose(np.sum(unique_probs), 1.0)
+    # Check that all probabilities are positive
+    assert np.all(unique_probs > 0)
+    # Check that proportions are preserved: 2:4:2 = 1:2:1
+    # After normalization: 0.25, 0.5, 0.25
+    expected_probs = np.array([0.25, 0.5, 0.25])
+    assert np.allclose(sorted(unique_probs), sorted(expected_probs))
+
+
+def test_get_unique_support_empty():
+    """Test get_unique_support with empty input."""
+    particles = []
+    probabilities = np.array([])
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    assert len(unique_particles) == 0
+    assert len(unique_probs) == 0
+    # Empty arrays should have sum of 0 (no normalization performed)
+    assert np.sum(unique_probs) == 0.0
+
+
+def test_get_unique_support_single_particle():
+    """Test get_unique_support with single particle."""
+    particles = [42]
+    probabilities = np.array([0.5])
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    assert len(unique_particles) == 1
+    assert unique_particles[0] == 42
+    assert np.isclose(unique_probs[0], 1.0)  # Normalized to 1.0
+
+
+def test_get_unique_support_all_duplicates():
+    """Test get_unique_support when all particles are duplicates."""
+    particles = [1, 1, 1, 1]
+    probabilities = np.array([0.1, 0.2, 0.3, 0.4])
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    assert len(unique_particles) == 1
+    assert unique_particles[0] == 1
+    assert np.isclose(unique_probs[0], 1.0)  # All combined and normalized
+
+
+def test_get_unique_support_order_independent():
+    """Test that get_unique_support produces same result regardless of input order."""
+    particles1 = [1, 2, 1, 3, 2]
+    probabilities1 = np.array([0.2, 0.3, 0.1, 0.2, 0.2])
+
+    particles2 = [3, 1, 2, 2, 1]  # Same particles, different order
+    probabilities2 = np.array([0.2, 0.2, 0.2, 0.3, 0.1])  # Reordered to match
+
+    unique_particles1, unique_probs1 = get_unique_support(particles1, probabilities1)
+    unique_particles2, unique_probs2 = get_unique_support(particles2, probabilities2)
+
+    # Should have same unique particles (order may differ)
+    assert set(unique_particles1) == set(unique_particles2)
+
+    # Probabilities should match when sorted by particle
+    particle_probs1 = {p: prob for p, prob in zip(unique_particles1, unique_probs1)}
+    particle_probs2 = {p: prob for p, prob in zip(unique_particles2, unique_probs2)}
+
+    for particle in particle_probs1:
+        assert np.isclose(particle_probs1[particle], particle_probs2[particle])
+
+
+def test_get_unique_support_zero_probabilities():
+    """Test get_unique_support with zero probabilities."""
+    particles = [1, 2, 3]
+    probabilities = np.array([0.0, 0.5, 0.5])
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    # Zero probability particle should be included (it's in the unique particles)
+    # After normalization: 0.0 becomes 0.0, 0.5 and 0.5 become 0.5 each
+    # But wait - normalization would divide by sum, so 0.0 + 0.5 + 0.5 = 1.0
+    # After normalization by 1.0: [0.0, 0.5, 0.5]
+    assert len(unique_particles) == 3  # All particles should be included
+    assert np.isclose(np.sum(unique_probs), 1.0)
+
+    # Find probabilities
+    particle_probs = {p: prob for p, prob in zip(unique_particles, unique_probs)}
+    assert np.isclose(particle_probs[1], 0.0)
+    assert np.isclose(particle_probs[2], 0.5)
+    assert np.isclose(particle_probs[3], 0.5)
+
+
+def test_get_unique_support_very_small_probabilities():
+    """Test get_unique_support with very small probability values."""
+    particles = [1, 2, 3]
+    probabilities = np.array([1e-10, 0.5, 0.5 - 1e-10])
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    assert len(unique_particles) == 3
+    assert np.isclose(np.sum(unique_probs), 1.0)
+
+
+def test_get_unique_support_complex_numpy_arrays():
+    """Test get_unique_support with multi-dimensional numpy arrays."""
+    particles = [
+        np.array([[1, 2], [3, 4]]),
+        np.array([[1, 2], [3, 4]]),  # Duplicate
+        np.array([[5, 6], [7, 8]]),
+    ]
+    probabilities = np.array([0.3, 0.2, 0.5])
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    assert len(unique_particles) == 2
+    assert np.isclose(np.sum(unique_probs), 1.0)
+
+    # Check that duplicates are combined
+    found_1234 = False
+    found_5678 = False
+    for value, prob in zip(unique_particles, unique_probs):
+        if np.array_equal(value, np.array([[1, 2], [3, 4]])):
+            found_1234 = True
+            assert np.isclose(prob, (0.3 + 0.2) / 1.0)  # Combined and normalized
+        elif np.array_equal(value, np.array([[5, 6], [7, 8]])):
+            found_5678 = True
+            assert np.isclose(prob, 0.5 / 1.0)
+
+    assert found_1234 and found_5678
+
+
+def test_get_unique_support_return_types():
+    """Test that get_unique_support returns correct types."""
+    particles = [1, 2, 3]
+    probabilities = np.array([0.3, 0.3, 0.4])
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    # Check return types
+    assert isinstance(unique_particles, list)
+    assert isinstance(unique_probs, np.ndarray)
+    assert unique_probs.dtype == float
+    assert len(unique_particles) == len(unique_probs)
+
+
+def test_get_unique_support_preserves_original_types():
+    """Test that get_unique_support preserves original particle types."""
+    particles = [
+        "string_particle",
+        42,  # int
+        3.14,  # float
+        np.array([1, 2]),  # numpy array
+        ("tuple", "particle"),  # tuple
+    ]
+    probabilities = np.array([0.2, 0.2, 0.2, 0.2, 0.2])
+
+    unique_particles, unique_probs = get_unique_support(particles, probabilities)
+
+    # Check that types are preserved
+    assert len(unique_particles) == 5
+    assert any(isinstance(p, str) and p == "string_particle" for p in unique_particles)
+    assert any(isinstance(p, int) and p == 42 for p in unique_particles)
+    assert any(isinstance(p, float) and p == 3.14 for p in unique_particles)
+    assert any(
+        isinstance(p, np.ndarray) and np.array_equal(p, np.array([1, 2])) for p in unique_particles
+    )
+    assert any(isinstance(p, tuple) and p == ("tuple", "particle") for p in unique_particles)
 
 
 def test_create_belief_from_config_basic():
