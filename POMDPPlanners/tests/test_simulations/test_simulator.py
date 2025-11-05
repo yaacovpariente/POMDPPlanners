@@ -3296,3 +3296,306 @@ def test_memory_leak_full_simulator_integration_reduced_scale():
     assert (
         results["final_growth"] < 250
     ), f"Full simulator integration leaked {results['final_growth']:.1f} MB"
+
+
+def test_get_output_metric_names_basic():
+    """Test get_output_metric_names returns correct metric names for single environment-policy pair.
+
+    Purpose: Validates that get_output_metric_names returns all expected metric names for a single environment-policy pair
+
+    Given: TigerPOMDP environment and POMCP policy class
+    When: get_output_metric_names is called with a single (environment, policy_class) pair
+    Then: Returns nested dict with environment name -> policy class name -> list of metric names including environment metrics, policy info metrics, and standard metrics
+
+    Test type: unit
+    """
+    # Create environment and simulator
+    tiger_env = TigerPOMDP(discount_factor=0.95)
+    simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1), experiment_name="Metric_Names_Test_Basic"
+    )
+
+    try:
+        # Get metric names
+        env_policy_pairs = [(tiger_env, POMCP)]
+        metric_names = simulator.get_output_metric_names(env_policy_pairs)
+
+        # Verify structure
+        assert "TigerPOMDP" in metric_names
+        assert "POMCP" in metric_names["TigerPOMDP"]
+
+        # Get the metric list
+        pomcp_metrics = metric_names["TigerPOMDP"]["POMCP"]
+
+        # Verify it's a list
+        assert isinstance(pomcp_metrics, list)
+        assert len(pomcp_metrics) > 0
+
+        # Verify environment-specific metrics
+        assert "success_rate" in pomcp_metrics
+        assert "average_listens" in pomcp_metrics
+
+        # Verify standard metrics
+        assert "average_return" in pomcp_metrics
+        assert "return_cvar" in pomcp_metrics
+        assert "return_value_at_risk" in pomcp_metrics
+        assert "average_action_time" in pomcp_metrics
+
+        # Verify policy info metrics (POMCP has several)
+        policy_info_metrics = [name for name in pomcp_metrics if name.startswith("policy_info_")]
+        assert len(policy_info_metrics) > 0
+
+    finally:
+        simulator.cleanup_mlflow_runs()
+
+
+def test_get_output_metric_names_multiple_policies():
+    """Test get_output_metric_names with multiple policy classes for same environment.
+
+    Purpose: Validates that get_output_metric_names correctly handles multiple policy classes with different info variables
+
+    Given: TigerPOMDP environment with POMCP (has info vars) and PFT_DPW (has info vars) policy classes
+    When: get_output_metric_names is called with both policy classes
+    Then: Returns metrics for both policies with appropriate policy-specific info variables
+
+    Test type: unit
+    """
+    tiger_env = TigerPOMDP(discount_factor=0.95)
+    simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1), experiment_name="Metric_Names_Multiple_Policies"
+    )
+
+    try:
+        # Get metric names for multiple policies
+        env_policy_pairs = [(tiger_env, POMCP), (tiger_env, PFT_DPW)]
+        metric_names = simulator.get_output_metric_names(env_policy_pairs)
+
+        # Verify structure
+        assert "TigerPOMDP" in metric_names
+        assert "POMCP" in metric_names["TigerPOMDP"]
+        assert "PFT_DPW" in metric_names["TigerPOMDP"]
+
+        # Both should have environment and standard metrics
+        pomcp_metrics = metric_names["TigerPOMDP"]["POMCP"]
+        pft_metrics = metric_names["TigerPOMDP"]["PFT_DPW"]
+
+        # Verify both have environment-specific metrics
+        assert "success_rate" in pomcp_metrics
+        assert "success_rate" in pft_metrics
+
+        # Verify both have standard metrics
+        assert "average_return" in pomcp_metrics
+        assert "average_return" in pft_metrics
+
+        # Both should have policy info metrics (both are tree-based planners)
+        pomcp_policy_info = [name for name in pomcp_metrics if name.startswith("policy_info_")]
+        pft_policy_info = [name for name in pft_metrics if name.startswith("policy_info_")]
+        assert len(pomcp_policy_info) > 0
+        assert len(pft_policy_info) > 0
+
+    finally:
+        simulator.cleanup_mlflow_runs()
+
+
+def test_get_output_metric_names_multiple_environments():
+    """Test get_output_metric_names with multiple environments.
+
+    Purpose: Validates that get_output_metric_names correctly handles multiple different environments
+
+    Given: TigerPOMDP and ContinuousLightDarkPOMDPDiscreteActions environments with POMCP policy class
+    When: get_output_metric_names is called with both environments
+    Then: Returns metrics for both environments with environment-specific metrics differing
+
+    Test type: unit
+    """
+    tiger_env = TigerPOMDP(discount_factor=0.95)
+    light_dark_env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95, name="LightDarkPOMDP"
+    )
+
+    simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
+        experiment_name="Metric_Names_Multiple_Environments",
+    )
+
+    try:
+        # Get metric names for multiple environments
+        env_policy_pairs = [(tiger_env, POMCP), (light_dark_env, POMCP)]
+        metric_names = simulator.get_output_metric_names(env_policy_pairs)
+
+        # Verify structure
+        assert "TigerPOMDP" in metric_names
+        assert "LightDarkPOMDP" in metric_names
+
+        # Both should have POMCP
+        assert "POMCP" in metric_names["TigerPOMDP"]
+        assert "POMCP" in metric_names["LightDarkPOMDP"]
+
+        # Get metric lists
+        tiger_metrics = metric_names["TigerPOMDP"]["POMCP"]
+        light_dark_metrics = metric_names["LightDarkPOMDP"]["POMCP"]
+
+        # Both should have standard metrics
+        assert "average_return" in tiger_metrics
+        assert "average_return" in light_dark_metrics
+
+        # TigerPOMDP specific metrics
+        assert "success_rate" in tiger_metrics
+        assert "average_listens" in tiger_metrics
+
+        # LightDark specific metrics
+        assert "goal_reaching_rate" in light_dark_metrics
+        assert "obstacle_hit_rate" in light_dark_metrics
+
+        # Tiger metrics should not be in LightDark
+        assert "success_rate" not in light_dark_metrics
+        assert "average_listens" not in light_dark_metrics
+
+    finally:
+        simulator.cleanup_mlflow_runs()
+
+
+def test_get_output_metric_names_input_validation():
+    """Test get_output_metric_names validates inputs correctly.
+
+    Purpose: Validates that get_output_metric_names performs comprehensive input validation
+
+    Given: Various invalid input types (non-list, empty list, wrong tuple structure, wrong types)
+    When: get_output_metric_names is called with invalid inputs
+    Then: Raises appropriate TypeError or ValueError with descriptive messages
+
+    Test type: unit
+    """
+    tiger_env = TigerPOMDP(discount_factor=0.95)
+    simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1), experiment_name="Metric_Names_Validation"
+    )
+
+    try:
+        # Test non-sequence input (string is a sequence, but we explicitly reject it)
+        with pytest.raises(TypeError, match="environment_policy_pairs must be a sequence"):
+            simulator.get_output_metric_names("not a list")  # type: ignore
+
+        # Test empty list
+        with pytest.raises(ValueError, match="environment_policy_pairs cannot be empty"):
+            simulator.get_output_metric_names([])
+
+        # Test invalid tuple structure (not a tuple)
+        with pytest.raises(
+            TypeError, match="Each element in environment_policy_pairs must be a tuple"
+        ):
+            simulator.get_output_metric_names([tiger_env])  # type: ignore
+
+        # Test invalid tuple structure (wrong length)
+        with pytest.raises(
+            TypeError, match="Each element in environment_policy_pairs must be a tuple"
+        ):
+            simulator.get_output_metric_names([(tiger_env,)])  # type: ignore
+
+        # Test invalid environment type
+        with pytest.raises(TypeError, match="Expected Environment instance"):
+            simulator.get_output_metric_names([("not_an_env", POMCP)])  # type: ignore
+
+        # Test invalid policy type (instance instead of class)
+        pomcp_instance = POMCP(
+            environment=tiger_env,
+            discount_factor=0.95,
+            depth=5,
+            exploration_constant=1.0,
+            name="test",
+            n_simulations=10,
+        )
+        with pytest.raises(TypeError, match="Expected Policy class"):
+            simulator.get_output_metric_names([(tiger_env, pomcp_instance)])  # type: ignore
+
+    finally:
+        simulator.cleanup_mlflow_runs()
+
+
+def test_get_output_metric_names_consistency():
+    """Test get_output_metric_names returns consistent results.
+
+    Purpose: Validates that get_output_metric_names is deterministic and returns same results on repeated calls
+
+    Given: TigerPOMDP environment and POMCP policy class
+    When: get_output_metric_names is called multiple times
+    Then: Returns identical results on each call
+
+    Test type: unit
+    """
+    tiger_env = TigerPOMDP(discount_factor=0.95)
+    simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1), experiment_name="Metric_Names_Consistency"
+    )
+
+    try:
+        env_policy_pairs = [(tiger_env, POMCP)]
+
+        # Call multiple times
+        result1 = simulator.get_output_metric_names(env_policy_pairs)
+        result2 = simulator.get_output_metric_names(env_policy_pairs)
+        result3 = simulator.get_output_metric_names(env_policy_pairs)
+
+        # All results should be identical
+        assert result1 == result2 == result3
+
+        # Specifically check the metric lists are identical
+        assert result1["TigerPOMDP"]["POMCP"] == result2["TigerPOMDP"]["POMCP"]
+        assert result2["TigerPOMDP"]["POMCP"] == result3["TigerPOMDP"]["POMCP"]
+
+    finally:
+        simulator.cleanup_mlflow_runs()
+
+
+def test_get_output_metric_names_metric_order():
+    """Test get_output_metric_names returns metrics in correct order.
+
+    Purpose: Validates that metrics are returned in the expected order (environment, policy info, standard)
+
+    Given: TigerPOMDP environment and POMCP policy class
+    When: get_output_metric_names is called
+    Then: Returns metrics in order: environment-specific, policy info, standard metrics
+
+    Test type: unit
+    """
+    tiger_env = TigerPOMDP(discount_factor=0.95)
+    simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1), experiment_name="Metric_Names_Order"
+    )
+
+    try:
+        env_policy_pairs = [(tiger_env, POMCP)]
+        metric_names = simulator.get_output_metric_names(env_policy_pairs)
+
+        pomcp_metrics = metric_names["TigerPOMDP"]["POMCP"]
+
+        # Get expected metric counts
+        env_metrics = tiger_env.get_metric_names()
+        policy_info_vars = POMCP.get_info_variable_names()
+
+        # Environment metrics should come first
+        for i, env_metric in enumerate(env_metrics):
+            assert (
+                pomcp_metrics[i] == env_metric
+            ), f"Environment metric {env_metric} not at expected position {i}"
+
+        # Policy info metrics should come next
+        offset = len(env_metrics)
+        policy_info_count = 0
+        for name in pomcp_metrics[offset:]:
+            if name.startswith("policy_info_"):
+                policy_info_count += 1
+            else:
+                break  # Stop when we hit non-policy-info metrics
+
+        assert policy_info_count == len(
+            policy_info_vars
+        ), f"Expected {len(policy_info_vars)} policy info metrics, found {policy_info_count}"
+
+        # Standard metrics should come after policy info metrics
+        standard_start_idx = offset + policy_info_count
+        assert "average_return" in pomcp_metrics[standard_start_idx:]
+        assert "return_cvar" in pomcp_metrics[standard_start_idx:]
+
+    finally:
+        simulator.cleanup_mlflow_runs()
