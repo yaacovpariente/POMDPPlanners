@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import List
 
 import numpy as np
@@ -5,6 +6,18 @@ from scipy.stats import entropy
 
 from POMDPPlanners.core.policy import PolicyInfoVariable
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
+
+
+class TreeMetrics(Enum):
+    """Metric names for MCTS tree statistics."""
+
+    MIN_ACTIONS_VISIT_COUNT = "min_actions_visit_count"
+    MAX_ACTIONS_VISIT_COUNT = "max_actions_visit_count"
+    ACTIONS_VISIT_COUNT_ENTROPY = "actions_visit_count_entropy"
+    N_ACTIONS_FROM_ROOT = "n_actions_from_root"
+    ROOT_VISIT_COUNT = "root_visit_count"
+    TREE_MAX_DEPTH = "tree_max_depth"
+    IS_LEAF = "is_leaf"
 
 
 def get_v_values_sample(action_node: ActionNode) -> np.ndarray:
@@ -118,19 +131,19 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
     if tree.is_leaf:
         return [
             PolicyInfoVariable(
-                name="min_actions_visit_count",
+                name=TreeMetrics.MIN_ACTIONS_VISIT_COUNT.value,
                 value=0,
             ),
             PolicyInfoVariable(
-                name="max_actions_visit_count",
+                name=TreeMetrics.MAX_ACTIONS_VISIT_COUNT.value,
                 value=0,
             ),
             PolicyInfoVariable(
-                name="actions_visit_count_entropy",
+                name=TreeMetrics.ACTIONS_VISIT_COUNT_ENTROPY.value,
                 value=0,
             ),
             PolicyInfoVariable(
-                name="is_leaf",
+                name=TreeMetrics.IS_LEAF.value,
                 value=1,
             ),
         ]
@@ -148,31 +161,31 @@ def compute_tree_metrics(tree: BeliefNode) -> List[PolicyInfoVariable]:
 
     return [
         PolicyInfoVariable(
-            name="min_actions_visit_count",
+            name=TreeMetrics.MIN_ACTIONS_VISIT_COUNT.value,
             value=np.min(visit_counts),
         ),
         PolicyInfoVariable(
-            name="max_actions_visit_count",
+            name=TreeMetrics.MAX_ACTIONS_VISIT_COUNT.value,
             value=np.max(visit_counts),
         ),
         PolicyInfoVariable(
-            name="actions_visit_count_entropy",
+            name=TreeMetrics.ACTIONS_VISIT_COUNT_ENTROPY.value,
             value=entropy_value,  # type: ignore
         ),
         PolicyInfoVariable(
-            name="n_actions_from_root",
+            name=TreeMetrics.N_ACTIONS_FROM_ROOT.value,
             value=n_actions_from_root,
         ),
         PolicyInfoVariable(
-            name="root_visit_count",
+            name=TreeMetrics.ROOT_VISIT_COUNT.value,
             value=root_visit_count,
         ),
         PolicyInfoVariable(
-            name="tree_max_depth",
+            name=TreeMetrics.TREE_MAX_DEPTH.value,
             value=tree.height - 1,
         ),
         PolicyInfoVariable(
-            name="is_leaf",
+            name=TreeMetrics.IS_LEAF.value,
             value=0,
         ),
     ]

@@ -1,3 +1,4 @@
+from enum import Enum
 from typing import Any, List, Tuple
 
 import numpy as np
@@ -13,6 +14,13 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_lig
     BaseLightDarkPOMDPDiscreteActions,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+
+class DiscreteLightDarkPOMDPMetrics(Enum):
+    """Metric names for Discrete Light-Dark POMDP environment."""
+
+    GOAL_REACHING_RATE = "goal_reaching_rate"
+    OBSTACLE_HIT_RATE = "obstacle_hit_rate"
 
 
 class DiscreteLDObservationModel(ObservationModel):
@@ -252,6 +260,14 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
         return bool(is_terminal)
 
+    def get_metric_names(self) -> List[str]:
+        """Get names of Discrete Light-Dark POMDP specific metrics.
+
+        Returns:
+            List containing metric names: goal_reaching_rate and obstacle_hit_rate
+        """
+        return [metric.value for metric in DiscreteLightDarkPOMDPMetrics]
+
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         # Calculate time to reach goal for each history
         goal_reached = []
@@ -279,13 +295,13 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
 
         return [
             MetricValue(
-                name="goal_reaching_rate",
+                name=DiscreteLightDarkPOMDPMetrics.GOAL_REACHING_RATE.value,
                 value=avg_goal_reached,
                 lower_confidence_bound=goal_reached_ci[0],
                 upper_confidence_bound=goal_reached_ci[1],
             ),
             MetricValue(
-                name="obstacle_hit_rate",
+                name=DiscreteLightDarkPOMDPMetrics.OBSTACLE_HIT_RATE.value,
                 value=avg_obstacle_hits,
                 lower_confidence_bound=obstacle_hits_ci[0],
                 upper_confidence_bound=obstacle_hits_ci[1],

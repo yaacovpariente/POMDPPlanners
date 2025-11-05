@@ -14,6 +14,7 @@ Classes:
 """
 
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple, Union
 
@@ -29,6 +30,16 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+
+class PacManPOMDPMetrics(Enum):
+    """Metric names for PacMan POMDP environment."""
+
+    WIN_RATE = "win_rate"
+    AVG_PELLETS_COLLECTED = "avg_pellets_collected"
+    AVG_EPISODE_LENGTH = "avg_episode_length"
+    AVG_PACMAN_CLOSEST_GHOST_DISTANCE = "avg_pacman_closest_ghost_distance"
+    AVG_COLLISION_ENCOUNTERS = "avg_collision_encounters"
 
 
 @dataclass(frozen=True)
@@ -1026,6 +1037,25 @@ class PacManPOMDP(DiscreteActionsEnvironment):
 
         return self._create_metrics_for_each_ghost(per_ghost_avg_distances)
 
+    def get_metric_names(self) -> List[str]:
+        """Get names of PacMan POMDP specific metrics.
+
+        Returns:
+            List containing metric names including standard metrics (win_rate,
+            avg_pellets_collected, avg_episode_length, avg_pacman_closest_ghost_distance,
+            avg_collision_encounters) and dynamically generated per-ghost distance metrics
+            for multi-ghost scenarios (avg_pacman_ghost_0_distance, avg_pacman_ghost_1_distance, etc.)
+        """
+        # Start with standard metrics
+        metric_names = [metric.value for metric in PacManPOMDPMetrics]
+
+        # Add dynamic per-ghost metrics for multi-ghost scenarios
+        if self.num_ghosts > 1:
+            for ghost_id in range(self.num_ghosts):
+                metric_names.append(f"avg_pacman_ghost_{ghost_id}_distance")
+
+        return metric_names
+
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         """Compute environment-specific metrics."""
         if not histories:
@@ -1051,11 +1081,11 @@ class PacManPOMDP(DiscreteActionsEnvironment):
         # Create standard metrics using helper
         metrics = []
         metric_definitions = [
-            ("win_rate", wins),
-            ("avg_pellets_collected", pellets_collected),
-            ("avg_episode_length", episode_lengths),
-            ("avg_pacman_closest_ghost_distance", pacman_ghost_distances),
-            ("avg_collision_encounters", collision_encounters),
+            (PacManPOMDPMetrics.WIN_RATE.value, wins),
+            (PacManPOMDPMetrics.AVG_PELLETS_COLLECTED.value, pellets_collected),
+            (PacManPOMDPMetrics.AVG_EPISODE_LENGTH.value, episode_lengths),
+            (PacManPOMDPMetrics.AVG_PACMAN_CLOSEST_GHOST_DISTANCE.value, pacman_ghost_distances),
+            (PacManPOMDPMetrics.AVG_COLLISION_ENCOUNTERS.value, collision_encounters),
         ]
 
         for name, values in metric_definitions:

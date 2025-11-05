@@ -10,7 +10,7 @@ This module tests the policy implementations, focusing on:
 import logging
 import random
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 from unittest.mock import Mock
 
 import numpy as np
@@ -100,6 +100,10 @@ class MockPolicy(Policy):
             action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
         )
 
+    @classmethod
+    def get_info_variable_names(cls) -> List[str]:
+        return []
+
 
 class DifferentPolicy(Policy):
     def __init__(
@@ -120,6 +124,10 @@ class DifferentPolicy(Policy):
         return PolicySpaceInfo(
             action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
         )
+
+    @classmethod
+    def get_info_variable_names(cls) -> List[str]:
+        return []
 
 
 @pytest.fixture

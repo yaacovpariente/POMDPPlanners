@@ -21,6 +21,7 @@ Classes:
 """
 
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -36,6 +37,17 @@ from POMDPPlanners.core.environment import (
 )
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+
+class LaserTagPOMDPMetrics(Enum):
+    """Metric names for LaserTag POMDP environment."""
+
+    TAG_SUCCESS_RATE = "tag_success_rate"
+    AVERAGE_EPISODE_LENGTH = "average_episode_length"
+    AVERAGE_FAILED_TAG_ATTEMPTS = "average_failed_tag_attempts"
+    AVERAGE_OBSTACLE_COLLISIONS = "average_obstacle_collisions"
+    AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
+    AVERAGE_ALL_DANGEROUS_ENCOUNTERS = "average_all_dangerous_encounters"
 
 
 @dataclass
@@ -857,6 +869,16 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             all_dangerous_encounters_ci,
         )
 
+    def get_metric_names(self) -> List[str]:
+        """Get names of LaserTag POMDP specific metrics.
+
+        Returns:
+            List containing metric names: tag_success_rate, average_episode_length,
+            average_failed_tag_attempts, average_obstacle_collisions,
+            average_dangerous_area_steps, and average_all_dangerous_encounters
+        """
+        return [metric.value for metric in LaserTagPOMDPMetrics]
+
     def _build_metric_values(
         self,
         success_rate: float,
@@ -874,37 +896,37 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     ) -> List[MetricValue]:
         return [
             MetricValue(
-                name="tag_success_rate",
+                name=LaserTagPOMDPMetrics.TAG_SUCCESS_RATE.value,
                 value=success_rate,
                 lower_confidence_bound=success_ci[0],
                 upper_confidence_bound=success_ci[1],
             ),
             MetricValue(
-                name="average_episode_length",
+                name=LaserTagPOMDPMetrics.AVERAGE_EPISODE_LENGTH.value,
                 value=avg_episode_length,
                 lower_confidence_bound=episode_length_ci[0],
                 upper_confidence_bound=episode_length_ci[1],
             ),
             MetricValue(
-                name="average_failed_tag_attempts",
+                name=LaserTagPOMDPMetrics.AVERAGE_FAILED_TAG_ATTEMPTS.value,
                 value=avg_failed_tags,
                 lower_confidence_bound=failed_tags_ci[0],
                 upper_confidence_bound=failed_tags_ci[1],
             ),
             MetricValue(
-                name="average_obstacle_collisions",
+                name=LaserTagPOMDPMetrics.AVERAGE_OBSTACLE_COLLISIONS.value,
                 value=avg_obstacle_collisions,
                 lower_confidence_bound=obstacle_collisions_ci[0],
                 upper_confidence_bound=obstacle_collisions_ci[1],
             ),
             MetricValue(
-                name="average_dangerous_area_steps",
+                name=LaserTagPOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
                 value=avg_dangerous_area_steps,
                 lower_confidence_bound=dangerous_area_steps_ci[0],
                 upper_confidence_bound=dangerous_area_steps_ci[1],
             ),
             MetricValue(
-                name="average_all_dangerous_encounters",
+                name=LaserTagPOMDPMetrics.AVERAGE_ALL_DANGEROUS_ENCOUNTERS.value,
                 value=avg_all_dangerous_encounters,
                 lower_confidence_bound=all_dangerous_encounters_ci[0],
                 upper_confidence_bound=all_dangerous_encounters_ci[1],

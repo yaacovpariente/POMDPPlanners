@@ -15,7 +15,7 @@ from POMDPPlanners.core.environment import Environment, SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.tree import BeliefNode, get_optimal_action_reward_setting
 from POMDPPlanners.planners.planners_utils.dpw import ActionSampler
-from POMDPPlanners.utils.tree_statistics import compute_tree_metrics
+from POMDPPlanners.utils.tree_statistics import TreeMetrics, compute_tree_metrics
 
 
 class PathSimulationPolicy(Policy):
@@ -147,6 +147,15 @@ class PathSimulationPolicy(Policy):
             return is_terminal_belief(belief=belief, env=self.environment)
 
         raise ValueError("Unsupported belief type")
+
+    @classmethod
+    def get_info_variable_names(cls) -> List[str]:
+        """Get names of tree metric info variables produced by path simulation policies.
+
+        Returns:
+            List of metric names from tree statistics
+        """
+        return [metric.value for metric in TreeMetrics]
 
     @abstractmethod
     def _simulate_path(self, belief_node: BeliefNode, depth: int) -> Optional[float]:

@@ -24,6 +24,7 @@ Classes:
     SafeAntVelocityPOMDP: Main safety-critical velocity control environment
 """
 
+from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
@@ -42,6 +43,15 @@ from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_vi
     SafeAntVelocityVisualizer,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+
+class SafeAntVelocityPOMDPMetrics(Enum):
+    """Metric names for Safety Ant Velocity POMDP environment."""
+
+    SAFETY_VIOLATION_RATE = "safety_violation_rate"
+    CRITICAL_VIOLATION_RATE = "critical_violation_rate"
+    TOTAL_SAFETY_VIOLATIONS = "total_safety_violations"
+    TOTAL_CRITICAL_VIOLATIONS = "total_critical_violations"
 
 
 class SafeAntVelocityStateTransition(StateTransitionModel):
@@ -398,6 +408,15 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
         visualizer = SafeAntVelocityVisualizer(self)
         visualizer.create_animation(history, cache_path)
 
+    def get_metric_names(self) -> List[str]:
+        """Get names of Safety Ant Velocity POMDP specific metrics.
+
+        Returns:
+            List containing metric names: safety_violation_rate, critical_violation_rate,
+            total_safety_violations, and total_critical_violations
+        """
+        return [metric.value for metric in SafeAntVelocityPOMDPMetrics]
+
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         # Initialize metrics
         safety_violations = []
@@ -451,25 +470,25 @@ class SafeAntVelocityPOMDP(DiscreteActionsEnvironment):
 
         return [
             MetricValue(
-                name="safety_violation_rate",
+                name=SafeAntVelocityPOMDPMetrics.SAFETY_VIOLATION_RATE.value,
                 value=avg_safety_violations,
                 lower_confidence_bound=safety_violations_ci[0],
                 upper_confidence_bound=safety_violations_ci[1],
             ),
             MetricValue(
-                name="critical_violation_rate",
+                name=SafeAntVelocityPOMDPMetrics.CRITICAL_VIOLATION_RATE.value,
                 value=avg_critical_violations,
                 lower_confidence_bound=critical_violations_ci[0],
                 upper_confidence_bound=critical_violations_ci[1],
             ),
             MetricValue(
-                name="total_safety_violations",
+                name=SafeAntVelocityPOMDPMetrics.TOTAL_SAFETY_VIOLATIONS.value,
                 value=sum(safety_violations),
                 lower_confidence_bound=total_safety_violations_ci[0],
                 upper_confidence_bound=total_safety_violations_ci[1],
             ),
             MetricValue(
-                name="total_critical_violations",
+                name=SafeAntVelocityPOMDPMetrics.TOTAL_CRITICAL_VIOLATIONS.value,
                 value=sum(critical_violations),
                 lower_confidence_bound=total_critical_violations_ci[0],
                 upper_confidence_bound=total_critical_violations_ci[1],

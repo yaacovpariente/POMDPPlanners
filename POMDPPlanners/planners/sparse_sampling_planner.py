@@ -176,6 +176,17 @@ class SparseSamplingDiscreteActionsPlanner(Policy, ABC):
     def get_space_info(cls) -> PolicySpaceInfo:
         return PolicySpaceInfo(action_space=SpaceType.DISCRETE, observation_space=SpaceType.MIXED)
 
+    @classmethod
+    def get_info_variable_names(cls) -> List[str]:
+        """Get names of policy info variables.
+
+        Sparse sampling planner does not produce any info variables.
+
+        Returns:
+            Empty list as this planner produces no info variables
+        """
+        return []
+
 
 class StandardSparseSamplingDiscreteActionsPlanner(SparseSamplingDiscreteActionsPlanner):
     """Standard implementation of sparse sampling for POMDP planning.

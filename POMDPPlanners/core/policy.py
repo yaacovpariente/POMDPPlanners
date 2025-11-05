@@ -239,3 +239,23 @@ class Policy(ABC):
             This is used for validation when pairing policies with environments.
         """
         pass
+
+    @classmethod
+    @abstractmethod
+    def get_info_variable_names(cls) -> List[str]:
+        """Get names of policy info variables that this policy produces.
+
+        This class method returns the names of metrics and performance data
+        that the policy tracks during execution via PolicyInfoVariable objects.
+        It enables users to discover what metrics are available for hyperparameter
+        optimization before running simulations.
+
+        Returns:
+            List of info variable names that this policy produces during action selection
+
+        Note:
+            Subclasses must implement this method to declare what metrics they track.
+            Use an Enum to ensure consistency between the names returned here and
+            the names used when creating PolicyInfoVariable objects in the action() method.
+        """
+        pass

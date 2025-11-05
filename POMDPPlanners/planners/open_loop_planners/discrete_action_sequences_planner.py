@@ -106,6 +106,17 @@ class DiscreteActionSequencesPlanner(Policy):
     def get_space_info(cls) -> PolicySpaceInfo:
         return PolicySpaceInfo(action_space=SpaceType.DISCRETE, observation_space=SpaceType.MIXED)
 
+    @classmethod
+    def get_info_variable_names(cls) -> List[str]:
+        """Get names of policy info variables.
+
+        Discrete action sequences planner does not produce any info variables.
+
+        Returns:
+            Empty list as this planner produces no info variables
+        """
+        return []
+
     def action(self, belief: Belief) -> Tuple[List[Any], PolicyRunData]:
         return self.search(belief), PolicyRunData(info_variables=[])
 

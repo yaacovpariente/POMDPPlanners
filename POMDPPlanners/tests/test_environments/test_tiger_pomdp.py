@@ -679,3 +679,50 @@ def test_metrics_confidence_intervals(tiger_pomdp):
 
     # Use generic confidence interval verification
     verify_metrics_within_confidence_intervals(metrics)
+
+
+def test_metric_name_consistency(tiger_pomdp):
+    """Test that declared metric names match actual produced metrics.
+
+    Purpose: Validates that TigerPOMDP get_metric_names() returns exactly the metric names produced by compute_metrics()
+
+    Given: A TigerPOMDP environment and sample episode histories
+    When: get_metric_names() is called and compute_metrics() is executed
+    Then: The metric names declared match exactly the metric names produced (no missing or extra metrics)
+
+    Test type: unit
+    """
+    from POMDPPlanners.tests.test_metric_consistency_utils import (
+        verify_environment_metric_consistency,
+    )
+
+    # Create sample histories
+    steps = [
+        StepData(
+            state="tiger_left",
+            action="listen",
+            next_state="tiger_left",
+            observation="hear_left",
+            reward=-1,
+            belief=Mock(spec=Belief),
+        )
+        for _ in range(3)
+    ]
+
+    histories = [
+        History(
+            history=steps,
+            discount_factor=0.95,
+            average_state_sampling_time=0.0,
+            average_action_time=0.0,
+            average_observation_time=0.0,
+            average_belief_update_time=0.0,
+            average_reward_time=0.0,
+            actual_num_steps=len(steps),
+            reach_terminal_state=True,
+            policy_run_data=[PolicyRunData(info_variables=[])],
+        )
+    ]
+
+    # Verify consistency using reusable utility function
+    verify_environment_metric_consistency(tiger_pomdp, histories)

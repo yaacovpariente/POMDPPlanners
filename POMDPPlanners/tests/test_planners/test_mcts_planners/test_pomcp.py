@@ -722,3 +722,20 @@ def test_memory_leak_environment_policy_object_accumulation(discount_factor):
 
     # Assert memory growth is reasonable after cleanup (<100MB)
     assert memory_growth < 100, f"Environment/Policy objects leaked {memory_growth:.1f} MB"
+
+
+def test_info_variable_name_consistency(planner, belief):
+    """Test that declared info variable names match actual produced names.
+
+    Purpose: Validates that POMCP get_info_variable_names() returns exactly the info variable names produced by action()
+
+    Given: A POMCP planner and initial belief state
+    When: get_info_variable_names() is called and action() is executed
+    Then: The info variable names declared match exactly the names produced (no missing or extra variables)
+
+    Test type: unit
+    """
+    from POMDPPlanners.tests.test_metric_consistency_utils import verify_policy_metric_consistency
+
+    # Verify consistency using reusable utility function
+    verify_policy_metric_consistency(planner, belief)

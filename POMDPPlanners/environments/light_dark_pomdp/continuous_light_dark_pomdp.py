@@ -55,6 +55,14 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_da
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
+class ContinuousLightDarkPOMDPMetrics(Enum):
+    """Metric names for Continuous Light-Dark POMDP environment."""
+
+    GOAL_REACHING_RATE = "goal_reaching_rate"
+    OBSTACLE_HIT_RATE = "obstacle_hit_rate"
+    AVG_OBSTACLE_HIT_COUNTER = "avg_obstacle_hit_counter"
+
+
 class RewardModelType(Enum):
     STANDARD = "standard"
     DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
@@ -369,6 +377,15 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
 
         return bool(is_terminal)
 
+    def get_metric_names(self) -> List[str]:
+        """Get names of Continuous Light-Dark POMDP specific metrics.
+
+        Returns:
+            List containing metric names: goal_reaching_rate, obstacle_hit_rate,
+            and avg_obstacle_hit_counter
+        """
+        return [metric.value for metric in ContinuousLightDarkPOMDPMetrics]
+
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         goal_reached = []
         obstacle_hits = []
@@ -402,19 +419,19 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
 
         return [
             MetricValue(
-                name="goal_reaching_rate",
+                name=ContinuousLightDarkPOMDPMetrics.GOAL_REACHING_RATE.value,
                 value=avg_goal_reached,
                 lower_confidence_bound=goal_reached_ci[0],
                 upper_confidence_bound=goal_reached_ci[1],
             ),
             MetricValue(
-                name="obstacle_hit_rate",
+                name=ContinuousLightDarkPOMDPMetrics.OBSTACLE_HIT_RATE.value,
                 value=avg_obstacle_hits,
                 lower_confidence_bound=obstacle_hits_ci[0],
                 upper_confidence_bound=obstacle_hits_ci[1],
             ),
             MetricValue(
-                name="avg_obstacle_hit_counter",
+                name=ContinuousLightDarkPOMDPMetrics.AVG_OBSTACLE_HIT_COUNTER.value,
                 value=avg_obstacle_hit_counter,
                 lower_confidence_bound=obstacle_hit_counter_ci[0],
                 upper_confidence_bound=obstacle_hit_counter_ci[1],
