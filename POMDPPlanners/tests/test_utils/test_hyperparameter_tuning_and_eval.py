@@ -74,6 +74,11 @@ class InvalidPolicy(Policy):
             observation_space=SpaceType.DISCRETE,
         )
 
+    @classmethod
+    def get_info_variable_names(cls):
+        """Return empty list of info variable names."""
+        return []
+
 
 def test_optimize_and_evaluate_planners_basic_functionality():
     """Test basic functionality of optimize_and_evaluate_planners function."""
