@@ -417,7 +417,9 @@ class TestHyperParameterOptimizerHelperMethods:
             environment=real_optimized_policy_result.environment,
             belief=get_initial_belief(real_optimized_policy_result.environment, n_particles=10),
             policy_cls=type(real_optimized_policy_result.policy),
-            hyper_parameters=[],
+            hyper_parameters=[
+                NumericalHyperParameter(1, 2, "branching_factor"),
+            ],
             constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=1,
             num_steps=1,
@@ -441,7 +443,9 @@ class TestHyperParameterOptimizerHelperMethods:
             environment=real_environment,
             belief=get_initial_belief(real_environment, n_particles=10),
             policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-            hyper_parameters=[],
+            hyper_parameters=[
+                NumericalHyperParameter(1, 2, "branching_factor"),
+            ],
             constant_parameters={},  # No constant parameters needed for this planner
             num_episodes=1,
             num_steps=1,
@@ -530,10 +534,9 @@ class TestHyperParameterOptimizerErrorHandling:
             ],
         )
 
-        # Should not crash during task creation even with empty hyperparameters
-        tasks, task_identifiers = optimizer._create_tasks([minimal_config])
-        assert len(tasks) == 1
-        assert len(task_identifiers) == 1
+        # Should raise ValueError when creating tasks with empty hyperparameters
+        with pytest.raises(ValueError, match="hyper_parameters cannot be empty"):
+            optimizer._create_tasks([minimal_config])
 
 
 class TestHyperParameterOptimizerEdgeCases:
