@@ -59,8 +59,52 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         seed: int = 42,
         use_queue_logger: bool = False,
     ):
-        if len(set(parameters_to_optimize)) != len(parameters_to_optimize):
-            raise ValueError("parameters_to_optimize must be a list of unique tuples")
+        """Initialize a hyperparameter tuning simulation task.
+
+        Args:
+            environment: The environment to use for optimization
+            belief: The initial belief state
+            policy_cls: The policy class to optimize
+            hyper_parameters: Sequence of hyperparameter definitions
+            constant_parameters: Dictionary of constant parameters for policy creation
+            num_episodes: Number of episodes to run per trial
+            num_steps: Number of steps per episode
+            parameters_to_optimize: List of (parameter_name, direction) tuples
+            experiment_name: Name of the experiment
+            n_trials: Number of optimization trials
+            cache_dir: Directory for caching results
+            debug: Whether to enable debug logging
+            console_output: Whether to enable console output
+            n_jobs: Number of parallel jobs
+            confidence_interval_level: Confidence interval level (0-1)
+            alpha: Alpha parameter for statistics (0-1)
+            seed: Random seed for reproducibility
+            use_queue_logger: Whether to use queue-based logging
+
+        Raises:
+            ValueError: If any input parameter is invalid
+            TypeError: If any input parameter has incorrect type
+        """
+        self._validate_inputs(
+            environment=environment,
+            belief=belief,
+            policy_cls=policy_cls,
+            hyper_parameters=hyper_parameters,
+            constant_parameters=constant_parameters,
+            num_episodes=num_episodes,
+            num_steps=num_steps,
+            parameters_to_optimize=parameters_to_optimize,
+            experiment_name=experiment_name,
+            n_trials=n_trials,
+            cache_dir=cache_dir,
+            debug=debug,
+            console_output=console_output,
+            n_jobs=n_jobs,
+            confidence_interval_level=confidence_interval_level,
+            alpha=alpha,
+            seed=seed,
+            use_queue_logger=use_queue_logger,
+        )
 
         self.environment = environment
         self.belief = belief
@@ -96,6 +140,139 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             self.study_storage = DiskCacheDB(cache_dir=str(storage_dir))
         else:
             self.study_storage = None
+
+    @staticmethod
+    def _validate_inputs(
+        environment: Environment,
+        belief: Belief,
+        policy_cls: Type[Policy],
+        hyper_parameters: Sequence[HyperParameterFeature],
+        constant_parameters: Dict[str, Any],
+        num_episodes: int,
+        num_steps: int,
+        parameters_to_optimize: List[Tuple[str, HyperParameterOptimizationDirection]],
+        experiment_name: str,
+        n_trials: int,
+        cache_dir: Optional[Path],
+        debug: bool,
+        console_output: bool,
+        n_jobs: int,
+        confidence_interval_level: float,
+        alpha: float,
+        seed: int,
+        use_queue_logger: bool,
+    ) -> None:
+        """Validate input parameters for HyperParameterTuningSimulationTask.
+
+        Args:
+            environment: The environment to use for optimization
+            belief: The initial belief state
+            policy_cls: The policy class to optimize
+            hyper_parameters: Sequence of hyperparameter definitions
+            constant_parameters: Dictionary of constant parameters for policy creation
+            num_episodes: Number of episodes to run per trial
+            num_steps: Number of steps per episode
+            parameters_to_optimize: List of (parameter_name, direction) tuples
+            experiment_name: Name of the experiment
+            n_trials: Number of optimization trials
+            cache_dir: Directory for caching results
+            debug: Whether to enable debug logging
+            console_output: Whether to enable console output
+            n_jobs: Number of parallel jobs
+            confidence_interval_level: Confidence interval level (0-1)
+            alpha: Alpha parameter for statistics (0-1)
+            seed: Random seed for reproducibility
+            use_queue_logger: Whether to use queue-based logging
+
+        Raises:
+            ValueError: If any input parameter is invalid
+            TypeError: If any input parameter has incorrect type
+        """
+        # Validate required objects
+        if environment is None:
+            raise ValueError("environment cannot be None")
+        if not isinstance(environment, Environment):
+            raise TypeError(f"environment must be an Environment instance, got {type(environment)}")
+        if belief is None:
+            raise ValueError("belief cannot be None")
+        if not isinstance(belief, Belief):
+            raise TypeError(f"belief must be a Belief instance, got {type(belief)}")
+        if policy_cls is None:
+            raise ValueError("policy_cls cannot be None")
+        if not isinstance(policy_cls, type):
+            raise TypeError(f"policy_cls must be a class (type), got {type(policy_cls)}")
+
+        # Validate sequences and collections
+        if not isinstance(hyper_parameters, Sequence):
+            raise TypeError("hyper_parameters must be a sequence")
+        if len(hyper_parameters) == 0:
+            raise ValueError("hyper_parameters cannot be empty")
+        if not isinstance(constant_parameters, dict):
+            raise TypeError("constant_parameters must be a dictionary")
+
+        # Validate parameters_to_optimize
+        if not isinstance(parameters_to_optimize, list):
+            raise TypeError("parameters_to_optimize must be a list")
+        if len(parameters_to_optimize) == 0:
+            raise ValueError("parameters_to_optimize cannot be empty")
+        # Validate structure of each tuple before checking uniqueness
+        for param_tuple in parameters_to_optimize:
+            if not isinstance(param_tuple, tuple):
+                raise TypeError("Each element in parameters_to_optimize must be a tuple")
+            if len(param_tuple) != 2:
+                raise ValueError(
+                    "Each tuple in parameters_to_optimize must have exactly 2 elements"
+                )
+            param_name, direction = param_tuple
+            if not isinstance(param_name, str):
+                raise TypeError("First element of each tuple must be a string (parameter name)")
+            if not isinstance(direction, HyperParameterOptimizationDirection):
+                raise TypeError(
+                    f"Second element must be HyperParameterOptimizationDirection, got {type(direction)}"
+                )
+        # Check uniqueness after structure validation
+        if len(set(parameters_to_optimize)) != len(parameters_to_optimize):
+            raise ValueError("parameters_to_optimize must be a list of unique tuples")
+
+        # Validate integer parameters
+        if not isinstance(num_episodes, int) or num_episodes <= 0:
+            raise ValueError("num_episodes must be a positive integer")
+        if not isinstance(num_steps, int) or num_steps <= 0:
+            raise ValueError("num_steps must be a positive integer")
+        if not isinstance(n_trials, int) or n_trials <= 0:
+            raise ValueError("n_trials must be a positive integer")
+        if not isinstance(n_jobs, int) or (n_jobs <= 0 and n_jobs != -1):
+            raise ValueError("n_jobs must be a positive integer or -1 (for all cores)")
+        if not isinstance(seed, int):
+            raise TypeError("seed must be an integer")
+
+        # Validate string parameters
+        if not isinstance(experiment_name, str):
+            raise TypeError("experiment_name must be a string")
+        if len(experiment_name) == 0:
+            raise ValueError("experiment_name cannot be empty")
+
+        # Validate float parameters with range checks
+        if not isinstance(confidence_interval_level, (int, float)):
+            raise TypeError("confidence_interval_level must be a number")
+        if confidence_interval_level <= 0 or confidence_interval_level > 1:
+            raise ValueError("confidence_interval_level must be between 0 and 1")
+        if not isinstance(alpha, (int, float)):
+            raise TypeError("alpha must be a number")
+        if alpha < 0 or alpha > 1:
+            raise ValueError("alpha must be between 0 and 1")
+
+        # Validate cache_dir
+        if cache_dir is not None and not isinstance(cache_dir, Path):
+            raise TypeError("cache_dir must be a Path object or None")
+
+        # Validate boolean parameters
+        if not isinstance(debug, bool):
+            raise TypeError("debug must be a boolean")
+        if not isinstance(console_output, bool):
+            raise TypeError("console_output must be a boolean")
+        if not isinstance(use_queue_logger, bool):
+            raise TypeError("use_queue_logger must be a boolean")
 
     @property
     def logger(self) -> logging.Logger:
