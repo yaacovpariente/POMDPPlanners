@@ -49,10 +49,23 @@ class EpisodeSimulationTask(SimulationTask):
                 With the environment-policy pair logging design, multiple tasks
                 using the same environment and policy share the same logger.
         Raises:
-            ValueError: If num_steps is not positive
+            ValueError: If any input parameter is invalid
+            TypeError: If any input parameter has incorrect type
         """
-        if not isinstance(num_steps, int) or num_steps <= 0:
-            raise ValueError("num_steps must be a positive integer")
+        self._validate_inputs(
+            environment=environment,
+            policy=policy,
+            initial_belief=initial_belief,
+            num_steps=num_steps,
+            episode_id=episode_id,
+            seed=seed,
+            discount_factor=discount_factor,
+            episode_number=episode_number,
+            cache_dir=cache_dir,
+            debug=debug,
+            console_output=console_output,
+            use_queue_logger=use_queue_logger,
+        )
 
         self.environment = environment
         self.policy = policy
@@ -107,6 +120,77 @@ class EpisodeSimulationTask(SimulationTask):
             console_output=self.console_output,
             use_queue=self.use_queue_logger,
         )
+
+    @staticmethod
+    def _validate_inputs(
+        environment: Any,
+        policy: Any,
+        initial_belief: Any,
+        num_steps: int,
+        episode_id: int,
+        seed: int,
+        discount_factor: float,
+        episode_number: int,
+        cache_dir: Optional[Path],
+        debug: bool,
+        console_output: bool,
+        use_queue_logger: bool,
+    ) -> None:
+        """Validate input parameters for EpisodeSimulationTask.
+
+        Args:
+            environment: The environment to simulate
+            policy: The policy to use
+            initial_belief: The initial belief state
+            num_steps: Number of steps to simulate
+            episode_id: Unique identifier for this episode
+            seed: Random seed for reproducibility
+            discount_factor: Discount factor for reward calculation
+            episode_number: The episode number for this simulation
+            cache_dir: Directory for caching results
+            debug: Whether to enable debug logging
+            console_output: Whether to enable console output
+            use_queue_logger: Whether to use queue-based logging
+
+        Raises:
+            ValueError: If any input parameter is invalid
+            TypeError: If any input parameter has incorrect type
+        """
+        # Validate required objects
+        if environment is None:
+            raise ValueError("environment cannot be None")
+        if policy is None:
+            raise ValueError("policy cannot be None")
+        if initial_belief is None:
+            raise ValueError("initial_belief cannot be None")
+
+        # Validate integer parameters
+        if not isinstance(num_steps, int) or num_steps <= 0:
+            raise ValueError("num_steps must be a positive integer")
+        if not isinstance(episode_id, int) or episode_id < 0:
+            raise ValueError("episode_id must be a non-negative integer")
+        if not isinstance(seed, int):
+            raise TypeError("seed must be an integer")
+        if not isinstance(episode_number, int) or episode_number < 0:
+            raise ValueError("episode_number must be a non-negative integer")
+
+        # Validate discount_factor
+        if not isinstance(discount_factor, (int, float)):
+            raise TypeError("discount_factor must be a number")
+        if discount_factor < 0 or discount_factor > 1:
+            raise ValueError("discount_factor must be between 0 and 1")
+
+        # Validate cache_dir
+        if cache_dir is not None and not isinstance(cache_dir, Path):
+            raise TypeError("cache_dir must be a Path object or None")
+
+        # Validate boolean parameters
+        if not isinstance(debug, bool):
+            raise TypeError("debug must be a boolean")
+        if not isinstance(console_output, bool):
+            raise TypeError("console_output must be a boolean")
+        if not isinstance(use_queue_logger, bool):
+            raise TypeError("use_queue_logger must be a boolean")
 
     def _get_env_policy_logger_name(self) -> str:
         """Get the shared logger name for this environment-policy combination."""
