@@ -473,6 +473,65 @@ def metrics_dict_to_dataframe(
     return df
 
 
+def get_metric_names_from_environment_policy_pair(
+    environment: Environment,
+    policy_class: Type[Policy],
+) -> List[str]:
+    """Get all metric names returned by compute_statistics_environment_policy_pair.
+
+    This function returns the complete list of metric names that will be computed
+    for a given environment-policy pair, matching the structure of metrics returned
+    by compute_statistics_environment_policy_pair.
+
+    The metrics are returned in the same order as compute_statistics_environment_policy_pair:
+    1. Environment-specific metrics - Custom metrics from the environment
+    2. Policy-specific metrics - Info variables tracked by the policy (prefixed with "policy_info_")
+    3. Standard metrics - Always computed for all environment-policy pairs
+
+    Args:
+        environment: Environment instance to get custom metrics from
+        policy_class: Policy class (not instance) to get info variable names from
+
+    Returns:
+        Complete list of all metric names in the order they appear in
+        compute_statistics_environment_policy_pair results
+
+    Example:
+        Get metric names for TigerPOMDP with POMCP:
+
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        >>> from POMDPPlanners.simulations.simulation_statistics import get_metric_names_from_environment_policy_pair
+        >>>
+        >>> env = TigerPOMDP(discount_factor=0.95)
+        >>> metric_names = get_metric_names_from_environment_policy_pair(env, POMCP)
+        >>>
+        >>> # Check for environment-specific metrics (first in order)
+        >>> "success_rate" in metric_names
+        True
+        >>>
+        >>> # Check for policy-specific metrics (second, with prefix)
+        >>> "policy_info_min_actions_visit_count" in metric_names
+        True
+        >>>
+        >>> # Check for standard metrics (last in order)
+        >>> "average_return" in metric_names
+        True
+        >>> "return_cvar" in metric_names
+        True
+    """
+    # Environment-specific metrics (first)
+    env_metrics = environment.get_metric_names()
+
+    # Policy-specific metrics (second, prefixed with "policy_info_")
+    policy_metrics = [f"policy_info_{name}" for name in policy_class.get_info_variable_names()]
+
+    # Standard metrics (last, always available)
+    standard_metrics = [metric.value for metric in StandardMetrics]
+
+    return env_metrics + policy_metrics + standard_metrics
+
+
 def get_available_optimization_metrics(
     environment: Environment,
     policy_class: Type[Policy],
@@ -490,6 +549,11 @@ def get_available_optimization_metrics(
 
     Returns:
         Complete list of all metric names available for this environment-policy combination
+
+    Note:
+        This function returns metrics in a different order than compute_statistics_environment_policy_pair.
+        Use get_metric_names_from_environment_policy_pair if you need the exact order from
+        compute_statistics_environment_policy_pair.
 
     Example:
         Get available metrics for TigerPOMDP with POMCP:
