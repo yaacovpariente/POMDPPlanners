@@ -29,7 +29,7 @@ from POMDPPlanners.core.simulation.simulation_configs import (
     PlannerGenerator,
     EnvironmentRunParams,
 )
-from POMDPPlanners.core.policy import PolicySpaceInfo
+from POMDPPlanners.core.policy import PolicySpaceInfo, PolicyRunData
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.environment import Environment
@@ -38,6 +38,35 @@ from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 
 # Set random seeds for reproducible tests
 np.random.seed(42)
+
+
+class MockPolicy(Policy):
+    """Mock Policy class for testing that accepts standard policy parameters."""
+
+    def __init__(
+        self,
+        environment,
+        name,
+        discount_factor=0.95,
+        log_path=None,
+        debug=False,
+        use_queue_logger=False,
+    ):
+        super().__init__(environment, discount_factor, name, log_path, debug, use_queue_logger)
+
+    def action(self, belief):
+        """Mock action method."""
+        return [], PolicyRunData(info_variables=[])
+
+    @classmethod
+    def get_space_info(cls):
+        """Mock space info method."""
+        return PolicySpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE)
+
+    @classmethod
+    def get_info_variable_names(cls):
+        """Mock info variable names method."""
+        return []
 
 
 class MockHyperParamPlannerConfigGenerator(HyperParamPlannerConfigGenerator):
@@ -49,7 +78,7 @@ class MockHyperParamPlannerConfigGenerator(HyperParamPlannerConfigGenerator):
     def generate(self, environment: Environment) -> HyperParamPlannerConfig:
         """Generate a mock planner config."""
         return HyperParamPlannerConfig(
-            policy_cls=Mock,
+            policy_cls=MockPolicy,
             hyper_parameters=[],
             constant_parameters={"environment": environment, "name": "MockPlanner"},
         )
@@ -299,7 +328,7 @@ class TestExperimentConfigs:
         mock_env = TigerPOMDP(discount_factor=0.95, name="TestTiger")
         mock_belief = Mock(spec=Belief)
         mock_planner_config = HyperParamPlannerConfig(
-            policy_cls=Mock,
+            policy_cls=MockPolicy,
             hyper_parameters=[],
             constant_parameters={"environment": mock_env, "name": "TestBenchmark"},
         )
@@ -359,7 +388,7 @@ class TestExperimentConfigs:
         mock_env = TigerPOMDP(discount_factor=0.95, name="TestTiger")
         mock_belief = Mock(spec=Belief)
         mock_planner_config = HyperParamPlannerConfig(
-            policy_cls=Mock,
+            policy_cls=MockPolicy,
             hyper_parameters=[],
             constant_parameters={"environment": mock_env, "name": "TestBenchmark"},
         )
@@ -408,7 +437,7 @@ class TestExperimentConfigs:
 
         # Mock planner configs
         fake_planner_conf = Mock()
-        fake_planner_conf.policy_cls = Mock
+        fake_planner_conf.policy_cls = MockPolicy
         fake_planner_conf.hyper_parameters = []
         fake_planner_conf.constant_parameters = {"environment": fake_env, "name": "FakePlanner"}
         mock_planners_instance.get_compatible_planners.return_value = [fake_planner_conf]
@@ -784,7 +813,7 @@ class TestMockImplementations:
         config = gen.generate(mock_env)
 
         assert isinstance(config, HyperParamPlannerConfig)
-        assert config.policy_cls == Mock
+        assert config.policy_cls == MockPolicy
         assert config.hyper_parameters == []
         assert config.constant_parameters == {"environment": mock_env, "name": "MockPlanner"}
 

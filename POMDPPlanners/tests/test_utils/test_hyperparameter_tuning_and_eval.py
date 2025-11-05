@@ -2776,10 +2776,13 @@ class TestHyperParamRunnerUseCases:
 
         # Test with invalid policy class - this will fail during optimization, not during validation
         # The system will try to instantiate the policy and fail, which is the expected behavior
+        # Use empty hyperparameters and only valid constant parameters since InvalidPolicy doesn't accept exploration_constant or name
         invalid_config = HyperParamPlannerConfig(
             policy_cls=InvalidPolicy,  # Invalid policy class that won't error on construction
-            hyper_parameters=hyper_parameters,
-            constant_parameters=constant_parameters,
+            hyper_parameters=[],  # Empty hyperparameters to avoid validation errors
+            constant_parameters={
+                "discount_factor": 0.95
+            },  # Only include parameters that InvalidPolicy accepts
         )
 
         # This should fail during optimization, not during validation

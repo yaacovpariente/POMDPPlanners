@@ -799,30 +799,35 @@ class TestHyperParameterOptimizerMLFlowIntegration:
             NumericalHyperParameter("depth", 1, 3),  # type: ignore[arg-type]  # Wrong order: name, low, high
         ]
 
-        incorrect_config = HyperParameterRunParams(
-            environment=real_environment,
-            belief=real_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
-                hyper_parameters=cast(List[HyperParameterFeature], incorrect_hyperparams),
-                constant_parameters={},
-            ),
-            num_episodes=1,
-            num_steps=1,
-            n_trials=1,
-            parameters_to_optimize=[
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
-            ],
-        )
-
         # This should fail because the parameters are in wrong order
         # The low and high values are strings instead of numbers
+        # With validation, this fails immediately when creating HyperParamPlannerConfig
         with pytest.raises(Exception) as exc_info:
-            optimizer.optimize([incorrect_config])
+            incorrect_config = HyperParameterRunParams(
+                environment=real_environment,
+                belief=real_belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=StandardSparseSamplingDiscreteActionsPlanner,
+                    hyper_parameters=cast(List[HyperParameterFeature], incorrect_hyperparams),
+                    constant_parameters={},
+                ),
+                num_episodes=1,
+                num_steps=1,
+                n_trials=1,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
 
-        # Verify the error is related to parameter type issues
+        # Verify the error is related to parameter type issues or invalid parameter names
+        # With parameter validation, this gets caught as an invalid parameter name
         error_message = str(exc_info.value).lower()
-        assert "type" in error_message or ">" in error_message or "comparison" in error_message
+        assert (
+            "type" in error_message
+            or ">" in error_message
+            or "comparison" in error_message
+            or "is not a valid parameter" in error_message
+        )
 
     def test_missing_constant_parameters_for_complex_policies(
         self, temp_cache_dir, real_environment, real_belief
