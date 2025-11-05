@@ -11,6 +11,7 @@ This module tests the PathSimulationPolicy abstract base class, focusing on:
 
 import random
 from pathlib import Path
+from typing import List
 from unittest.mock import Mock, patch
 
 import numpy as np
@@ -123,6 +124,12 @@ class ConcretePathSimulationPolicy(PathSimulationPolicy):
     def get_space_info(cls) -> PolicySpaceInfo:
         """Get space type requirements for this test policy."""
         return PolicySpaceInfo(action_space=SpaceType.MIXED, observation_space=SpaceType.DISCRETE)
+
+    @classmethod
+    def get_info_variable_names(cls) -> List[str]:
+        """Get names of info variables produced by this test policy."""
+        # Inherit from parent class implementation
+        return super().get_info_variable_names()
 
 
 @pytest.fixture
