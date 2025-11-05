@@ -450,3 +450,194 @@ class PFT_DPW_TestGenerator(HyperParamPlannerConfigGenerator):
             action_space=SpaceType.DISCRETE,
             observation_space=SpaceType.DISCRETE,
         )
+
+
+class TestWorkflowValidation:
+    """Test input validation for workflow optimize_and_evaluate method."""
+
+    def test_validate_configs_empty_list_raises_error(self, temp_cache_dir):
+        """Test that empty configs list raises ValueError.
+
+        Purpose: Validates that empty configs list is rejected at workflow level
+
+        Given: OptimizationEvaluationLocalWorkflow instance and empty configs list
+        When: optimize_and_evaluate is called with empty list
+        Then: ValueError is raised with appropriate message
+
+        Test type: unit
+        """
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=temp_cache_dir, experiment_name="test", optimization_n_jobs=1
+        )
+
+        with pytest.raises(ValueError, match="configs list cannot be empty"):
+            workflow.optimize_and_evaluate([])
+
+    def test_validate_configs_invalid_type_raises_error(self, temp_cache_dir):
+        """Test that non-HyperParameterRunParams element raises TypeError.
+
+        Purpose: Validates that configs must be proper type
+
+        Given: Workflow and list with dict instead of HyperParameterRunParams
+        When: optimize_and_evaluate is called
+        Then: TypeError is raised indicating wrong type
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        from POMDPPlanners.core.belief import get_initial_belief
+
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=temp_cache_dir, experiment_name="test", optimization_n_jobs=1
+        )
+
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+        invalid_configs = [{"environment": env, "belief": belief}]
+
+        with pytest.raises(TypeError, match="not a HyperParameterRunParams instance"):
+            workflow.optimize_and_evaluate(invalid_configs)  # type: ignore
+
+    def test_validate_configs_negative_num_episodes_raises_error(self, temp_cache_dir):
+        """Test that negative num_episodes raises ValueError.
+
+        Purpose: Validates that num_episodes must be positive
+
+        Given: Config with num_episodes = -1
+        When: optimize_and_evaluate is called
+        Then: ValueError is raised about num_episodes
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        from POMDPPlanners.core.belief import get_initial_belief
+        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+            HyperParameterRunParams,
+            HyperParamPlannerConfig,
+            HyperParameterOptimizationDirection,
+        )
+
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=temp_cache_dir, experiment_name="test", optimization_n_jobs=1
+        )
+
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                constant_parameters={"depth": 5, "n_simulations": 100},
+            ),
+            num_episodes=-1,  # Invalid
+            num_steps=10,
+            n_trials=5,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        with pytest.raises(ValueError, match="num_episodes must be positive"):
+            workflow.optimize_and_evaluate([config])
+
+    def test_validate_configs_invalid_metric_name_raises_error(self, temp_cache_dir):
+        """Test that invalid metric name in parameters_to_optimize raises ValueError.
+
+        Purpose: Validates that metric names must match available metrics at workflow level
+
+        Given: Config with invalid metric name "nonexistent_metric"
+        When: optimize_and_evaluate is called
+        Then: ValueError is raised with available metrics listed
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        from POMDPPlanners.core.belief import get_initial_belief
+        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+            HyperParameterRunParams,
+            HyperParamPlannerConfig,
+            HyperParameterOptimizationDirection,
+        )
+
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=temp_cache_dir, experiment_name="test", optimization_n_jobs=1
+        )
+
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                constant_parameters={"depth": 5, "n_simulations": 100},
+            ),
+            num_episodes=10,
+            num_steps=5,
+            n_trials=5,
+            parameters_to_optimize=[
+                (
+                    "nonexistent_metric",
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                )  # Invalid metric
+            ],
+        )
+
+        with pytest.raises(ValueError, match="Invalid metric name 'nonexistent_metric'"):
+            workflow.optimize_and_evaluate([config])
+
+    def test_validate_configs_valid_environment_specific_metric(self, temp_cache_dir):
+        """Test that valid environment-specific metric passes validation at workflow level.
+
+        Purpose: Validates that environment-specific metrics (like TigerPOMDP's success_rate) are accepted
+
+        Given: TigerPOMDP environment and config with "success_rate" metric
+        When: _validate_configs is called
+        Then: No exception is raised
+
+        Test type: unit
+        """
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        from POMDPPlanners.core.belief import get_initial_belief
+        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+            HyperParameterRunParams,
+            HyperParamPlannerConfig,
+            HyperParameterOptimizationDirection,
+        )
+
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=temp_cache_dir, experiment_name="test", optimization_n_jobs=1
+        )
+
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                constant_parameters={"depth": 5, "n_simulations": 100},
+            ),
+            num_episodes=10,
+            num_steps=5,
+            n_trials=5,
+            parameters_to_optimize=[
+                (
+                    "success_rate",
+                    HyperParameterOptimizationDirection.MAXIMIZE,
+                )  # TigerPOMDP-specific
+            ],
+        )
+
+        # Should not raise any exception
+        workflow._validate_configs([config])
