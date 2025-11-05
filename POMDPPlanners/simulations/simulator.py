@@ -7,7 +7,7 @@ import shutil
 import tempfile
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Type
 
 import mlflow
 import pandas as pd
@@ -24,6 +24,7 @@ from POMDPPlanners.core.simulation import (
 )
 from POMDPPlanners.simulations.simulation_statistics import (
     compute_statistics_environment_policy_pair,
+    get_metric_names_from_environment_policy_pair,
     metrics_dict_to_dataframe,
 )
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
@@ -969,6 +970,129 @@ class POMDPSimulator(BaseSimulator):
                 metrics_dict[env_name][policy_name] = metrics
 
         return metrics_dict
+
+    def get_output_metric_names(
+        self, environment_policy_pairs: Sequence[Tuple[Environment, Type[Policy]]]
+    ) -> Dict[str, Dict[str, List[str]]]:
+        """Get all metric names that will be output by the simulator for given environment-policy pairs.
+
+        This method returns the complete list of metric names that will be computed and logged
+        for each environment-policy combination during simulation. This is useful for:
+        - Pre-allocating data structures for metric collection
+        - Validating expected metric availability before running simulations
+        - Understanding what metrics will be tracked in MLflow
+        - Setting up metric-based optimization objectives
+
+        Args:
+            environment_policy_pairs: Sequence of (Environment, Policy class) tuples specifying
+                the combinations to get metrics for. Note that Policy should be the class,
+                not an instance.
+
+        Returns:
+            Dictionary with two-level nesting:
+            - First level: environment name -> policy metrics dict
+            - Second level: policy class name -> list of metric names
+            Each list contains metric names in the order they will appear in simulation results:
+            1. Environment-specific metrics
+            2. Policy info variables (prefixed with "policy_info_")
+            3. Standard metrics (return, CVaR, timing, etc.)
+
+        Raises:
+            TypeError: If environment_policy_pairs is not a sequence or contains invalid types
+            ValueError: If environment_policy_pairs is empty
+
+        Example:
+            Get expected metrics for TigerPOMDP with POMCP and SparseSampling:
+
+            >>> from pathlib import Path
+            >>> from POMDPPlanners.simulations.simulator import POMDPSimulator
+            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+            >>> from POMDPPlanners.planners.sparse_sampling_planner import SparseSamplingDiscreteActionsPlanner
+            >>> from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import JoblibConfig
+            >>>
+            >>> # Create environment
+            >>> tiger_env = TigerPOMDP(discount_factor=0.95)
+            >>>
+            >>> # Create simulator
+            >>> joblib_config = JoblibConfig(n_jobs=1)
+            >>> simulator = POMDPSimulator(
+            ...     task_manager_config=joblib_config,
+            ...     experiment_name="Metric_Names_Test"
+            ... )
+            >>>
+            >>> # Get metric names for environment-policy combinations
+            >>> env_policy_pairs = [
+            ...     (tiger_env, POMCP),
+            ...     (tiger_env, SparseSamplingDiscreteActionsPlanner)
+            ... ]
+            >>> metric_names = simulator.get_output_metric_names(env_policy_pairs)
+            >>>
+            >>> # Check structure
+            >>> 'TigerPOMDP' in metric_names
+            True
+            >>> 'POMCP' in metric_names['TigerPOMDP']
+            True
+            >>> 'SparseSamplingDiscreteActionsPlanner' in metric_names['TigerPOMDP']
+            True
+            >>>
+            >>> # Check for standard metrics in POMCP results
+            >>> pomcp_metrics = metric_names['TigerPOMDP']['POMCP']
+            >>> 'average_return' in pomcp_metrics
+            True
+            >>> 'return_cvar' in pomcp_metrics
+            True
+            >>>
+            >>> # Check for environment-specific metrics
+            >>> 'success_rate' in pomcp_metrics
+            True
+            >>>
+            >>> # POMCP has policy info metrics, SparseSampling does not
+            >>> any(name.startswith('policy_info_') for name in pomcp_metrics)
+            True
+            >>> sparse_metrics = metric_names['TigerPOMDP']['SparseSamplingDiscreteActionsPlanner']
+            >>> any(name.startswith('policy_info_') for name in sparse_metrics)
+            False
+            >>>
+            >>> # Clean up simulator
+            >>> simulator.cleanup_mlflow_runs()
+        """
+        # Input validation
+        # Check if it's a sequence (but not string which is also a sequence)
+        if isinstance(environment_policy_pairs, str) or not hasattr(
+            environment_policy_pairs, "__iter__"
+        ):
+            raise TypeError("environment_policy_pairs must be a sequence")
+        if len(environment_policy_pairs) == 0:
+            raise ValueError("environment_policy_pairs cannot be empty")
+
+        for pair in environment_policy_pairs:
+            if not isinstance(pair, tuple) or len(pair) != 2:
+                raise TypeError(
+                    "Each element in environment_policy_pairs must be a tuple of (Environment, Type[Policy])"
+                )
+            env, policy_cls = pair
+            if not isinstance(env, Environment):
+                raise TypeError(f"Expected Environment instance, got {type(env)}")
+            if not isinstance(policy_cls, type) or not issubclass(policy_cls, Policy):
+                raise TypeError(f"Expected Policy class, got {type(policy_cls)}")
+
+        # Build nested dictionary of metric names
+        metric_names_dict: Dict[str, Dict[str, List[str]]] = {}
+
+        for env, policy_cls in environment_policy_pairs:
+            env_name = env.name
+            policy_cls_name = policy_cls.__name__
+
+            # Initialize environment entry if not present
+            if env_name not in metric_names_dict:
+                metric_names_dict[env_name] = {}
+
+            # Get metric names for this environment-policy pair
+            metric_names = get_metric_names_from_environment_policy_pair(env, policy_cls)
+            metric_names_dict[env_name][policy_cls_name] = metric_names
+
+        return metric_names_dict
 
     def _create_environment_visualizations(
         self,
