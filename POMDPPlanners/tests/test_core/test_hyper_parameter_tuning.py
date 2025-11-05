@@ -106,10 +106,40 @@ class TestHyperParamPlannerConfigIdUniqueness:
 
         # Create mock policy classes
         class Policy1(Policy):
-            pass
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+                self.a = a
 
         class Policy2(Policy):
-            pass
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+                self.a = a
 
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
@@ -127,7 +157,24 @@ class TestHyperParamPlannerConfigIdUniqueness:
         """Test that configs with different hyper parameters produce different IDs."""
 
         class MockPolicy(Policy):
-            pass
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param1=None,
+                param2=None,
+                a=None,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param1 = param1
+                self.param2 = param2
+                self.a = a
 
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param1")
         param2 = CategoricalHyperParameter(choices=[1, 2], name="param2")
@@ -146,7 +193,22 @@ class TestHyperParamPlannerConfigIdUniqueness:
         """Test that configs with different constant parameters produce different IDs."""
 
         class MockPolicy(Policy):
-            pass
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+                self.a = a
 
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
@@ -164,7 +226,22 @@ class TestHyperParamPlannerConfigIdUniqueness:
         """Test that identical configs produce same IDs."""
 
         class MockPolicy(Policy):
-            pass
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+                self.a = a
 
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
@@ -182,7 +259,24 @@ class TestHyperParamPlannerConfigIdUniqueness:
         """Test that different order of hyper parameters produces same ID (due to sorting)."""
 
         class MockPolicy(Policy):
-            pass
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param1,
+                param2,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param1 = param1
+                self.param2 = param2
+                self.a = a
 
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param1")
         param2 = CategoricalHyperParameter(choices=[3, 4], name="param2")
@@ -252,7 +346,22 @@ class TestHyperParameterRunParamsIdUniqueness:
                 return "state"
 
         class MockPolicy(Policy):
-            pass
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+                self.a = a
 
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
@@ -324,7 +433,22 @@ class TestHyperParameterRunParamsIdUniqueness:
                 return "state"
 
         class MockPolicy(Policy):
-            pass
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+                self.a = a
 
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
@@ -400,7 +524,22 @@ class TestHyperParameterRunParamsIdUniqueness:
                 return "state"
 
         class MockPolicy(Policy):
-            pass
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+                self.a = a
 
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
@@ -478,7 +617,22 @@ class TestHyperParameterRunParamsIdUniqueness:
                 return "state"
 
         class MockPolicy(Policy):
-            pass
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+                self.a = a
 
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
@@ -544,7 +698,22 @@ class TestIdConsistency:
         """Test that config_id properties produce consistent results."""
 
         class MockPolicy(Policy):
-            pass
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+                self.a = a
 
         param = CategoricalHyperParameter(choices=[1, 2], name="param")
 
@@ -561,3 +730,275 @@ class TestIdConsistency:
         assert id1 == id2 == id3
         assert isinstance(id1, str)
         assert len(id1) > 0
+
+
+class TestHyperParamPlannerConfigValidation:
+    """Test validation of HyperParamPlannerConfig inputs."""
+
+    def test_invalid_policy_cls_type_raises_type_error(self):
+        """Test that non-class policy_cls raises TypeError.
+
+        Purpose: Validates that policy_cls must be a class type
+
+        Given: An attempt to create HyperParamPlannerConfig with non-class policy_cls
+        When: The config is instantiated with a string instead of a Policy class
+        Then: TypeError is raised with descriptive message
+
+        Test type: unit
+        """
+        import pytest
+
+        param = CategoricalHyperParameter(choices=[1, 2], name="param")
+
+        with pytest.raises(TypeError, match="policy_cls must be a class type"):
+            HyperParamPlannerConfig(
+                policy_cls="NotAClass",  # type: ignore
+                hyper_parameters=[param],
+                constant_parameters={"a": 1},
+            )
+
+    def test_invalid_hyper_parameters_type_raises_type_error(self):
+        """Test that non-sequence hyper_parameters raises TypeError.
+
+        Purpose: Validates that hyper_parameters must be a Sequence (list or tuple)
+
+        Given: An attempt to create HyperParamPlannerConfig with non-sequence hyper_parameters
+        When: The config is instantiated with a dict instead of a list/tuple
+        Then: TypeError is raised with descriptive message
+
+        Test type: unit
+        """
+        import pytest
+
+        class MockPolicy(Policy):
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+                self.a = a
+
+        with pytest.raises(TypeError, match="hyper_parameters must be a Sequence"):
+            HyperParamPlannerConfig(
+                policy_cls=MockPolicy,
+                hyper_parameters={"param": [1, 2]},  # type: ignore
+                constant_parameters={"a": 1},
+            )
+
+    def test_invalid_hyper_parameter_element_type_raises_type_error(self):
+        """Test that invalid hyperparameter element types raise TypeError.
+
+        Purpose: Validates that all elements in hyper_parameters are valid HyperParameterFeature types
+
+        Given: An attempt to create HyperParamPlannerConfig with invalid hyperparameter element
+        When: The config is instantiated with a string in the hyper_parameters list
+        Then: TypeError is raised indicating the invalid element index and type
+
+        Test type: unit
+        """
+        import pytest
+
+        class MockPolicy(Policy):
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+                self.a = a
+
+        with pytest.raises(
+            TypeError,
+            match="hyper_parameters\\[0\\] must be either CategoricalHyperParameter or NumericalHyperParameter",
+        ):
+            HyperParamPlannerConfig(
+                policy_cls=MockPolicy,
+                hyper_parameters=["invalid"],  # type: ignore
+                constant_parameters={"a": 1},
+            )
+
+    def test_invalid_constant_parameters_type_raises_type_error(self):
+        """Test that non-dict constant_parameters raises TypeError.
+
+        Purpose: Validates that constant_parameters must be a dict
+
+        Given: An attempt to create HyperParamPlannerConfig with non-dict constant_parameters
+        When: The config is instantiated with a list instead of a dict
+        Then: TypeError is raised with descriptive message
+
+        Test type: unit
+        """
+        import pytest
+
+        class MockPolicy(Policy):
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                a,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+                self.a = a
+
+        param = CategoricalHyperParameter(choices=[1, 2], name="param")
+
+        with pytest.raises(TypeError, match="constant_parameters must be a dict"):
+            HyperParamPlannerConfig(
+                policy_cls=MockPolicy,
+                hyper_parameters=[param],
+                constant_parameters=[("a", 1)],  # type: ignore
+            )
+
+    def test_invalid_hyperparameter_name_raises_value_error(self):
+        """Test that hyperparameter names not in policy constructor raise ValueError.
+
+        Purpose: Validates that all hyperparameter names correspond to policy class constructor parameters
+
+        Given: A policy class with specific constructor parameters
+        When: HyperParamPlannerConfig is created with hyperparameter name not in constructor
+        Then: ValueError is raised listing valid parameter names
+
+        Test type: unit
+        """
+        import pytest
+
+        class MockPolicy(Policy):
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                valid_param,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.valid_param = valid_param
+
+        invalid_param = CategoricalHyperParameter(choices=[1, 2], name="invalid_param")
+
+        with pytest.raises(
+            ValueError, match="Hyperparameter 'invalid_param' is not a valid parameter"
+        ):
+            HyperParamPlannerConfig(
+                policy_cls=MockPolicy, hyper_parameters=[invalid_param], constant_parameters={}
+            )
+
+    def test_invalid_constant_parameter_name_raises_value_error(self):
+        """Test that constant parameter names not in policy constructor raise ValueError.
+
+        Purpose: Validates that all constant parameter names correspond to policy class constructor parameters
+
+        Given: A policy class with specific constructor parameters
+        When: HyperParamPlannerConfig is created with constant parameter name not in constructor
+        Then: ValueError is raised listing valid parameter names
+
+        Test type: unit
+        """
+        import pytest
+
+        class MockPolicy(Policy):
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                param,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.param = param
+
+        param = CategoricalHyperParameter(choices=[1, 2], name="param")
+
+        with pytest.raises(
+            ValueError, match="Constant parameter 'invalid_constant' is not a valid parameter"
+        ):
+            HyperParamPlannerConfig(
+                policy_cls=MockPolicy,
+                hyper_parameters=[param],
+                constant_parameters={"invalid_constant": 1},
+            )
+
+    def test_valid_config_with_all_parameters_succeeds(self):
+        """Test that valid configuration with all correct parameters succeeds.
+
+        Purpose: Validates that properly configured HyperParamPlannerConfig is created without errors
+
+        Given: A policy class with specific constructor parameters
+        When: HyperParamPlannerConfig is created with valid hyperparameters and constants
+        Then: Config is created successfully and has valid config_id
+
+        Test type: unit
+        """
+
+        class MockPolicy(Policy):
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                hp1,
+                hp2,
+                const1,
+                const2,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.hp1 = hp1
+                self.hp2 = hp2
+                self.const1 = const1
+                self.const2 = const2
+
+        hp1 = CategoricalHyperParameter(choices=[1, 2, 3], name="hp1")
+        hp2 = NumericalHyperParameter(low=0.0, high=1.0, name="hp2")
+
+        config = HyperParamPlannerConfig(
+            policy_cls=MockPolicy,
+            hyper_parameters=[hp1, hp2],
+            constant_parameters={"const1": "value1", "const2": 42},
+        )
+
+        assert config.policy_cls == MockPolicy
+        assert len(config.hyper_parameters) == 2
+        assert config.constant_parameters == {"const1": "value1", "const2": 42}
+        assert isinstance(config.config_id, str)
+        assert len(config.config_id) > 0

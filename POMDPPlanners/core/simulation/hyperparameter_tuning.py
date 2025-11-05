@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
+from inspect import signature
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -81,6 +82,66 @@ class HyperParamPlannerConfig:
     policy_cls: Type["Policy"]
     hyper_parameters: Sequence[HyperParameterFeature]
     constant_parameters: Dict[str, Any]
+
+    def __post_init__(self) -> None:
+        """Validate input types and hyperparameter names."""
+        self._validate_types()
+        self._validate_hyperparameter_names()
+
+    def _validate_types(self) -> None:
+        """Verify input types are correct."""
+        if not isinstance(self.policy_cls, type):
+            raise TypeError(
+                f"policy_cls must be a class type, got {type(self.policy_cls).__name__}"
+            )
+
+        if not isinstance(self.hyper_parameters, (list, tuple)):
+            raise TypeError(
+                f"hyper_parameters must be a Sequence (list or tuple), got {type(self.hyper_parameters).__name__}"
+            )
+
+        for i, param in enumerate(self.hyper_parameters):
+            if not isinstance(param, (CategoricalHyperParameter, NumericalHyperParameter)):
+                raise TypeError(
+                    f"hyper_parameters[{i}] must be either CategoricalHyperParameter or NumericalHyperParameter, "
+                    f"got {type(param).__name__}"
+                )
+
+        if not isinstance(self.constant_parameters, dict):
+            raise TypeError(
+                f"constant_parameters must be a dict, got {type(self.constant_parameters).__name__}"
+            )
+
+    def _validate_hyperparameter_names(self) -> None:
+        """Verify all hyperparameters correspond to policy class constructor parameters."""
+        try:
+            sig = signature(self.policy_cls.__init__)
+        except (ValueError, TypeError) as e:
+            raise ValueError(
+                f"Cannot inspect signature of policy_cls {self.policy_cls.__name__}: {e}"
+            ) from e
+
+        # Get valid parameter names from the policy class constructor
+        # Exclude 'self' as it's implicit
+        valid_param_names = set(sig.parameters.keys()) - {"self"}
+
+        # Check each hyperparameter
+        for param in self.hyper_parameters:
+            if param.name not in valid_param_names:
+                raise ValueError(
+                    f"Hyperparameter '{param.name}' is not a valid parameter of "
+                    f"{self.policy_cls.__name__}.__init__(). "
+                    f"Valid parameters are: {sorted(valid_param_names)}"
+                )
+
+        # Check constant parameters too
+        for param_name in self.constant_parameters.keys():
+            if param_name not in valid_param_names:
+                raise ValueError(
+                    f"Constant parameter '{param_name}' is not a valid parameter of "
+                    f"{self.policy_cls.__name__}.__init__(). "
+                    f"Valid parameters are: {sorted(valid_param_names)}"
+                )
 
     @property
     def config_id(self) -> str:
