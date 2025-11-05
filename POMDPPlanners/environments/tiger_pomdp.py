@@ -18,6 +18,7 @@ Classes:
     TigerPOMDP: Main environment class implementing the Tiger problem
 """
 
+from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -36,6 +37,13 @@ from POMDPPlanners.core.simulation import History, MetricValue
 STATES = ["tiger_left", "tiger_right"]
 ACTIONS = ["listen", "open_left", "open_right"]
 OBSERVATIONS = ["hear_left", "hear_right", "hear_nothing"]
+
+
+class TigerPOMDPMetrics(Enum):
+    """Metric names for Tiger POMDP environment."""
+
+    SUCCESS_RATE = "success_rate"
+    AVERAGE_LISTENS = "average_listens"
 
 
 class TigerStateTransition(StateTransitionModel):
@@ -296,6 +304,14 @@ class TigerPOMDP(DiscreteActionsEnvironment):
     def is_equal_observation(self, observation1: Any, observation2: Any) -> bool:
         return observation1 == observation2
 
+    def get_metric_names(self) -> List[str]:
+        """Get names of Tiger POMDP specific metrics.
+
+        Returns:
+            List containing metric names: success_rate and average_listens
+        """
+        return [metric.value for metric in TigerPOMDPMetrics]
+
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         """Compute Tiger POMDP specific metrics from simulation histories.
 
@@ -332,13 +348,13 @@ class TigerPOMDP(DiscreteActionsEnvironment):
         # Create MetricValue objects
         return [
             MetricValue(
-                name="success_rate",
+                name=TigerPOMDPMetrics.SUCCESS_RATE.value,
                 value=success_rate,
                 lower_confidence_bound=success_rate,  # Simple implementation, could be improved with proper confidence intervals
                 upper_confidence_bound=success_rate,
             ),
             MetricValue(
-                name="average_listens",
+                name=TigerPOMDPMetrics.AVERAGE_LISTENS.value,
                 value=avg_listens,
                 lower_confidence_bound=avg_listens,
                 upper_confidence_bound=avg_listens,

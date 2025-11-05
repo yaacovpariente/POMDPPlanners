@@ -24,6 +24,7 @@ Classes:
     PushPOMDP: Main push task environment with POMDP formulation
 """
 
+from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
@@ -40,6 +41,17 @@ from POMDPPlanners.core.environment import (
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.environments.push_pomdp.push_pomdp_visualizer import PushPOMDPVisualizer
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+
+class PushPOMDPMetrics(Enum):
+    """Metric names for Push POMDP environment."""
+
+    ROBOT_OBSTACLE_COLLISION_RATE = "robot_obstacle_collision_rate"
+    OBJECT_OBSTACLE_COLLISION_RATE = "object_obstacle_collision_rate"
+    TOTAL_OBSTACLE_COLLISION_RATE = "total_obstacle_collision_rate"
+    TOTAL_ROBOT_OBSTACLE_COLLISIONS = "total_robot_obstacle_collisions"
+    TOTAL_OBJECT_OBSTACLE_COLLISIONS = "total_object_obstacle_collisions"
+    TOTAL_ALL_OBSTACLE_COLLISIONS = "total_all_obstacle_collisions"
 
 
 class PushStateTransition(StateTransitionModel):
@@ -505,6 +517,14 @@ class PushPOMDP(DiscreteActionsEnvironment):
         visualizer = PushPOMDPVisualizer(self)
         visualizer.create_visualization(history, cache_path)
 
+    def get_metric_names(self) -> List[str]:
+        """Get names of Push POMDP specific metrics.
+
+        Returns:
+            List containing collision-related metric names
+        """
+        return [metric.value for metric in PushPOMDPMetrics]
+
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         robot_collisions = []
         object_collisions = []
@@ -557,37 +577,37 @@ class PushPOMDP(DiscreteActionsEnvironment):
 
         return [
             MetricValue(
-                name="robot_obstacle_collision_rate",
+                name=PushPOMDPMetrics.ROBOT_OBSTACLE_COLLISION_RATE.value,
                 value=avg_robot_collisions,
                 lower_confidence_bound=robot_collisions_ci[0],
                 upper_confidence_bound=robot_collisions_ci[1],
             ),
             MetricValue(
-                name="object_obstacle_collision_rate",
+                name=PushPOMDPMetrics.OBJECT_OBSTACLE_COLLISION_RATE.value,
                 value=avg_object_collisions,
                 lower_confidence_bound=object_collisions_ci[0],
                 upper_confidence_bound=object_collisions_ci[1],
             ),
             MetricValue(
-                name="total_obstacle_collision_rate",
+                name=PushPOMDPMetrics.TOTAL_OBSTACLE_COLLISION_RATE.value,
                 value=avg_total_collisions,
                 lower_confidence_bound=total_collisions_ci[0],
                 upper_confidence_bound=total_collisions_ci[1],
             ),
             MetricValue(
-                name="total_robot_obstacle_collisions",
+                name=PushPOMDPMetrics.TOTAL_ROBOT_OBSTACLE_COLLISIONS.value,
                 value=sum(robot_collisions),
                 lower_confidence_bound=total_robot_collisions_ci[0],
                 upper_confidence_bound=total_robot_collisions_ci[1],
             ),
             MetricValue(
-                name="total_object_obstacle_collisions",
+                name=PushPOMDPMetrics.TOTAL_OBJECT_OBSTACLE_COLLISIONS.value,
                 value=sum(object_collisions),
                 lower_confidence_bound=total_object_collisions_ci[0],
                 upper_confidence_bound=total_object_collisions_ci[1],
             ),
             MetricValue(
-                name="total_all_obstacle_collisions",
+                name=PushPOMDPMetrics.TOTAL_ALL_OBSTACLE_COLLISIONS.value,
                 value=sum(total_collisions),
                 lower_confidence_bound=total_all_collisions_ci[0],
                 upper_confidence_bound=total_all_collisions_ci[1],

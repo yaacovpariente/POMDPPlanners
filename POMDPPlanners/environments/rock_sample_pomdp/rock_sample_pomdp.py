@@ -14,6 +14,7 @@ Classes:
 
 import math
 from dataclasses import dataclass
+from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
@@ -32,6 +33,14 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import 
     RockSampleVisualizer,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+
+class RockSamplePOMDPMetrics(Enum):
+    """Metric names for RockSample POMDP environment."""
+
+    AVG_ROCKS_SAMPLED = "avg_rocks_sampled"
+    EXIT_SUCCESS_RATE = "exit_success_rate"
+    AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
 
 
 @dataclass(frozen=True)
@@ -442,6 +451,15 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         """Check if two observations are equal."""
         return observation1 == observation2
 
+    def get_metric_names(self) -> List[str]:
+        """Get names of RockSample POMDP specific metrics.
+
+        Returns:
+            List containing metric names: avg_rocks_sampled, exit_success_rate,
+            and average_dangerous_area_steps
+        """
+        return [metric.value for metric in RockSamplePOMDPMetrics]
+
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         """Compute environment-specific metrics."""
         if not histories:
@@ -463,7 +481,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             ci_low, ci_high = confidence_interval(rocks_sampled)
             metrics.append(
                 MetricValue(
-                    name="avg_rocks_sampled",
+                    name=RockSamplePOMDPMetrics.AVG_ROCKS_SAMPLED.value,
                     value=mean_rocks,
                     lower_confidence_bound=ci_low,
                     upper_confidence_bound=ci_high,
@@ -481,7 +499,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             ci_low, ci_high = confidence_interval(exits)
             metrics.append(
                 MetricValue(
-                    name="exit_success_rate",
+                    name=RockSamplePOMDPMetrics.EXIT_SUCCESS_RATE.value,
                     value=exit_rate,
                     lower_confidence_bound=ci_low,
                     upper_confidence_bound=ci_high,
@@ -503,7 +521,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
             metrics.append(
                 MetricValue(
-                    name="average_dangerous_area_steps",
+                    name=RockSamplePOMDPMetrics.AVERAGE_DANGEROUS_AREA_STEPS.value,
                     value=avg_dangerous_steps,
                     lower_confidence_bound=ci_low,
                     upper_confidence_bound=ci_high,

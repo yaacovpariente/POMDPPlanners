@@ -1,9 +1,11 @@
-from typing import Dict, List, Union
+from enum import Enum
+from typing import Dict, List, Type, Union
 
 import numpy as np
 import pandas as pd
 
 from POMDPPlanners.core.environment import Environment
+from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.utils.statistics_utils import (
     confidence_interval,
@@ -11,6 +13,21 @@ from POMDPPlanners.utils.statistics_utils import (
     cvar_estimator,
     quantile_confidence_interval,
 )
+
+
+class StandardMetrics(Enum):
+    """Standard metric names computed for all environment-policy pairs."""
+
+    AVERAGE_RETURN = "average_return"
+    RETURN_CVAR = "return_cvar"
+    RETURN_VALUE_AT_RISK = "return_value_at_risk"
+    AVERAGE_STATE_SAMPLING_TIME = "average_state_sampling_time"
+    AVERAGE_ACTION_TIME = "average_action_time"
+    AVERAGE_OBSERVATION_TIME = "average_observation_time"
+    AVERAGE_BELIEF_UPDATE_TIME = "average_belief_update_time"
+    AVERAGE_REWARD_TIME = "average_reward_time"
+    AVERAGE_ACTUAL_NUM_STEPS = "average_actual_num_steps"
+    AVERAGE_REACH_TERMINAL_STATE = "average_reach_terminal_state"
 
 
 def compute_statistics_environment_policy_pair(
@@ -223,61 +240,61 @@ def compute_statistics_environment_policy_pair(
         + policy_info_metrics
         + [
             MetricValue(
-                name="average_return",
+                name=StandardMetrics.AVERAGE_RETURN.value,
                 value=average_return,
                 lower_confidence_bound=average_return_confidence_interval[0],
                 upper_confidence_bound=average_return_confidence_interval[1],
             ),
             MetricValue(
-                name="return_cvar",
+                name=StandardMetrics.RETURN_CVAR.value,
                 value=float(return_cvar),
                 lower_confidence_bound=cvar_return_confidence_interval[0],
                 upper_confidence_bound=cvar_return_confidence_interval[1],
             ),
             MetricValue(
-                name="return_value_at_risk",
+                name=StandardMetrics.RETURN_VALUE_AT_RISK.value,
                 value=float(return_value_at_risk),
                 lower_confidence_bound=return_value_at_risk_confidence_interval[0],
                 upper_confidence_bound=return_value_at_risk_confidence_interval[1],
             ),
             MetricValue(
-                name="average_state_sampling_time",
+                name=StandardMetrics.AVERAGE_STATE_SAMPLING_TIME.value,
                 value=float(np.mean(average_state_sampling_time)),
                 lower_confidence_bound=average_state_sampling_time_confidence_interval[0],
                 upper_confidence_bound=average_state_sampling_time_confidence_interval[1],
             ),
             MetricValue(
-                name="average_action_time",
+                name=StandardMetrics.AVERAGE_ACTION_TIME.value,
                 value=float(np.mean(average_action_time)),
                 lower_confidence_bound=average_action_time_confidence_interval[0],
                 upper_confidence_bound=average_action_time_confidence_interval[1],
             ),
             MetricValue(
-                name="average_observation_time",
+                name=StandardMetrics.AVERAGE_OBSERVATION_TIME.value,
                 value=float(np.mean(average_observation_time)),
                 lower_confidence_bound=average_observation_time_confidence_interval[0],
                 upper_confidence_bound=average_observation_time_confidence_interval[1],
             ),
             MetricValue(
-                name="average_belief_update_time",
+                name=StandardMetrics.AVERAGE_BELIEF_UPDATE_TIME.value,
                 value=float(np.mean(average_belief_update_time)),
                 lower_confidence_bound=average_belief_update_time_confidence_interval[0],
                 upper_confidence_bound=average_belief_update_time_confidence_interval[1],
             ),
             MetricValue(
-                name="average_reward_time",
+                name=StandardMetrics.AVERAGE_REWARD_TIME.value,
                 value=float(np.mean(average_reward_time)),
                 lower_confidence_bound=average_reward_time_confidence_interval[0],
                 upper_confidence_bound=average_reward_time_confidence_interval[1],
             ),
             MetricValue(
-                name="average_actual_num_steps",
+                name=StandardMetrics.AVERAGE_ACTUAL_NUM_STEPS.value,
                 value=float(np.mean(average_actual_num_steps)),
                 lower_confidence_bound=average_actual_num_steps_confidence_interval[0],
                 upper_confidence_bound=average_actual_num_steps_confidence_interval[1],
             ),
             MetricValue(
-                name="average_reach_terminal_state",
+                name=StandardMetrics.AVERAGE_REACH_TERMINAL_STATE.value,
                 value=float(np.mean(average_reach_terminal_state)),
                 lower_confidence_bound=average_reach_terminal_state_confidence_interval[0],
                 upper_confidence_bound=average_reach_terminal_state_confidence_interval[1],
@@ -454,3 +471,57 @@ def metrics_dict_to_dataframe(
     df = pd.DataFrame(all_statistics)
 
     return df
+
+
+def get_available_optimization_metrics(
+    environment: Environment,
+    policy_class: Type[Policy],
+) -> List[str]:
+    """Get all metric names available for hyperparameter optimization.
+
+    This function aggregates metric names from three sources:
+    1. Standard metrics - Always computed for all environment-policy pairs
+    2. Environment-specific metrics - Custom metrics from the environment
+    3. Policy-specific metrics - Info variables tracked by the policy
+
+    Args:
+        environment: Environment instance to get custom metrics from
+        policy_class: Policy class (not instance) to get info variable names from
+
+    Returns:
+        Complete list of all metric names available for this environment-policy combination
+
+    Example:
+        Get available metrics for TigerPOMDP with POMCP:
+
+        >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        >>> from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        >>> from POMDPPlanners.simulations.simulation_statistics import get_available_optimization_metrics
+        >>>
+        >>> env = TigerPOMDP(discount_factor=0.95)
+        >>> available_metrics = get_available_optimization_metrics(env, POMCP)
+        >>>
+        >>> # Check for standard metrics
+        >>> "average_return" in available_metrics
+        True
+        >>> "return_cvar" in available_metrics
+        True
+        >>>
+        >>> # Check for environment-specific metrics
+        >>> "success_rate" in available_metrics
+        True
+        >>>
+        >>> # Check for policy-specific metrics (with prefix)
+        >>> "policy_info_min_actions_visit_count" in available_metrics
+        True
+    """
+    # Standard metrics (always available)
+    standard = [metric.value for metric in StandardMetrics]
+
+    # Environment-specific metrics
+    env_metrics = environment.get_metric_names()
+
+    # Policy-specific metrics (prefixed with "policy_info_")
+    policy_metrics = [f"policy_info_{name}" for name in policy_class.get_info_variable_names()]
+
+    return standard + env_metrics + policy_metrics

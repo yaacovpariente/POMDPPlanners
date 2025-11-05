@@ -530,6 +530,24 @@ class Environment(ABC):
         """
         pass
 
+    def get_metric_names(self) -> List[str]:
+        """Get names of environment-specific metrics.
+
+        This method returns the names of custom metrics that this environment
+        computes in the compute_metrics() method. It enables users to discover
+        what metrics are available for hyperparameter optimization.
+
+        Returns:
+            List of metric names that this environment produces.
+            Default implementation returns empty list for environments without custom metrics.
+
+        Note:
+            Subclasses that override compute_metrics() should also override this method
+            to return the names of metrics they produce. Use an Enum to ensure consistency
+            between the names returned here and the names used in compute_metrics().
+        """
+        return []
+
     def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
         """Compute environment-specific metrics from episode histories.
 

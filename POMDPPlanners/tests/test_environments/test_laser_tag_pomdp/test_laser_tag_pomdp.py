@@ -13,6 +13,8 @@ from collections import Counter
 import numpy as np
 import pytest
 
+from typing import List
+
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
@@ -57,6 +59,11 @@ class RandomPolicy(Policy):
         return PolicySpaceInfo(
             action_space=SpaceType.DISCRETE, observation_space=SpaceType.CONTINUOUS
         )
+
+    @classmethod
+    def get_info_variable_names(cls) -> List[str]:
+        """Return info variable names (none for random policy)."""
+        return []
 
 
 class TestLaserTagState:
