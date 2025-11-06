@@ -23,6 +23,7 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     HyperParamPlannerConfigGenerator,
     HyperParamPlannerConfig,
+    CategoricalHyperParameter,
 )
 from POMDPPlanners.core.simulation.simulation_configs import (
     EvaluationExperimentConfigCreator,
@@ -51,8 +52,10 @@ class MockPolicy(Policy):
         log_path=None,
         debug=False,
         use_queue_logger=False,
+        test_param=1.0,  # Added parameter for hyperparameter testing
     ):
         super().__init__(environment, discount_factor, name, log_path, debug, use_queue_logger)
+        self.test_param = test_param
 
     def action(self, belief):
         """Mock action method."""
@@ -79,7 +82,9 @@ class MockHyperParamPlannerConfigGenerator(HyperParamPlannerConfigGenerator):
         """Generate a mock planner config."""
         return HyperParamPlannerConfig(
             policy_cls=MockPolicy,
-            hyper_parameters=[],
+            hyper_parameters=[
+                CategoricalHyperParameter(name="test_param", choices=[0.5, 1.0, 1.5])
+            ],
             constant_parameters={"environment": environment, "name": "MockPlanner"},
         )
 
@@ -329,7 +334,9 @@ class TestExperimentConfigs:
         mock_belief = Mock(spec=Belief)
         mock_planner_config = HyperParamPlannerConfig(
             policy_cls=MockPolicy,
-            hyper_parameters=[],
+            hyper_parameters=[
+                CategoricalHyperParameter(name="test_param", choices=[0.5, 1.0, 1.5])
+            ],
             constant_parameters={"environment": mock_env, "name": "TestBenchmark"},
         )
 
@@ -389,7 +396,9 @@ class TestExperimentConfigs:
         mock_belief = Mock(spec=Belief)
         mock_planner_config = HyperParamPlannerConfig(
             policy_cls=MockPolicy,
-            hyper_parameters=[],
+            hyper_parameters=[
+                CategoricalHyperParameter(name="test_param", choices=[0.5, 1.0, 1.5])
+            ],
             constant_parameters={"environment": mock_env, "name": "TestBenchmark"},
         )
 
@@ -401,7 +410,7 @@ class TestExperimentConfigs:
             num_steps=5,
             n_trials=10,
             parameters_to_optimize=[
-                ("cumulative_reward", HyperParameterOptimizationDirection.MINIMIZE)
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
             ],
         )
 
@@ -438,7 +447,9 @@ class TestExperimentConfigs:
         # Mock planner configs
         fake_planner_conf = Mock()
         fake_planner_conf.policy_cls = MockPolicy
-        fake_planner_conf.hyper_parameters = []
+        fake_planner_conf.hyper_parameters = [
+            CategoricalHyperParameter(name="test_param", choices=[0.5, 1.0, 1.5])
+        ]
         fake_planner_conf.constant_parameters = {"environment": fake_env, "name": "FakePlanner"}
         mock_planners_instance.get_compatible_planners.return_value = [fake_planner_conf]
 
@@ -814,7 +825,8 @@ class TestMockImplementations:
 
         assert isinstance(config, HyperParamPlannerConfig)
         assert config.policy_cls == MockPolicy
-        assert config.hyper_parameters == []
+        assert len(config.hyper_parameters) == 1
+        assert config.hyper_parameters[0].name == "test_param"
         assert config.constant_parameters == {"environment": mock_env, "name": "MockPlanner"}
 
         # Test space info retrieval

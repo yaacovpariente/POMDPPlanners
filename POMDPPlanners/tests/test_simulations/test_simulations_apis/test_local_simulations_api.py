@@ -312,8 +312,21 @@ class TestLocalSimulationsAPI(
 
         Test type: unit
         """
-        # Create a mock OptimizedPolicyResult
+        # Create a mock OptimizedPolicyResult with required attributes
+        # Create mock environment with proper __class__.__name__
+        MockEnvironment = type("MockEnvironment", (), {})
+        mock_environment = Mock(spec=MockEnvironment)
+        mock_environment.__class__ = MockEnvironment  # type: ignore[assignment]
+
+        # Create mock policy with proper __class__.__name__
+        MockPolicy = type("MockPolicy", (), {})
+        mock_policy = Mock(spec=MockPolicy)
+        mock_policy.__class__ = MockPolicy  # type: ignore[assignment]
+
         mock_result = Mock(spec=OptimizedPolicyResult)
+        mock_result.environment = mock_environment
+        mock_result.policy = mock_policy
+        mock_result.chosen_hyper_parameters = {"param1": 1.0, "param2": 2.0}
 
         # Mock the optimizer instance
         mock_optimizer_instance = MagicMock()

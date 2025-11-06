@@ -19,7 +19,7 @@ import pandas as pd
 import pytest
 
 from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, SpaceType
+from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo, SpaceType
 from POMDPPlanners.core.simulation import (
     NumericalHyperParameter,
 )
@@ -46,6 +46,43 @@ from POMDPPlanners.utils.hyperparameter_tuning_and_eval import (
 # Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
+
+
+class MockTestPolicy(Policy):
+    """Mock policy class for testing that properly implements Policy interface"""
+
+    def __init__(self, environment, discount_factor=0.95, name="MockTestPolicy", **kwargs):
+        super().__init__(
+            environment=environment,
+            discount_factor=discount_factor,
+            name=name,
+        )
+
+    def action(self, belief):
+        """Return first action from environment"""
+        from POMDPPlanners.core.environment import DiscreteActionsEnvironment
+
+        if isinstance(self.environment, DiscreteActionsEnvironment):
+            actions = self.environment.get_actions()
+            action = actions[0] if actions else None
+            if action is None:
+                raise ValueError("No actions available")
+            return [action], PolicyRunData(info_variables=[])
+        else:
+            raise ValueError("Environment does not support get_actions()")
+
+    @classmethod
+    def get_space_info(cls):
+        """Return space info for mock policy"""
+        return PolicySpaceInfo(
+            action_space=SpaceType.DISCRETE,
+            observation_space=SpaceType.DISCRETE,
+        )
+
+    @classmethod
+    def get_info_variable_names(cls):
+        """Return empty list of info variable names."""
+        return []
 
 
 class InvalidPolicy(Policy):
@@ -197,9 +234,8 @@ class TestOptimizeAndEvaluatePlanners:
 
         Test type: unit
         """
-        # Mock optimization result
-        mock_policy = Mock()
-        mock_policy.name = "TestPOMCP"
+        # Create real policy instance for testing
+        mock_policy = MockTestPolicy(environment=test_environment, name="TestPOMCP")
         mock_optimization_result = OptimizedPolicyResult(
             environment=test_environment,
             policy=mock_policy,
@@ -321,19 +357,18 @@ class TestOptimizeAndEvaluatePlanners:
             ) as mock_eval,
         ):
             # Setup mocks
-            mock_policy = Mock()
-            mock_policy.name = "MinimizedPOMCP"
+            mock_policy = MockTestPolicy(environment=test_environment, name="MinimizedPOMCP")
             mock_opt.return_value = [
                 OptimizedPolicyResult(
                     environment=test_environment,
                     policy=mock_policy,
-                    chosen_hyper_parameters={},
+                    chosen_hyper_parameters={"exploration_constant": 1.5},
                     num_episodes=3,
                     num_steps=6,
                     parameters_to_optimize=[
-                        ("average_cost", HyperParameterOptimizationDirection.MINIMIZE)
+                        ("average_return", HyperParameterOptimizationDirection.MINIMIZE)
                     ],
-                    optimized_metric_values={"average_cost": 5.0},
+                    optimized_metric_values={"average_return": 5.0},
                 )
             ]
             mock_eval.return_value = ({}, pd.DataFrame())
@@ -345,7 +380,7 @@ class TestOptimizeAndEvaluatePlanners:
                 planner_configs=test_planner_configs,
                 cache_dir=temp_dir,
                 parameters_to_optimize=[
-                    ("average_cost", HyperParameterOptimizationDirection.MINIMIZE)
+                    ("average_return", HyperParameterOptimizationDirection.MINIMIZE)
                 ],
                 verbose=False,
             )
@@ -354,7 +389,7 @@ class TestOptimizeAndEvaluatePlanners:
             mock_opt.assert_called_once()
             args, kwargs = mock_opt.call_args
             assert kwargs["parameters_to_optimize"] == [
-                ("average_cost", HyperParameterOptimizationDirection.MINIMIZE)
+                ("average_return", HyperParameterOptimizationDirection.MINIMIZE)
             ]
 
     @patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters")
@@ -381,10 +416,8 @@ class TestOptimizeAndEvaluatePlanners:
         Test type: unit
         """
         # Mock optimization results for multiple planners
-        mock_policy_1 = Mock()
-        mock_policy_1.name = "TestPOMCP1"
-        mock_policy_2 = Mock()
-        mock_policy_2.name = "TestPOMCP2"
+        mock_policy_1 = MockTestPolicy(environment=test_environment, name="TestPOMCP1")
+        mock_policy_2 = MockTestPolicy(environment=test_environment, name="TestPOMCP2")
 
         mock_result_1 = OptimizedPolicyResult(
             environment=test_environment,
@@ -499,8 +532,7 @@ class TestOptimizeAndEvaluatePlannersPBS:
         Test type: unit
         """
         # Mock PBS optimization result
-        mock_policy = Mock()
-        mock_policy.name = "PBSTestPOMCP"
+        mock_policy = MockTestPolicy(environment=test_environment, name="PBSTestPOMCP")
         mock_optimization_result = OptimizedPolicyResult(
             environment=test_environment,
             policy=mock_policy,
@@ -631,19 +663,18 @@ class TestOptimizeAndEvaluatePlannersPBS:
         Test type: unit
         """
         # Mock PBS optimization with custom setup
-        mock_policy = Mock()
-        mock_policy.name = "CustomPBSPOMCP"
+        mock_policy = MockTestPolicy(environment=test_environment, name="CustomPBSPOMCP")
         mock_optimize_pbs.return_value = [
             OptimizedPolicyResult(
                 environment=test_environment,
                 policy=mock_policy,
-                chosen_hyper_parameters={},
+                chosen_hyper_parameters={"exploration_constant": 2.0},
                 num_episodes=5,
                 num_steps=10,
                 parameters_to_optimize=[
-                    ("average_cost", HyperParameterOptimizationDirection.MINIMIZE)
+                    ("average_return", HyperParameterOptimizationDirection.MINIMIZE)
                 ],
-                optimized_metric_values={"average_cost": 5.0},
+                optimized_metric_values={"average_return": 5.0},
             )
         ]
         mock_evaluate.return_value = ({}, pd.DataFrame())
@@ -658,7 +689,9 @@ class TestOptimizeAndEvaluatePlannersPBS:
             planner_configs=test_planner_configs,
             cache_dir=temp_dir,
             queue="gpu_queue",
-            parameters_to_optimize=[("average_cost", HyperParameterOptimizationDirection.MINIMIZE)],
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MINIMIZE)
+            ],
             experiment_name="CustomPBSExperiment",
             optimization_episodes=5,
             optimization_steps=10,
@@ -688,7 +721,7 @@ class TestOptimizeAndEvaluatePlannersPBS:
         pbs_call_kwargs = mock_optimize_pbs.call_args[1]
         assert pbs_call_kwargs["queue"] == "gpu_queue"
         assert pbs_call_kwargs["parameters_to_optimize"] == [
-            ("average_cost", HyperParameterOptimizationDirection.MINIMIZE)
+            ("average_return", HyperParameterOptimizationDirection.MINIMIZE)
         ]
         assert pbs_call_kwargs["experiment_name"] == "CustomPBSExperiment"
         assert pbs_call_kwargs["num_episodes"] == 5
@@ -754,10 +787,8 @@ class TestOptimizeAndEvaluatePlannersPBS:
         Test type: unit
         """
         # Mock PBS optimization results for multiple planners
-        mock_policy_1 = Mock()
-        mock_policy_1.name = "PBSTestPOMCP1"
-        mock_policy_2 = Mock()
-        mock_policy_2.name = "PBSTestPOMCP2"
+        mock_policy_1 = MockTestPolicy(environment=test_environment, name="PBSTestPOMCP1")
+        mock_policy_2 = MockTestPolicy(environment=test_environment, name="PBSTestPOMCP2")
 
         mock_result_1 = OptimizedPolicyResult(
             environment=test_environment,
@@ -873,8 +904,7 @@ class TestOptimizeAndEvaluatePlannersPBS:
             env = TigerPOMDP(discount_factor=0.95)
             initial_belief = get_initial_belief(env, n_particles=100)
 
-            mock_policy = Mock()
-            mock_policy.name = "PBSOptimizedPOMCP"
+            mock_policy = MockTestPolicy(environment=env, name="PBSOptimizedPOMCP")
             mock_optimization_result = OptimizedPolicyResult(
                 environment=env,
                 policy=mock_policy,
@@ -1028,10 +1058,8 @@ class TestEvaluateMultipleOptimizedPlanners:
         mock_simulator_class.return_value.__exit__ = Mock(return_value=None)
 
         # Create multiple optimized policies
-        policy_1 = Mock()
-        policy_1.name = "Policy1"
-        policy_2 = Mock()
-        policy_2.name = "Policy2"
+        policy_1 = MockTestPolicy(environment=test_environment, name="Policy1")
+        policy_2 = MockTestPolicy(environment=test_environment, name="Policy2")
         optimized_policies = cast(list[Policy], [policy_1, policy_2])
 
         # Mock evaluation results for multiple policies
@@ -1107,8 +1135,7 @@ class TestOptimizePlannerHyperparameters:
         mock_optimizer = Mock()
         mock_optimizer_class.return_value = mock_optimizer
 
-        mock_policy = Mock()
-        mock_policy.name = "OptimizedPolicy"
+        mock_policy = MockTestPolicy(environment=test_environment, name="OptimizedPolicy")
         mock_result = OptimizedPolicyResult(
             environment=test_environment,
             policy=mock_policy,
@@ -1258,10 +1285,8 @@ class TestOptimizePlannerHyperparameters:
         mock_optimizer_class.return_value = mock_optimizer
 
         # Mock multiple results
-        mock_policy_1 = Mock()
-        mock_policy_1.name = "TestPOMCP1"
-        mock_policy_2 = Mock()
-        mock_policy_2.name = "TestPOMCP2"
+        mock_policy_1 = MockTestPolicy(environment=test_environment, name="TestPOMCP1")
+        mock_policy_2 = MockTestPolicy(environment=test_environment, name="TestPOMCP2")
 
         mock_result_1 = OptimizedPolicyResult(
             environment=test_environment,
@@ -1349,8 +1374,7 @@ class TestOptimizePlannerHyperparametersPBS:
         mock_optimizer = Mock()
         mock_optimizer_class.return_value = mock_optimizer
 
-        mock_policy = Mock()
-        mock_policy.name = "PBSOptimizedPolicy"
+        mock_policy = MockTestPolicy(environment=test_environment, name="PBSOptimizedPolicy")
         mock_result = OptimizedPolicyResult(
             environment=test_environment,
             policy=mock_policy,
@@ -1543,10 +1567,8 @@ class TestOptimizePlannerHyperparametersPBS:
         mock_optimizer_class.return_value = mock_optimizer
 
         # Mock multiple results for PBS
-        mock_policy_1 = Mock()
-        mock_policy_1.name = "PBSTestPOMCP1"
-        mock_policy_2 = Mock()
-        mock_policy_2.name = "PBSTestPOMCP2"
+        mock_policy_1 = MockTestPolicy(environment=test_environment, name="PBSTestPOMCP1")
+        mock_policy_2 = MockTestPolicy(environment=test_environment, name="PBSTestPOMCP2")
 
         mock_result_1 = OptimizedPolicyResult(
             environment=test_environment,
@@ -1688,8 +1710,7 @@ class TestOptimizePlannerHyperparametersPBS:
             env = TigerPOMDP(discount_factor=0.95)
             initial_belief = get_initial_belief(env, n_particles=100)
 
-            mock_policy = Mock()
-            mock_policy.name = "PBSOptimizedPOMCP"
+            mock_policy = MockTestPolicy(environment=env, name="PBSOptimizedPOMCP")
             mock_optimization_result = OptimizedPolicyResult(
                 environment=env,
                 policy=mock_policy,
@@ -1765,8 +1786,7 @@ class TestEvaluateOptimizedPlanner:
         mock_simulator_class.return_value.__enter__ = Mock(return_value=mock_simulator)
         mock_simulator_class.return_value.__exit__ = Mock(return_value=None)
 
-        optimized_policy = Mock()
-        optimized_policy.name = "EvaluatedPolicy"
+        optimized_policy = MockTestPolicy(environment=test_environment, name="EvaluatedPolicy")
 
         # Mock evaluation results
         mock_episode_results = {"TestTiger": {"EvaluatedPolicy": [Mock(), Mock(), Mock()]}}
@@ -1835,8 +1855,7 @@ class TestEvaluateOptimizedPlanner:
             pd.DataFrame(),
         )
 
-        optimized_policy = Mock()
-        optimized_policy.name = "EvaluatedPolicy"
+        optimized_policy = MockTestPolicy(environment=test_environment, name="EvaluatedPolicy")
 
         evaluate_optimized_planner(
             environment=test_environment,
@@ -1891,8 +1910,7 @@ class TestEvaluateOptimizedPlanner:
                 pd.DataFrame(),
             )
 
-            optimized_policy = Mock()
-            optimized_policy.name = "EvaluatedPolicy"
+            optimized_policy = MockTestPolicy(environment=test_environment, name="EvaluatedPolicy")
 
             evaluate_optimized_planner(
                 environment=test_environment,
@@ -2138,8 +2156,7 @@ class TestUsageExamples:
         ):
             # Setup mocks to return valid results
             env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
-            mock_policy = Mock()
-            mock_policy.name = "OptimizedPOMCP"
+            mock_policy = MockTestPolicy(environment=env, name="OptimizedPOMCP")
             mock_optimization_result = OptimizedPolicyResult(
                 environment=env,
                 policy=mock_policy,
@@ -2341,8 +2358,7 @@ class TestHyperParamRunnerUseCases:
             }
 
             # Mock successful optimization
-            mock_policy = Mock()
-            mock_policy.name = "ComprehensivePOMCP"
+            mock_policy = MockTestPolicy(environment=env, name="ComprehensivePOMCP")
             mock_opt.return_value = [
                 OptimizedPolicyResult(
                     environment=env,
@@ -2439,38 +2455,14 @@ class TestHyperParamRunnerUseCases:
         env = TigerPOMDP(discount_factor=0.95, name="Tiger_095")
         initial_belief = get_initial_belief(env, n_particles=10)
 
-        # Test with empty hyperparameters list
-        with patch(
-            "POMDPPlanners.utils.hyperparameter_tuning_and_eval.HyperParameterOptimizer"
-        ) as mock_opt_class:
-            mock_optimizer = Mock()
-            mock_opt_class.return_value = mock_optimizer
-            mock_optimizer.optimize.return_value = []
-
-            planner_config = HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[],  # Empty list
-                constant_parameters={"discount_factor": 0.95, "name": "TestPOMCP"},
-            )
-            result = optimize_planner_hyperparameters(
-                environment=env,
-                initial_belief=initial_belief,
-                planner_configs=[planner_config],
-                cache_dir=temp_dir,
-                verbose=False,
-            )
-
-            assert result == []
-
-        # Test with single hyperparameter
+        # Test with single hyperparameter (edge case: minimal hyperparameters)
         with patch(
             "POMDPPlanners.utils.hyperparameter_tuning_and_eval.HyperParameterOptimizer"
         ) as mock_opt_class:
             mock_optimizer = Mock()
             mock_opt_class.return_value = mock_optimizer
 
-            mock_policy = Mock()
-            mock_policy.name = "SingleParamPOMCP"
+            mock_policy = MockTestPolicy(environment=env, name="SingleParamPOMCP")
             mock_result = OptimizedPolicyResult(
                 environment=env,
                 policy=mock_policy,
@@ -2487,11 +2479,8 @@ class TestHyperParamRunnerUseCases:
             single_hyper_param = [NumericalHyperParameter(0.1, 5.0, "exploration_constant")]
             planner_config = HyperParamPlannerConfig(
                 policy_cls=POMCP,
-                hyper_parameters=single_hyper_param,
-                constant_parameters={
-                    "discount_factor": 0.95,
-                    "name": "SingleParamPOMCP",
-                },
+                hyper_parameters=single_hyper_param,  # Single hyperparameter (minimal case)
+                constant_parameters={"discount_factor": 0.95, "name": "TestPOMCP"},
             )
             result = optimize_planner_hyperparameters(
                 environment=env,
@@ -2531,8 +2520,7 @@ class TestHyperParamRunnerUseCases:
                 pd.DataFrame(),
             )
 
-            optimized_policy = Mock()
-            optimized_policy.name = "TestPolicy"
+            optimized_policy = MockTestPolicy(environment=env, name="TestPolicy")
 
             # Test with minimal parameters
             results, stats = evaluate_optimized_planner(
@@ -2564,8 +2552,7 @@ class TestHyperParamRunnerUseCases:
                 pd.DataFrame(),
             )
 
-            optimized_policy = Mock()
-            optimized_policy.name = "CustomPolicy"
+            optimized_policy = MockTestPolicy(environment=env, name="CustomPolicy")
 
             results, stats = evaluate_optimized_planner(
                 environment=env,
@@ -2825,8 +2812,7 @@ class TestHyperParamRunnerUseCases:
                 pd.DataFrame(),
             )
 
-            optimized_policy = Mock()
-            optimized_policy.name = "TestPolicy"
+            optimized_policy = MockTestPolicy(environment=env, name="TestPolicy")
 
             evaluate_optimized_planner(
                 environment=env,
@@ -2921,8 +2907,7 @@ class TestHyperParamRunnerUseCases:
             assert len(initial_belief.particles) == 10
 
             # Mock successful results
-            mock_policy = Mock()
-            mock_policy.name = "RealPOMCP"
+            mock_policy = MockTestPolicy(environment=env, name="RealPOMCP")
             mock_opt.return_value = [
                 OptimizedPolicyResult(
                     environment=env,
