@@ -1151,128 +1151,80 @@ class TestPlannerEvaluationWorkflowValidation:
 
         Purpose: Validates that environment must be Environment instance
 
-        Given: PlannerEvaluationWorkflow instance and config with invalid environment
-        When: Calling _validate_configs
+        Given: Invalid environment parameter for EnvironmentRunParams
+        When: Creating EnvironmentRunParams at construction time
         Then: TypeError is raised with appropriate message
 
         Test type: unit
         """
-
-        class TestWorkflow(PlannerEvaluationWorkflow):
-            def _get_task_manager_config(self) -> TaskManagerConfig:
-                return JoblibConfig(n_jobs=1)
-
-        workflow = TestWorkflow(
-            experiment_name="test",
-            cache_dir_path=None,
-        )
-
-        config = EnvironmentRunParams(
-            environment="not_an_environment",  # type: ignore
-            belief=mock_belief,
-            policies=[mock_policy],
-            num_episodes=10,
-            num_steps=5,
-        )
-
         with pytest.raises(TypeError, match="environment must be an Environment instance"):
-            workflow._validate_configs([config])  # type: ignore
+            EnvironmentRunParams(
+                environment="not_an_environment",  # type: ignore
+                belief=mock_belief,
+                policies=[mock_policy],
+                num_episodes=10,
+                num_steps=5,
+            )
 
     def test_validate_configs_invalid_belief_type_raises_error(self, mock_environment, mock_policy):
         """Test that invalid belief type raises TypeError.
 
         Purpose: Validates that belief must be Belief instance
 
-        Given: PlannerEvaluationWorkflow instance and config with invalid belief
-        When: Calling _validate_configs
+        Given: Invalid belief parameter for EnvironmentRunParams
+        When: Creating EnvironmentRunParams at construction time
         Then: TypeError is raised with appropriate message
 
         Test type: unit
         """
-
-        class TestWorkflow(PlannerEvaluationWorkflow):
-            def _get_task_manager_config(self) -> TaskManagerConfig:
-                return JoblibConfig(n_jobs=1)
-
-        workflow = TestWorkflow(
-            experiment_name="test",
-            cache_dir_path=None,
-        )
-
-        config = EnvironmentRunParams(
-            environment=mock_environment,
-            belief="not_a_belief",  # type: ignore
-            policies=[mock_policy],
-            num_episodes=10,
-            num_steps=5,
-        )
-
         with pytest.raises(TypeError, match="belief must be a Belief instance"):
-            workflow._validate_configs([config])  # type: ignore
+            EnvironmentRunParams(
+                environment=mock_environment,
+                belief="not_a_belief",  # type: ignore
+                policies=[mock_policy],
+                num_episodes=10,
+                num_steps=5,
+            )
 
     def test_validate_configs_empty_policies_list_raises_error(self, mock_environment, mock_belief):
         """Test that empty policies list raises ValueError.
 
         Purpose: Validates that policies list cannot be empty
 
-        Given: PlannerEvaluationWorkflow instance and config with empty policies
-        When: Calling _validate_configs
+        Given: Empty policies list for EnvironmentRunParams
+        When: Creating EnvironmentRunParams at construction time
         Then: ValueError is raised with appropriate message
 
         Test type: unit
         """
-
-        class TestWorkflow(PlannerEvaluationWorkflow):
-            def _get_task_manager_config(self) -> TaskManagerConfig:
-                return JoblibConfig(n_jobs=1)
-
-        workflow = TestWorkflow(
-            experiment_name="test",
-            cache_dir_path=None,
-        )
-
-        config = EnvironmentRunParams(
-            environment=mock_environment,
-            belief=mock_belief,
-            policies=[],
-            num_episodes=10,
-            num_steps=5,
-        )
-
         with pytest.raises(ValueError, match="policies list cannot be empty"):
-            workflow._validate_configs([config])  # type: ignore
+            EnvironmentRunParams(
+                environment=mock_environment,
+                belief=mock_belief,
+                policies=[],
+                num_episodes=10,
+                num_steps=5,
+            )
 
     def test_validate_configs_invalid_policy_type_raises_error(self, mock_environment, mock_belief):
         """Test that invalid policy type raises TypeError.
 
         Purpose: Validates that all policies must be Policy instances
 
-        Given: PlannerEvaluationWorkflow instance and config with invalid policy
-        When: Calling _validate_configs
+        Given: Invalid policy in policies list for EnvironmentRunParams
+        When: Creating EnvironmentRunParams at construction time
         Then: TypeError is raised with appropriate message
 
         Test type: unit
         """
-
-        class TestWorkflow(PlannerEvaluationWorkflow):
-            def _get_task_manager_config(self) -> TaskManagerConfig:
-                return JoblibConfig(n_jobs=1)
-
-        workflow = TestWorkflow(
-            experiment_name="test",
-            cache_dir_path=None,
-        )
-
-        config = EnvironmentRunParams(
-            environment=mock_environment,
-            belief=mock_belief,
-            policies=["not_a_policy"],  # type: ignore
-            num_episodes=10,
-            num_steps=5,
-        )
-
         with pytest.raises(TypeError, match="must be a Policy instance"):
-            workflow._validate_configs([config])  # type: ignore
+            EnvironmentRunParams(
+                environment=mock_environment,
+                belief=mock_belief,
+                policies=["not_a_policy"],  # type: ignore
+                num_episodes=10,
+                num_steps=5,
+            )
 
     def test_validate_configs_negative_num_episodes_raises_error(
         self, mock_environment, mock_belief, mock_policy
@@ -1281,32 +1233,20 @@ class TestPlannerEvaluationWorkflowValidation:
 
         Purpose: Validates that num_episodes must be positive
 
-        Given: PlannerEvaluationWorkflow instance and config with negative num_episodes
-        When: Calling _validate_configs
+        Given: Negative num_episodes for EnvironmentRunParams
+        When: Creating EnvironmentRunParams at construction time
         Then: ValueError is raised with appropriate message
 
         Test type: unit
         """
-
-        class TestWorkflow(PlannerEvaluationWorkflow):
-            def _get_task_manager_config(self) -> TaskManagerConfig:
-                return JoblibConfig(n_jobs=1)
-
-        workflow = TestWorkflow(
-            experiment_name="test",
-            cache_dir_path=None,
-        )
-
-        config = EnvironmentRunParams(
-            environment=mock_environment,
-            belief=mock_belief,
-            policies=[mock_policy],
-            num_episodes=-5,
-            num_steps=10,
-        )
-
         with pytest.raises(ValueError, match="num_episodes must be positive"):
-            workflow._validate_configs([config])  # type: ignore
+            EnvironmentRunParams(
+                environment=mock_environment,
+                belief=mock_belief,
+                policies=[mock_policy],
+                num_episodes=-5,
+                num_steps=10,
+            )
 
     def test_validate_configs_zero_num_episodes_raises_error(
         self, mock_environment, mock_belief, mock_policy
@@ -1315,32 +1255,20 @@ class TestPlannerEvaluationWorkflowValidation:
 
         Purpose: Validates that num_episodes must be greater than zero
 
-        Given: PlannerEvaluationWorkflow instance and config with zero num_episodes
-        When: Calling _validate_configs
+        Given: Zero num_episodes for EnvironmentRunParams
+        When: Creating EnvironmentRunParams at construction time
         Then: ValueError is raised with appropriate message
 
         Test type: unit
         """
-
-        class TestWorkflow(PlannerEvaluationWorkflow):
-            def _get_task_manager_config(self) -> TaskManagerConfig:
-                return JoblibConfig(n_jobs=1)
-
-        workflow = TestWorkflow(
-            experiment_name="test",
-            cache_dir_path=None,
-        )
-
-        config = EnvironmentRunParams(
-            environment=mock_environment,
-            belief=mock_belief,
-            policies=[mock_policy],
-            num_episodes=0,
-            num_steps=10,
-        )
-
         with pytest.raises(ValueError, match="num_episodes must be positive"):
-            workflow._validate_configs([config])  # type: ignore
+            EnvironmentRunParams(
+                environment=mock_environment,
+                belief=mock_belief,
+                policies=[mock_policy],
+                num_episodes=0,
+                num_steps=10,
+            )
 
     def test_validate_configs_non_integer_num_episodes_raises_error(
         self, mock_environment, mock_belief, mock_policy
@@ -1349,32 +1277,20 @@ class TestPlannerEvaluationWorkflowValidation:
 
         Purpose: Validates that num_episodes must be an integer
 
-        Given: PlannerEvaluationWorkflow instance and config with non-integer num_episodes
-        When: Calling _validate_configs
+        Given: Non-integer num_episodes for EnvironmentRunParams
+        When: Creating EnvironmentRunParams at construction time
         Then: TypeError is raised with appropriate message
 
         Test type: unit
         """
-
-        class TestWorkflow(PlannerEvaluationWorkflow):
-            def _get_task_manager_config(self) -> TaskManagerConfig:
-                return JoblibConfig(n_jobs=1)
-
-        workflow = TestWorkflow(
-            experiment_name="test",
-            cache_dir_path=None,
-        )
-
-        config = EnvironmentRunParams(
-            environment=mock_environment,
-            belief=mock_belief,
-            policies=[mock_policy],
-            num_episodes=10.5,  # type: ignore
-            num_steps=5,
-        )
-
         with pytest.raises(TypeError, match="num_episodes must be an integer"):
-            workflow._validate_configs([config])  # type: ignore
+            EnvironmentRunParams(
+                environment=mock_environment,
+                belief=mock_belief,
+                policies=[mock_policy],
+                num_episodes=10.5,  # type: ignore
+                num_steps=5,
+            )
 
     def test_validate_configs_negative_num_steps_raises_error(
         self, mock_environment, mock_belief, mock_policy
@@ -1383,32 +1299,20 @@ class TestPlannerEvaluationWorkflowValidation:
 
         Purpose: Validates that num_steps must be positive
 
-        Given: PlannerEvaluationWorkflow instance and config with negative num_steps
-        When: Calling _validate_configs
+        Given: Negative num_steps for EnvironmentRunParams
+        When: Creating EnvironmentRunParams at construction time
         Then: ValueError is raised with appropriate message
 
         Test type: unit
         """
-
-        class TestWorkflow(PlannerEvaluationWorkflow):
-            def _get_task_manager_config(self) -> TaskManagerConfig:
-                return JoblibConfig(n_jobs=1)
-
-        workflow = TestWorkflow(
-            experiment_name="test",
-            cache_dir_path=None,
-        )
-
-        config = EnvironmentRunParams(
-            environment=mock_environment,
-            belief=mock_belief,
-            policies=[mock_policy],
-            num_episodes=10,
-            num_steps=-5,
-        )
-
         with pytest.raises(ValueError, match="num_steps must be positive"):
-            workflow._validate_configs([config])  # type: ignore
+            EnvironmentRunParams(
+                environment=mock_environment,
+                belief=mock_belief,
+                policies=[mock_policy],
+                num_episodes=10,
+                num_steps=-5,
+            )
 
     def test_validate_configs_zero_num_steps_raises_error(
         self, mock_environment, mock_belief, mock_policy
@@ -1417,32 +1321,20 @@ class TestPlannerEvaluationWorkflowValidation:
 
         Purpose: Validates that num_steps must be greater than zero
 
-        Given: PlannerEvaluationWorkflow instance and config with zero num_steps
-        When: Calling _validate_configs
+        Given: Zero num_steps for EnvironmentRunParams
+        When: Creating EnvironmentRunParams at construction time
         Then: ValueError is raised with appropriate message
 
         Test type: unit
         """
-
-        class TestWorkflow(PlannerEvaluationWorkflow):
-            def _get_task_manager_config(self) -> TaskManagerConfig:
-                return JoblibConfig(n_jobs=1)
-
-        workflow = TestWorkflow(
-            experiment_name="test",
-            cache_dir_path=None,
-        )
-
-        config = EnvironmentRunParams(
-            environment=mock_environment,
-            belief=mock_belief,
-            policies=[mock_policy],
-            num_episodes=10,
-            num_steps=0,
-        )
-
         with pytest.raises(ValueError, match="num_steps must be positive"):
-            workflow._validate_configs([config])  # type: ignore
+            EnvironmentRunParams(
+                environment=mock_environment,
+                belief=mock_belief,
+                policies=[mock_policy],
+                num_episodes=10,
+                num_steps=0,
+            )
 
     def test_validate_configs_non_integer_num_steps_raises_error(
         self, mock_environment, mock_belief, mock_policy
@@ -1451,32 +1343,20 @@ class TestPlannerEvaluationWorkflowValidation:
 
         Purpose: Validates that num_steps must be an integer
 
-        Given: PlannerEvaluationWorkflow instance and config with non-integer num_steps
-        When: Calling _validate_configs
+        Given: Non-integer num_steps for EnvironmentRunParams
+        When: Creating EnvironmentRunParams at construction time
         Then: TypeError is raised with appropriate message
 
         Test type: unit
         """
-
-        class TestWorkflow(PlannerEvaluationWorkflow):
-            def _get_task_manager_config(self) -> TaskManagerConfig:
-                return JoblibConfig(n_jobs=1)
-
-        workflow = TestWorkflow(
-            experiment_name="test",
-            cache_dir_path=None,
-        )
-
-        config = EnvironmentRunParams(
-            environment=mock_environment,
-            belief=mock_belief,
-            policies=[mock_policy],
-            num_episodes=10,
-            num_steps=5.5,  # type: ignore
-        )
-
         with pytest.raises(TypeError, match="num_steps must be an integer"):
-            workflow._validate_configs([config])  # type: ignore
+            EnvironmentRunParams(
+                environment=mock_environment,
+                belief=mock_belief,
+                policies=[mock_policy],
+                num_episodes=10,
+                num_steps=5.5,  # type: ignore
+            )
 
     def test_validate_configs_valid_config_passes(self, mock_environment, mock_belief, mock_policy):
         """Test that valid configuration passes validation.
@@ -1575,40 +1455,22 @@ class TestPlannerEvaluationWorkflowValidation:
         workflow._validate_configs([config1, config2])
 
     def test_evaluate_calls_validation(self, mock_environment, mock_belief, mock_policy):
-        """Test that evaluate method calls validation before execution.
+        """Test that validation is performed at construction time before evaluate is called.
 
-        Purpose: Validates that validation is integrated into evaluate method
+        Purpose: Validates that validation occurs at EnvironmentRunParams construction
 
-        Given: PlannerEvaluationWorkflow instance with invalid config
-        When: Calling evaluate
-        Then: Validation error is raised before simulator is called
+        Given: Invalid parameters for EnvironmentRunParams
+        When: Creating EnvironmentRunParams with negative num_episodes
+        Then: Validation error is raised at construction time
 
         Test type: integration
         """
-
-        class TestWorkflow(PlannerEvaluationWorkflow):
-            def _get_task_manager_config(self) -> TaskManagerConfig:
-                return JoblibConfig(n_jobs=1)
-
-        workflow = TestWorkflow(
-            experiment_name="test",
-            cache_dir_path=None,
-        )
-
-        # Create invalid config (negative num_episodes)
-        invalid_config = EnvironmentRunParams(
-            environment=mock_environment,
-            belief=mock_belief,
-            policies=[mock_policy],
-            num_episodes=-5,
-            num_steps=10,
-        )
-
-        with patch(
-            "POMDPPlanners.simulations.workflows.planner_evaluation_workflow.POMDPSimulator"
-        ) as mock_simulator_class:
-            with pytest.raises(ValueError, match="num_episodes must be positive"):
-                workflow.evaluate([invalid_config])
-
-            # Verify simulator was never created
-            mock_simulator_class.assert_not_called()
+        # Create invalid config (negative num_episodes) - validation happens here
+        with pytest.raises(ValueError, match="num_episodes must be positive"):
+            EnvironmentRunParams(
+                environment=mock_environment,
+                belief=mock_belief,
+                policies=[mock_policy],
+                num_episodes=-5,
+                num_steps=10,
+            )
