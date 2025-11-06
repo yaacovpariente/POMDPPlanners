@@ -5,7 +5,7 @@ followed by policy evaluation in different execution environments.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
 from abc import ABC, abstractmethod
 import pandas as pd
 
@@ -13,15 +13,14 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterRunParams,
     OptimizedPolicyResult,
 )
-from POMDPPlanners.core.environment import Environment
-from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.core.simulation import EnvironmentRunParams
+
+if TYPE_CHECKING:
+    from POMDPPlanners.core.environment import Environment
+    from POMDPPlanners.core.belief import Belief
+    from POMDPPlanners.core.policy import Policy
 from POMDPPlanners.simulations.hyper_parameter_tuning_simulations import HyperParameterOptimizer
 from POMDPPlanners.simulations.simulator import POMDPSimulator
-from POMDPPlanners.simulations.simulation_statistics import (
-    get_metric_names_from_environment_policy_pair,
-)
 from POMDPPlanners.simulations.simulations_deployment.task_manager_configs import (
     DaskConfig,
     JoblibConfig,
@@ -114,115 +113,33 @@ class OptimizationEvaluationWorkflow(ABC):
     def _validate_configs(self, configs: List[HyperParameterRunParams]) -> None:
         """Validate workflow configurations before execution.
 
-        This function performs validation of hyperparameter optimization
-        configurations at the workflow level to provide early error detection
-        and clear feedback.
-
-        Validation checks include:
-        - Basic structural validation (non-empty configs, proper types)
-        - Numerical parameter validation (positive values for episodes, steps, trials)
-        - Environment and belief validation
-        - Policy class validation (must be Policy subclass)
-        - Hyperparameter definition validation
-        - Metric name validation (parameters_to_optimize must match available metrics)
+        This function performs workflow-level validation to ensure the configs
+        list is properly structured. Individual config validation is handled by
+        HyperParameterRunParams.__post_init__() at construction time.
 
         Args:
             configs: List of hyperparameter run configurations to validate
 
         Raises:
-            ValueError: If any configuration contains invalid parameters, including:
-                - Empty configs list
-                - Non-positive num_episodes, num_steps, or n_trials
-                - Empty hyper_parameters list
-                - Empty parameters_to_optimize list
-                - Invalid metric names in parameters_to_optimize
-            TypeError: If any element is not HyperParameterRunParams or if
-                policy_cls is not a Policy subclass
+            ValueError: If configs list is empty
+            TypeError: If any element is not a HyperParameterRunParams instance
 
         Note:
-            This validation is performed at the workflow level in addition to
-            the validation in HyperParameterOptimizer to catch errors early and
-            provide better context in workflow execution.
+            Detailed parameter validation (num_episodes, num_steps, environment,
+            belief, policy_cls, hyper_parameters, parameters_to_optimize, metric
+            names) is performed by HyperParameterRunParams at construction time.
         """
         # Check configs is not empty
         if not configs:
             raise ValueError("configs list cannot be empty")
 
-        # Validate each configuration
+        # Validate each element is a HyperParameterRunParams instance
         for idx, config in enumerate(configs):
-            # Check config type
             if not isinstance(config, HyperParameterRunParams):
                 raise TypeError(
                     f"Configuration at index {idx} is not a HyperParameterRunParams instance. "
                     f"Got type: {type(config).__name__}"
                 )
-
-            # Validate numerical parameters
-            if config.num_episodes <= 0:
-                raise ValueError(
-                    f"Configuration at index {idx}: num_episodes must be positive, "
-                    f"got {config.num_episodes}"
-                )
-
-            if config.num_steps <= 0:
-                raise ValueError(
-                    f"Configuration at index {idx}: num_steps must be positive, "
-                    f"got {config.num_steps}"
-                )
-
-            if config.n_trials <= 0:
-                raise ValueError(
-                    f"Configuration at index {idx}: n_trials must be positive, "
-                    f"got {config.n_trials}"
-                )
-
-            # Validate environment
-            if not isinstance(config.environment, Environment):
-                raise TypeError(
-                    f"Configuration at index {idx}: environment must be an Environment instance, "
-                    f"got {type(config.environment).__name__}"
-                )
-
-            # Validate belief
-            if not isinstance(config.belief, Belief):
-                raise TypeError(
-                    f"Configuration at index {idx}: belief must be a Belief instance, "
-                    f"got {type(config.belief).__name__}"
-                )
-
-            # Validate policy class
-            policy_cls = config.hyper_param_planner_config.policy_cls
-            if not (isinstance(policy_cls, type) and issubclass(policy_cls, Policy)):
-                raise TypeError(
-                    f"Configuration at index {idx}: policy_cls must be a Policy subclass, "
-                    f"got {policy_cls}"
-                )
-
-            # Validate hyper_parameters is not empty
-            if not config.hyper_param_planner_config.hyper_parameters:
-                raise ValueError(
-                    f"Configuration at index {idx}: hyper_parameters list cannot be empty"
-                )
-
-            # Validate parameters_to_optimize is not empty
-            if not config.parameters_to_optimize:
-                raise ValueError(
-                    f"Configuration at index {idx}: parameters_to_optimize list cannot be empty"
-                )
-
-            # CRITICAL CHECK: Validate metric names match available metrics
-            available_metrics = get_metric_names_from_environment_policy_pair(
-                config.environment, policy_cls
-            )
-
-            for metric_name, direction in config.parameters_to_optimize:
-                if metric_name not in available_metrics:
-                    raise ValueError(
-                        f"Configuration at index {idx}: Invalid metric name '{metric_name}' "
-                        f"in parameters_to_optimize. "
-                        f"Available metrics for {config.environment.__class__.__name__} "
-                        f"with {policy_cls.__name__}: {available_metrics}"
-                    )
 
     def optimize_and_evaluate(
         self,

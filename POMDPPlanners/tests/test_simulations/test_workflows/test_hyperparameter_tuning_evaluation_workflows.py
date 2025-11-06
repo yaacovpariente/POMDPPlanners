@@ -504,7 +504,7 @@ class TestWorkflowValidation:
         Purpose: Validates that num_episodes must be positive
 
         Given: Config with num_episodes = -1
-        When: optimize_and_evaluate is called
+        When: HyperParameterRunParams is constructed
         Then: ValueError is raised about num_episodes
 
         Test type: unit
@@ -525,32 +525,30 @@ class TestWorkflowValidation:
         env = TigerPOMDP(discount_factor=0.95)
         belief = get_initial_belief(env, n_particles=10)
 
-        config = HyperParameterRunParams(
-            environment=env,
-            belief=belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
-                constant_parameters={"depth": 5, "n_simulations": 100},
-            ),
-            num_episodes=-1,  # Invalid
-            num_steps=10,
-            n_trials=5,
-            parameters_to_optimize=[
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
-            ],
-        )
-
         with pytest.raises(ValueError, match="num_episodes must be positive"):
-            workflow.optimize_and_evaluate([config])
+            config = HyperParameterRunParams(
+                environment=env,
+                belief=belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                    constant_parameters={"depth": 5, "n_simulations": 100},
+                ),
+                num_episodes=-1,  # Invalid
+                num_steps=10,
+                n_trials=5,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
 
     def test_validate_configs_invalid_metric_name_raises_error(self, temp_cache_dir):
         """Test that invalid metric name in parameters_to_optimize raises ValueError.
 
-        Purpose: Validates that metric names must match available metrics at workflow level
+        Purpose: Validates that metric names must match available metrics
 
         Given: Config with invalid metric name "nonexistent_metric"
-        When: optimize_and_evaluate is called
+        When: HyperParameterRunParams is constructed
         Then: ValueError is raised with available metrics listed
 
         Test type: unit
@@ -571,27 +569,25 @@ class TestWorkflowValidation:
         env = TigerPOMDP(discount_factor=0.95)
         belief = get_initial_belief(env, n_particles=10)
 
-        config = HyperParameterRunParams(
-            environment=env,
-            belief=belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
-                constant_parameters={"depth": 5, "n_simulations": 100},
-            ),
-            num_episodes=10,
-            num_steps=5,
-            n_trials=5,
-            parameters_to_optimize=[
-                (
-                    "nonexistent_metric",
-                    HyperParameterOptimizationDirection.MAXIMIZE,
-                )  # Invalid metric
-            ],
-        )
-
         with pytest.raises(ValueError, match="Invalid metric name 'nonexistent_metric'"):
-            workflow.optimize_and_evaluate([config])
+            config = HyperParameterRunParams(
+                environment=env,
+                belief=belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                    constant_parameters={"depth": 5, "n_simulations": 100},
+                ),
+                num_episodes=10,
+                num_steps=5,
+                n_trials=5,
+                parameters_to_optimize=[
+                    (
+                        "nonexistent_metric",
+                        HyperParameterOptimizationDirection.MAXIMIZE,
+                    )  # Invalid metric
+                ],
+            )
 
     def test_validate_configs_valid_environment_specific_metric(self, temp_cache_dir):
         """Test that valid environment-specific metric passes validation at workflow level.
