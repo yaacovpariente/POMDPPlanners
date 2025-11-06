@@ -95,11 +95,13 @@ class HyperParamPlannerConfig:
                 f"policy_cls must be a class type, got {type(self.policy_cls).__name__}"
             )
 
+        # Validate hyper_parameters is a sequence (list or tuple)
         if not isinstance(self.hyper_parameters, (list, tuple)):
             raise TypeError(
                 f"hyper_parameters must be a Sequence (list or tuple), got {type(self.hyper_parameters).__name__}"
             )
 
+        # Validate each hyperparameter is of correct type
         for i, param in enumerate(self.hyper_parameters):
             if not isinstance(param, (CategoricalHyperParameter, NumericalHyperParameter)):
                 raise TypeError(
@@ -107,6 +109,7 @@ class HyperParamPlannerConfig:
                     f"got {type(param).__name__}"
                 )
 
+        # Validate constant_parameters is a dict
         if not isinstance(self.constant_parameters, dict):
             raise TypeError(
                 f"constant_parameters must be a dict, got {type(self.constant_parameters).__name__}"
@@ -162,7 +165,31 @@ class ParameterToOptimizeMapper(ABC):
         pass
 
 
-class HyperParameterRunParams(NamedTuple):
+@dataclass(frozen=True)
+class HyperParameterRunParams:
+    """Configuration parameters for hyperparameter optimization runs.
+
+    This frozen dataclass contains all parameters needed to configure and execute
+    a hyperparameter optimization run. Input validation is performed at construction
+    time to ensure all parameters are valid before optimization begins.
+
+    Attributes:
+        environment: POMDP environment instance to optimize policies for
+        belief: Initial belief state for the environment
+        hyper_param_planner_config: Configuration defining policy class, hyperparameters,
+            and constant parameters for optimization
+        num_episodes: Number of episodes to run per trial (must be positive)
+        num_steps: Maximum number of steps per episode (must be positive)
+        n_trials: Number of optimization trials to execute (must be positive)
+        parameters_to_optimize: List of (metric_name, direction) tuples specifying
+            which metrics to optimize and in which direction (maximize/minimize)
+
+    Raises:
+        ValueError: If any numerical parameter is non-positive, if hyperparameters
+            or parameters_to_optimize are empty, or if metric names are invalid
+        TypeError: If environment, belief, or policy_cls have incorrect types
+    """
+
     environment: "Environment"
     belief: "Belief"
     hyper_param_planner_config: HyperParamPlannerConfig
@@ -170,6 +197,68 @@ class HyperParameterRunParams(NamedTuple):
     num_steps: int
     n_trials: int
     parameters_to_optimize: List[Tuple[str, HyperParameterOptimizationDirection]]
+
+    def __post_init__(self) -> None:
+        """Validate all parameters at construction time."""
+        # Import validation dependencies at runtime to avoid circular imports
+        from POMDPPlanners.core.environment import Environment
+        from POMDPPlanners.core.belief import Belief
+        from POMDPPlanners.core.policy import Policy
+        from POMDPPlanners.simulations.simulation_statistics import (
+            get_metric_names_from_environment_policy_pair,
+        )
+
+        # Validate numerical parameters
+        if self.num_episodes <= 0:
+            raise ValueError(f"num_episodes must be positive, got {self.num_episodes}")
+        if self.num_steps <= 0:
+            raise ValueError(f"num_steps must be positive, got {self.num_steps}")
+        if self.n_trials <= 0:
+            raise ValueError(f"n_trials must be positive, got {self.n_trials}")
+
+        # Validate types
+        if not isinstance(self.environment, Environment):
+            raise TypeError(
+                f"environment must be an Environment instance, "
+                f"got {type(self.environment).__name__}"
+            )
+        if not isinstance(self.belief, Belief):
+            raise TypeError(f"belief must be a Belief instance, got {type(self.belief).__name__}")
+        if not (
+            isinstance(self.hyper_param_planner_config.policy_cls, type)
+            and issubclass(self.hyper_param_planner_config.policy_cls, Policy)
+        ):
+            raise TypeError(
+                f"policy_cls must be a Policy subclass, got {self.hyper_param_planner_config.policy_cls}"
+            )
+
+        # Validate non-empty collections
+        if not isinstance(self.hyper_param_planner_config.hyper_parameters, (list, tuple)):
+            raise TypeError(
+                f"hyper_parameters must be list or tuple, got {type(self.hyper_param_planner_config.hyper_parameters).__name__}"
+            )
+        if not self.hyper_param_planner_config.hyper_parameters:
+            raise ValueError("hyper_parameters cannot be empty")
+
+        if not isinstance(self.parameters_to_optimize, list):
+            raise TypeError(
+                f"parameters_to_optimize must be list, got {type(self.parameters_to_optimize).__name__}"
+            )
+        if not self.parameters_to_optimize:
+            raise ValueError("parameters_to_optimize cannot be empty")
+
+        # Validate metric names
+        policy_cls = self.hyper_param_planner_config.policy_cls
+        available_metrics = get_metric_names_from_environment_policy_pair(
+            self.environment, policy_cls
+        )
+        for metric_name, direction in self.parameters_to_optimize:
+            if metric_name not in available_metrics:
+                raise ValueError(
+                    f"Invalid metric name '{metric_name}' in parameters_to_optimize. "
+                    f"Available metrics for {self.environment.__class__.__name__} "
+                    f"with {policy_cls.__name__}: {available_metrics}"
+                )
 
     @property
     def config_id(self) -> str:
@@ -186,7 +275,31 @@ class HyperParameterRunParams(NamedTuple):
         )
 
 
-class OptimizedPolicyResult(NamedTuple):
+@dataclass(frozen=True)
+class OptimizedPolicyResult:
+    """Result of hyperparameter optimization containing the optimized policy and metrics.
+
+    This frozen dataclass contains all information about a completed hyperparameter
+    optimization run, including the optimized policy, chosen hyperparameters, and
+    achieved metric values. Input validation is performed at construction time.
+
+    Attributes:
+        environment: POMDP environment instance used for optimization
+        policy: Optimized policy instance with best hyperparameters
+        chosen_hyper_parameters: Dictionary of hyperparameter names to chosen values
+        num_episodes: Number of episodes run per trial (must be positive)
+        num_steps: Maximum number of steps per episode (must be positive)
+        parameters_to_optimize: List of (metric_name, direction) tuples that were optimized
+        optimized_metric_values: Dictionary mapping metric names to achieved values
+            (None if metric value not found)
+
+    Raises:
+        ValueError: If num_episodes or num_steps are non-positive, if chosen_hyper_parameters
+            or parameters_to_optimize are empty, or if metric names are invalid
+        TypeError: If environment, policy types are incorrect, or if data structures
+            have wrong types
+    """
+
     environment: "Environment"
     policy: "Policy"
     chosen_hyper_parameters: dict
@@ -196,6 +309,104 @@ class OptimizedPolicyResult(NamedTuple):
     optimized_metric_values: Dict[
         str, Optional[float]
     ]  # Actual metric values achieved (None if not found)
+
+    def __post_init__(self) -> None:
+        """Validate all parameters at construction time."""
+        # Import validation dependencies at runtime to avoid circular imports
+        from POMDPPlanners.core.environment import Environment
+        from POMDPPlanners.core.policy import Policy
+        from POMDPPlanners.simulations.simulation_statistics import (
+            get_metric_names_from_environment_policy_pair,
+        )
+
+        # Validate numerical parameters
+        if self.num_episodes <= 0:
+            raise ValueError(f"num_episodes must be positive, got {self.num_episodes}")
+        if self.num_steps <= 0:
+            raise ValueError(f"num_steps must be positive, got {self.num_steps}")
+
+        # Validate types
+        if not isinstance(self.environment, Environment):
+            raise TypeError(
+                f"environment must be an Environment instance, "
+                f"got {type(self.environment).__name__}"
+            )
+        if not isinstance(self.policy, Policy):
+            raise TypeError(f"policy must be a Policy instance, got {type(self.policy).__name__}")
+
+        # Validate non-empty collections
+        if not isinstance(self.chosen_hyper_parameters, dict):
+            raise TypeError(
+                f"chosen_hyper_parameters must be a dict, got {type(self.chosen_hyper_parameters).__name__}"
+            )
+        if not self.chosen_hyper_parameters:
+            raise ValueError("chosen_hyper_parameters dict cannot be empty")
+
+        if not isinstance(self.parameters_to_optimize, list):
+            raise TypeError(
+                f"parameters_to_optimize must be list, got {type(self.parameters_to_optimize).__name__}"
+            )
+        if not self.parameters_to_optimize:
+            raise ValueError("parameters_to_optimize cannot be empty")
+
+        # Validate each parameter_to_optimize tuple
+        for i, param_tuple in enumerate(self.parameters_to_optimize):
+            if not isinstance(param_tuple, tuple) or len(param_tuple) != 2:
+                raise TypeError(
+                    f"parameters_to_optimize[{i}] must be a tuple of length 2, "
+                    f"got {type(param_tuple).__name__} with length {len(param_tuple) if isinstance(param_tuple, tuple) else 'N/A'}"
+                )
+            metric_name, direction = param_tuple
+            if not isinstance(metric_name, str):
+                raise TypeError(
+                    f"parameters_to_optimize[{i}][0] (metric_name) must be a str, "
+                    f"got {type(metric_name).__name__}"
+                )
+            if not isinstance(direction, HyperParameterOptimizationDirection):
+                raise TypeError(
+                    f"parameters_to_optimize[{i}][1] (direction) must be a "
+                    f"HyperParameterOptimizationDirection, got {type(direction).__name__}"
+                )
+
+        # Validate optimized_metric_values is a dict (can be empty in some cases)
+        if not isinstance(self.optimized_metric_values, dict):
+            raise TypeError(
+                f"optimized_metric_values must be a dict, "
+                f"got {type(self.optimized_metric_values).__name__}"
+            )
+
+        # Validate metric names against available metrics
+        policy_cls = type(self.policy)
+        available_metrics = get_metric_names_from_environment_policy_pair(
+            self.environment, policy_cls
+        )
+
+        for metric_name, _ in self.parameters_to_optimize:
+            if metric_name not in available_metrics:
+                raise ValueError(
+                    f"Invalid metric name '{metric_name}' in parameters_to_optimize. "
+                    f"Available metrics for {self.environment.__class__.__name__} "
+                    f"with {policy_cls.__name__}: {available_metrics}"
+                )
+
+        # Validate that optimized_metric_values contains all optimized metrics
+        optimized_metric_names = {name for name, _ in self.parameters_to_optimize}
+        for metric_name in optimized_metric_names:
+            if metric_name not in self.optimized_metric_values:
+                raise ValueError(
+                    f"Metric '{metric_name}' in parameters_to_optimize is missing "
+                    f"from optimized_metric_values. Expected keys: {optimized_metric_names}, "
+                    f"got: {set(self.optimized_metric_values.keys())}"
+                )
+
+        # Validate that optimized_metric_values doesn't have extra metrics
+        for metric_name in self.optimized_metric_values.keys():
+            if metric_name not in optimized_metric_names:
+                raise ValueError(
+                    f"Metric '{metric_name}' in optimized_metric_values was not "
+                    f"in parameters_to_optimize. Expected keys: {optimized_metric_names}, "
+                    f"got: {set(self.optimized_metric_values.keys())}"
+                )
 
 
 class HyperParamPlannerConfigGenerator(ABC):
