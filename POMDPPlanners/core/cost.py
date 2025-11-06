@@ -24,7 +24,8 @@ def particle_belief_entropy(
     belief: Union[WeightedParticleBelief, WeightedParticleBeliefStateUpdate],
 ) -> float:
     unique_belief = belief.to_unique_support_distribution()
-    return -np.sum(unique_belief.probs * np.log(unique_belief.probs))
+    entropy = -np.sum(unique_belief.probs * np.log(unique_belief.probs))
+    return float(entropy)
 
 
 def belief_expectation_cost_particle_belief(
