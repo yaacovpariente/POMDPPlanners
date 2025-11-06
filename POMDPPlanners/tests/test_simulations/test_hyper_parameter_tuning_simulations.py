@@ -514,29 +514,27 @@ class TestHyperParameterOptimizerErrorHandling:
     def test_task_creation_with_invalid_configs(
         self, temp_cache_dir, real_environment, real_policy_class, real_belief
     ):
-        """Test task creation handles invalid configurations gracefully."""
+        """Test that invalid configurations raise errors at construction time."""
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
 
-        # Create a real but minimal config with very small parameters for fast testing
-        minimal_config = HyperParameterRunParams(
-            environment=real_environment,
-            belief=real_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=real_policy_class,
-                hyper_parameters=[],  # Empty hyperparameters - this is the "invalid" aspect
-                constant_parameters={},  # No constant parameters needed for this planner
-            ),
-            num_episodes=1,  # Small for fast tests
-            num_steps=1,  # Small for fast tests
-            n_trials=1,  # Small for fast tests
-            parameters_to_optimize=[
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
-            ],
-        )
-
-        # Should raise ValueError when creating tasks with empty hyperparameters
+        # Should raise ValueError when creating HyperParameterRunParams with empty hyperparameters
+        # Validation now happens at construction time (fail-fast)
         with pytest.raises(ValueError, match="hyper_parameters cannot be empty"):
-            optimizer._create_tasks([minimal_config])
+            minimal_config = HyperParameterRunParams(
+                environment=real_environment,
+                belief=real_belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=real_policy_class,
+                    hyper_parameters=[],  # Empty hyperparameters - this is the "invalid" aspect
+                    constant_parameters={},  # No constant parameters needed for this planner
+                ),
+                num_episodes=1,  # Small for fast tests
+                num_steps=1,  # Small for fast tests
+                n_trials=1,  # Small for fast tests
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
 
 
 class TestHyperParameterOptimizerEdgeCases:
@@ -581,24 +579,25 @@ class TestHyperParameterOptimizerEdgeCases:
         """Test handling of zero episodes and steps."""
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
 
-        zero_config = HyperParameterRunParams(
-            environment=real_environment,
-            belief=real_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=real_policy_class,
-                hyper_parameters=[],
-                constant_parameters={},  # No constant parameters needed for this planner
-            ),
-            num_episodes=0,
-            num_steps=0,
-            n_trials=1,  # Small for fast tests
-            parameters_to_optimize=[
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
-            ],
-        )
-
-        # Should not crash during initialization
-        assert optimizer is not None
+        # Should raise ValueError at construction time for num_episodes=0
+        with pytest.raises(ValueError, match="num_episodes must be positive"):
+            zero_config = HyperParameterRunParams(
+                environment=real_environment,
+                belief=real_belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=real_policy_class,
+                    hyper_parameters=[
+                        NumericalHyperParameter(1, 2, "branching_factor"),
+                    ],
+                    constant_parameters={},  # No constant parameters needed for this planner
+                ),
+                num_episodes=0,
+                num_steps=0,
+                n_trials=1,  # Small for fast tests
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
 
     def test_empty_hyperparameters_list(
         self, temp_cache_dir, real_environment, real_policy_class, real_belief
@@ -606,24 +605,23 @@ class TestHyperParameterOptimizerEdgeCases:
         """Test handling of empty hyperparameters list."""
         optimizer = HyperParameterOptimizer(cache_dir_path=temp_cache_dir)
 
-        empty_config = HyperParameterRunParams(
-            environment=real_environment,
-            belief=real_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=real_policy_class,
-                hyper_parameters=[],
-                constant_parameters={},  # No constant parameters needed for this planner
-            ),
-            num_episodes=1,  # Small for fast tests
-            num_steps=1,  # Small for fast tests
-            n_trials=1,  # Small for fast tests
-            parameters_to_optimize=[
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
-            ],
-        )
-
-        # Should not crash during initialization
-        assert optimizer is not None
+        # Should raise ValueError at construction time for empty hyper_parameters
+        with pytest.raises(ValueError, match="hyper_parameters cannot be empty"):
+            empty_config = HyperParameterRunParams(
+                environment=real_environment,
+                belief=real_belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=real_policy_class,
+                    hyper_parameters=[],
+                    constant_parameters={},  # No constant parameters needed for this planner
+                ),
+                num_episodes=1,  # Small for fast tests
+                num_steps=1,  # Small for fast tests
+                n_trials=1,  # Small for fast tests
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
 
     def test_very_large_n_jobs(self, temp_cache_dir):
         """Test handling of very large n_jobs values."""
@@ -1555,24 +1553,6 @@ class TestHyperParameterOptimizerWithTaskManagerConfigs:
 class TestHyperParameterOptimizerValidation:
     """Test input validation for HyperParameterOptimizer.optimize() method."""
 
-    def test_validate_optimization_configs_empty_list_raises_error(self, temp_cache_dir):
-        """Test that empty configs list raises ValueError.
-
-        Purpose: Validates that empty configs list is rejected
-
-        Given: HyperParameterOptimizer instance and empty configs list
-        When: _validate_optimization_configs is called with empty list
-        Then: ValueError is raised with appropriate message
-
-        Test type: unit
-        """
-        optimizer = HyperParameterOptimizer(
-            cache_dir_path=temp_cache_dir, experiment_name="test", n_jobs=1
-        )
-
-        with pytest.raises(ValueError, match="configs list cannot be empty"):
-            optimizer._validate_optimization_configs([])
-
     def test_validate_optimization_configs_invalid_type_raises_error(
         self, temp_cache_dir, real_environment, real_belief
     ):
@@ -1603,8 +1583,8 @@ class TestHyperParameterOptimizerValidation:
         Purpose: Validates that num_episodes must be positive
 
         Given: Config with num_episodes = -1
-        When: _validate_optimization_configs is called
-        Then: ValueError is raised about num_episodes
+        When: HyperParameterRunParams is constructed
+        Then: ValueError is raised about num_episodes at construction time
 
         Test type: unit
         """
@@ -1612,24 +1592,23 @@ class TestHyperParameterOptimizerValidation:
             cache_dir_path=temp_cache_dir, experiment_name="test", n_jobs=1
         )
 
-        config = HyperParameterRunParams(
-            environment=real_environment,
-            belief=real_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
-                constant_parameters={"depth": 5, "n_simulations": 100},
-            ),
-            num_episodes=-1,  # Invalid
-            num_steps=10,
-            n_trials=5,
-            parameters_to_optimize=[
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
-            ],
-        )
-
+        # Should raise ValueError at construction time for negative num_episodes
         with pytest.raises(ValueError, match="num_episodes must be positive"):
-            optimizer._validate_optimization_configs([config])
+            config = HyperParameterRunParams(
+                environment=real_environment,
+                belief=real_belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                    constant_parameters={"depth": 5, "n_simulations": 100},
+                ),
+                num_episodes=-1,  # Invalid
+                num_steps=10,
+                n_trials=5,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
 
     def test_validate_optimization_configs_zero_num_steps_raises_error(
         self, temp_cache_dir, real_environment, real_belief
@@ -1639,8 +1618,8 @@ class TestHyperParameterOptimizerValidation:
         Purpose: Validates that num_steps must be positive
 
         Given: Config with num_steps = 0
-        When: _validate_optimization_configs is called
-        Then: ValueError is raised about num_steps
+        When: HyperParameterRunParams is constructed
+        Then: ValueError is raised about num_steps at construction time
 
         Test type: unit
         """
@@ -1648,24 +1627,23 @@ class TestHyperParameterOptimizerValidation:
             cache_dir_path=temp_cache_dir, experiment_name="test", n_jobs=1
         )
 
-        config = HyperParameterRunParams(
-            environment=real_environment,
-            belief=real_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
-                constant_parameters={"depth": 5, "n_simulations": 100},
-            ),
-            num_episodes=10,
-            num_steps=0,  # Invalid
-            n_trials=5,
-            parameters_to_optimize=[
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
-            ],
-        )
-
+        # Should raise ValueError at construction time for zero num_steps
         with pytest.raises(ValueError, match="num_steps must be positive"):
-            optimizer._validate_optimization_configs([config])
+            config = HyperParameterRunParams(
+                environment=real_environment,
+                belief=real_belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                    constant_parameters={"depth": 5, "n_simulations": 100},
+                ),
+                num_episodes=10,
+                num_steps=0,  # Invalid
+                n_trials=5,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
 
     def test_validate_optimization_configs_negative_n_trials_raises_error(
         self, temp_cache_dir, real_environment, real_belief
@@ -1675,8 +1653,8 @@ class TestHyperParameterOptimizerValidation:
         Purpose: Validates that n_trials must be positive
 
         Given: Config with n_trials = -5
-        When: _validate_optimization_configs is called
-        Then: ValueError is raised about n_trials
+        When: HyperParameterRunParams is constructed
+        Then: ValueError is raised about n_trials at construction time
 
         Test type: unit
         """
@@ -1684,24 +1662,23 @@ class TestHyperParameterOptimizerValidation:
             cache_dir_path=temp_cache_dir, experiment_name="test", n_jobs=1
         )
 
-        config = HyperParameterRunParams(
-            environment=real_environment,
-            belief=real_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
-                constant_parameters={"depth": 5, "n_simulations": 100},
-            ),
-            num_episodes=10,
-            num_steps=5,
-            n_trials=-5,  # Invalid
-            parameters_to_optimize=[
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
-            ],
-        )
-
+        # Should raise ValueError at construction time for negative n_trials
         with pytest.raises(ValueError, match="n_trials must be positive"):
-            optimizer._validate_optimization_configs([config])
+            config = HyperParameterRunParams(
+                environment=real_environment,
+                belief=real_belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                    constant_parameters={"depth": 5, "n_simulations": 100},
+                ),
+                num_episodes=10,
+                num_steps=5,
+                n_trials=-5,  # Invalid
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
 
     def test_validate_optimization_configs_empty_hyper_parameters_raises_error(
         self, temp_cache_dir, real_environment, real_belief
@@ -1711,8 +1688,8 @@ class TestHyperParameterOptimizerValidation:
         Purpose: Validates that hyper_parameters cannot be empty
 
         Given: Config with empty hyper_parameters list
-        When: _validate_optimization_configs is called
-        Then: ValueError is raised about empty hyper_parameters
+        When: HyperParameterRunParams is constructed
+        Then: ValueError is raised about empty hyper_parameters at construction time
 
         Test type: unit
         """
@@ -1720,24 +1697,23 @@ class TestHyperParameterOptimizerValidation:
             cache_dir_path=temp_cache_dir, experiment_name="test", n_jobs=1
         )
 
-        config = HyperParameterRunParams(
-            environment=real_environment,
-            belief=real_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[],  # Invalid - empty
-                constant_parameters={"depth": 5, "n_simulations": 100},
-            ),
-            num_episodes=10,
-            num_steps=5,
-            n_trials=5,
-            parameters_to_optimize=[
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
-            ],
-        )
-
-        with pytest.raises(ValueError, match="hyper_parameters list cannot be empty"):
-            optimizer._validate_optimization_configs([config])
+        # Should raise ValueError at construction time for empty hyper_parameters
+        with pytest.raises(ValueError, match="hyper_parameters cannot be empty"):
+            config = HyperParameterRunParams(
+                environment=real_environment,
+                belief=real_belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=[],  # Invalid - empty
+                    constant_parameters={"depth": 5, "n_simulations": 100},
+                ),
+                num_episodes=10,
+                num_steps=5,
+                n_trials=5,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
 
     def test_validate_optimization_configs_empty_parameters_to_optimize_raises_error(
         self, temp_cache_dir, real_environment, real_belief
@@ -1747,8 +1723,8 @@ class TestHyperParameterOptimizerValidation:
         Purpose: Validates that parameters_to_optimize cannot be empty
 
         Given: Config with empty parameters_to_optimize list
-        When: _validate_optimization_configs is called
-        Then: ValueError is raised about empty parameters_to_optimize
+        When: HyperParameterRunParams is constructed
+        Then: ValueError is raised about empty parameters_to_optimize at construction time
 
         Test type: unit
         """
@@ -1756,22 +1732,21 @@ class TestHyperParameterOptimizerValidation:
             cache_dir_path=temp_cache_dir, experiment_name="test", n_jobs=1
         )
 
-        config = HyperParameterRunParams(
-            environment=real_environment,
-            belief=real_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
-                constant_parameters={"depth": 5, "n_simulations": 100},
-            ),
-            num_episodes=10,
-            num_steps=5,
-            n_trials=5,
-            parameters_to_optimize=[],  # Invalid - empty
-        )
-
-        with pytest.raises(ValueError, match="parameters_to_optimize list cannot be empty"):
-            optimizer._validate_optimization_configs([config])
+        # Should raise ValueError at construction time for empty parameters_to_optimize
+        with pytest.raises(ValueError, match="parameters_to_optimize cannot be empty"):
+            config = HyperParameterRunParams(
+                environment=real_environment,
+                belief=real_belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                    constant_parameters={"depth": 5, "n_simulations": 100},
+                ),
+                num_episodes=10,
+                num_steps=5,
+                n_trials=5,
+                parameters_to_optimize=[],  # Invalid - empty
+            )
 
     def test_validate_optimization_configs_invalid_metric_name_raises_error(
         self, temp_cache_dir, real_environment, real_belief
@@ -1781,8 +1756,8 @@ class TestHyperParameterOptimizerValidation:
         Purpose: Validates that metric names must match available metrics from environment and policy
 
         Given: Config with invalid metric name "nonexistent_metric"
-        When: _validate_optimization_configs is called
-        Then: ValueError is raised with available metrics listed
+        When: HyperParameterRunParams is constructed
+        Then: ValueError is raised with available metrics listed at construction time
 
         Test type: unit
         """
@@ -1790,120 +1765,37 @@ class TestHyperParameterOptimizerValidation:
             cache_dir_path=temp_cache_dir, experiment_name="test", n_jobs=1
         )
 
-        config = HyperParameterRunParams(
-            environment=real_environment,
-            belief=real_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
-                constant_parameters={"depth": 5, "n_simulations": 100},
-            ),
-            num_episodes=10,
-            num_steps=5,
-            n_trials=5,
-            parameters_to_optimize=[
-                (
-                    "nonexistent_metric",
-                    HyperParameterOptimizationDirection.MAXIMIZE,
-                )  # Invalid metric
-            ],
-        )
-
+        # Should raise ValueError at construction time for invalid metric name
         with pytest.raises(ValueError, match="Invalid metric name 'nonexistent_metric'"):
-            optimizer._validate_optimization_configs([config])
-
-    def test_validate_optimization_configs_valid_environment_specific_metric(
-        self, temp_cache_dir, real_belief
-    ):
-        """Test that valid environment-specific metric passes validation.
-
-        Purpose: Validates that environment-specific metrics (like TigerPOMDP's success_rate) are accepted
-
-        Given: TigerPOMDP environment and config with "success_rate" metric
-        When: _validate_optimization_configs is called
-        Then: No exception is raised
-
-        Test type: unit
-        """
-        tiger_env = TigerPOMDP(discount_factor=0.95)
-        tiger_belief = get_initial_belief(tiger_env, n_particles=10)
-
-        optimizer = HyperParameterOptimizer(
-            cache_dir_path=temp_cache_dir, experiment_name="test", n_jobs=1
-        )
-
-        config = HyperParameterRunParams(
-            environment=tiger_env,
-            belief=tiger_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
-                constant_parameters={"depth": 5, "n_simulations": 100},
-            ),
-            num_episodes=10,
-            num_steps=5,
-            n_trials=5,
-            parameters_to_optimize=[
-                (
-                    "success_rate",
-                    HyperParameterOptimizationDirection.MAXIMIZE,
-                )  # TigerPOMDP-specific
-            ],
-        )
-
-        # Should not raise any exception
-        optimizer._validate_optimization_configs([config])
-
-    def test_validate_optimization_configs_valid_config_passes(
-        self, temp_cache_dir, real_environment, real_belief
-    ):
-        """Test that valid configuration passes validation.
-
-        Purpose: Validates that properly configured HyperParameterRunParams passes all checks
-
-        Given: Valid HyperParameterRunParams with standard metrics
-        When: _validate_optimization_configs is called
-        Then: No exception is raised
-
-        Test type: unit
-        """
-        optimizer = HyperParameterOptimizer(
-            cache_dir_path=temp_cache_dir, experiment_name="test", n_jobs=1
-        )
-
-        config = HyperParameterRunParams(
-            environment=real_environment,
-            belief=real_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[
-                    NumericalHyperParameter(0.1, 2.0, "exploration_constant"),
-                    NumericalHyperParameter(10, 50, "n_simulations"),
+            config = HyperParameterRunParams(
+                environment=real_environment,
+                belief=real_belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                    constant_parameters={"depth": 5, "n_simulations": 100},
+                ),
+                num_episodes=10,
+                num_steps=5,
+                n_trials=5,
+                parameters_to_optimize=[
+                    (
+                        "nonexistent_metric",
+                        HyperParameterOptimizationDirection.MAXIMIZE,
+                    )  # Invalid metric
                 ],
-                constant_parameters={"depth": 5},
-            ),
-            num_episodes=10,
-            num_steps=5,
-            n_trials=5,
-            parameters_to_optimize=[
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
-                ("return_cvar", HyperParameterOptimizationDirection.MAXIMIZE),
-            ],
-        )
-
-        # Should not raise any exception
-        optimizer._validate_optimization_configs([config])
+            )
 
     def test_validate_optimization_configs_multiple_configs_first_invalid(
         self, temp_cache_dir, real_environment, real_belief
     ):
         """Test that first invalid config in list is caught.
 
-        Purpose: Validates that validation checks all configs and reports which one fails
+        Purpose: Validates that validation catches invalid configs at construction time
 
         Given: List with first config having invalid metric, second config valid
-        When: _validate_optimization_configs is called
-        Then: ValueError is raised for config at index 0
+        When: First HyperParameterRunParams is constructed with invalid metric
+        Then: ValueError is raised at construction time for invalid metric
 
         Test type: unit
         """
@@ -1911,22 +1803,25 @@ class TestHyperParameterOptimizerValidation:
             cache_dir_path=temp_cache_dir, experiment_name="test", n_jobs=1
         )
 
-        invalid_config = HyperParameterRunParams(
-            environment=real_environment,
-            belief=real_belief,
-            hyper_param_planner_config=HyperParamPlannerConfig(
-                policy_cls=POMCP,
-                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
-                constant_parameters={"depth": 5, "n_simulations": 100},
-            ),
-            num_episodes=10,
-            num_steps=5,
-            n_trials=5,
-            parameters_to_optimize=[
-                ("invalid_metric", HyperParameterOptimizationDirection.MAXIMIZE)
-            ],
-        )
+        # Should raise ValueError at construction time for invalid metric
+        with pytest.raises(ValueError, match="Invalid metric name 'invalid_metric'"):
+            invalid_config = HyperParameterRunParams(
+                environment=real_environment,
+                belief=real_belief,
+                hyper_param_planner_config=HyperParamPlannerConfig(
+                    policy_cls=POMCP,
+                    hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                    constant_parameters={"depth": 5, "n_simulations": 100},
+                ),
+                num_episodes=10,
+                num_steps=5,
+                n_trials=5,
+                parameters_to_optimize=[
+                    ("invalid_metric", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+            )
 
+        # Valid config should construct successfully
         valid_config = HyperParameterRunParams(
             environment=real_environment,
             belief=real_belief,
@@ -1942,9 +1837,7 @@ class TestHyperParameterOptimizerValidation:
                 ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
             ],
         )
-
-        with pytest.raises(ValueError, match="Configuration at index 0.*Invalid metric name"):
-            optimizer._validate_optimization_configs([invalid_config, valid_config])
+        assert valid_config is not None
 
 
 class TestHyperParameterOptimizationPBSIntegration:
