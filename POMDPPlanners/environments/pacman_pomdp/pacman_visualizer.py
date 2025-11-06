@@ -48,7 +48,7 @@ class PacManVisualizer:
 
     def _colorize_sprite(self, image: Image.Image, color: Tuple[int, int, int, int]) -> Image.Image:
         """Apply color overlay to sprite image."""
-        overlay = Image.new("RGBA", image.size, color)
+        overlay = Image.new("RGBA", image.size, color)  # type: ignore[arg-type]
         result = Image.blend(image.convert("RGBA"), overlay, 0.3)
         result.putalpha(image.split()[-1])
         return result

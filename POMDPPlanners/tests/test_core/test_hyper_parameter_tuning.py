@@ -4,10 +4,11 @@ from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParamPlannerConfig,
     HyperParameterRunParams,
     HyperParameterOptimizationDirection,
+    OptimizedPolicyResult,
 )
 from POMDPPlanners.core.environment import Environment, SpaceInfo, SpaceType
 from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.policy import Policy
+from POMDPPlanners.core.policy import Policy, PolicySpaceInfo, PolicyRunData
 
 
 class TestCategoricalHyperParameterIdUniqueness:
@@ -210,6 +211,10 @@ class TestHyperParamPlannerConfigIdUniqueness:
                 self.param = param
                 self.a = a
 
+            @classmethod
+            def get_info_variable_names(cls):
+                return []
+
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
         config1 = HyperParamPlannerConfig(
@@ -242,6 +247,10 @@ class TestHyperParamPlannerConfigIdUniqueness:
                 )
                 self.param = param
                 self.a = a
+
+            @classmethod
+            def get_info_variable_names(cls):
+                return []
 
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
@@ -363,6 +372,10 @@ class TestHyperParameterRunParamsIdUniqueness:
                 self.param = param
                 self.a = a
 
+            @classmethod
+            def get_info_variable_names(cls):
+                return []
+
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
         hyper_config = HyperParamPlannerConfig(
@@ -377,7 +390,7 @@ class TestHyperParameterRunParamsIdUniqueness:
             10,
             100,
             5,
-            [("param", HyperParameterOptimizationDirection.MAXIMIZE)],
+            [("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         )
 
         # The config_id should exist and be a string
@@ -450,6 +463,10 @@ class TestHyperParameterRunParamsIdUniqueness:
                 self.param = param
                 self.a = a
 
+            @classmethod
+            def get_info_variable_names(cls):
+                return []
+
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
         hyper_config = HyperParamPlannerConfig(
@@ -463,7 +480,7 @@ class TestHyperParameterRunParamsIdUniqueness:
             10,
             100,
             5,
-            [("param", HyperParameterOptimizationDirection.MAXIMIZE)],
+            [("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         )
 
         # Generate config_id multiple times
@@ -541,6 +558,10 @@ class TestHyperParameterRunParamsIdUniqueness:
                 self.param = param
                 self.a = a
 
+            @classmethod
+            def get_info_variable_names(cls):
+                return []
+
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
         hyper_config = HyperParamPlannerConfig(
@@ -554,7 +575,7 @@ class TestHyperParameterRunParamsIdUniqueness:
             10,
             100,
             5,
-            [("param", HyperParameterOptimizationDirection.MAXIMIZE)],
+            [("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         )
 
         params2 = HyperParameterRunParams(
@@ -564,7 +585,7 @@ class TestHyperParameterRunParamsIdUniqueness:
             20,  # Different num_episodes
             100,
             5,
-            [("param", HyperParameterOptimizationDirection.MAXIMIZE)],
+            [("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         )
 
         assert params1.config_id != params2.config_id
@@ -634,6 +655,10 @@ class TestHyperParameterRunParamsIdUniqueness:
                 self.param = param
                 self.a = a
 
+            @classmethod
+            def get_info_variable_names(cls):
+                return []
+
         param1 = CategoricalHyperParameter(choices=[1, 2], name="param")
 
         hyper_config = HyperParamPlannerConfig(
@@ -647,7 +672,7 @@ class TestHyperParameterRunParamsIdUniqueness:
             10,
             100,
             5,
-            [("param", HyperParameterOptimizationDirection.MAXIMIZE)],
+            [("average_return", HyperParameterOptimizationDirection.MAXIMIZE)],
         )
 
         params2 = HyperParameterRunParams(
@@ -657,7 +682,9 @@ class TestHyperParameterRunParamsIdUniqueness:
             10,
             100,
             5,
-            [("param", HyperParameterOptimizationDirection.MINIMIZE)],  # Different direction
+            [
+                ("average_return", HyperParameterOptimizationDirection.MINIMIZE)
+            ],  # Different direction
         )
 
         assert params1.config_id != params2.config_id
@@ -714,6 +741,10 @@ class TestIdConsistency:
                 )
                 self.param = param
                 self.a = a
+
+            @classmethod
+            def get_info_variable_names(cls):
+                return []
 
         param = CategoricalHyperParameter(choices=[1, 2], name="param")
 
@@ -788,6 +819,10 @@ class TestHyperParamPlannerConfigValidation:
                 self.param = param
                 self.a = a
 
+            @classmethod
+            def get_info_variable_names(cls):
+                return []
+
         with pytest.raises(TypeError, match="hyper_parameters must be a Sequence"):
             HyperParamPlannerConfig(
                 policy_cls=MockPolicy,
@@ -825,6 +860,10 @@ class TestHyperParamPlannerConfigValidation:
                 )
                 self.param = param
                 self.a = a
+
+            @classmethod
+            def get_info_variable_names(cls):
+                return []
 
         with pytest.raises(
             TypeError,
@@ -866,6 +905,10 @@ class TestHyperParamPlannerConfigValidation:
                 )
                 self.param = param
                 self.a = a
+
+            @classmethod
+            def get_info_variable_names(cls):
+                return []
 
         param = CategoricalHyperParameter(choices=[1, 2], name="param")
 
@@ -1002,3 +1045,709 @@ class TestHyperParamPlannerConfigValidation:
         assert config.constant_parameters == {"const1": "value1", "const2": 42}
         assert isinstance(config.config_id, str)
         assert len(config.config_id) > 0
+
+
+class TestOptimizedPolicyResultValidation:
+    """Test validation of OptimizedPolicyResult inputs."""
+
+    def _create_mock_environment(self):
+        """Create a simple mock environment for testing."""
+
+        class MockEnv(Environment):
+            def __init__(self):
+                super().__init__(
+                    discount_factor=0.95,
+                    name="mock_env",
+                    space_info=SpaceInfo(SpaceType.DISCRETE, SpaceType.DISCRETE),
+                )
+
+            @property
+            def config_id(self):
+                return "mock_env_id"
+
+            def state_transition_model(self, state, action):  # type: ignore[override]
+                pass
+
+            def observation_model(self, next_state, action):  # type: ignore[override]
+                pass
+
+            def reward(self, state, action):
+                return 0.0
+
+            def is_terminal(self, state):
+                return False
+
+            def initial_state_dist(self):  # type: ignore[override]
+                pass
+
+            def initial_observation_dist(self):  # type: ignore[override]
+                pass
+
+            def is_equal_observation(self, observation1, observation2):
+                return observation1 == observation2
+
+        return MockEnv()
+
+    def _create_mock_policy(self, env):
+        """Create a simple mock policy for testing."""
+
+        class MockPolicy(Policy):
+            def __init__(
+                self,
+                environment,
+                discount_factor,
+                name,
+                hp1,
+                log_path=None,
+                debug=False,
+                use_queue_logger=False,
+            ):
+                super().__init__(
+                    environment, discount_factor, name, log_path, debug, use_queue_logger
+                )
+                self.hp1 = hp1
+
+            @classmethod
+            def get_info_variable_names(cls):
+                return []
+
+            def action(self, belief):
+                """Return a dummy action."""
+                return [0], PolicyRunData(info_variables=[])
+
+            @classmethod
+            def get_space_info(cls):
+                """Return dummy space info."""
+                return PolicySpaceInfo(
+                    action_space=SpaceType.DISCRETE, observation_space=SpaceType.DISCRETE
+                )
+
+        return MockPolicy(env, 0.95, "mock_policy", hp1=1.0)
+
+    def test_valid_optimized_policy_result_succeeds(self):
+        """Test that valid OptimizedPolicyResult is created successfully.
+
+        Purpose: Validates that properly configured OptimizedPolicyResult is created without errors
+
+        Given: Valid environment, policy, and optimization parameters
+        When: OptimizedPolicyResult is created with all correct parameters
+        Then: Result is created successfully as a frozen dataclass
+
+        Test type: unit
+        """
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        result = OptimizedPolicyResult(
+            environment=env,
+            policy=policy,
+            chosen_hyper_parameters={"hp1": 1.0},
+            num_episodes=10,
+            num_steps=100,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 42.5},
+        )
+
+        assert result.environment == env
+        assert result.policy == policy
+        assert result.chosen_hyper_parameters == {"hp1": 1.0}
+        assert result.num_episodes == 10
+        assert result.num_steps == 100
+        assert result.parameters_to_optimize == [
+            ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+        ]
+        assert result.optimized_metric_values == {"average_return": 42.5}
+
+    def test_frozen_dataclass_is_immutable(self):
+        """Test that OptimizedPolicyResult is immutable (frozen).
+
+        Purpose: Validates that OptimizedPolicyResult is a frozen dataclass
+
+        Given: A created OptimizedPolicyResult instance
+        When: Attempting to modify any attribute
+        Then: FrozenInstanceError or AttributeError is raised
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        result = OptimizedPolicyResult(
+            environment=env,
+            policy=policy,
+            chosen_hyper_parameters={"hp1": 1.0},
+            num_episodes=10,
+            num_steps=100,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 42.5},
+        )
+
+        with pytest.raises((AttributeError, Exception)):
+            result.num_episodes = 20  # type: ignore
+
+    def test_negative_num_episodes_raises_value_error(self):
+        """Test that negative num_episodes raises ValueError.
+
+        Purpose: Validates that num_episodes must be positive
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with num_episodes <= 0
+        Then: ValueError is raised with descriptive message
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(ValueError, match="num_episodes must be positive"):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=-5,
+                num_steps=100,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"average_return": 42.5},
+            )
+
+    def test_zero_num_episodes_raises_value_error(self):
+        """Test that zero num_episodes raises ValueError.
+
+        Purpose: Validates that num_episodes must be strictly positive
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with num_episodes = 0
+        Then: ValueError is raised
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(ValueError, match="num_episodes must be positive"):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=0,
+                num_steps=100,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"average_return": 42.5},
+            )
+
+    def test_negative_num_steps_raises_value_error(self):
+        """Test that negative num_steps raises ValueError.
+
+        Purpose: Validates that num_steps must be positive
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with num_steps <= 0
+        Then: ValueError is raised with descriptive message
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(ValueError, match="num_steps must be positive"):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=-100,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"average_return": 42.5},
+            )
+
+    def test_zero_num_steps_raises_value_error(self):
+        """Test that zero num_steps raises ValueError.
+
+        Purpose: Validates that num_steps must be strictly positive
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with num_steps = 0
+        Then: ValueError is raised
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(ValueError, match="num_steps must be positive"):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=0,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"average_return": 42.5},
+            )
+
+    def test_invalid_environment_type_raises_type_error(self):
+        """Test that non-Environment environment raises TypeError.
+
+        Purpose: Validates that environment must be an Environment instance
+
+        Given: An invalid environment type (not an Environment subclass)
+        When: OptimizedPolicyResult is created with invalid environment
+        Then: TypeError is raised with descriptive message
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(TypeError, match="environment must be an Environment instance"):
+            OptimizedPolicyResult(
+                environment="not_an_environment",  # type: ignore
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"average_return": 42.5},
+            )
+
+    def test_invalid_policy_type_raises_type_error(self):
+        """Test that non-Policy policy raises TypeError.
+
+        Purpose: Validates that policy must be a Policy instance
+
+        Given: An invalid policy type (not a Policy subclass)
+        When: OptimizedPolicyResult is created with invalid policy
+        Then: TypeError is raised with descriptive message
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+
+        with pytest.raises(TypeError, match="policy must be a Policy instance"):
+            OptimizedPolicyResult(
+                environment=env,
+                policy="not_a_policy",  # type: ignore
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"average_return": 42.5},
+            )
+
+    def test_invalid_chosen_hyper_parameters_type_raises_type_error(self):
+        """Test that non-dict chosen_hyper_parameters raises TypeError.
+
+        Purpose: Validates that chosen_hyper_parameters must be a dict
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with non-dict chosen_hyper_parameters
+        Then: TypeError is raised with descriptive message
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(TypeError, match="chosen_hyper_parameters must be a dict"):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters=[("hp1", 1.0)],  # type: ignore
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"average_return": 42.5},
+            )
+
+    def test_empty_chosen_hyper_parameters_raises_value_error(self):
+        """Test that empty chosen_hyper_parameters dict raises ValueError.
+
+        Purpose: Validates that chosen_hyper_parameters cannot be empty
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with empty chosen_hyper_parameters dict
+        Then: ValueError is raised indicating dict cannot be empty
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(ValueError, match="chosen_hyper_parameters dict cannot be empty"):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={},
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"average_return": 42.5},
+            )
+
+    def test_invalid_parameters_to_optimize_type_raises_type_error(self):
+        """Test that non-list parameters_to_optimize raises TypeError.
+
+        Purpose: Validates that parameters_to_optimize must be a list
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with non-list parameters_to_optimize
+        Then: TypeError is raised with descriptive message
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(TypeError, match="parameters_to_optimize must be list"):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=("average_return", HyperParameterOptimizationDirection.MAXIMIZE),  # type: ignore
+                optimized_metric_values={"average_return": 42.5},
+            )
+
+    def test_empty_parameters_to_optimize_raises_value_error(self):
+        """Test that empty parameters_to_optimize list raises ValueError.
+
+        Purpose: Validates that parameters_to_optimize cannot be empty
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with empty parameters_to_optimize list
+        Then: ValueError is raised indicating list cannot be empty
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(ValueError, match="parameters_to_optimize cannot be empty"):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=[],
+                optimized_metric_values={},
+            )
+
+    def test_invalid_parameter_to_optimize_tuple_type_raises_type_error(self):
+        """Test that non-tuple elements in parameters_to_optimize raise TypeError.
+
+        Purpose: Validates that each element in parameters_to_optimize is a tuple of length 2
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with non-tuple element in parameters_to_optimize
+        Then: TypeError is raised indicating expected tuple of length 2
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(
+            TypeError, match="parameters_to_optimize\\[0\\] must be a tuple of length 2"
+        ):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=["average_return"],  # type: ignore
+                optimized_metric_values={"average_return": 42.5},
+            )
+
+    def test_invalid_metric_name_type_in_parameters_to_optimize_raises_type_error(self):
+        """Test that non-string metric names in parameters_to_optimize raise TypeError.
+
+        Purpose: Validates that metric names in parameters_to_optimize must be strings
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with non-string metric name
+        Then: TypeError is raised indicating metric_name must be str
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(
+            TypeError, match="parameters_to_optimize\\[0\\]\\[0\\] \\(metric_name\\) must be a str"
+        ):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=[(123, HyperParameterOptimizationDirection.MAXIMIZE)],  # type: ignore
+                optimized_metric_values={"average_return": 42.5},
+            )
+
+    def test_invalid_direction_type_in_parameters_to_optimize_raises_type_error(self):
+        """Test that non-HyperParameterOptimizationDirection directions raise TypeError.
+
+        Purpose: Validates that directions in parameters_to_optimize must be HyperParameterOptimizationDirection
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with invalid direction type
+        Then: TypeError is raised indicating direction must be HyperParameterOptimizationDirection
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(
+            TypeError,
+            match="parameters_to_optimize\\[0\\]\\[1\\] \\(direction\\) must be a HyperParameterOptimizationDirection",
+        ):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=[("average_return", "maximize")],  # type: ignore
+                optimized_metric_values={"average_return": 42.5},
+            )
+
+    def test_invalid_optimized_metric_values_type_raises_type_error(self):
+        """Test that non-dict optimized_metric_values raises TypeError.
+
+        Purpose: Validates that optimized_metric_values must be a dict
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with non-dict optimized_metric_values
+        Then: TypeError is raised with descriptive message
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(TypeError, match="optimized_metric_values must be a dict"):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values=[("average_return", 42.5)],  # type: ignore
+            )
+
+    def test_invalid_metric_name_raises_value_error(self):
+        """Test that invalid metric names in parameters_to_optimize raise ValueError.
+
+        Purpose: Validates that metric names must be valid for the environment-policy pair
+
+        Given: Valid environment and policy with specific available metrics
+        When: OptimizedPolicyResult is created with invalid metric name
+        Then: ValueError is raised listing available metrics
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(ValueError, match="Invalid metric name 'invalid_metric'"):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=[
+                    ("invalid_metric", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={"invalid_metric": 42.5},
+            )
+
+    def test_missing_metric_in_optimized_metric_values_raises_value_error(self):
+        """Test that missing metrics in optimized_metric_values raise ValueError.
+
+        Purpose: Validates that all metrics in parameters_to_optimize must be in optimized_metric_values
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with metric in parameters_to_optimize but not in optimized_metric_values
+        Then: ValueError is raised indicating missing metric
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(
+            ValueError,
+            match="Metric 'average_return' in parameters_to_optimize is missing from optimized_metric_values",
+        ):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={},  # Missing the metric
+            )
+
+    def test_extra_metric_in_optimized_metric_values_raises_value_error(self):
+        """Test that extra metrics in optimized_metric_values raise ValueError.
+
+        Purpose: Validates that optimized_metric_values only contains metrics from parameters_to_optimize
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with extra metric in optimized_metric_values
+        Then: ValueError is raised indicating extra metric
+
+        Test type: unit
+        """
+        import pytest
+
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        with pytest.raises(
+            ValueError,
+            match="Metric 'extra_metric' in optimized_metric_values was not in parameters_to_optimize",
+        ):
+            OptimizedPolicyResult(
+                environment=env,
+                policy=policy,
+                chosen_hyper_parameters={"hp1": 1.0},
+                num_episodes=10,
+                num_steps=100,
+                parameters_to_optimize=[
+                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+                ],
+                optimized_metric_values={
+                    "average_return": 42.5,
+                    "extra_metric": 10.0,  # Extra metric not in parameters_to_optimize
+                },
+            )
+
+    def test_none_metric_values_are_allowed(self):
+        """Test that None values in optimized_metric_values are allowed.
+
+        Purpose: Validates that optimized_metric_values can contain None for missing metrics
+
+        Given: Valid environment and policy
+        When: OptimizedPolicyResult is created with None as a metric value
+        Then: Result is created successfully
+
+        Test type: unit
+        """
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        result = OptimizedPolicyResult(
+            environment=env,
+            policy=policy,
+            chosen_hyper_parameters={"hp1": 1.0},
+            num_episodes=10,
+            num_steps=100,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": None},  # None is allowed
+        )
+
+        assert result.optimized_metric_values["average_return"] is None
+
+    def test_multiple_metrics_validation_succeeds(self):
+        """Test that multiple valid metrics pass validation.
+
+        Purpose: Validates that OptimizedPolicyResult handles multiple optimization metrics correctly
+
+        Given: Valid environment and policy with multiple available metrics
+        When: OptimizedPolicyResult is created with multiple metrics to optimize
+        Then: Result is created successfully with all metrics
+
+        Test type: unit
+        """
+        env = self._create_mock_environment()
+        policy = self._create_mock_policy(env)
+
+        result = OptimizedPolicyResult(
+            environment=env,
+            policy=policy,
+            chosen_hyper_parameters={"hp1": 1.0},
+            num_episodes=10,
+            num_steps=100,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+                ("return_cvar", HyperParameterOptimizationDirection.MAXIMIZE),
+            ],
+            optimized_metric_values={
+                "average_return": 42.5,
+                "return_cvar": 38.2,
+            },
+        )
+
+        assert len(result.parameters_to_optimize) == 2
+        assert len(result.optimized_metric_values) == 2
+        assert result.optimized_metric_values["average_return"] == 42.5
+        assert result.optimized_metric_values["return_cvar"] == 38.2
