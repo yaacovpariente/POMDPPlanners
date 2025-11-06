@@ -59,12 +59,16 @@ class PlannerEvaluationWorkflow(ABC):
     def _validate_configs(self, configs: List[EnvironmentRunParams]) -> None:
         """Validate evaluation configurations before execution.
 
+        Performs basic validation of the configs list structure. Individual config
+        validation is now handled by EnvironmentRunParams.__post_init__ at
+        construction time.
+
         Args:
             configs: List of EnvironmentRunParams to validate.
 
         Raises:
-            ValueError: If configs is empty or any configuration is invalid.
-            TypeError: If configs or its elements have incorrect types.
+            ValueError: If configs list is empty
+            TypeError: If configs is not a list or any element is not EnvironmentRunParams
         """
         # Check configs is not empty
         if not configs:
@@ -74,63 +78,12 @@ class PlannerEvaluationWorkflow(ABC):
         if not isinstance(configs, list):
             raise TypeError(f"configs must be a list, got {type(configs).__name__}")
 
-        # Validate each configuration
+        # Validate each configuration type
         for idx, config in enumerate(configs):
-            # Check config is EnvironmentRunParams
             if not isinstance(config, EnvironmentRunParams):
                 raise TypeError(
                     f"Configuration at index {idx}: Expected EnvironmentRunParams, "
                     f"got {type(config).__name__}"
-                )
-
-            # Validate environment
-            if not isinstance(config.environment, Environment):
-                raise TypeError(
-                    f"Configuration at index {idx}: environment must be an Environment "
-                    f"instance, got {type(config.environment).__name__}"
-                )
-
-            # Validate belief
-            if not isinstance(config.belief, Belief):
-                raise TypeError(
-                    f"Configuration at index {idx}: belief must be a Belief instance, "
-                    f"got {type(config.belief).__name__}"
-                )
-
-            # Validate policies is not empty
-            if not config.policies:
-                raise ValueError(f"Configuration at index {idx}: policies list cannot be empty")
-
-            # Validate each policy
-            for policy_idx, policy in enumerate(config.policies):
-                if not isinstance(policy, Policy):
-                    raise TypeError(
-                        f"Configuration at index {idx}: policy at index {policy_idx} "
-                        f"must be a Policy instance, got {type(policy).__name__}"
-                    )
-
-            # Validate num_episodes is positive
-            if not isinstance(config.num_episodes, int):
-                raise TypeError(
-                    f"Configuration at index {idx}: num_episodes must be an integer, "
-                    f"got {type(config.num_episodes).__name__}"
-                )
-            if config.num_episodes <= 0:
-                raise ValueError(
-                    f"Configuration at index {idx}: num_episodes must be positive, "
-                    f"got {config.num_episodes}"
-                )
-
-            # Validate num_steps is positive
-            if not isinstance(config.num_steps, int):
-                raise TypeError(
-                    f"Configuration at index {idx}: num_steps must be an integer, "
-                    f"got {type(config.num_steps).__name__}"
-                )
-            if config.num_steps <= 0:
-                raise ValueError(
-                    f"Configuration at index {idx}: num_steps must be positive, "
-                    f"got {config.num_steps}"
                 )
 
     @abstractmethod
