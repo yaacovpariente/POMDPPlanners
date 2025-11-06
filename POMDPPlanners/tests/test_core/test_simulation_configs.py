@@ -1,5 +1,7 @@
 """Tests for simulation configuration classes."""
 
+import pytest
+
 from POMDPPlanners.core.simulation.simulation_configs import EnvironmentRunParams
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.core.belief import get_initial_belief
@@ -422,3 +424,283 @@ class TestEnvironmentRunParamsHashAndEquality:
 
         assert len(params_dict) == 1  # params1 and params2 are the same key
         assert params_dict[params1] == "value2"
+
+
+class TestEnvironmentRunParamsInputValidation:
+    """Test suite for EnvironmentRunParams input validation."""
+
+    def test_num_episodes_must_be_integer(self):
+        """Test that num_episodes must be an integer.
+
+        Purpose: Validates that TypeError is raised when num_episodes is not an integer
+
+        Given: EnvironmentRunParams with non-integer num_episodes
+        When: EnvironmentRunParams is instantiated
+        Then: TypeError is raised with appropriate message
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        policy = DiscreteActionSequencesPlanner(
+            environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
+        )
+
+        with pytest.raises(TypeError, match="num_episodes must be an integer"):
+            EnvironmentRunParams(
+                environment=env,
+                belief=belief,
+                policies=[policy],
+                num_episodes=10.5,  # type: ignore[arg-type]
+                num_steps=20,
+            )
+
+        with pytest.raises(TypeError, match="num_episodes must be an integer"):
+            EnvironmentRunParams(
+                environment=env,
+                belief=belief,
+                policies=[policy],
+                num_episodes="10",  # type: ignore[arg-type]
+                num_steps=20,
+            )
+
+    def test_num_steps_must_be_integer(self):
+        """Test that num_steps must be an integer.
+
+        Purpose: Validates that TypeError is raised when num_steps is not an integer
+
+        Given: EnvironmentRunParams with non-integer num_steps
+        When: EnvironmentRunParams is instantiated
+        Then: TypeError is raised with appropriate message
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        policy = DiscreteActionSequencesPlanner(
+            environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
+        )
+
+        with pytest.raises(TypeError, match="num_steps must be an integer"):
+            EnvironmentRunParams(
+                environment=env,
+                belief=belief,
+                policies=[policy],
+                num_episodes=10,
+                num_steps=20.5,  # type: ignore[arg-type]
+            )
+
+        with pytest.raises(TypeError, match="num_steps must be an integer"):
+            EnvironmentRunParams(
+                environment=env,
+                belief=belief,
+                policies=[policy],
+                num_episodes=10,
+                num_steps="20",  # type: ignore[arg-type]
+            )
+
+    def test_num_episodes_must_be_positive(self):
+        """Test that num_episodes must be positive.
+
+        Purpose: Validates that ValueError is raised when num_episodes is non-positive
+
+        Given: EnvironmentRunParams with non-positive num_episodes
+        When: EnvironmentRunParams is instantiated
+        Then: ValueError is raised with appropriate message
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        policy = DiscreteActionSequencesPlanner(
+            environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
+        )
+
+        with pytest.raises(ValueError, match="num_episodes must be positive"):
+            EnvironmentRunParams(
+                environment=env, belief=belief, policies=[policy], num_episodes=0, num_steps=20
+            )
+
+        with pytest.raises(ValueError, match="num_episodes must be positive"):
+            EnvironmentRunParams(
+                environment=env, belief=belief, policies=[policy], num_episodes=-1, num_steps=20
+            )
+
+    def test_num_steps_must_be_positive(self):
+        """Test that num_steps must be positive.
+
+        Purpose: Validates that ValueError is raised when num_steps is non-positive
+
+        Given: EnvironmentRunParams with non-positive num_steps
+        When: EnvironmentRunParams is instantiated
+        Then: ValueError is raised with appropriate message
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        policy = DiscreteActionSequencesPlanner(
+            environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
+        )
+
+        with pytest.raises(ValueError, match="num_steps must be positive"):
+            EnvironmentRunParams(
+                environment=env, belief=belief, policies=[policy], num_episodes=10, num_steps=0
+            )
+
+        with pytest.raises(ValueError, match="num_steps must be positive"):
+            EnvironmentRunParams(
+                environment=env, belief=belief, policies=[policy], num_episodes=10, num_steps=-1
+            )
+
+    def test_environment_must_be_environment_instance(self):
+        """Test that environment must be an Environment instance.
+
+        Purpose: Validates that TypeError is raised when environment is not an Environment instance
+
+        Given: EnvironmentRunParams with non-Environment environment
+        When: EnvironmentRunParams is instantiated
+        Then: TypeError is raised with appropriate message
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        policy = DiscreteActionSequencesPlanner(
+            environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
+        )
+
+        with pytest.raises(TypeError, match="environment must be an Environment instance"):
+            EnvironmentRunParams(
+                environment="not_an_environment",  # type: ignore[arg-type]
+                belief=belief,
+                policies=[policy],
+                num_episodes=10,
+                num_steps=20,
+            )
+
+        with pytest.raises(TypeError, match="environment must be an Environment instance"):
+            EnvironmentRunParams(
+                environment=42,  # type: ignore[arg-type]
+                belief=belief,
+                policies=[policy],
+                num_episodes=10,
+                num_steps=20,
+            )
+
+    def test_belief_must_be_belief_instance(self):
+        """Test that belief must be a Belief instance.
+
+        Purpose: Validates that TypeError is raised when belief is not a Belief instance
+
+        Given: EnvironmentRunParams with non-Belief belief
+        When: EnvironmentRunParams is instantiated
+        Then: TypeError is raised with appropriate message
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        policy = DiscreteActionSequencesPlanner(
+            environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
+        )
+
+        with pytest.raises(TypeError, match="belief must be a Belief instance"):
+            EnvironmentRunParams(
+                environment=env,
+                belief="not_a_belief",  # type: ignore[arg-type]
+                policies=[policy],
+                num_episodes=10,
+                num_steps=20,
+            )
+
+        with pytest.raises(TypeError, match="belief must be a Belief instance"):
+            EnvironmentRunParams(
+                environment=env,
+                belief=42,  # type: ignore[arg-type]
+                policies=[policy],
+                num_episodes=10,
+                num_steps=20,
+            )
+
+    def test_policies_must_not_be_empty(self):
+        """Test that policies list must not be empty.
+
+        Purpose: Validates that ValueError is raised when policies list is empty
+
+        Given: EnvironmentRunParams with empty policies list
+        When: EnvironmentRunParams is instantiated
+        Then: ValueError is raised with appropriate message
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+
+        with pytest.raises(ValueError, match="policies list cannot be empty"):
+            EnvironmentRunParams(
+                environment=env, belief=belief, policies=[], num_episodes=10, num_steps=20
+            )
+
+    def test_policies_must_be_policy_instances(self):
+        """Test that all policies must be Policy instances.
+
+        Purpose: Validates that TypeError is raised when any policy is not a Policy instance
+
+        Given: EnvironmentRunParams with non-Policy in policies list
+        When: EnvironmentRunParams is instantiated
+        Then: TypeError is raised with appropriate message
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        policy = DiscreteActionSequencesPlanner(
+            environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
+        )
+
+        with pytest.raises(TypeError, match="policies\\[0\\] must be a Policy instance"):
+            EnvironmentRunParams(
+                environment=env,
+                belief=belief,
+                policies=["not_a_policy"],  # type: ignore[list-item]
+                num_episodes=10,
+                num_steps=20,
+            )
+
+        with pytest.raises(TypeError, match="policies\\[1\\] must be a Policy instance"):
+            EnvironmentRunParams(
+                environment=env,
+                belief=belief,
+                policies=[policy, "not_a_policy"],  # type: ignore[list-item]
+                num_episodes=10,
+                num_steps=20,
+            )
+
+    def test_valid_params_do_not_raise_errors(self):
+        """Test that valid parameters do not raise any errors.
+
+        Purpose: Validates that valid parameters successfully create EnvironmentRunParams
+
+        Given: Valid EnvironmentRunParams parameters
+        When: EnvironmentRunParams is instantiated
+        Then: No exceptions are raised
+
+        Test type: unit
+        """
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=100)
+        policy = DiscreteActionSequencesPlanner(
+            environment=env, discount_factor=0.95, name="test_planner", depth=5, n_return_samples=10
+        )
+
+        # Should not raise any exceptions
+        params = EnvironmentRunParams(
+            environment=env, belief=belief, policies=[policy], num_episodes=10, num_steps=20
+        )
+
+        assert params.environment == env
+        assert params.belief == belief
+        assert params.policies == [policy]
+        assert params.num_episodes == 10
+        assert params.num_steps == 20
