@@ -552,7 +552,7 @@ def test_hyper_parameter_tuning_task_run_with_categorical_params(
     assert "depth" in result.chosen_hyper_parameters
 
 
-def test_hyper_parameter_tuning_task_run_failure_logging(environment, hyper_parameters, caplog):
+def test_hyper_parameter_tuning_task_run_failure_logging(environment, hyper_parameters):
     """Test that HyperParameterTuningSimulationTask logs failures properly.
 
     Purpose: Validates that HyperParameterTuningSimulationTask logs failures with appropriate detail
@@ -563,7 +563,15 @@ def test_hyper_parameter_tuning_task_run_failure_logging(environment, hyper_para
 
     Test type: unit
     """
+    import logging
+    from io import StringIO
+
     belief = create_test_belief(environment)
+
+    # Create a custom handler to capture logs
+    log_capture = StringIO()
+    handler = logging.StreamHandler(log_capture)
+    handler.setLevel(logging.ERROR)
 
     task = HyperParameterTuningSimulationTask(
         environment=environment,
@@ -576,25 +584,33 @@ def test_hyper_parameter_tuning_task_run_failure_logging(environment, hyper_para
         parameters_to_optimize=[
             ("nonexistent_parameter", HyperParameterOptimizationDirection.MAXIMIZE)
         ],  # This will cause failure in evaluation
-        console_output=False,
+        console_output=True,
         n_trials=1,  # Very small number for fast execution
         seed=42,
     )
 
-    # Run task and expect it to fail with clear error message
-    with pytest.raises(
-        ValueError,
-        match="Parameters .* not found in computed statistics",
-    ):
-        task.run()
+    # Add handler to task logger
+    logger = task.logger
+    logger.addHandler(handler)
+
+    try:
+        # Run task and expect it to fail with clear error message
+        with pytest.raises(
+            ValueError,
+            match="Parameters .* not found in computed statistics",
+        ):
+            task.run()
+    finally:
+        # Remove handler
+        logger.removeHandler(handler)
+        handler.close()
 
     # Verify error was logged appropriately
-    assert "Error in evaluation function" in caplog.text
+    log_output = log_capture.getvalue()
+    assert "Error in evaluation function" in log_output
 
 
-def test_hyper_parameter_tuning_task_run_missing_parameter_logging(
-    environment, hyper_parameters, caplog
-):
+def test_hyper_parameter_tuning_task_run_missing_parameter_logging(environment, hyper_parameters):
     """Test that HyperParameterTuningSimulationTask logs missing parameter errors properly.
 
     Purpose: Validates that HyperParameterTuningSimulationTask logs missing parameter errors with appropriate detail
@@ -605,7 +621,15 @@ def test_hyper_parameter_tuning_task_run_missing_parameter_logging(
 
     Test type: unit
     """
+    import logging
+    from io import StringIO
+
     belief = create_test_belief(environment)
+
+    # Create a custom handler to capture logs
+    log_capture = StringIO()
+    handler = logging.StreamHandler(log_capture)
+    handler.setLevel(logging.ERROR)
 
     task = HyperParameterTuningSimulationTask(
         environment=environment,
@@ -618,17 +642,27 @@ def test_hyper_parameter_tuning_task_run_missing_parameter_logging(
         parameters_to_optimize=[
             ("invalid_metric", HyperParameterOptimizationDirection.MAXIMIZE)
         ],  # This will cause a missing parameter error
-        console_output=False,
+        console_output=True,
         n_trials=1,  # Very small number for fast execution
         seed=42,
     )
 
-    # Run task and expect it to fail with clear error message
-    with pytest.raises(ValueError, match="Parameters .* not found in computed statistics"):
-        task.run()
+    # Add handler to task logger
+    logger = task.logger
+    logger.addHandler(handler)
+
+    try:
+        # Run task and expect it to fail with clear error message
+        with pytest.raises(ValueError, match="Parameters .* not found in computed statistics"):
+            task.run()
+    finally:
+        # Remove handler
+        logger.removeHandler(handler)
+        handler.close()
 
     # Verify error was logged appropriately
-    assert "Error in evaluation function" in caplog.text
+    log_output = log_capture.getvalue()
+    assert "Error in evaluation function" in log_output
 
 
 def test_hyper_parameter_tuning_task_custom_n_trials(environment, hyper_parameters):
