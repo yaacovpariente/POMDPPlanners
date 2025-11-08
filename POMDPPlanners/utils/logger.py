@@ -476,6 +476,16 @@ def _create_individual_logger(
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
 
+    # If no output_dir and no console_output, disable propagation to prevent any logging
+    # This is the "no_logs" case where we want to completely disable logging
+    # Add a NullHandler to prevent Python's "lastResort" handler from outputting to stderr
+    if output_dir is None and not console_output:
+        logger.propagate = False
+        # Add NullHandler to prevent lastResort handler from being used
+        # This ensures no output is produced when logging is disabled
+        null_handler = logging.NullHandler()
+        logger.addHandler(null_handler)
+
     # Create console handler only if console_output is True
     if console_output:
         console_handler = logging.StreamHandler()
