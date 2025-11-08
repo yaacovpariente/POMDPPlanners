@@ -57,6 +57,47 @@ def test_logger_console_output_false(capsys):
     assert "This should not appear in the console." not in captured.err
 
 
+def test_logger_no_handlers_no_io(capsys, tmp_path):
+    """Test logger with no handlers performs no I/O.
+
+    Purpose: Validates that logger with console_output=False and output_dir=None has zero handlers
+             and performs no I/O operations
+
+    Given: Logger configured with console_output=False and output_dir=None
+    When: Multiple messages are logged at various levels
+    Then: Logger has zero handlers, no console output, and no files are created
+
+    Test type: unit
+    """
+    logger = get_logger(name="test.no_handlers", debug=True, console_output=False, output_dir=None)
+
+    # Verify logger has zero handlers
+    assert len(logger.handlers) == 0, f"Expected 0 handlers, got {len(logger.handlers)}"
+
+    # Log messages at various levels - should not crash
+    logger.debug("Debug message - should be ignored")
+    logger.info("Info message - should be ignored")
+    logger.warning("Warning message - should be ignored")
+    logger.error("Error message - should be ignored")
+
+    # Verify no console output
+    captured = capsys.readouterr()
+    assert "Debug message" not in captured.out
+    assert "Info message" not in captured.out
+    assert "Warning message" not in captured.out
+    assert "Error message" not in captured.out
+    assert "Debug message" not in captured.err
+    assert "Info message" not in captured.err
+    assert "Warning message" not in captured.err
+    assert "Error message" not in captured.err
+
+    # Verify no log files were created
+    logs_dir = tmp_path / "logs"
+    if logs_dir.exists():
+        log_files = list(logs_dir.glob("*.log"))
+        assert len(log_files) == 0, f"Expected no log files, found {len(log_files)}"
+
+
 def test_logger_file_output(tmp_path):
     """Test logger file output.
 
