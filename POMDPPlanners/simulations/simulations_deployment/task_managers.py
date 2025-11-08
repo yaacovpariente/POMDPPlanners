@@ -199,6 +199,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
         verbose: int = 0,
         logger_debug: bool = False,
         console_output: bool = True,
+        no_logs: bool = False,
     ):
         """Initialize the joblib task manager.
 
@@ -216,6 +217,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
             cache_dir=Path(cache_dir) if cache_dir else None,
             logger_debug=logger_debug,
             console_output=console_output,
+            no_logs=no_logs,
         )
         self.n_jobs = n_jobs
         self.verbose = verbose

@@ -117,6 +117,7 @@ class BaseSimulator(ABC):
         profiling_output_limit: int = 50,
         use_queue_logger: bool = False,
         console_output: bool = True,
+        no_logs: bool = False,
     ):
         """Initialize the simulator.
 
@@ -128,6 +129,7 @@ class BaseSimulator(ABC):
             enable_profiling: Whether to enable cProfile profiling
             profiling_output_limit: Maximum number of functions to show in profiling output (default: 50)
             console_output: Whether to print logs to console (default: True)
+            no_logs: Whether to disable all logging (default: False)
         """
         self.cache_dir_path = cache_dir_path
         self.experiment_name = experiment_name
@@ -143,9 +145,9 @@ class BaseSimulator(ABC):
         self.logger = get_logger(
             name=f"simulator.{experiment_name}",
             debug=debug,
-            output_dir=cache_dir_path,
+            output_dir=cache_dir_path if not no_logs else None,
             use_queue=use_queue_logger,
-            console_output=console_output,
+            console_output=console_output if not no_logs else False,
         )
 
         # Create task manager using configuration
@@ -865,6 +867,7 @@ class POMDPSimulator(BaseSimulator):
         task_console_output: bool = False,
         use_queue_logger: bool = False,
         console_output: bool = True,
+        no_logs: bool = False,
     ):
         """Initialize the POMDP simulator.
 
@@ -879,6 +882,7 @@ class POMDPSimulator(BaseSimulator):
                                Set to True to see console output from each task, but this can create
                                log mess when running in parallel.
             console_output: Whether to print logs to console (default: True)
+            no_logs: Whether to disable all logging (default: False)
         """
         super().__init__(
             task_manager_config=task_manager_config,
@@ -889,6 +893,7 @@ class POMDPSimulator(BaseSimulator):
             profiling_output_limit=profiling_output_limit,
             use_queue_logger=use_queue_logger,
             console_output=console_output,
+            no_logs=no_logs,
         )
         self.task_console_output = task_console_output
 

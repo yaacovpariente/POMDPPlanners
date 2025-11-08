@@ -222,6 +222,7 @@ class TaskManagerExternalDB(TaskManager):
         logger_debug: bool = False,
         use_queue_logger: bool = False,
         console_output: bool = True,
+        no_logs: bool = False,
     ):
         """Initialize the task manager with caching database.
 
@@ -231,12 +232,14 @@ class TaskManagerExternalDB(TaskManager):
             logger_debug: Whether to enable debug logging
             use_queue_logger: Whether to use queue-based logging
             console_output: Whether to print logs to console
+            no_logs: Whether to disable all logging
         """
         self.cache_db = cache_db
         self.cache_dir = cache_dir
         self.logger_debug = logger_debug
         self.console_output = console_output
         self.use_queue_logger = use_queue_logger
+        self.no_logs = no_logs
 
     @property
     def logger(self) -> logging.Logger:
@@ -248,9 +251,9 @@ class TaskManagerExternalDB(TaskManager):
         return get_logger(
             name="task_manager",
             debug=self.logger_debug,
-            output_dir=self.cache_dir,
+            output_dir=self.cache_dir if not self.no_logs else None,
             use_queue=self.use_queue_logger,
-            console_output=self.console_output,
+            console_output=self.console_output if not self.no_logs else False,
         )
 
     @abstractmethod
