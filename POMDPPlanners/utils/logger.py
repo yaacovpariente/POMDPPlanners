@@ -558,14 +558,19 @@ def reset_logger_state():
     This function ensures clean state between test runs by:
     - Stopping any running queue manager
     - Clearing the global singleton
+    - Resetting the task logger manager
     - Removing all Python loggers created by this module
     """
-    global _queue_logger_manager
+    global _queue_logger_manager, _task_logger_manager
 
     # Stop and clear the queue manager
     if _queue_logger_manager is not None:
         _queue_logger_manager.stop()
         _queue_logger_manager = None
+
+    # Reset the task logger manager
+    if _task_logger_manager is not None:
+        _task_logger_manager = None
 
     # Clear all loggers that start with "queue." to reset state
 
@@ -586,3 +591,238 @@ def reset_logger_state():
         # Remove from manager
         if name in logging.Logger.manager.loggerDict:
             del logging.Logger.manager.loggerDict[name]
+
+
+class TaskLoggerManager:
+    """Manages task logger configuration and buffered handlers without polluting logger objects.
+
+    This manager maintains a registry of configured loggers and their associated
+    memory handlers, eliminating the need to set dynamic attributes on logger objects.
+
+    Attributes:
+        _configured_loggers: Dictionary mapping logger names to their configuration state
+        _memory_handlers: Dictionary mapping logger names to their ConditionalMemoryHandler list
+        _lock: Thread lock for safe concurrent access
+    """
+
+    def __init__(self):
+        self._configured_loggers: Dict[str, bool] = {}
+        self._memory_handlers: Dict[str, list] = {}
+        self._lock = threading.Lock()
+
+    def get_or_create_logger(
+        self,
+        logger_name: str,
+        output_dir: Optional[Path],
+        debug: bool,
+        console_output: bool,
+        use_queue: bool,
+        log_only_on_failure: bool,
+    ) -> logging.Logger:
+        """Get or create a task logger with optional buffering.
+
+        Args:
+            logger_name: Unique name for the logger
+            output_dir: Directory for log files (creates logs/ subdirectory if provided)
+            debug: Enable debug mode with verbose logging
+            console_output: Enable/disable console output
+            use_queue: Enable queue-based logging for multiprocessing
+            log_only_on_failure: Buffer logs in memory and only flush on failure
+
+        Returns:
+            Configured logger instance ready for task execution
+        """
+        with self._lock:
+            logger = logging.getLogger(logger_name)
+
+            # If logger already has handlers and is in our registry, return it
+            if logger.handlers and logger_name in self._configured_loggers:
+                return logger
+
+            # Get base logger (which will create handlers)
+            logger = get_logger(
+                name=logger_name,
+                debug=debug,
+                output_dir=output_dir,
+                console_output=console_output if not log_only_on_failure else False,
+                use_queue=use_queue,
+            )
+
+            # Add buffered handlers if log_only_on_failure is enabled
+            if log_only_on_failure and logger_name not in self._memory_handlers:
+                self._setup_buffered_handlers(logger_name, logger)
+
+            # Mark logger as configured in our registry
+            self._configured_loggers[logger_name] = True
+
+            return logger
+
+    def _setup_buffered_handlers(self, logger_name: str, logger: logging.Logger) -> None:
+        """Wrap logger handlers with ConditionalMemoryHandler for buffering.
+
+        Args:
+            logger_name: Name of the logger (for tracking in registry)
+            logger: The logger instance to configure with buffered handlers
+        """
+        memory_handlers = []
+
+        # Replace each existing handler with a buffered version
+        for handler in logger.handlers[:]:
+            # Create memory buffer that holds logs until failure
+            memory_handler = ConditionalMemoryHandler(
+                capacity=10000,  # Hold up to 10k log records
+                target=handler,
+            )
+            memory_handler.setLevel(handler.level)
+            if handler.formatter:
+                memory_handler.setFormatter(handler.formatter)
+
+            # Replace original handler with buffered version
+            logger.removeHandler(handler)
+            logger.addHandler(memory_handler)
+            memory_handlers.append(memory_handler)
+
+        # Store references in our registry (not on the logger object)
+        self._memory_handlers[logger_name] = memory_handlers
+
+    def flush_buffered_logs(self, logger_name: str) -> None:
+        """Flush buffered logs to file/console when failure occurs.
+
+        Args:
+            logger_name: Name of the logger to flush
+        """
+        try:
+            with self._lock:
+                if logger_name in self._memory_handlers:
+                    for handler in self._memory_handlers[logger_name]:
+                        if isinstance(handler, ConditionalMemoryHandler):
+                            handler.trigger_flush()
+        except Exception:
+            # Don't let flush errors affect the main task
+            pass
+
+    def cleanup_logger(
+        self,
+        logger_name: str,
+        episode_failed: bool = False,
+        log_only_on_failure: bool = False,
+    ) -> None:
+        """Clean up task logger resources with buffering awareness.
+
+        Handles cleanup for both buffered and non-buffered loggers:
+        - For buffered loggers: Flushes on failure, discards on success
+        - For non-buffered loggers: Always flushes
+
+        Args:
+            logger_name: Name of the logger to clean up
+            episode_failed: Whether the episode failed
+            log_only_on_failure: Whether buffering is enabled for this logger
+        """
+        try:
+            logger = logging.getLogger(logger_name)
+            # Only flush if episode failed OR log_only_on_failure is disabled
+            should_flush = episode_failed or not log_only_on_failure
+
+            with self._lock:
+                # Check if we have buffered handlers for this logger
+                has_buffered_handlers = logger_name in self._memory_handlers
+
+            for handler in logger.handlers:
+                if isinstance(handler, ConditionalMemoryHandler):
+                    if should_flush:
+                        # Flush buffered logs for failed episodes or normal logging
+                        if hasattr(handler, "flush"):
+                            handler.flush()
+                    else:
+                        # Discard buffered logs for successful episodes with log_only_on_failure
+                        handler.buffer.clear()
+                elif hasattr(handler, "flush"):
+                    # Always flush non-buffered handlers
+                    handler.flush()
+        except Exception:
+            # Don't let cleanup errors affect the main task
+            pass
+
+
+# Global singleton instance
+_task_logger_manager: Optional[TaskLoggerManager] = None
+
+
+def get_task_logger_manager() -> TaskLoggerManager:
+    """Get the global task logger manager instance."""
+    global _task_logger_manager
+    if _task_logger_manager is None:
+        _task_logger_manager = TaskLoggerManager()
+    return _task_logger_manager
+
+
+def setup_task_logger_with_buffering(
+    logger_name: str,
+    output_dir: Optional[Path],
+    debug: bool,
+    console_output: bool,
+    use_queue: bool,
+    log_only_on_failure: bool,
+) -> logging.Logger:
+    """Set up a task logger with optional buffering for failure-only logging.
+
+    This is a convenience function that delegates to TaskLoggerManager to avoid
+    setting dynamic attributes on logger objects.
+
+    Args:
+        logger_name: Unique name for the logger
+        output_dir: Directory for log files (creates logs/ subdirectory if provided)
+        debug: Enable debug mode with verbose logging
+        console_output: Enable/disable console output
+        use_queue: Enable queue-based logging for multiprocessing
+        log_only_on_failure: Buffer logs in memory and only flush on failure
+
+    Returns:
+        Configured logger instance ready for task execution
+    """
+    manager = get_task_logger_manager()
+    return manager.get_or_create_logger(
+        logger_name=logger_name,
+        output_dir=output_dir,
+        debug=debug,
+        console_output=console_output,
+        use_queue=use_queue,
+        log_only_on_failure=log_only_on_failure,
+    )
+
+
+def flush_buffered_task_logs(logger_name: str) -> None:
+    """Flush buffered logs to file/console when failure occurs.
+
+    This function triggers the flush of all buffered log records for loggers
+    configured with ConditionalMemoryHandler (when log_only_on_failure is enabled).
+
+    Args:
+        logger_name: Name of the logger to flush
+    """
+    manager = get_task_logger_manager()
+    manager.flush_buffered_logs(logger_name)
+
+
+def cleanup_task_logger(
+    logger_name: str,
+    episode_failed: bool = False,
+    log_only_on_failure: bool = False,
+) -> None:
+    """Clean up task logger resources with buffering awareness.
+
+    Handles cleanup for both buffered and non-buffered loggers:
+    - For buffered loggers: Flushes on failure, discards on success
+    - For non-buffered loggers: Always flushes
+
+    Args:
+        logger_name: Name of the logger to clean up
+        episode_failed: Whether the episode failed
+        log_only_on_failure: Whether buffering is enabled for this logger
+    """
+    manager = get_task_logger_manager()
+    manager.cleanup_logger(
+        logger_name=logger_name,
+        episode_failed=episode_failed,
+        log_only_on_failure=log_only_on_failure,
+    )

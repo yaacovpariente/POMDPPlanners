@@ -1,5 +1,7 @@
+import logging
 import random
 import tempfile
+import threading
 import time
 from pathlib import Path
 
@@ -7,8 +9,13 @@ import numpy as np
 
 from POMDPPlanners.utils.logger import (
     cleanup_all_loggers,
+    cleanup_task_logger,
+    ConditionalMemoryHandler,
+    flush_buffered_task_logs,
     get_logger,
     get_queue_logger_diagnostics,
+    get_task_logger_manager,
+    setup_task_logger_with_buffering,
 )
 
 np.random.seed(42)
@@ -491,3 +498,490 @@ def test_logger_reuses_handlers_with_same_name(tmp_path):
 
     # Handler IDs should be the same (handlers were reused, not recreated)
     assert handler_ids_1 == handler_ids_2, "Handlers were recreated instead of being reused"
+
+
+def test_conditional_memory_handler_buffering(tmp_path):
+    """Test that ConditionalMemoryHandler buffers logs in memory.
+
+    Purpose: Validates that ConditionalMemoryHandler holds logs in buffer without writing to disk
+
+    Given: A ConditionalMemoryHandler wrapping a FileHandler
+    When: INFO level messages are logged
+    Then: Messages are buffered in memory and not written to the file
+
+    Test type: unit
+    """
+    log_file = tmp_path / "test_buffer.log"
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+
+    # Create memory handler wrapping file handler
+    memory_handler = ConditionalMemoryHandler(capacity=100, target=file_handler)
+    memory_handler.setLevel(logging.INFO)
+
+    # Create logger with memory handler
+    logger = logging.getLogger("test.buffer")
+    logger.setLevel(logging.INFO)
+    logger.handlers = []
+    logger.addHandler(memory_handler)
+
+    # Log some messages
+    logger.info("Buffered message 1")
+    logger.info("Buffered message 2")
+
+    # File should be empty (logs are buffered)
+    if log_file.exists():
+        assert log_file.stat().st_size == 0, "File should be empty before flush"
+
+    # Buffer should have messages
+    assert len(memory_handler.buffer) == 2
+
+
+def test_conditional_memory_handler_flush_on_error(tmp_path):
+    """Test that ConditionalMemoryHandler auto-flushes on ERROR level.
+
+    Purpose: Validates that ERROR level messages trigger automatic flush of buffered logs
+
+    Given: A ConditionalMemoryHandler with buffered INFO messages
+    When: An ERROR level message is logged
+    Then: All buffered messages (including ERROR) are flushed to file
+
+    Test type: unit
+    """
+    log_file = tmp_path / "test_error_flush.log"
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(levelname)s - %(message)s")
+    file_handler.setFormatter(formatter)
+
+    # Create memory handler wrapping file handler
+    memory_handler = ConditionalMemoryHandler(capacity=100, target=file_handler)
+    memory_handler.setLevel(logging.INFO)
+    memory_handler.setFormatter(formatter)
+
+    # Create logger with memory handler
+    logger = logging.getLogger("test.error_flush")
+    logger.setLevel(logging.INFO)
+    logger.handlers = []
+    logger.addHandler(memory_handler)
+
+    # Log INFO messages (should be buffered)
+    logger.info("Buffered message 1")
+    logger.info("Buffered message 2")
+
+    # Log ERROR message (should trigger flush)
+    logger.error("Error message - triggers flush")
+
+    # File should now contain all messages
+    assert log_file.exists()
+    with open(log_file, "r") as f:
+        content = f.read()
+
+    assert "Buffered message 1" in content
+    assert "Buffered message 2" in content
+    assert "Error message - triggers flush" in content
+
+
+def test_conditional_memory_handler_manual_flush(tmp_path):
+    """Test that ConditionalMemoryHandler.trigger_flush() works correctly.
+
+    Purpose: Validates that manual flush trigger writes buffered logs to file
+
+    Given: A ConditionalMemoryHandler with buffered INFO messages
+    When: trigger_flush() is called manually
+    Then: All buffered messages are flushed to file
+
+    Test type: unit
+    """
+    log_file = tmp_path / "test_manual_flush.log"
+
+    # Create file handler
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(message)s")
+    file_handler.setFormatter(formatter)
+
+    # Create memory handler wrapping file handler
+    memory_handler = ConditionalMemoryHandler(capacity=100, target=file_handler)
+    memory_handler.setLevel(logging.INFO)
+    memory_handler.setFormatter(formatter)
+
+    # Create logger with memory handler
+    logger = logging.getLogger("test.manual_flush")
+    logger.setLevel(logging.INFO)
+    logger.handlers = []
+    logger.addHandler(memory_handler)
+
+    # Log messages (should be buffered)
+    logger.info("Message 1")
+    logger.info("Message 2")
+    logger.info("Message 3")
+
+    # Manually trigger flush
+    memory_handler.trigger_flush()
+
+    # File should now contain all messages
+    assert log_file.exists()
+    with open(log_file, "r") as f:
+        content = f.read()
+
+    assert "Message 1" in content
+    assert "Message 2" in content
+    assert "Message 3" in content
+
+
+def test_setup_task_logger_with_buffering_creates_logger(tmp_path):
+    """Test that setup_task_logger_with_buffering creates a properly configured logger.
+
+    Purpose: Validates that setup function creates logger with correct configuration
+
+    Given: Logger name and configuration parameters
+    When: setup_task_logger_with_buffering is called with log_only_on_failure=False
+    Then: Logger is created with file and console handlers as expected
+
+    Test type: unit
+    """
+    logger_name = "test.task.logger.create"
+
+    logger = setup_task_logger_with_buffering(
+        logger_name=logger_name,
+        output_dir=tmp_path,
+        debug=True,
+        console_output=False,
+        use_queue=False,
+        log_only_on_failure=False,
+    )
+
+    assert logger is not None
+    assert logger.name == logger_name
+    assert len(logger.handlers) > 0
+
+    # Check that log file is created
+    logger.info("Test message")
+    log_dir = tmp_path / "logs"
+    log_files = list(log_dir.glob("*.log"))
+    assert len(log_files) > 0
+
+
+def test_setup_task_logger_with_buffering_adds_memory_handlers(tmp_path):
+    """Test that setup_task_logger_with_buffering adds ConditionalMemoryHandler when enabled.
+
+    Purpose: Validates that log_only_on_failure=True wraps handlers with ConditionalMemoryHandler
+
+    Given: Logger configuration with log_only_on_failure=True
+    When: setup_task_logger_with_buffering is called
+    Then: Handlers are wrapped with ConditionalMemoryHandler for buffering
+
+    Test type: unit
+    """
+    logger_name = "test.task.logger.buffering"
+
+    logger = setup_task_logger_with_buffering(
+        logger_name=logger_name,
+        output_dir=tmp_path,
+        debug=True,
+        console_output=False,
+        use_queue=False,
+        log_only_on_failure=True,
+    )
+
+    # Check that handlers are ConditionalMemoryHandler
+    has_memory_handler = any(isinstance(h, ConditionalMemoryHandler) for h in logger.handlers)
+    assert has_memory_handler, "Should have ConditionalMemoryHandler when log_only_on_failure=True"
+
+    # Verify messages are buffered
+    logger.info("Buffered test message")
+
+    log_dir = tmp_path / "logs"
+    log_files = list(log_dir.glob("*.log"))
+
+    # File should exist but be empty (buffered)
+    if log_files:
+        for log_file in log_files:
+            assert log_file.stat().st_size == 0, "Log file should be empty (logs buffered)"
+
+
+def test_setup_task_logger_with_buffering_reuses_existing(tmp_path):
+    """Test that setup_task_logger_with_buffering reuses existing configured logger.
+
+    Purpose: Validates that repeated calls with same logger name return the same logger
+
+    Given: Logger already created and configured
+    When: setup_task_logger_with_buffering is called again with same name
+    Then: Same logger instance is returned without duplicate handlers
+
+    Test type: unit
+    """
+    logger_name = "test.task.logger.reuse"
+
+    # First call
+    logger1 = setup_task_logger_with_buffering(
+        logger_name=logger_name,
+        output_dir=tmp_path,
+        debug=True,
+        console_output=False,
+        use_queue=False,
+        log_only_on_failure=False,
+    )
+    handler_count_1 = len(logger1.handlers)
+
+    # Second call
+    logger2 = setup_task_logger_with_buffering(
+        logger_name=logger_name,
+        output_dir=tmp_path,
+        debug=True,
+        console_output=False,
+        use_queue=False,
+        log_only_on_failure=False,
+    )
+    handler_count_2 = len(logger2.handlers)
+
+    # Should be the same logger instance
+    assert logger1 is logger2
+    # Should not have added duplicate handlers
+    assert handler_count_1 == handler_count_2
+
+
+def test_flush_buffered_task_logs_flushes_handlers(tmp_path):
+    """Test that flush_buffered_task_logs flushes buffered logs to file.
+
+    Purpose: Validates that flush function triggers flush of all buffered logs
+
+    Given: Logger with buffered messages (log_only_on_failure=True)
+    When: flush_buffered_task_logs is called
+    Then: Buffered logs are written to file
+
+    Test type: unit
+    """
+    logger_name = "test.task.flush"
+
+    logger = setup_task_logger_with_buffering(
+        logger_name=logger_name,
+        output_dir=tmp_path,
+        debug=True,
+        console_output=False,
+        use_queue=False,
+        log_only_on_failure=True,
+    )
+
+    # Log messages (should be buffered)
+    logger.info("Buffered message 1")
+    logger.info("Buffered message 2")
+
+    # Flush buffered logs
+    flush_buffered_task_logs(logger_name)
+
+    # Check that logs were written to file
+    log_dir = tmp_path / "logs"
+    log_files = list(log_dir.glob("*.log"))
+    assert len(log_files) > 0
+
+    # Read log file
+    with open(log_files[0], "r") as f:
+        content = f.read()
+
+    assert "Buffered message 1" in content
+    assert "Buffered message 2" in content
+
+
+def test_cleanup_task_logger_success_discards_logs(tmp_path):
+    """Test that cleanup_task_logger discards buffered logs on success.
+
+    Purpose: Validates that successful episodes with log_only_on_failure discard buffered logs
+
+    Given: Logger with buffered messages and log_only_on_failure=True
+    When: cleanup_task_logger is called with episode_failed=False
+    Then: Buffered logs are discarded without writing to file
+
+    Test type: unit
+    """
+    logger_name = "test.task.cleanup.success"
+
+    logger = setup_task_logger_with_buffering(
+        logger_name=logger_name,
+        output_dir=tmp_path,
+        debug=True,
+        console_output=False,
+        use_queue=False,
+        log_only_on_failure=True,
+    )
+
+    # Log messages (should be buffered)
+    logger.info("Should be discarded 1")
+    logger.info("Should be discarded 2")
+
+    # Cleanup with success (episode_failed=False)
+    cleanup_task_logger(
+        logger_name=logger_name,
+        episode_failed=False,
+        log_only_on_failure=True,
+    )
+
+    # Check that log file is empty or doesn't have the messages
+    log_dir = tmp_path / "logs"
+    log_files = list(log_dir.glob("*.log"))
+
+    if log_files:
+        for log_file in log_files:
+            # File should be empty (logs discarded)
+            assert log_file.stat().st_size == 0, "Log file should be empty after cleanup on success"
+
+
+def test_cleanup_task_logger_failure_flushes_logs(tmp_path):
+    """Test that cleanup_task_logger flushes buffered logs on failure.
+
+    Purpose: Validates that failed episodes with log_only_on_failure flush buffered logs
+
+    Given: Logger with buffered messages and log_only_on_failure=True
+    When: cleanup_task_logger is called with episode_failed=True
+    Then: Buffered logs are flushed and written to file
+
+    Test type: unit
+    """
+    logger_name = "test.task.cleanup.failure"
+
+    logger = setup_task_logger_with_buffering(
+        logger_name=logger_name,
+        output_dir=tmp_path,
+        debug=True,
+        console_output=False,
+        use_queue=False,
+        log_only_on_failure=True,
+    )
+
+    # Log messages (should be buffered)
+    logger.info("Failure message 1")
+    logger.info("Failure message 2")
+
+    # Cleanup with failure (episode_failed=True)
+    cleanup_task_logger(
+        logger_name=logger_name,
+        episode_failed=True,
+        log_only_on_failure=True,
+    )
+
+    # Check that logs were written to file
+    log_dir = tmp_path / "logs"
+    log_files = list(log_dir.glob("*.log"))
+    assert len(log_files) > 0
+
+    # Read log file
+    with open(log_files[0], "r") as f:
+        content = f.read()
+
+    assert "Failure message 1" in content
+    assert "Failure message 2" in content
+
+
+def test_task_logger_manager_thread_safety(tmp_path):
+    """Test that TaskLoggerManager is thread-safe for concurrent access.
+
+    Purpose: Validates that TaskLoggerManager can handle concurrent logger creation safely
+
+    Given: Multiple threads creating loggers simultaneously
+    When: Threads call setup_task_logger_with_buffering concurrently
+    Then: All loggers are created correctly without race conditions
+
+    Test type: unit
+    """
+    num_threads = 10
+    results = []
+    errors = []
+
+    def create_logger(thread_id):
+        try:
+            logger_name = f"test.task.thread.{thread_id}"
+            logger = setup_task_logger_with_buffering(
+                logger_name=logger_name,
+                output_dir=tmp_path,
+                debug=False,
+                console_output=False,
+                use_queue=False,
+                log_only_on_failure=False,
+            )
+            logger.info(f"Message from thread {thread_id}")
+            results.append((thread_id, logger.name))
+        except Exception as e:
+            errors.append((thread_id, str(e)))
+
+    # Create threads
+    threads = []
+    for i in range(num_threads):
+        thread = threading.Thread(target=create_logger, args=(i,))
+        threads.append(thread)
+
+    # Start all threads
+    for thread in threads:
+        thread.start()
+
+    # Wait for all threads to complete
+    for thread in threads:
+        thread.join()
+
+    # Verify no errors occurred
+    assert len(errors) == 0, f"Errors occurred: {errors}"
+
+    # Verify all threads created loggers
+    assert len(results) == num_threads
+
+    # Verify log files were created
+    log_dir = tmp_path / "logs"
+    log_files = list(log_dir.glob("*.log"))
+    assert len(log_files) == num_threads
+
+
+def test_task_logger_manager_state_tracking(tmp_path):
+    """Test that TaskLoggerManager correctly tracks logger state.
+
+    Purpose: Validates that TaskLoggerManager maintains accurate state of configured loggers
+
+    Given: TaskLoggerManager with multiple loggers created
+    When: Loggers are created and configured
+    Then: Manager correctly tracks which loggers are configured and their handlers
+
+    Test type: unit
+    """
+    manager = get_task_logger_manager()
+
+    # Clear any previous state
+    manager._configured_loggers.clear()
+    manager._memory_handlers.clear()
+
+    logger_name_1 = "test.state.tracking.1"
+    logger_name_2 = "test.state.tracking.2"
+
+    # Create first logger without buffering
+    logger1 = manager.get_or_create_logger(
+        logger_name=logger_name_1,
+        output_dir=tmp_path,
+        debug=False,
+        console_output=False,
+        use_queue=False,
+        log_only_on_failure=False,
+    )
+
+    # Check state
+    assert logger_name_1 in manager._configured_loggers
+    assert logger_name_1 not in manager._memory_handlers  # No buffering
+
+    # Create second logger with buffering
+    logger2 = manager.get_or_create_logger(
+        logger_name=logger_name_2,
+        output_dir=tmp_path,
+        debug=False,
+        console_output=False,
+        use_queue=False,
+        log_only_on_failure=True,
+    )
+
+    # Check state
+    assert logger_name_2 in manager._configured_loggers
+    assert logger_name_2 in manager._memory_handlers  # Has buffering
+    assert len(manager._memory_handlers[logger_name_2]) > 0
+
+    # Verify loggers are different
+    assert logger1 is not logger2
