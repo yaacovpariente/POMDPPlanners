@@ -9,7 +9,11 @@ import numpy as np
 from POMDPPlanners.core.simulation import History, SimulationTask
 from POMDPPlanners.simulations.episodes import run_episode
 from POMDPPlanners.utils.config_to_id import config_to_id
-from POMDPPlanners.utils.logger import ConditionalMemoryHandler, get_logger
+from POMDPPlanners.utils.logger import (
+    setup_task_logger_with_buffering,
+    flush_buffered_task_logs,
+    cleanup_task_logger,
+)
 
 
 class EpisodeSimulationTask(SimulationTask):
@@ -118,65 +122,21 @@ class EpisodeSimulationTask(SimulationTask):
         to buffer logs in memory and only flush to disk/console on failure.
         """
         logger_name = self._get_env_policy_logger_name()
-        logger = logging.getLogger(logger_name)
 
-        # If logger already exists and has handlers, return it
-        if logger.handlers and hasattr(logger, "_pomdp_configured"):
-            return logger
-
-        # Configure new logger
+        # Configure output directory
         output_dir = None
         if self.cache_dir is not None:
-            # Note: get_logger automatically creates a 'logs' subdirectory,
-            # so we only need to specify the parent directory
             output_dir = self.cache_dir / "env_policy"
 
-        # Get base logger (which will create handlers)
-        logger = get_logger(
-            name=logger_name,
-            debug=self.debug,
+        # Use helper function to set up logger with buffering
+        return setup_task_logger_with_buffering(
+            logger_name=logger_name,
             output_dir=output_dir,
-            console_output=self.console_output if not self.log_only_on_failure else False,
+            debug=self.debug,
+            console_output=self.console_output,
             use_queue=self.use_queue_logger,
+            log_only_on_failure=self.log_only_on_failure,
         )
-
-        # Add buffered handlers if log_only_on_failure is enabled
-        # This must happen BEFORE any logging calls
-        if self.log_only_on_failure and not hasattr(logger, "_buffered_handler_added"):
-            self._setup_buffered_logging(logger)
-
-        # Mark logger as configured (dynamic attribute for runtime state tracking)
-        setattr(logger, "_pomdp_configured", True)
-
-        return logger
-
-    def _setup_buffered_logging(self, logger: logging.Logger) -> None:
-        """Set up buffered logging handlers for failure-only logging.
-
-        Args:
-            logger: The logger instance to configure with buffered handlers
-        """
-        memory_handlers = []
-
-        # Replace each existing handler with a buffered version
-        for handler in logger.handlers[:]:
-            # Create memory buffer that holds logs until failure
-            memory_handler = ConditionalMemoryHandler(
-                capacity=10000,  # Hold up to 10k log records
-                target=handler,
-            )
-            memory_handler.setLevel(handler.level)
-            if handler.formatter:
-                memory_handler.setFormatter(handler.formatter)
-
-            # Replace original handler with buffered version
-            logger.removeHandler(handler)
-            logger.addHandler(memory_handler)
-            memory_handlers.append(memory_handler)
-
-        # Mark logger as having buffered handlers and store references (dynamic attributes)
-        setattr(logger, "_buffered_handler_added", True)
-        setattr(logger, "_memory_handlers", memory_handlers)
 
     @staticmethod
     def _validate_inputs(
@@ -344,16 +304,7 @@ class EpisodeSimulationTask(SimulationTask):
         This method triggers the flush of all buffered log records when
         log_only_on_failure is enabled and a failure is detected.
         """
-        try:
-            logger = logging.getLogger(self._get_env_policy_logger_name())
-            if hasattr(logger, "_memory_handlers"):
-                memory_handlers = getattr(logger, "_memory_handlers", [])
-                for handler in memory_handlers:
-                    if isinstance(handler, ConditionalMemoryHandler):
-                        handler.trigger_flush()
-        except Exception:
-            # Don't let flush errors affect the main task
-            pass
+        flush_buffered_task_logs(self._get_env_policy_logger_name())
 
     def cleanup_logger(self, episode_failed: bool = False) -> None:
         """Clean up logger resources to prevent file handle leaks.
@@ -367,26 +318,11 @@ class EpisodeSimulationTask(SimulationTask):
             episode_failed: Whether the episode failed. If False and log_only_on_failure
                           is enabled, buffered logs will be discarded instead of flushed.
         """
-        try:
-            logger = logging.getLogger(self._get_env_policy_logger_name())
-            # Only flush if episode failed OR log_only_on_failure is disabled
-            should_flush = episode_failed or not self.log_only_on_failure
-
-            for handler in logger.handlers:
-                if isinstance(handler, ConditionalMemoryHandler):
-                    if should_flush:
-                        # Flush buffered logs for failed episodes or normal logging
-                        if hasattr(handler, "flush"):
-                            handler.flush()
-                    else:
-                        # Discard buffered logs for successful episodes with log_only_on_failure
-                        handler.buffer.clear()
-                elif hasattr(handler, "flush"):
-                    # Always flush non-buffered handlers
-                    handler.flush()
-        except Exception as e:
-            # Don't let cleanup errors affect the main task
-            pass
+        cleanup_task_logger(
+            logger_name=self._get_env_policy_logger_name(),
+            episode_failed=episode_failed,
+            log_only_on_failure=self.log_only_on_failure,
+        )
 
     def cleanup(self, is_final_task: bool = False, episode_failed: bool = False) -> None:
         """Comprehensive cleanup to prevent memory leaks.
