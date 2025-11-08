@@ -435,6 +435,7 @@ class TestJoblibConfig:
             clear_cache_on_start=True,
             verbose=1,
             console_output=True,
+            no_logs=False,
         )
         assert result == mock_task_manager
 
@@ -466,6 +467,7 @@ class TestJoblibConfig:
             clear_cache_on_start=False,
             verbose=0,
             console_output=True,
+            no_logs=False,
         )
         assert result == mock_task_manager
 
@@ -576,6 +578,7 @@ class TestTaskManagerConfigIntegration:
                 clear_cache_on_start=False,
                 verbose=0,
                 console_output=True,
+                no_logs=False,
             )
 
 

@@ -410,6 +410,61 @@ def test_joblib_task_manager_logging_with_multiple_tasks(
         # Note: We don't check directory structure as it may change
 
 
+def test_joblib_task_manager_no_logs_disabled(cache_db, environment, policy, temp_cache_dir):
+    """Test that JoblibTaskManager does not write logs when no_logs=True.
+
+    Purpose: Validates that JoblibTaskManager does not create log files when no_logs=True is set
+
+    Given: A cache database, TigerPOMDP environment, SparsePFT policy, EpisodeSimulationTask, and log directory
+    When: JoblibTaskManager runs task with no_logs=True and cache_dir configured
+    Then: Task executes successfully but no log files are created in the logs directory
+
+    Test type: unit
+    """
+    # Create a specific log directory for this test
+    log_dir = Path(temp_cache_dir) / "test_no_logs"
+    log_dir.mkdir(exist_ok=True)
+
+    with JoblibTaskManager(
+        cache_db=cache_db, cache_dir=str(log_dir), logger_debug=True, no_logs=True
+    ) as task_manager:
+        # Create a task
+        belief = create_test_belief()
+        task = EpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=1,
+            seed=42,
+            console_output=False,
+        )
+        task_identifier = "episode_1"
+
+        # Verify no_logs is set correctly
+        assert task_manager.no_logs is True
+
+        # Run task - should not generate logs
+        results, successful_ids = task_manager.run_tasks([task], [task_identifier])
+
+        # Verify results
+        assert len(results) == 1
+        assert len(successful_ids) == 1
+        assert task_identifier in successful_ids
+
+        # Verify that no logs directory was created (or if it exists, it's empty)
+        logs_dir = log_dir / "logs"
+        if logs_dir.exists():
+            # If logs directory exists, it should be empty (no log files created)
+            log_files = list(logs_dir.glob("*.log"))
+            assert (
+                len(log_files) == 0
+            ), f"Expected no log files when no_logs=True, but found {len(log_files)} log files"
+        else:
+            # Logs directory should not exist when no_logs=True
+            assert not logs_dir.exists(), "Logs directory should not be created when no_logs=True"
+
+
 class FailingEpisodeSimulationTask(EpisodeSimulationTask):
     """Mock task that always fails for testing failed task caching behavior."""
 

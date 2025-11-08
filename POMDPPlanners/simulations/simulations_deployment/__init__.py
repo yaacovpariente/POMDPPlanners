@@ -65,6 +65,7 @@ class TaskManagerFactory:
         clear_cache_on_start: bool = False,
         verbose: int = 0,
         console_output: bool = True,
+        no_logs: bool = False,
     ) -> JoblibTaskManager:
         """Create a JoblibTaskManager with a configured DiskCacheDB.
 
@@ -76,6 +77,7 @@ class TaskManagerFactory:
             clear_cache_on_start: If True, clears the cache at startup
             verbose: Verbosity level for joblib
             console_output: Whether to print logs to console
+            no_logs: Whether to disable all logging
 
         Returns:
             A configured JoblibTaskManager instance
@@ -91,6 +93,7 @@ class TaskManagerFactory:
             clear_cache_on_start=clear_cache_on_start,
             verbose=verbose,
             console_output=console_output,
+            no_logs=no_logs,
         )
 
     @staticmethod

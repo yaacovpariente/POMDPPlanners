@@ -79,6 +79,7 @@ class JoblibConfig(TaskManagerConfig):
     verbose: int = 0
     clear_cache_on_start: bool = False
     console_output: bool = True
+    no_logs: bool = False
 
     def create_task_manager(self, cache_dir: Optional[str] = None) -> TaskManager:
         return TaskManagerFactory.create_joblib(
@@ -89,4 +90,5 @@ class JoblibConfig(TaskManagerConfig):
             clear_cache_on_start=self.clear_cache_on_start,
             verbose=self.verbose,
             console_output=self.console_output,
+            no_logs=self.no_logs,
         )
