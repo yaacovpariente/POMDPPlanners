@@ -78,6 +78,7 @@ class JoblibConfig(TaskManagerConfig):
     eviction_policy: str = "least-recently-used"
     verbose: int = 0
     clear_cache_on_start: bool = False
+    console_output: bool = True
 
     def create_task_manager(self, cache_dir: Optional[str] = None) -> TaskManager:
         return TaskManagerFactory.create_joblib(
@@ -87,4 +88,5 @@ class JoblibConfig(TaskManagerConfig):
             eviction_policy=self.eviction_policy,
             clear_cache_on_start=self.clear_cache_on_start,
             verbose=self.verbose,
+            console_output=self.console_output,
         )
