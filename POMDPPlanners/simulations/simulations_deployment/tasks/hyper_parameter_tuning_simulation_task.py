@@ -589,21 +589,19 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 Tuple of metric values in the same order as self.parameters_to_optimize.
                 Optuna uses these values to perform intelligent multi-objective optimization.
             """
+            policy_params = None
+            metric_values = None
             try:
                 # Create parameters dictionary from hyperparameters
                 policy_params = self._create_policy_parameter_suggestions(
                     trial, self.hyper_parameters
                 )
 
-                self.logger.debug("Trial %d: Testing parameters %s", trial.number, policy_params)
-
                 # Create policy instance with suggested parameters
                 policy = self.policy_cls(**policy_params)
 
                 # Evaluate and store metrics - actual values stored in trial.user_attrs
                 metric_values = self._evaluate_policy_configuration(policy, trial)
-
-                self.logger.info("Trial %d completed with metrics: %s", trial.number, metric_values)
 
                 # Return metrics as tuple in the order specified by parameters_to_optimize
                 # This allows Optuna to intelligently guide the hyperparameter search
@@ -614,6 +612,14 @@ class HyperParameterTuningSimulationTask(SimulationTask):
                 return metric_tuple
 
             except Exception as e:
+                if metric_values is not None:
+                    self.logger.info(
+                        "Trial %d completed with metrics: %s", trial.number, metric_values
+                    )
+                if policy_params is not None:
+                    self.logger.debug(
+                        "Trial %d: Testing parameters %s", trial.number, policy_params
+                    )
                 self.logger.error("Error in objective function for trial %d: %s", trial.number, e)
                 self.logger.exception("Full exception details:")
                 raise e
