@@ -5,9 +5,52 @@ import signal
 import threading
 import time
 from datetime import datetime
-from logging.handlers import QueueHandler
+from logging.handlers import MemoryHandler, QueueHandler
 from pathlib import Path
 from typing import Any, Dict, Optional
+
+
+class ConditionalMemoryHandler(MemoryHandler):
+    """Memory handler that buffers logs and only flushes on failure or explicit request.
+
+    This handler is designed for failure-only logging scenarios where you want to
+    capture all logs during execution but only write them to disk/console when
+    a failure occurs. This dramatically reduces I/O overhead for successful operations.
+
+    Attributes:
+        should_flush: Flag to manually trigger flushing of buffered logs
+    """
+
+    def __init__(self, capacity: int, target: logging.Handler):
+        """Initialize the conditional memory handler.
+
+        Args:
+            capacity: Maximum number of log records to buffer before auto-flush
+            target: The target handler to flush logs to (FileHandler, StreamHandler, etc.)
+        """
+        super().__init__(capacity, target=target)
+        self.should_flush = False
+
+    def shouldFlush(self, record: logging.LogRecord) -> bool:
+        """Determine if buffered logs should be flushed.
+
+        Flushes occur when:
+        - Manual trigger via trigger_flush()
+        - ERROR or CRITICAL level message
+        - Buffer capacity reached
+
+        Args:
+            record: The log record being processed
+
+        Returns:
+            True if logs should be flushed, False otherwise
+        """
+        return self.should_flush or record.levelno >= logging.ERROR or super().shouldFlush(record)
+
+    def trigger_flush(self):
+        """Manually trigger flush of all buffered logs to target handler."""
+        self.should_flush = True
+        self.flush()
 
 
 class QueueLoggerManager:
