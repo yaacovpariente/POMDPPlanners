@@ -125,7 +125,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         self.seed = seed
         self.use_queue_logger = use_queue_logger
         # Create task manager config for joblib
-        task_manager_config = JoblibConfig(n_jobs=n_jobs)
+        task_manager_config = JoblibConfig(n_jobs=n_jobs, console_output=False)
 
         self.simulator = POMDPSimulator(
             task_manager_config=task_manager_config,
