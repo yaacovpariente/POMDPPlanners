@@ -116,16 +116,18 @@ class BaseSimulator(ABC):
         enable_profiling: bool = False,
         profiling_output_limit: int = 50,
         use_queue_logger: bool = False,
+        console_output: bool = True,
     ):
         """Initialize the simulator.
 
         Args:
             task_manager_config: Configuration object for task manager creation
-            cache_dir_path: Path to store results
+            cache_dir_path: Path to store results and log files. Set to None to disable file logging.
             experiment_name: Name of the MLFlow experiment
             debug: Whether to enable debug logging
             enable_profiling: Whether to enable cProfile profiling
             profiling_output_limit: Maximum number of functions to show in profiling output (default: 50)
+            console_output: Whether to print logs to console (default: True)
         """
         self.cache_dir_path = cache_dir_path
         self.experiment_name = experiment_name
@@ -135,11 +137,15 @@ class BaseSimulator(ABC):
         self.profiler: Optional[cProfile.Profile] = None
         self.use_queue_logger = use_queue_logger
 
+        # Create logger
+        # When output_dir=None, logger.py skips file handler creation (logger.py:490)
+        # When console_output=False, logger.py skips console handler creation (logger.py:480)
         self.logger = get_logger(
             name=f"simulator.{experiment_name}",
             debug=debug,
             output_dir=cache_dir_path,
             use_queue=use_queue_logger,
+            console_output=console_output,
         )
 
         # Create task manager using configuration
@@ -858,12 +864,13 @@ class POMDPSimulator(BaseSimulator):
         profiling_output_limit: int = 50,
         task_console_output: bool = False,
         use_queue_logger: bool = False,
+        console_output: bool = True,
     ):
         """Initialize the POMDP simulator.
 
         Args:
             task_manager_config: Configuration object for task manager creation
-            cache_dir_path: Path to store results
+            cache_dir_path: Path to store results and log files. Set to None to disable file logging.
             experiment_name: Name of the MLFlow experiment
             debug: Whether to enable debug logging
             enable_profiling: Whether to enable cProfile profiling
@@ -871,6 +878,7 @@ class POMDPSimulator(BaseSimulator):
             task_console_output: Whether to enable console output for individual tasks (default: False).
                                Set to True to see console output from each task, but this can create
                                log mess when running in parallel.
+            console_output: Whether to print logs to console (default: True)
         """
         super().__init__(
             task_manager_config=task_manager_config,
@@ -880,6 +888,7 @@ class POMDPSimulator(BaseSimulator):
             enable_profiling=enable_profiling,
             profiling_output_limit=profiling_output_limit,
             use_queue_logger=use_queue_logger,
+            console_output=console_output,
         )
         self.task_console_output = task_console_output
 

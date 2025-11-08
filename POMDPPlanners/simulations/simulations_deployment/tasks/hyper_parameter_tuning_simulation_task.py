@@ -133,6 +133,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
             experiment_name=experiment_name,
             debug=debug,  # Keep episode-level logging minimal for optimization
             use_queue_logger=use_queue_logger,
+            console_output=False,
         )
 
         if cache_dir is not None:
