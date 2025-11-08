@@ -854,7 +854,7 @@ def test_episode_simulation_task_log_only_on_failure_validation(environment, pol
             discount_factor=0.95,
             episode_number=1,
             console_output=False,
-            log_only_on_failure="true",  # Invalid: string instead of bool
+            log_only_on_failure="true",  # type: ignore[arg-type]  # Invalid: string instead of bool (intentional for testing)
         )
 
 
