@@ -65,14 +65,18 @@ def test_logger_no_handlers_no_io(capsys, tmp_path):
 
     Given: Logger configured with console_output=False and output_dir=None
     When: Multiple messages are logged at various levels
-    Then: Logger has zero handlers, no console output, and no files are created
+    Then: Logger has zero handlers (or only NullHandlers which perform no I/O), no console output, and no files are created
 
     Test type: unit
     """
     logger = get_logger(name="test.no_handlers", debug=True, console_output=False, output_dir=None)
 
-    # Verify logger has zero handlers
-    assert len(logger.handlers) == 0, f"Expected 0 handlers, got {len(logger.handlers)}"
+    # Verify logger has zero handlers OR only NullHandlers (which perform no I/O)
+    # NullHandler is added to prevent Python's lastResort handler from outputting to stderr
+    non_null_handlers = [h for h in logger.handlers if not isinstance(h, logging.NullHandler)]
+    assert (
+        len(non_null_handlers) == 0
+    ), f"Expected 0 non-NullHandler handlers, got {len(non_null_handlers)}"
 
     # Log messages at various levels - should not crash
     logger.debug("Debug message - should be ignored")
