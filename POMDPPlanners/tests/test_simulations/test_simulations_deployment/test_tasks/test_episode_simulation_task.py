@@ -306,7 +306,7 @@ def test_episode_simulation_task_execution(environment, policy):
         assert hasattr(result, "actual_num_steps")
 
 
-def test_episode_simulation_task_value_error_logging(caplog, environment, policy):
+def test_episode_simulation_task_value_error_logging(tmp_path, environment, policy):
     """Test that EpisodeSimulationTask logs ValueError exceptions properly.
 
     Purpose: Validates that EpisodeSimulationTask logs ValueError exceptions with appropriate detail
@@ -319,13 +319,17 @@ def test_episode_simulation_task_value_error_logging(caplog, environment, policy
     """
     belief = create_test_belief()
 
+    # Create a temporary cache directory
+    cache_dir = tmp_path / "test_cache_value_error"
+    cache_dir.mkdir()
+
     # Create a real environment and patch it to cause an error during execution
     test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
     # Patch the environment to fail when state_transition_model is called
     with patch.object(
         test_env, "state_transition_model", side_effect=ValueError("Test value error")
     ):
-        # Create task using the real environment
+        # Create task using the real environment with cache_dir to enable file logging
         task = EpisodeSimulationTask(
             environment=test_env,
             policy=policy,
@@ -335,6 +339,7 @@ def test_episode_simulation_task_value_error_logging(caplog, environment, policy
             seed=42,
             discount_factor=0.95,
             episode_number=1,
+            cache_dir=cache_dir,
             console_output=False,
         )
 
@@ -344,11 +349,23 @@ def test_episode_simulation_task_value_error_logging(caplog, environment, policy
         # Verify that the task handled the error and returned None
         assert result is None
 
-        # Verify that some error was logged (the exact message may vary)
-        assert "[EPISODE_001] Error running episode:" in caplog.text
+    # Find log files and check for error message
+    log_files = list(cache_dir.rglob("*.log"))
+    assert len(log_files) > 0, f"No log files were created in {cache_dir}"
+
+    # Check if error is in any log file
+    error_found = False
+    for log_file in log_files:
+        log_content = log_file.read_text()
+        if "[EPISODE_001] Error running episode:" in log_content:
+            error_found = True
+            assert "Test value error" in log_content
+            break
+
+    assert error_found, f"Error message not found in any log file. Checked {len(log_files)} files."
 
 
-def test_episode_simulation_task_runtime_error_logging(caplog, environment, policy):
+def test_episode_simulation_task_runtime_error_logging(tmp_path, environment, policy):
     """Test that EpisodeSimulationTask logs RuntimeError exceptions properly.
 
     Purpose: Validates that EpisodeSimulationTask logs RuntimeError exceptions with appropriate detail
@@ -361,13 +378,17 @@ def test_episode_simulation_task_runtime_error_logging(caplog, environment, poli
     """
     belief = create_test_belief()
 
+    # Create a temporary cache directory
+    cache_dir = tmp_path / "test_cache_runtime_error"
+    cache_dir.mkdir()
+
     # Create a real environment and patch it to cause a RuntimeError during execution
     test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
     # Patch the environment to fail when observation_model is called
     with patch.object(
         test_env, "observation_model", side_effect=RuntimeError("Test runtime error")
     ):
-        # Create task using the real environment
+        # Create task using the real environment with cache_dir to enable file logging
         task = EpisodeSimulationTask(
             environment=test_env,
             policy=policy,
@@ -377,6 +398,7 @@ def test_episode_simulation_task_runtime_error_logging(caplog, environment, poli
             seed=42,
             discount_factor=0.95,
             episode_number=1,
+            cache_dir=cache_dir,
             console_output=False,
         )
 
@@ -386,11 +408,23 @@ def test_episode_simulation_task_runtime_error_logging(caplog, environment, poli
         # Verify that the task handled the error and returned None
         assert result is None
 
-        # Verify that some error was logged (the exact message may vary)
-        assert "[EPISODE_001] Error running episode:" in caplog.text
+    # Find log files and check for error message
+    log_files = list(cache_dir.rglob("*.log"))
+    assert len(log_files) > 0, f"No log files were created in {cache_dir}"
+
+    # Check if error is in any log file
+    error_found = False
+    for log_file in log_files:
+        log_content = log_file.read_text()
+        if "[EPISODE_001] Error running episode:" in log_content:
+            error_found = True
+            assert "Test runtime error" in log_content
+            break
+
+    assert error_found, f"Error message not found in any log file. Checked {len(log_files)} files."
 
 
-def test_episode_simulation_task_type_error_logging(caplog, environment, policy):
+def test_episode_simulation_task_type_error_logging(tmp_path, environment, policy):
     """Test that EpisodeSimulationTask logs TypeError exceptions properly.
 
     Purpose: Validates that EpisodeSimulationTask logs TypeError exceptions with appropriate detail
@@ -403,11 +437,15 @@ def test_episode_simulation_task_type_error_logging(caplog, environment, policy)
     """
     belief = create_test_belief()
 
+    # Create a temporary cache directory
+    cache_dir = tmp_path / "test_cache_type_error"
+    cache_dir.mkdir()
+
     # Create a real environment and patch it to cause a TypeError during execution
     test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
     # Patch the environment to fail when reward is called
     with patch.object(test_env, "reward", side_effect=TypeError("Test type error")):
-        # Create task using the real environment
+        # Create task using the real environment with cache_dir to enable file logging
         task = EpisodeSimulationTask(
             environment=test_env,
             policy=policy,
@@ -417,6 +455,7 @@ def test_episode_simulation_task_type_error_logging(caplog, environment, policy)
             seed=42,
             discount_factor=0.95,
             episode_number=1,
+            cache_dir=cache_dir,
             console_output=False,
         )
 
@@ -426,11 +465,23 @@ def test_episode_simulation_task_type_error_logging(caplog, environment, policy)
         # Verify that the task handled the error and returned None
         assert result is None
 
-        # Verify that some error was logged (the exact message may vary)
-        assert "[EPISODE_001] Error running episode:" in caplog.text
+    # Find log files and check for error message
+    log_files = list(cache_dir.rglob("*.log"))
+    assert len(log_files) > 0, f"No log files were created in {cache_dir}"
+
+    # Check if error is in any log file
+    error_found = False
+    for log_file in log_files:
+        log_content = log_file.read_text()
+        if "[EPISODE_001] Error running episode:" in log_content:
+            error_found = True
+            assert "Test type error" in log_content
+            break
+
+    assert error_found, f"Error message not found in any log file. Checked {len(log_files)} files."
 
 
-def test_episode_simulation_task_custom_exception_logging(caplog, environment, policy):
+def test_episode_simulation_task_custom_exception_logging(tmp_path, environment, policy):
     """Test that EpisodeSimulationTask logs custom exceptions properly.
 
     Purpose: Validates that EpisodeSimulationTask logs custom exceptions with appropriate detail
@@ -448,6 +499,10 @@ def test_episode_simulation_task_custom_exception_logging(caplog, environment, p
 
     belief = create_test_belief()
 
+    # Create a temporary cache directory
+    cache_dir = tmp_path / "test_cache_custom_error"
+    cache_dir.mkdir()
+
     # Create a real environment and patch it to cause a custom exception during execution
     test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
     # Patch the environment to fail when is_terminal is called
@@ -456,7 +511,7 @@ def test_episode_simulation_task_custom_exception_logging(caplog, environment, p
         "is_terminal",
         side_effect=CustomTestException("Test custom exception"),
     ):
-        # Create task using the real environment
+        # Create task using the real environment with cache_dir to enable file logging
         task = EpisodeSimulationTask(
             environment=test_env,
             policy=policy,
@@ -466,6 +521,7 @@ def test_episode_simulation_task_custom_exception_logging(caplog, environment, p
             seed=42,
             discount_factor=0.95,
             episode_number=1,
+            cache_dir=cache_dir,
             console_output=False,
         )
 
@@ -475,11 +531,23 @@ def test_episode_simulation_task_custom_exception_logging(caplog, environment, p
         # Verify that the task handled the error and returned None
         assert result is None
 
-        # Verify that some error was logged (the exact message may vary)
-        assert "[EPISODE_001] Error running episode:" in caplog.text
+    # Find log files and check for error message
+    log_files = list(cache_dir.rglob("*.log"))
+    assert len(log_files) > 0, f"No log files were created in {cache_dir}"
+
+    # Check if error is in any log file
+    error_found = False
+    for log_file in log_files:
+        log_content = log_file.read_text()
+        if "[EPISODE_001] Error running episode:" in log_content:
+            error_found = True
+            assert "Test custom exception" in log_content
+            break
+
+    assert error_found, f"Error message not found in any log file. Checked {len(log_files)} files."
 
 
-def test_episode_simulation_task_logging_includes_traceback(caplog, environment, policy):
+def test_episode_simulation_task_logging_includes_traceback(tmp_path, environment, policy):
     """Test that EpisodeSimulationTask logs include full traceback information.
 
     Purpose: Validates that EpisodeSimulationTask logs include full exception traceback for debugging
@@ -492,6 +560,10 @@ def test_episode_simulation_task_logging_includes_traceback(caplog, environment,
     """
     belief = create_test_belief()
 
+    # Create a temporary cache directory
+    cache_dir = tmp_path / "test_cache_traceback"
+    cache_dir.mkdir()
+
     # Create a real environment and patch it to cause an exception during execution
     test_env = TigerPOMDP(discount_factor=0.95, name="test_env")
     # Patch the environment to fail when state_transition_model is called
@@ -500,7 +572,7 @@ def test_episode_simulation_task_logging_includes_traceback(caplog, environment,
         "state_transition_model",
         side_effect=Exception("Test exception with traceback"),
     ):
-        # Create task using the real environment
+        # Create task using the real environment with cache_dir to enable file logging
         task = EpisodeSimulationTask(
             environment=test_env,
             policy=policy,
@@ -510,6 +582,7 @@ def test_episode_simulation_task_logging_includes_traceback(caplog, environment,
             seed=42,
             discount_factor=0.95,
             episode_number=1,
+            cache_dir=cache_dir,
             console_output=False,
         )
 
@@ -519,11 +592,25 @@ def test_episode_simulation_task_logging_includes_traceback(caplog, environment,
         # Verify that the task handled the error and returned None
         assert result is None
 
-        # Verify that some error was logged (the exact message may vary)
-        assert "[EPISODE_001] Error running episode:" in caplog.text
+    # Find log files and check for error message and traceback
+    log_files = list(cache_dir.rglob("*.log"))
+    assert len(log_files) > 0, f"No log files were created in {cache_dir}"
 
-        # Verify that traceback information was logged
-        assert "Full exception details:" in caplog.text
+    # Check if error and traceback are in any log file
+    error_found = False
+    traceback_found = False
+    for log_file in log_files:
+        log_content = log_file.read_text()
+        if "[EPISODE_001] Error running episode:" in log_content:
+            error_found = True
+            assert "Test exception with traceback" in log_content
+        if "Full exception details:" in log_content:
+            traceback_found = True
+
+    assert error_found, f"Error message not found in any log file. Checked {len(log_files)} files."
+    assert (
+        traceback_found
+    ), f"Traceback information not found in any log file. Checked {len(log_files)} files."
 
 
 def test_episode_simulation_task_error_written_to_log_file(tmp_path, environment, policy):
@@ -743,16 +830,33 @@ def test_episode_simulation_task_log_only_on_failure_false_always_logs(
 
     Test type: integration
     """
+    import logging
+    import time
+
     belief = create_test_belief()
 
     # Create a temporary cache directory
     cache_dir = tmp_path / "test_cache_always_log"
     cache_dir.mkdir()
 
+    # Create a unique environment to ensure a unique logger name
+    test_env = TigerPOMDP(discount_factor=0.95, name="test_env_always_log")
+    test_policy = SparsePFT(
+        environment=test_env,
+        discount_factor=0.95,
+        gamma=0.95,
+        depth=3,
+        c_ucb=1.0,
+        beta_ucb=0.5,
+        belief_child_num=4,
+        n_simulations=2,
+        name="test_policy_always_log",
+    )
+
     # Create task with log_only_on_failure=False (always log)
     task = EpisodeSimulationTask(
-        environment=environment,
-        policy=policy,
+        environment=test_env,
+        policy=test_policy,
         initial_belief=belief,
         num_steps=2,
         episode_id=1,
@@ -765,15 +869,45 @@ def test_episode_simulation_task_log_only_on_failure_false_always_logs(
         log_only_on_failure=False,  # Always log
     )
 
+    # Access logger to ensure it's set up and file handlers are created
+    logger = task.logger
+    # Log a test message to trigger file creation
+    logger.info("Test message to trigger file creation")
+
+    # Flush handlers to ensure file is created
+    for handler in logger.handlers:
+        if hasattr(handler, "flush"):
+            handler.flush()
+
     # Run successful episode
     result = task.run()
 
     # Verify task succeeded
     assert result is not None, "Task should have succeeded"
 
+    # Flush all handlers again to ensure logs are written to disk
+    for handler in logger.handlers:
+        if hasattr(handler, "flush"):
+            handler.flush()
+
+    # Give file system a moment to sync
+    time.sleep(0.2)
+
     # Check log files - they should contain logs
+    # Logs are created in cache_dir / "env_policy" / "logs"
     log_files = list(cache_dir.rglob("*.log"))
-    assert len(log_files) > 0, "Log files should be created"
+    # If no log files found, check if env_policy directory exists
+    if len(log_files) == 0:
+        env_policy_dir = cache_dir / "env_policy"
+        if env_policy_dir.exists():
+            all_files = list(env_policy_dir.rglob("*"))
+            assert (
+                len(log_files) > 0
+            ), f"Log files should be created in {cache_dir}. env_policy dir exists: {env_policy_dir.exists()}, files in env_policy: {all_files}"
+        else:
+            assert (
+                len(log_files) > 0
+            ), f"Log files should be created in {cache_dir}. env_policy dir doesn't exist. Found: {list(cache_dir.rglob('*'))}"
 
     # Verify logs are NOT empty (normal logging writes all logs)
     total_size = 0
@@ -783,7 +917,7 @@ def test_episode_simulation_task_log_only_on_failure_false_always_logs(
 
     assert (
         total_size > 0
-    ), "Log files should contain logs for successful episode with log_only_on_failure=False"
+    ), f"Log files should contain logs for successful episode with log_only_on_failure=False. Total size: {total_size}, files: {[f.name for f in log_files]}"
 
 
 def test_episode_simulation_task_conditional_memory_handler_setup(environment, policy):

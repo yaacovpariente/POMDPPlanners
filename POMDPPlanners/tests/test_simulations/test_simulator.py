@@ -11,6 +11,7 @@ This module tests the simulator functionality, focusing on:
 
 import random
 import shutil
+import sys
 import tempfile
 import gc
 import psutil
@@ -2986,6 +2987,140 @@ def test_simulator_creates_environment_policy_log_files(temp_cache_dir):
     # Verify simulation results are valid
     assert results is not None, "Simulation should return valid results"
     assert len(results) > 0, "Simulation should return non-empty results"
+
+
+def test_simulator_no_logs_disabled(temp_cache_dir):
+    """Test that simulator does not create log files when no_logs=True.
+
+    Purpose: Validates that POMDPSimulator does not create log files when no_logs=True is set
+
+    Given: A simulator with cache directory and no_logs=True
+    When: Simulation is executed with no_logs=True
+    Then: Simulation completes successfully but no log files are created in the logs directory
+
+    Test type: integration
+    """
+    # ARRANGE: Set up simulator with no_logs=True
+    simulator = POMDPSimulator(
+        task_manager_config=JoblibConfig(n_jobs=1),
+        cache_dir_path=temp_cache_dir,
+        experiment_name="NoLogsTest",
+        debug=True,
+        no_logs=True,  # Disable all logging
+    )
+
+    # Setup environment and policy for simulation
+    environment = TigerPOMDP(discount_factor=0.95)
+    policy = POMCP(
+        environment=cast(DiscreteActionsEnvironment, environment),
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        name="TestPolicy",
+        n_simulations=5,
+    )
+    initial_belief = get_initial_belief(environment, n_particles=10)
+
+    env_run_params = [
+        EnvironmentRunParams(
+            environment=cast(DiscreteActionsEnvironment, environment),
+            belief=initial_belief,
+            policies=[policy],
+            num_episodes=2,  # Small number for fast test
+            num_steps=5,
+        )
+    ]
+
+    # Clean any existing log files to ensure test isolation
+    logs_dir = temp_cache_dir / "logs"
+    if logs_dir.exists():
+        for log_file in logs_dir.glob("*.log"):
+            log_file.unlink()
+
+    # ACT: Run simulation with no_logs=True
+    with simulator:
+        results, statistics_df = simulator.compare_multiple_environments_policies(
+            environment_run_params=env_run_params,
+            alpha=0.1,
+            confidence_interval_level=0.95,
+            n_jobs=1,
+            cache_visualizations=False,  # Disable visualizations for faster test
+        )
+
+    # Ensure all handlers are flushed
+    for logger_name in logging.Logger.manager.loggerDict:
+        logger = logging.getLogger(logger_name)
+        for handler in logger.handlers:
+            if hasattr(handler, "flush"):
+                handler.flush()
+
+    # Small delay to ensure file system operations complete
+    time.sleep(0.1)
+
+    # ASSERT: Verify that the simulator's logger has no file handlers
+    # Note: The simulator's no_logs parameter only affects the simulator's own logger,
+    # not the task manager or other components which may still create log files
+    simulator_logger = simulator.logger
+
+    # Verify logger has only a NullHandler (which disables logging)
+    # When no_logs=True, we add a NullHandler to prevent Python's "lastResort" handler
+    assert (
+        len(simulator_logger.handlers) == 1
+    ), f"Expected 1 handler (NullHandler) when no_logs=True, but found {len(simulator_logger.handlers)} handlers"
+    assert isinstance(
+        simulator_logger.handlers[0], logging.NullHandler
+    ), f"Expected NullHandler when no_logs=True, but got {type(simulator_logger.handlers[0]).__name__}"
+
+    # Verify propagation is disabled to prevent messages from going to parent loggers
+    assert (
+        simulator_logger.propagate is False
+    ), f"Expected propagate=False when no_logs=True, but got propagate={simulator_logger.propagate}"
+
+    # Verify that no simulator-specific log files were created
+    # The simulator's logger name is "simulator.{experiment_name}"
+    if logs_dir.exists():
+        simulator_log_files = [
+            f
+            for f in logs_dir.glob("*.log")
+            if f.name.startswith("simulator_") or "NoLogsTest" in f.name
+        ]
+        assert (
+            len(simulator_log_files) == 0
+        ), f"Expected no simulator log files when no_logs=True, but found {len(simulator_log_files)} files: {[f.name for f in simulator_log_files]}"
+
+    # Verify that logging actually doesn't produce output by capturing stdout/stderr
+    # This is a functional test to ensure no_logs actually prevents logging
+    import io
+    import contextlib
+
+    # Capture any output from the logger
+    log_capture = io.StringIO()
+    with contextlib.redirect_stderr(log_capture), contextlib.redirect_stdout(log_capture):
+        simulator_logger.info("Test message that should not appear")
+        simulator_logger.warning("Warning that should not appear")
+        simulator_logger.error("Error that should not appear")
+
+    captured_output = log_capture.getvalue()
+    # The logger should not produce any output since it has no handlers and propagate=False
+    # However, other loggers (like MLflow, task manager, etc.) may still produce output
+    # So we only check that simulator-specific messages don't appear
+    test_messages = [
+        "Test message that should not appear",
+        "Warning that should not appear",
+        "Error that should not appear",
+    ]
+    for msg in test_messages:
+        assert (
+            msg not in captured_output
+        ), f"Logger with no_logs=True should not produce output, but message '{msg}' appeared in: {captured_output[:200]}"
+
+    # Verify simulation results are valid (simulator should still function correctly)
+    assert results is not None, "Simulation should return valid results even with no_logs=True"
+    assert len(results) > 0, "Simulation should return non-empty results even with no_logs=True"
+    assert (
+        statistics_df is not None
+    ), "Statistics DataFrame should be created even with no_logs=True"
+    assert len(statistics_df) > 0, "Statistics DataFrame should not be empty"
 
 
 # ==============================================================================
