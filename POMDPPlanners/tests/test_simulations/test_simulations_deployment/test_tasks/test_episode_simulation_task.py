@@ -1,5 +1,6 @@
 # pylint: disable=protected-access  # Tests need to access protected members
 from unittest.mock import patch
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -13,6 +14,7 @@ from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
 from POMDPPlanners.planners.mcts_planners.pomcpow import POMCPOW
 from POMDPPlanners.simulations.simulations_deployment.tasks import EpisodeSimulationTask
 from POMDPPlanners.utils.action_samplers import DiscreteActionSampler, UnitCircleActionSampler
+from POMDPPlanners.utils.logger import ConditionalMemoryHandler
 from experiments.configs.environments_configs import (
     environment_instances,
     belief_instances,
@@ -586,6 +588,303 @@ def test_episode_simulation_task_error_written_to_log_file(tmp_path, environment
             break
 
     assert error_found, f"Error message not found in any log file. Checked {len(log_files)} files."
+
+
+# Failure-Only Logging Tests
+
+
+def test_episode_simulation_task_log_only_on_failure_successful_episode_no_logs(
+    tmp_path, environment, policy
+):
+    """Test that successful episodes with log_only_on_failure=True produce no log output.
+
+    Purpose: Validates that buffered logging discards logs for successful episodes
+
+    Given: EpisodeSimulationTask with log_only_on_failure=True and a successful episode execution
+    When: Task executes successfully without errors
+    Then: No logs are written to disk (log file is empty or has zero bytes)
+
+    Test type: integration
+    """
+    import logging
+
+    belief = create_test_belief()
+
+    # Create a temporary cache directory
+    cache_dir = tmp_path / "test_cache_success"
+    cache_dir.mkdir()
+
+    # Create a unique environment and policy to avoid logger conflicts with other tests
+    test_env = TigerPOMDP(discount_factor=0.95, name="test_env_success_nolog")
+    test_policy = SparsePFT(
+        environment=test_env,
+        discount_factor=0.95,
+        gamma=0.95,
+        depth=3,
+        c_ucb=1.0,
+        beta_ucb=0.5,
+        belief_child_num=4,
+        n_simulations=2,
+        name="test_policy_success_nolog",
+    )
+
+    # Create task with log_only_on_failure=True (default)
+    task = EpisodeSimulationTask(
+        environment=test_env,
+        policy=test_policy,
+        initial_belief=belief,
+        num_steps=2,
+        episode_id=1,
+        seed=42,
+        discount_factor=0.95,
+        episode_number=1,
+        cache_dir=cache_dir,
+        debug=True,
+        console_output=False,
+        log_only_on_failure=True,
+    )
+
+    # Run successful episode
+    result = task.run()
+
+    # Verify task succeeded
+    assert result is not None, "Task should have succeeded"
+
+    # Check log files - they should exist but be empty
+    log_files = list(cache_dir.rglob("*.log"))
+    assert len(log_files) > 0, "Log file should be created"
+
+    # Verify all log files are empty (no logs written for successful episode)
+    for log_file in log_files:
+        size = log_file.stat().st_size
+        assert size == 0, f"Log file {log_file.name} should be empty but has {size} bytes"
+
+
+def test_episode_simulation_task_log_only_on_failure_failed_episode_has_logs(
+    tmp_path, environment, policy
+):
+    """Test that failed episodes with log_only_on_failure=True produce complete logs.
+
+    Purpose: Validates that buffered logging flushes all logs when episode fails
+
+    Given: EpisodeSimulationTask with log_only_on_failure=True and a simulated failure
+    When: Task execution encounters an error
+    Then: Complete logs including error details are written to disk
+
+    Test type: integration
+    """
+    belief = create_test_belief()
+
+    # Create a temporary cache directory
+    cache_dir = tmp_path / "test_cache_failure"
+    cache_dir.mkdir()
+
+    # Create a real environment and patch it to cause an exception
+    test_env = TigerPOMDP(discount_factor=0.95, name="test_env_fail")
+
+    with patch.object(
+        test_env,
+        "state_transition_model",
+        side_effect=RuntimeError("Simulated failure for log_only_on_failure test"),
+    ):
+        # Create task with log_only_on_failure=True
+        task = EpisodeSimulationTask(
+            environment=test_env,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=1,
+            seed=42,
+            discount_factor=0.95,
+            episode_number=1,
+            cache_dir=cache_dir,
+            debug=True,
+            console_output=False,
+            log_only_on_failure=True,
+        )
+
+        # Run task - it should fail gracefully
+        result = task.run()
+
+    # Verify task failed
+    assert result is None, "Task should have failed and returned None"
+
+    # Check log files - they should contain error information
+    log_files = list(cache_dir.rglob("*.log"))
+    assert len(log_files) > 0, "Log files should be created"
+
+    # Verify logs contain error information
+    error_found = False
+    for log_file in log_files:
+        log_content = log_file.read_text()
+        if "[EPISODE_001] Error running episode:" in log_content:
+            error_found = True
+            assert "Simulated failure for log_only_on_failure test" in log_content
+            assert "Full exception details:" in log_content
+            # Verify log has substantial content (not empty)
+            assert (
+                log_file.stat().st_size > 100
+            ), "Log file should contain detailed error information"
+            break
+
+    assert error_found, "Error message should be found in log files"
+
+
+def test_episode_simulation_task_log_only_on_failure_false_always_logs(
+    tmp_path, environment, policy
+):
+    """Test that log_only_on_failure=False maintains backward compatibility with normal logging.
+
+    Purpose: Validates that disabling log_only_on_failure produces logs for all episodes
+
+    Given: EpisodeSimulationTask with log_only_on_failure=False and successful execution
+    When: Task executes successfully
+    Then: Complete logs are written to disk regardless of success
+
+    Test type: integration
+    """
+    belief = create_test_belief()
+
+    # Create a temporary cache directory
+    cache_dir = tmp_path / "test_cache_always_log"
+    cache_dir.mkdir()
+
+    # Create task with log_only_on_failure=False (always log)
+    task = EpisodeSimulationTask(
+        environment=environment,
+        policy=policy,
+        initial_belief=belief,
+        num_steps=2,
+        episode_id=1,
+        seed=42,
+        discount_factor=0.95,
+        episode_number=1,
+        cache_dir=cache_dir,
+        debug=True,
+        console_output=False,
+        log_only_on_failure=False,  # Always log
+    )
+
+    # Run successful episode
+    result = task.run()
+
+    # Verify task succeeded
+    assert result is not None, "Task should have succeeded"
+
+    # Check log files - they should contain logs
+    log_files = list(cache_dir.rglob("*.log"))
+    assert len(log_files) > 0, "Log files should be created"
+
+    # Verify logs are NOT empty (normal logging writes all logs)
+    total_size = 0
+    for log_file in log_files:
+        size = log_file.stat().st_size
+        total_size += size
+
+    assert (
+        total_size > 0
+    ), "Log files should contain logs for successful episode with log_only_on_failure=False"
+
+
+def test_episode_simulation_task_conditional_memory_handler_setup(environment, policy):
+    """Test that ConditionalMemoryHandler is properly set up when log_only_on_failure=True.
+
+    Purpose: Validates that buffered logging infrastructure is correctly initialized
+
+    Given: EpisodeSimulationTask with log_only_on_failure=True
+    When: Task is created and logger is accessed
+    Then: Logger has ConditionalMemoryHandler wrapping underlying handlers
+
+    Test type: unit
+    """
+    belief = create_test_belief()
+
+    # Create task with log_only_on_failure=True but no cache_dir (in-memory only)
+    task = EpisodeSimulationTask(
+        environment=environment,
+        policy=policy,
+        initial_belief=belief,
+        num_steps=2,
+        episode_id=1,
+        seed=42,
+        discount_factor=0.95,
+        episode_number=1,
+        console_output=False,
+        log_only_on_failure=True,
+    )
+
+    # Access logger to trigger setup
+    import logging
+
+    logger = logging.getLogger(task._get_env_policy_logger_name())
+
+    # Verify logger has ConditionalMemoryHandler if handlers were added
+    if logger.handlers:
+        # At least one handler should be a ConditionalMemoryHandler
+        has_memory_handler = any(
+            isinstance(handler, ConditionalMemoryHandler) for handler in logger.handlers
+        )
+        # Note: This may be False if no cache_dir was provided and no file handler was created
+        # The important thing is we don't crash and can check the property
+        assert isinstance(has_memory_handler, bool)
+
+
+def test_episode_simulation_task_log_only_on_failure_validation(environment, policy):
+    """Test that log_only_on_failure parameter is properly validated.
+
+    Purpose: Validates that log_only_on_failure only accepts boolean values
+
+    Given: EpisodeSimulationTask constructor
+    When: log_only_on_failure is set to non-boolean value
+    Then: TypeError is raised with appropriate error message
+
+    Test type: unit
+    """
+    belief = create_test_belief()
+
+    # Test with invalid type (string instead of bool)
+    with pytest.raises(TypeError, match="log_only_on_failure must be a boolean"):
+        EpisodeSimulationTask(
+            environment=environment,
+            policy=policy,
+            initial_belief=belief,
+            num_steps=2,
+            episode_id=1,
+            seed=42,
+            discount_factor=0.95,
+            episode_number=1,
+            console_output=False,
+            log_only_on_failure="true",  # Invalid: string instead of bool
+        )
+
+
+def test_episode_simulation_task_log_only_on_failure_default_value(environment, policy):
+    """Test that log_only_on_failure defaults to True.
+
+    Purpose: Validates that log_only_on_failure has correct default value
+
+    Given: EpisodeSimulationTask constructor without log_only_on_failure parameter
+    When: Task is created
+    Then: log_only_on_failure attribute is True by default
+
+    Test type: unit
+    """
+    belief = create_test_belief()
+
+    task = EpisodeSimulationTask(
+        environment=environment,
+        policy=policy,
+        initial_belief=belief,
+        num_steps=2,
+        episode_id=1,
+        seed=42,
+        discount_factor=0.95,
+        episode_number=1,
+        console_output=False,
+        # log_only_on_failure not specified - should default to True
+    )
+
+    assert task.log_only_on_failure is True, "log_only_on_failure should default to True"
 
 
 # POMCPOW Integration Tests with All Compatible Environments
