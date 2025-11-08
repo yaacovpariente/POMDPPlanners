@@ -434,6 +434,7 @@ class TestJoblibConfig:
             eviction_policy="random",
             clear_cache_on_start=True,
             verbose=1,
+            console_output=True,
         )
         assert result == mock_task_manager
 
@@ -464,6 +465,7 @@ class TestJoblibConfig:
             eviction_policy="least-recently-used",
             clear_cache_on_start=False,
             verbose=0,
+            console_output=True,
         )
         assert result == mock_task_manager
 
@@ -573,6 +575,7 @@ class TestTaskManagerConfigIntegration:
                 eviction_policy="least-recently-used",
                 clear_cache_on_start=False,
                 verbose=0,
+                console_output=True,
             )
 
 
