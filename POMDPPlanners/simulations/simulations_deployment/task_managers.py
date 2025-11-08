@@ -198,6 +198,7 @@ class JoblibTaskManager(TaskManagerExternalDB):
         clear_cache_on_start: bool = False,
         verbose: int = 0,
         logger_debug: bool = False,
+        console_output: bool = True,
     ):
         """Initialize the joblib task manager.
 
@@ -208,11 +209,13 @@ class JoblibTaskManager(TaskManagerExternalDB):
             clear_cache_on_start: If True, clears the cache at startup
             verbose: Verbosity level for joblib
             logger_debug: Whether to enable debug logging
+            console_output: Whether to print logs to console
         """
         super().__init__(
             cache_db=cache_db,
             cache_dir=Path(cache_dir) if cache_dir else None,
             logger_debug=logger_debug,
+            console_output=console_output,
         )
         self.n_jobs = n_jobs
         self.verbose = verbose
@@ -674,6 +677,7 @@ class SequentialTaskManager(JoblibTaskManager):
         clear_cache_on_start: bool = False,
         verbose: int = 0,
         logger_debug: bool = False,
+        console_output: bool = True,
     ):
         """Initialize the sequential task manager.
 
@@ -683,11 +687,13 @@ class SequentialTaskManager(JoblibTaskManager):
             clear_cache_on_start: If True, clears the cache at startup
             verbose: Verbosity level for joblib
             logger_debug: Whether to enable debug logging
+            console_output: Whether to print logs to console
         """
         super().__init__(
             cache_db=cache_db,
             cache_dir=cache_dir,
             logger_debug=logger_debug,
+            console_output=console_output,
             verbose=verbose,
             clear_cache_on_start=clear_cache_on_start,
         )

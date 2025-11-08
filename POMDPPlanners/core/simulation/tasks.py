@@ -221,6 +221,7 @@ class TaskManagerExternalDB(TaskManager):
         cache_dir: Optional[Path] = None,
         logger_debug: bool = False,
         use_queue_logger: bool = False,
+        console_output: bool = True,
     ):
         """Initialize the task manager with caching database.
 
@@ -229,10 +230,12 @@ class TaskManagerExternalDB(TaskManager):
             cache_dir: Optional directory for logging and cache files
             logger_debug: Whether to enable debug logging
             use_queue_logger: Whether to use queue-based logging
+            console_output: Whether to print logs to console
         """
         self.cache_db = cache_db
         self.cache_dir = cache_dir
         self.logger_debug = logger_debug
+        self.console_output = console_output
         self.use_queue_logger = use_queue_logger
 
     @property
@@ -247,6 +250,7 @@ class TaskManagerExternalDB(TaskManager):
             debug=self.logger_debug,
             output_dir=self.cache_dir,
             use_queue=self.use_queue_logger,
+            console_output=self.console_output,
         )
 
     @abstractmethod

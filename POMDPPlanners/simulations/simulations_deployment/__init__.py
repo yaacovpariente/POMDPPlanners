@@ -64,6 +64,7 @@ class TaskManagerFactory:
         eviction_policy: str = "least-recently-used",
         clear_cache_on_start: bool = False,
         verbose: int = 0,
+        console_output: bool = True,
     ) -> JoblibTaskManager:
         """Create a JoblibTaskManager with a configured DiskCacheDB.
 
@@ -74,6 +75,7 @@ class TaskManagerFactory:
             eviction_policy: Cache eviction policy ('least-recently-used' or 'least-frequently-used')
             clear_cache_on_start: If True, clears the cache at startup
             verbose: Verbosity level for joblib
+            console_output: Whether to print logs to console
 
         Returns:
             A configured JoblibTaskManager instance
@@ -88,6 +90,7 @@ class TaskManagerFactory:
             cache_dir=cache_dir,  # Use same directory for joblib cache
             clear_cache_on_start=clear_cache_on_start,
             verbose=verbose,
+            console_output=console_output,
         )
 
     @staticmethod
