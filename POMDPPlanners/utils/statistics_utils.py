@@ -3,6 +3,8 @@ from scipy import stats
 from scipy.stats import binom
 from typing import Tuple
 
+from POMDPPlanners.core.distributions import Distribution
+
 
 def cvar_estimator(vec: np.ndarray, alpha: float) -> float:
     """Calculate Conditional Value at Risk (CVaR) for risk-sensitive POMDP evaluation.
@@ -519,3 +521,210 @@ def cvar_estimator_from_dist(values: np.ndarray, weights: np.ndarray, alpha: flo
     cvar = (np.sum(conditional_values * conditional_weights) - correction_val) / alpha
 
     return float(cvar)
+
+
+def tv_distance_grid(
+    p: Distribution,
+    q: Distribution,
+    x_min: float = -5.0,
+    x_max: float = 5.0,
+    n_points: int = 10000,
+) -> float:
+    """Compute TV distance using grid-based numerical integration.
+
+    This method has zero sampling variance and is deterministic.
+    Works well for continuous distributions with known support.
+
+    Args:
+        p: First distribution
+        q: Second distribution
+        x_min: Lower bound of integration range
+        x_max: Upper bound of integration range
+        n_points: Number of grid points (higher = more accurate)
+
+    Returns:
+        TV distance between p and q
+    """
+    # Create uniform grid
+    x_points = np.linspace(x_min, x_max, n_points)
+
+    # Evaluate densities at grid points
+    p_probs = p.probability(x_points)
+    q_probs = q.probability(x_points)
+
+    # Numerical integration using trapezoidal rule
+    dx = (x_max - x_min) / n_points
+    tv_dist = 0.5 * np.sum(np.abs(p_probs - q_probs)) * dx
+
+    return float(tv_dist)
+
+
+def tv_distance_averaged(
+    p: Distribution, q: Distribution, n_samples: int = 1000, n_runs: int = 10
+) -> float:
+    """Compute TV distance by averaging multiple independent estimates.
+
+    Reduces variance by sqrt(n_runs) compared to single run.
+
+    Args:
+        p: First distribution
+        q: Second distribution
+        n_samples: Number of samples per run
+        n_runs: Number of independent runs to average
+
+    Returns:
+        Average TV distance estimate
+    """
+    estimates = []
+
+    for _ in range(n_runs):
+        # Sample half from p, half from q (similar to mixture sampling)
+        n_half = n_samples // 2
+        p_sample = p.sample(n_half)
+        q_sample = q.sample(n_half)
+        all_samples = p_sample + q_sample
+
+        p_probs = p.probability(all_samples)
+        q_probs = q.probability(all_samples)
+
+        # TV distance = 0.5 * ∫|p(x) - q(x)| dx
+        # Estimate using samples from both distributions
+        tv_est = 0.5 * np.mean(np.abs(p_probs - q_probs))
+        estimates.append(tv_est)
+
+    return float(np.mean(estimates))
+
+
+def tv_distance_mixture_sampling(p: Distribution, q: Distribution, n_samples: int = 2000) -> float:
+    """Compute TV distance using mixture sampling for better coverage.
+
+    Samples from mixture (p + q) / 2 to ensure good coverage of both
+    distributions' support.
+
+    Args:
+        p: First distribution
+        q: Second distribution
+        n_samples: Number of samples from mixture
+
+    Returns:
+        TV distance estimate
+    """
+    # Sample half from p, half from q
+    n_half = n_samples // 2
+    p_sample = p.sample(n_half)
+    q_sample = q.sample(n_half)
+
+    # Combine samples
+    all_samples = p_sample + q_sample
+
+    # Evaluate both distributions at all points
+    p_probs = p.probability(all_samples)
+    q_probs = q.probability(all_samples)
+
+    # Direct TV distance estimate
+    # TV = 0.5 * ∫|p(x) - q(x)| dx
+    # Estimate using importance sampling from mixture
+    tv_est = 0.5 * np.mean(np.abs(p_probs - q_probs))
+
+    return float(tv_est)
+
+
+def tv_distance_monte_carlo(p: Distribution, q: Distribution, n_samples: int = 1000) -> float:
+    """Compute TV distance using basic Monte Carlo sampling (original method).
+
+    This is the original implementation that samples randomly from both
+    distributions. Has higher variance than other methods.
+
+    Args:
+        p: First distribution
+        q: Second distribution
+        n_samples: Number of samples
+
+    Returns:
+        TV distance estimate
+    """
+    # Sample half from p, half from q (similar to mixture sampling)
+    n_half = n_samples // 2
+    p_sample = p.sample(n_half)
+    q_sample = q.sample(n_half)
+
+    # Combine samples
+    all_samples = p_sample + q_sample
+
+    # Evaluate both distributions at all points
+    p_probs = p.probability(all_samples)
+    q_probs = q.probability(all_samples)
+
+    # Avoid division by zero by adding a small epsilon
+    denominator = p_probs + q_probs
+    denominator = np.where(denominator == 0, 1e-10, denominator)
+
+    tv_distance_val = 0.5 * np.mean(np.abs(p_probs - q_probs) / denominator * 2)
+
+    return float(tv_distance_val)
+
+
+def tv_distance(
+    p: Distribution,
+    q: Distribution,
+    n_samples: int = 1000,
+    method: str = "grid",
+    **kwargs,
+) -> float:
+    """Compute Total Variation distance between two distributions.
+
+    Total Variation distance measures how different two probability distributions are,
+    with values ranging from 0 (identical) to 1 (completely different).
+
+    Args:
+        p: First distribution
+        q: Second distribution
+        n_samples: Number of samples (method-dependent usage)
+        method: Estimation method - "grid", "monte_carlo", "averaged", "mixture"
+        **kwargs: Additional method-specific parameters:
+            For "grid": x_min, x_max, n_points
+            For "averaged": n_runs
+            For "mixture": (uses n_samples directly)
+            For "monte_carlo": (uses n_samples directly)
+
+    Returns:
+        TV distance estimate
+
+    Example:
+        >>> import numpy as np
+        >>> from POMDPPlanners.environments.complex_environments.gmm_distributions import (
+        ...     NormalDistribution, create_gmm_approximation
+        ... )
+        >>> np.random.seed(42)
+        >>> normal_dist = NormalDistribution(mean=0.0, std=1.0)
+        >>> gmm_dist = create_gmm_approximation(0.0, 1.0, n_components=50)
+        >>> tv = tv_distance(normal_dist, gmm_dist, method="grid", n_points=10000)
+        >>> isinstance(tv, float)
+        True
+        >>> 0.0 <= tv <= 1.0
+        True
+    """
+    if method == "grid":
+        # Use grid-based integration (deterministic, best for continuous)
+        x_min = kwargs.get("x_min", -5.0)
+        x_max = kwargs.get("x_max", 5.0)
+        n_points = kwargs.get("n_points", n_samples)
+        return tv_distance_grid(p, q, x_min, x_max, n_points)
+
+    elif method == "averaged":
+        # Use multiple runs averaging
+        n_runs = kwargs.get("n_runs", 10)
+        return tv_distance_averaged(p, q, n_samples, n_runs)
+
+    elif method == "mixture":
+        # Use mixture sampling
+        return tv_distance_mixture_sampling(p, q, n_samples)
+
+    elif method == "monte_carlo":
+        # Original implementation
+        return tv_distance_monte_carlo(p, q, n_samples)
+
+    else:
+        raise ValueError(
+            f"Unknown method '{method}'. Choose from: 'grid', 'monte_carlo', 'averaged', 'mixture'"
+        )
