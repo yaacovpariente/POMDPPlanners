@@ -310,8 +310,8 @@ class JoblibTaskManager(TaskManagerExternalDB):
     def _execute_tasks_parallel(self, tasks: List[SimulationTask], start_time: float) -> list:
         """Execute tasks in parallel using joblib with progress tracking."""
 
-        # Use tqdm with custom callback for logging
-        with tqdm(tasks, desc="Running tasks") as pbar:
+        # Use tqdm with conditional disabling based on no_logs
+        with tqdm(tasks, desc="Running tasks", disable=self.no_logs) as pbar:
             results = list(
                 Parallel(n_jobs=self.n_jobs, verbose=self.verbose)(
                     delayed(self._cached_run)(task) for task in pbar
@@ -351,7 +351,6 @@ class JoblibTaskManager(TaskManagerExternalDB):
 
         # Shutdown loky worker pool to prevent orphaned processes
         try:
-
             get_reusable_executor().shutdown(wait=True, kill_workers=True)
             self.logger.debug("Shut down loky worker pool")
         except Exception as e:
@@ -680,6 +679,7 @@ class SequentialTaskManager(JoblibTaskManager):
         verbose: int = 0,
         logger_debug: bool = False,
         console_output: bool = True,
+        no_logs: bool = False,
     ):
         """Initialize the sequential task manager.
 
@@ -690,12 +690,14 @@ class SequentialTaskManager(JoblibTaskManager):
             verbose: Verbosity level for joblib
             logger_debug: Whether to enable debug logging
             console_output: Whether to print logs to console
+            no_logs: Whether to disable all logs including progress bars
         """
         super().__init__(
             cache_db=cache_db,
             cache_dir=cache_dir,
             logger_debug=logger_debug,
             console_output=console_output,
+            no_logs=no_logs,
             verbose=verbose,
             clear_cache_on_start=clear_cache_on_start,
         )
@@ -710,8 +712,8 @@ class SequentialTaskManager(JoblibTaskManager):
 
         # Run tasks with progress logging
         try:
-            # Use tqdm with custom callback for logging
-            with tqdm(tasks, desc="Running tasks") as pbar:
+            # Use tqdm with conditional disabling based on no_logs
+            with tqdm(tasks, desc="Running tasks", disable=self.no_logs) as pbar:
                 results = []
                 for task in pbar:
                     results.append(self._cached_run(task))
