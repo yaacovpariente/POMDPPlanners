@@ -692,13 +692,15 @@ def tv_distance(
 
     Example:
         >>> import numpy as np
-        >>> from POMDPPlanners.environments.complex_environments.gmm_distributions import (
-        ...     NormalDistribution, create_gmm_approximation
-        ... )
+        >>> from POMDPPlanners.core.distributions import DiscreteDistribution
         >>> np.random.seed(42)
-        >>> normal_dist = NormalDistribution(mean=0.0, std=1.0)
-        >>> gmm_dist = create_gmm_approximation(0.0, 1.0, n_components=50)
-        >>> tv = tv_distance(normal_dist, gmm_dist, method="grid", n_points=10000)
+        >>> # Create two similar discrete distributions
+        >>> values = [0, 1, 2, 3, 4]
+        >>> p_probs = np.array([0.2, 0.3, 0.25, 0.15, 0.1])
+        >>> q_probs = np.array([0.25, 0.25, 0.25, 0.15, 0.1])
+        >>> p = DiscreteDistribution(values, p_probs)
+        >>> q = DiscreteDistribution(values, q_probs)
+        >>> tv = tv_distance(p, q, method="monte_carlo", n_samples=10000)
         >>> isinstance(tv, float)
         True
         >>> 0.0 <= tv <= 1.0
