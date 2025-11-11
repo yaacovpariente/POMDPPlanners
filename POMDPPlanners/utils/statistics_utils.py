@@ -549,8 +549,8 @@ def tv_distance_grid(
     x_points = np.linspace(x_min, x_max, n_points)
 
     # Evaluate densities at grid points
-    p_probs = p.probability(x_points)
-    q_probs = q.probability(x_points)
+    p_probs = p.probability(x_points.tolist())
+    q_probs = q.probability(x_points.tolist())
 
     # Numerical integration using trapezoidal rule
     dx = (x_max - x_min) / n_points
