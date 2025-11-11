@@ -271,6 +271,180 @@ class TestLaserTagStateTransition:
             assert not next_state.terminal
             assert next_state.robot == (3, 5)  # Robot doesn't move on tag
 
+    def test_probability_successful_tag(self):
+        """Test probability calculation for successful tag transition.
+
+        Purpose: Validates probability assignment for terminal state after successful tag
+
+        Given: Robot and opponent at same position with tag action
+        When: probability() is called with terminal state
+        Then: Returns probability 1.0 for correct terminal state and 0.0 for others
+
+        Test type: unit
+        """
+        state = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=False)
+        floor_shape = (7, 11)
+        walls = set()
+
+        transition = LaserTagStateTransition(state, 4, floor_shape, walls)
+
+        # Correct terminal state
+        correct_terminal = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=True)
+        # Wrong terminal state (different position)
+        wrong_terminal = LaserTagState(robot=(3, 4), opponent=(3, 4), terminal=True)
+        # Non-terminal state
+        non_terminal = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=False)
+
+        test_states = [correct_terminal, wrong_terminal, non_terminal]
+        probs = transition.probability(test_states)
+
+        assert probs[0] == 1.0, f"Expected 1.0 for correct terminal state, got {probs[0]}"
+        assert probs[1] == 0.0, f"Expected 0.0 for wrong terminal state, got {probs[1]}"
+        assert probs[2] == 0.0, f"Expected 0.0 for non-terminal state, got {probs[2]}"
+
+    def test_probability_regular_transition(self):
+        """Test probability calculation for regular state transitions.
+
+        Purpose: Validates probability distribution over opponent positions during normal movement
+
+        Given: State with robot and opponent at different positions with movement action
+        When: probability() is called with various next states
+        Then: Returns correct probabilities based on opponent movement model
+
+        Test type: unit
+        """
+        state = LaserTagState(robot=(3, 5), opponent=(5, 5), terminal=False)
+        floor_shape = (7, 11)
+        walls = set()
+
+        # Robot moves South (action 1), so next robot position is (4, 5)
+        transition = LaserTagStateTransition(state, 1, floor_shape, walls)
+
+        # Opponent at (5, 5) should prefer moving toward robot at (4, 5)
+        # Expected moves: North to (4, 5) with prob 0.4, stay at (5, 5) with prob 0.2
+        # No horizontal movement since same column
+
+        next_state_north = LaserTagState(
+            robot=(4, 5), opponent=(4, 5), terminal=False
+        )  # Opponent moves North
+        next_state_stay = LaserTagState(
+            robot=(4, 5), opponent=(5, 5), terminal=False
+        )  # Opponent stays
+        next_state_south = LaserTagState(
+            robot=(4, 5), opponent=(6, 5), terminal=False
+        )  # Opponent moves South
+        next_state_wrong_robot = LaserTagState(
+            robot=(3, 5), opponent=(4, 5), terminal=False
+        )  # Wrong robot position
+
+        test_states = [next_state_north, next_state_stay, next_state_south, next_state_wrong_robot]
+        probs = transition.probability(test_states)
+
+        # Check that probabilities are non-negative
+        assert all(p >= 0 for p in probs), "All probabilities should be non-negative"
+
+        # Check that valid states have positive probability
+        assert (
+            probs[0] > 0
+        ), f"Expected positive probability for opponent moving North, got {probs[0]}"
+        assert probs[1] > 0, f"Expected positive probability for opponent staying, got {probs[1]}"
+
+        # Check that opponent moving away (South) has zero probability
+        assert (
+            probs[2] == 0.0
+        ), f"Expected 0.0 probability for opponent moving South (away), got {probs[2]}"
+
+        # Check that wrong robot position has zero probability
+        assert probs[3] == 0.0, f"Expected 0.0 for wrong robot position, got {probs[3]}"
+
+        # Verify approximate probability values (0.4 for North, rest to stay)
+        assert (
+            0.35 <= probs[0] <= 0.45
+        ), f"Expected ~0.4 probability for North movement, got {probs[0]}"
+
+    def test_probability_normalization_with_walls(self):
+        """Test probability normalization when opponent movement is blocked by walls.
+
+        Purpose: Validates that blocked moves redistribute probability to staying
+
+        Given: Opponent near walls that block some movement directions
+        When: probability() is called with possible next states
+        Then: Blocked moves have zero probability and staying absorbs extra probability
+
+        Test type: unit
+        """
+        state = LaserTagState(robot=(3, 5), opponent=(3, 3), terminal=False)
+        floor_shape = (7, 11)
+        walls = {(3, 4), (4, 3)}  # Walls to the East and South of opponent
+
+        # Robot moves North (action 0), so next robot position is (2, 5)
+        transition = LaserTagStateTransition(state, 0, floor_shape, walls)
+
+        # Opponent should try to move toward robot
+        # East move (3, 4) is blocked by wall
+        # South move (4, 3) is blocked by wall
+        # North move (2, 3) is valid
+        # West move (3, 2) is valid
+        # Stay at (3, 3) absorbs blocked probability
+
+        next_state_stay = LaserTagState(robot=(2, 5), opponent=(3, 3), terminal=False)
+        next_state_north = LaserTagState(robot=(2, 5), opponent=(2, 3), terminal=False)
+        next_state_east_blocked = LaserTagState(robot=(2, 5), opponent=(3, 4), terminal=False)
+
+        test_states = [next_state_stay, next_state_north, next_state_east_blocked]
+        probs = transition.probability(test_states)
+
+        # Stay should have increased probability due to blocked moves
+        assert (
+            probs[0] > 0.2
+        ), f"Expected stay probability > 0.2 due to blocked moves, got {probs[0]}"
+
+        # North is valid
+        assert probs[1] >= 0, f"Expected non-negative probability for North, got {probs[1]}"
+
+        # East is blocked by wall
+        assert probs[2] == 0.0, f"Expected 0.0 for blocked East move, got {probs[2]}"
+
+        # Total probability should sum to 1.0
+        all_possible_positions = [
+            (3, 3),  # Stay
+            (2, 3),  # North
+            (3, 2),  # West
+        ]
+        all_states = [
+            LaserTagState(robot=(2, 5), opponent=pos, terminal=False)
+            for pos in all_possible_positions
+        ]
+        all_probs = transition.probability(all_states)
+        total_prob = sum(all_probs)
+        assert (
+            abs(total_prob - 1.0) < 0.01
+        ), f"Expected probabilities to sum to ~1.0, got {total_prob}"
+
+    def test_probability_with_invalid_states(self):
+        """Test probability calculation with invalid or non-LaserTagState objects.
+
+        Purpose: Validates robust handling of invalid inputs to probability method
+
+        Given: Transition model with valid state
+        When: probability() is called with non-LaserTagState objects
+        Then: Returns zero probability for invalid states
+
+        Test type: unit
+        """
+        state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
+        floor_shape = (7, 11)
+        walls = set()
+
+        transition = LaserTagStateTransition(state, 0, floor_shape, walls)
+
+        # Test with invalid inputs
+        invalid_states = ["not a state", None, 42, {"robot": (3, 5)}]
+        probs = transition.probability(invalid_states)
+
+        # All invalid states should have zero probability
+        assert all(p == 0.0 for p in probs), "Invalid states should have zero probability"
+
 
 class TestLaserTagObservation:
     """Test LaserTagObservation model functionality.
@@ -339,6 +513,180 @@ class TestLaserTagObservation:
         terminal_obs = (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
         for obs in observations:
             assert obs == terminal_obs, f"Terminal observation should be {terminal_obs}"
+
+    def test_probability_terminal_observation(self):
+        """Test probability calculation for terminal state observations.
+
+        Purpose: Validates probability is 1.0 for terminal observation and 0.0 for others
+
+        Given: Terminal LaserTag state
+        When: probability() is called with terminal and non-terminal observations
+        Then: Returns 1.0 for terminal observation and 0.0 for others
+
+        Test type: unit
+        """
+        state = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=True)
+        obs_model = LaserTagObservation(
+            state, 4, measurement_noise=1.0, floor_shape=(7, 11), walls=set()
+        )
+
+        terminal_obs = (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
+        non_terminal_obs = (1.0, 2.0, 3.0, 1.5, 2.5, 1.2, 0.8, 2.1)
+        wrong_terminal_obs = (-1.0, -1.0, -1.0, -1.0, 0.0, 0.0, 0.0, 0.0)
+
+        test_observations = [terminal_obs, non_terminal_obs, wrong_terminal_obs]
+        probs = obs_model.probability(test_observations)
+
+        assert probs[0] == 1.0, f"Expected 1.0 for terminal observation, got {probs[0]}"
+        assert probs[1] == 0.0, f"Expected 0.0 for non-terminal observation, got {probs[1]}"
+        assert probs[2] == 0.0, f"Expected 0.0 for wrong terminal observation, got {probs[2]}"
+
+    def test_probability_non_terminal_observation(self):
+        """Test probability calculation for non-terminal state observations.
+
+        Purpose: Validates Gaussian probability density calculation for laser measurements
+
+        Given: Non-terminal state with known laser measurements
+        When: probability() is called with observations near true measurements
+        Then: Returns higher probability for observations closer to true measurements
+
+        Test type: unit
+        """
+        # Create simple scenario with robot in center of empty grid
+        state = LaserTagState(robot=(3, 3), opponent=(5, 5), terminal=False)
+        obs_model = LaserTagObservation(
+            state, 0, measurement_noise=1.0, floor_shape=(7, 7), walls=set()
+        )
+
+        # Get true measurements by sampling (we'll use these as baseline)
+        np.random.seed(42)
+        true_sample = obs_model.sample(n_samples=1)[0]
+
+        # Create observations: exact, close, and far from true
+        exact_obs = true_sample
+        close_obs = tuple(m + 0.1 for m in true_sample)  # Small perturbation
+        far_obs = tuple(m + 5.0 for m in true_sample)  # Large perturbation
+
+        test_observations = [exact_obs, close_obs, far_obs]
+        probs = obs_model.probability(test_observations)
+
+        # Exact should have highest probability
+        assert probs[0] > 0, f"Expected positive probability for exact observation, got {probs[0]}"
+
+        # Close should have lower probability than exact but higher than far
+        assert (
+            probs[0] > probs[1] > probs[2]
+        ), f"Expected exact > close > far, got {probs[0]}, {probs[1]}, {probs[2]}"
+
+        # All probabilities should be non-negative
+        assert all(p >= 0 for p in probs), "All probabilities should be non-negative"
+
+    def test_probability_with_walls(self):
+        """Test probability calculation accounts for walls in laser measurements.
+
+        Purpose: Validates laser measurements consider walls as obstacles
+
+        Given: Robot position with walls in specific directions
+        When: probability() is called with observations
+        Then: Probabilities reflect wall-blocked laser measurements
+
+        Test type: unit
+        """
+        # Place robot at (3, 3) with wall at (3, 5) to the East
+        state = LaserTagState(robot=(3, 3), opponent=(5, 5), terminal=False)
+        walls = {(3, 5)}
+        obs_model = LaserTagObservation(
+            state, 0, measurement_noise=0.5, floor_shape=(7, 7), walls=walls
+        )
+
+        # Sample to understand true measurements with wall
+        np.random.seed(42)
+        sampled_obs = obs_model.sample(n_samples=1)[0]
+
+        # East direction (index 2) should have shorter measurement due to wall
+        # Wall is at (3, 5), robot at (3, 3), so distance is 1 cell (to (3, 4))
+
+        # Create test observation matching the sampled one
+        test_observations = [sampled_obs]
+        probs = obs_model.probability(test_observations)
+
+        # Should have positive probability for matching observation
+        assert (
+            probs[0] > 0
+        ), f"Expected positive probability for matching observation, got {probs[0]}"
+
+    def test_probability_with_invalid_observations(self):
+        """Test probability calculation with invalid observation formats.
+
+        Purpose: Validates robust handling of invalid observation inputs
+
+        Given: Observation model with valid state
+        When: probability() is called with invalid observations
+        Then: Returns zero probability for invalid observations
+
+        Test type: unit
+        """
+        state = LaserTagState(robot=(3, 3), opponent=(5, 5), terminal=False)
+        obs_model = LaserTagObservation(
+            state, 0, measurement_noise=1.0, floor_shape=(7, 7), walls=set()
+        )
+
+        # Test invalid observation formats
+        invalid_observations = [
+            "not an observation",  # String
+            (1.0, 2.0, 3.0),  # Wrong dimension (3 instead of 8)
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0],  # List instead of tuple (still valid)
+            None,  # None
+            (1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, -2.0),  # Negative measurement
+        ]
+
+        probs = obs_model.probability(invalid_observations)
+
+        # Most invalid observations should have zero probability
+        assert probs[0] == 0.0, f"String should have zero probability, got {probs[0]}"
+        assert probs[1] == 0.0, f"Wrong dimension should have zero probability, got {probs[1]}"
+        # Note: List of length 8 is actually valid
+        assert probs[3] == 0.0, f"None should have zero probability, got {probs[3]}"
+        assert probs[4] == 0.0, f"Negative measurement should have zero probability, got {probs[4]}"
+
+    def test_probability_gaussian_properties(self):
+        """Test that probability follows Gaussian distribution properties.
+
+        Purpose: Validates observation probability follows expected Gaussian characteristics
+
+        Given: Observation model with specific measurement noise
+        When: probability() is called with observations at various distances from true
+        Then: Probabilities follow Gaussian decay pattern
+
+        Test type: unit
+        """
+        state = LaserTagState(robot=(3, 3), opponent=(5, 5), terminal=False)
+        measurement_noise = 1.0
+        obs_model = LaserTagObservation(
+            state, 0, measurement_noise=measurement_noise, floor_shape=(7, 7), walls=set()
+        )
+
+        # Get true measurement by creating observation with zero noise effect
+        np.random.seed(42)
+        base_sample = obs_model.sample(n_samples=1)[0]
+
+        # Create observations at different distances from true (in one dimension)
+        # Keep all other dimensions the same
+        observations_at_distances = []
+        for distance in [0.0, 0.5, 1.0, 2.0, 3.0]:
+            obs = tuple(base_sample[i] + (distance if i == 0 else 0.0) for i in range(8))
+            observations_at_distances.append(obs)
+
+        probs = obs_model.probability(observations_at_distances)
+
+        # Probabilities should decrease as distance increases
+        for i in range(len(probs) - 1):
+            assert (
+                probs[i] >= probs[i + 1]
+            ), f"Probability should decrease with distance: {probs[i]} >= {probs[i+1]} at index {i}"
+
+        # All probabilities should be positive
+        assert all(p > 0 for p in probs), f"All probabilities should be positive, got {probs}"
 
 
 class TestLaserTagPOMDP:
