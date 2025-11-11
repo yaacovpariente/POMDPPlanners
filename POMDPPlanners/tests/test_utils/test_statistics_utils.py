@@ -1,8 +1,10 @@
 import random
+from typing import List, Any
 
 import numpy as np
 import pytest
 
+from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.utils.statistics_utils import (
     cvar_estimator,
     cvar_estimator_from_dist,
@@ -224,18 +226,18 @@ def test_cvar_estimator_from_dist():
 # Mock distribution class for testing TV distance functions
 
 
-class MockNormalDistribution:
+class MockNormalDistribution(Distribution):
     """Mock normal distribution for testing TV distance functions."""
 
     def __init__(self, mean: float, std: float):
         self.mean = mean
         self.std = std
 
-    def sample(self, n_samples: int = 1):
+    def sample(self, n_samples: int = 1) -> List[Any]:
         """Sample from the normal distribution."""
         return np.random.normal(self.mean, self.std, n_samples).tolist()
 
-    def probability(self, values):
+    def probability(self, values: List[Any]) -> np.ndarray:
         """Compute probability density at given values (PDF for continuous distributions)."""
         values_array = np.array(values)
         return (1.0 / (self.std * np.sqrt(2 * np.pi))) * np.exp(
