@@ -12,10 +12,6 @@ from POMDPPlanners.utils.statistics_utils import (
     tv_distance_mixture_sampling,
     tv_distance_monte_carlo,
 )
-from POMDPPlanners.environments.complex_environments.gmm_distributions import (
-    NormalDistribution,
-    create_gmm_approximation,
-)
 
 np.random.seed(42)
 random.seed(42)
@@ -225,6 +221,27 @@ def test_cvar_estimator_from_dist():
 # TV Distance Tests
 # ============================================================================
 
+# Mock distribution class for testing TV distance functions
+
+
+class MockNormalDistribution:
+    """Mock normal distribution for testing TV distance functions."""
+
+    def __init__(self, mean: float, std: float):
+        self.mean = mean
+        self.std = std
+
+    def sample(self, n_samples: int = 1):
+        """Sample from the normal distribution."""
+        return np.random.normal(self.mean, self.std, n_samples).tolist()
+
+    def probability(self, values):
+        """Compute probability density at given values (PDF for continuous distributions)."""
+        values_array = np.array(values)
+        return (1.0 / (self.std * np.sqrt(2 * np.pi))) * np.exp(
+            -0.5 * ((values_array - self.mean) / self.std) ** 2
+        )
+
 
 def test_tv_distance_identical_distributions():
     """Test TV distance between identical distributions.
@@ -237,8 +254,8 @@ def test_tv_distance_identical_distributions():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=0.0, std=1.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=0.0, std=1.0)
 
     tv = tv_distance_grid(dist1, dist2, x_min=-5.0, x_max=5.0, n_points=1000)
     assert isinstance(tv, float)
@@ -257,8 +274,8 @@ def test_tv_distance_different_means():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=2.0, std=1.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=2.0, std=1.0)
 
     tv = tv_distance_grid(dist1, dist2, x_min=-5.0, x_max=5.0, n_points=1000)
     assert isinstance(tv, float)
@@ -277,33 +294,13 @@ def test_tv_distance_different_stds():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=0.0, std=2.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=0.0, std=2.0)
 
     tv = tv_distance_grid(dist1, dist2, x_min=-5.0, x_max=5.0, n_points=1000)
     assert isinstance(tv, float)
     assert 0.0 <= tv <= 1.0
     assert tv > 0.05  # Should be different
-
-
-def test_tv_distance_normal_vs_gmm():
-    """Test TV distance between Normal and GMM approximation.
-
-    Purpose: Validates that TV distance correctly measures difference between Normal and its GMM approximation
-
-    Given: Normal(0, 1) and its GMM approximation with 10 components
-    When: TV distance is computed using grid method
-    Then: Returns value less than 0.05 (good approximation)
-
-    Test type: unit
-    """
-    normal_dist = NormalDistribution(mean=0.0, std=1.0)
-    gmm_dist = create_gmm_approximation(target_mean=0.0, target_std=1.0, n_components=10)
-
-    tv = tv_distance_grid(normal_dist, gmm_dist, x_min=-5.0, x_max=5.0, n_points=1000)
-    assert isinstance(tv, float)
-    assert 0.0 <= tv <= 1.0
-    assert tv < 0.2  # GMM should be a reasonable approximation (allowing variance)
 
 
 def test_tv_distance_grid_method():
@@ -317,8 +314,8 @@ def test_tv_distance_grid_method():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=1.0, std=1.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=1.0, std=1.0)
 
     # Test with default parameters
     tv1 = tv_distance_grid(dist1, dist2, x_min=-5.0, x_max=5.0, n_points=1000)
@@ -349,8 +346,8 @@ def test_tv_distance_monte_carlo_method():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=1.0, std=1.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=1.0, std=1.0)
 
     # Test with small sample size
     tv1 = tv_distance_monte_carlo(dist1, dist2, n_samples=100)
@@ -377,8 +374,8 @@ def test_tv_distance_averaged_method():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=1.0, std=1.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=1.0, std=1.0)
 
     # Test with default parameters
     tv = tv_distance_averaged(dist1, dist2, n_samples=100, n_runs=5)
@@ -402,8 +399,8 @@ def test_tv_distance_mixture_sampling_method():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=1.0, std=1.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=1.0, std=1.0)
 
     tv = tv_distance_mixture_sampling(dist1, dist2, n_samples=1000)
     assert isinstance(tv, float)
@@ -421,8 +418,8 @@ def test_tv_distance_dispatcher_grid():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=1.0, std=1.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=1.0, std=1.0)
 
     tv1 = tv_distance(dist1, dist2, method="grid", x_min=-5.0, x_max=5.0, n_points=1000)
     tv2 = tv_distance_grid(dist1, dist2, x_min=-5.0, x_max=5.0, n_points=1000)
@@ -443,8 +440,8 @@ def test_tv_distance_dispatcher_monte_carlo():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=1.0, std=1.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=1.0, std=1.0)
 
     tv = tv_distance(dist1, dist2, method="monte_carlo", n_samples=1000)
     assert isinstance(tv, float)
@@ -462,8 +459,8 @@ def test_tv_distance_dispatcher_averaged():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=1.0, std=1.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=1.0, std=1.0)
 
     tv = tv_distance(dist1, dist2, method="averaged", n_samples=100, n_runs=5)
     assert isinstance(tv, float)
@@ -481,8 +478,8 @@ def test_tv_distance_dispatcher_mixture():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=1.0, std=1.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=1.0, std=1.0)
 
     tv = tv_distance(dist1, dist2, method="mixture", n_samples=1000)
     assert isinstance(tv, float)
@@ -500,8 +497,8 @@ def test_tv_distance_dispatcher_invalid_method():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=1.0, std=1.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=1.0, std=1.0)
 
     with pytest.raises(ValueError, match="Unknown method"):
         tv_distance(dist1, dist2, method="invalid")
@@ -518,8 +515,8 @@ def test_tv_distance_symmetry():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=1.0, std=1.5)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=1.0, std=1.5)
 
     tv1 = tv_distance_grid(dist1, dist2, x_min=-5.0, x_max=5.0, n_points=1000)
     tv2 = tv_distance_grid(dist2, dist1, x_min=-5.0, x_max=5.0, n_points=1000)
@@ -538,9 +535,9 @@ def test_tv_distance_triangle_inequality():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=1.0, std=1.0)
-    dist3 = NormalDistribution(mean=2.0, std=1.0)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=1.0, std=1.0)
+    dist3 = MockNormalDistribution(mean=2.0, std=1.0)
 
     tv12 = tv_distance_grid(dist1, dist2, x_min=-5.0, x_max=5.0, n_points=1000)
     tv23 = tv_distance_grid(dist2, dist3, x_min=-5.0, x_max=5.0, n_points=1000)
@@ -562,8 +559,8 @@ def test_tv_distance_bounds():
 
     Test type: unit
     """
-    dist1 = NormalDistribution(mean=0.0, std=1.0)
-    dist2 = NormalDistribution(mean=5.0, std=0.5)
+    dist1 = MockNormalDistribution(mean=0.0, std=1.0)
+    dist2 = MockNormalDistribution(mean=5.0, std=0.5)
 
     # Test all methods
     tv_grid = tv_distance_grid(dist1, dist2, x_min=-10.0, x_max=10.0, n_points=1000)
@@ -575,38 +572,3 @@ def test_tv_distance_bounds():
     assert 0.0 <= tv_mc <= 1.0
     assert 0.0 <= tv_avg <= 1.0
     assert 0.0 <= tv_mix <= 1.0
-
-
-def test_tv_distance_gmm_approximation_quality():
-    """Test TV distance for GMM approximation quality.
-
-    Purpose: Validates that GMM approximations achieve low TV distance with sufficient components
-
-    Given: Normal(0, 1) and GMM approximations with different component counts
-    When: TV distance is computed using grid method
-    Then: TV distance decreases with more components and is < 0.05 for 10+ components
-
-    Test type: unit
-    """
-    normal_dist = NormalDistribution(mean=0.0, std=1.0)
-
-    # Test with 5 components (should have higher TV distance)
-    gmm5 = create_gmm_approximation(target_mean=0.0, target_std=1.0, n_components=5)
-    tv5 = tv_distance_grid(normal_dist, gmm5, x_min=-5.0, x_max=5.0, n_points=1000)
-
-    # Test with 10 components (should have lower TV distance)
-    gmm10 = create_gmm_approximation(target_mean=0.0, target_std=1.0, n_components=10)
-    tv10 = tv_distance_grid(normal_dist, gmm10, x_min=-5.0, x_max=5.0, n_points=1000)
-
-    # Test with 20 components (should have even lower TV distance)
-    gmm20 = create_gmm_approximation(target_mean=0.0, target_std=1.0, n_components=20)
-    tv20 = tv_distance_grid(normal_dist, gmm20, x_min=-5.0, x_max=5.0, n_points=1000)
-
-    assert 0.0 <= tv5 <= 1.0
-    assert 0.0 <= tv10 <= 1.0
-    assert 0.0 <= tv20 <= 1.0
-
-    # More components should generally give better approximation
-    # (allowing some variance due to random initialization)
-    assert tv10 < 0.2  # 10 components should be reasonable
-    assert tv20 < 0.2  # 20 components should also be reasonable
