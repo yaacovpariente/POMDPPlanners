@@ -23,12 +23,13 @@ from POMDPPlanners.core.simulation import (
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
 )
-from POMDPPlanners.environments import TigerPOMDP
-from POMDPPlanners.planners import POMCP, SparsePFT
+from POMDPPlanners.environments import TigerPOMDP, ContinuousLightDarkPOMDPDiscreteActions
+from POMDPPlanners.planners import POMCP, SparsePFT, POMCPOW
 from POMDPPlanners.simulations.simulations_deployment.tasks import (
     EpisodeSimulationTask,
     HyperParameterTuningSimulationTask,
 )
+from POMDPPlanners.utils.action_samplers import DiscreteActionSampler
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -555,6 +556,213 @@ class TestTaskSerializationRoundTrip:
         assert "hyperparam" in unpickled_dict
         assert isinstance(unpickled_dict["episode"], EpisodeSimulationTask)
         assert isinstance(unpickled_dict["hyperparam"], HyperParameterTuningSimulationTask)
+
+
+class TestComplexHyperparameterTuningTaskSerialization:
+    """Test cases for complex hyperparameter tuning task configurations.
+
+    These tests validate serialization of complex configurations that
+    have been problematic in production, particularly those involving:
+    - Complex environments (ContinuousLightDarkPOMDPDiscreteActions)
+    - Advanced planners with many hyperparameters (POMCPOW)
+    - Multi-objective optimization
+    - Parallel execution scenarios
+    """
+
+    def setup_method(self):
+        """Set up complex test environment for each test."""
+        # Use the complex environment from the failure report
+        self.env = ContinuousLightDarkPOMDPDiscreteActions(discount_factor=0.95)
+
+        # Create action sampler for POMCPOW
+        self.action_sampler = DiscreteActionSampler(self.env.get_actions())
+
+        # Create initial belief from environment
+        initial_state = self.env.initial_state_dist().sample()[0]
+        self.belief = WeightedParticleBelief(
+            particles=[initial_state] * 100,
+            log_weights=np.log(np.ones(100) / 100),
+            resampling=True,
+        )
+
+    def test_pomcpow_hyperparameter_tuning_task_serialization(self):
+        """Test HyperParameterTuningSimulationTask with POMCPOW configuration.
+
+        Purpose: Validates that complex POMCPOW hyperparameter tuning task can be pickled
+
+        Given: HyperParameterTuningSimulationTask with POMCPOW planner and 7 hyperparameters
+        When: Task is pickled and unpickled
+        Then: Task maintains all properties and can be executed
+
+        Test type: integration
+
+        Note: This test replicates the configuration that failed in production at trial 66
+        with joblib's parallel processing (BrokenProcessPool error).
+        """
+        # Define hyperparameters matching the failure report
+        hyper_parameters = [
+            NumericalHyperParameter(low=2, high=10, name="depth"),
+            NumericalHyperParameter(low=1.0, high=10.0, name="k_o"),
+            NumericalHyperParameter(low=1.0, high=10.0, name="k_a"),
+            NumericalHyperParameter(low=0.1, high=0.5, name="alpha_o"),
+            NumericalHyperParameter(low=0.1, high=0.5, name="alpha_a"),
+            NumericalHyperParameter(low=0.001, high=0.1, name="delta"),
+            NumericalHyperParameter(low=0.001, high=0.1, name="epsilon"),
+        ]
+
+        constant_parameters = {
+            "environment": self.env,
+            "discount_factor": 0.95,
+            "action_sampler": self.action_sampler,
+            "name": "POMCPOW_Test",
+            "n_simulations": 10,
+        }
+
+        task = HyperParameterTuningSimulationTask(
+            environment=self.env,
+            belief=self.belief,
+            policy_cls=POMCPOW,
+            hyper_parameters=hyper_parameters,
+            constant_parameters=constant_parameters,
+            num_episodes=10,
+            num_steps=20,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ],
+            experiment_name="test_pomcpow_optimization",
+            n_trials=10,  # Small number for testing
+            console_output=False,
+            n_jobs=1,  # Single process to avoid parallel serialization issues in test
+            seed=42,
+        )
+
+        # Pickle the task
+        pickled = pickle.dumps(task)
+
+        # Unpickle the task
+        unpickled_task = pickle.loads(pickled)
+
+        # Verify basic properties are preserved
+        assert unpickled_task.num_episodes == 10
+        assert unpickled_task.num_steps == 20
+        assert unpickled_task.n_trials == 10
+        assert unpickled_task.policy_cls == POMCPOW
+        assert len(unpickled_task.hyper_parameters) == 7
+
+        # Verify environment is preserved
+        assert unpickled_task.environment.name == self.env.name
+
+        # Verify constant parameters including action_sampler
+        assert "action_sampler" in unpickled_task.constant_parameters
+        assert unpickled_task.constant_parameters["environment"].name == self.env.name
+
+    def test_multi_objective_pomcpow_task_serialization(self):
+        """Test HyperParameterTuningSimulationTask with multi-objective optimization.
+
+        Purpose: Validates that POMCPOW task with multiple objectives can be pickled
+
+        Given: HyperParameterTuningSimulationTask optimizing both return and another metric
+        When: Task is pickled and unpickled
+        Then: All optimization objectives are preserved
+
+        Test type: integration
+
+        Note: This matches the two-objective configuration from the failure report:
+        - avg_obstacle_hit_counter (minimize)
+        - average_return (maximize)
+        """
+        hyper_parameters = [
+            NumericalHyperParameter(low=2, high=10, name="depth"),
+            NumericalHyperParameter(low=1.0, high=10.0, name="k_o"),
+            NumericalHyperParameter(low=1.0, high=10.0, name="k_a"),
+            NumericalHyperParameter(low=0.1, high=0.5, name="alpha_o"),
+            NumericalHyperParameter(low=0.1, high=0.5, name="alpha_a"),
+        ]
+
+        constant_parameters = {
+            "environment": self.env,
+            "discount_factor": 0.95,
+            "action_sampler": self.action_sampler,
+            "name": "POMCPOW_MultiObj_Test",
+            "n_simulations": 10,
+        }
+
+        task = HyperParameterTuningSimulationTask(
+            environment=self.env,
+            belief=self.belief,
+            policy_cls=POMCPOW,
+            hyper_parameters=hyper_parameters,
+            constant_parameters=constant_parameters,
+            num_episodes=10,
+            num_steps=20,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+                ("avg_episode_length", HyperParameterOptimizationDirection.MINIMIZE),
+            ],
+            experiment_name="test_multi_objective",
+            n_trials=10,
+            console_output=False,
+            n_jobs=1,
+            seed=42,
+        )
+
+        pickled = pickle.dumps(task)
+        unpickled_task = pickle.loads(pickled)
+
+        # Verify multi-objective configuration
+        assert len(unpickled_task.parameters_to_optimize) == 2
+        assert unpickled_task.parameters_to_optimize[0][0] == "average_return"
+        assert unpickled_task.parameters_to_optimize[1][0] == "avg_episode_length"
+
+    def test_pomcpow_task_with_cache_dir_serialization(self):
+        """Test HyperParameterTuningSimulationTask with cache directory.
+
+        Purpose: Validates that POMCPOW task with cache_dir can be pickled
+
+        Given: HyperParameterTuningSimulationTask with cache directory configured
+        When: Task is pickled and unpickled
+        Then: Cache directory path is preserved
+
+        Test type: unit
+        """
+        hyper_parameters = [
+            NumericalHyperParameter(low=2, high=10, name="depth"),
+            NumericalHyperParameter(low=1.0, high=10.0, name="k_o"),
+        ]
+
+        constant_parameters = {
+            "environment": self.env,
+            "discount_factor": 0.95,
+            "action_sampler": self.action_sampler,
+            "name": "POMCPOW_Cache_Test",
+            "n_simulations": 10,
+        }
+
+        cache_dir = Path("icvar_hyperparameter_tuning_experiment_cache")
+
+        task = HyperParameterTuningSimulationTask(
+            environment=self.env,
+            belief=self.belief,
+            policy_cls=POMCPOW,
+            hyper_parameters=hyper_parameters,
+            constant_parameters=constant_parameters,
+            num_episodes=10,
+            num_steps=20,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+            ],
+            experiment_name="test_with_cache",
+            n_trials=10,
+            cache_dir=cache_dir,
+            console_output=False,
+            n_jobs=1,
+            seed=42,
+        )
+
+        pickled = pickle.dumps(task)
+        unpickled_task = pickle.loads(pickled)
+
+        assert unpickled_task.cache_dir == cache_dir
 
 
 class TestTaskSerializationEdgeCases:
