@@ -931,3 +931,57 @@ class HyperParameterTuningSimulationTask(SimulationTask):
     def __hash__(self) -> int:
         """Generate hash for the task."""
         return hash(self.get_config_id())
+
+    def __getstate__(self):
+        """Prepare task state for pickling by excluding unpicklable attributes.
+
+        Returns:
+            dict: Serializable state dictionary with unpicklable attributes removed
+        """
+        state = self.__dict__.copy()
+        # Remove unpicklable attributes
+        state.pop("simulator")  # Will be reconstructed
+        state.pop("study_storage", None)  # Will be reconstructed
+        state.pop("_last_optimization_result", None)  # Transient cache
+        state.pop("_last_optimization_metadata", None)  # Transient cache
+        # Logger is already a @property, not stored in __dict__
+        return state
+
+    def __setstate__(self, state):
+        """Restore task state after unpickling and reconstruct excluded attributes.
+
+        Args:
+            state: State dictionary from pickle
+        """
+        self.__dict__.update(state)
+
+        # Reconstruct simulator
+        self._reconstruct_simulator()
+
+        # Reconstruct study_storage if cache_dir exists
+        if hasattr(self, "cache_dir") and self.cache_dir is not None:
+            self._reconstruct_study_storage()
+
+    def _reconstruct_simulator(self):
+        """Reconstruct POMDPSimulator instance after unpickling."""
+        task_manager_config = JoblibConfig(n_jobs=self.n_jobs, console_output=False, no_logs=True)
+
+        experiment_name = getattr(self, "experiment_name", "hyperparameter_optimization")
+
+        self.simulator = POMDPSimulator(
+            task_manager_config=task_manager_config,
+            cache_dir_path=None,
+            experiment_name=experiment_name,
+            debug=self.debug,
+            use_queue_logger=self.use_queue_logger,
+            console_output=False,
+            no_logs=True,
+        )
+
+    def _reconstruct_study_storage(self):
+        """Reconstruct DiskCacheDB instance after unpickling."""
+        if self.cache_dir is not None:
+            storage_dir = Path(self.cache_dir) / "study_storage" / self.get_config_id()
+            self.study_storage = DiskCacheDB(cache_dir=str(storage_dir))
+        else:
+            self.study_storage = None

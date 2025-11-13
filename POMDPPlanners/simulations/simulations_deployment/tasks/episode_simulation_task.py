@@ -563,3 +563,24 @@ class EpisodeSimulationTask(SimulationTask):
     def __hash__(self) -> int:
         """Generate hash for the task."""
         return hash(self._cache_key)
+
+    def __getstate__(self):
+        """Prepare task state for pickling by excluding unpicklable attributes.
+
+        Returns:
+            dict: Serializable state dictionary with logger excluded
+        """
+        state = self.__dict__.copy()
+        # Logger is recreated via @property, no need to pickle it
+        # Remove it to avoid pickling issues with file handles and locks
+        state.pop("logger", None)
+        return state
+
+    def __setstate__(self, state):
+        """Restore task state after unpickling.
+
+        Args:
+            state: State dictionary from pickle
+        """
+        self.__dict__.update(state)
+        # Logger will be recreated via @property when first accessed
