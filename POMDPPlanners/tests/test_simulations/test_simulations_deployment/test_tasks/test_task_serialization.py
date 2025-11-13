@@ -20,6 +20,7 @@ from POMDPPlanners.core.simulation import (
     CategoricalHyperParameter,
     NumericalHyperParameter,
 )
+from POMDPPlanners.core.simulation.history import history_to_discounted_return_value
 from POMDPPlanners.core.simulation.hyperparameter_tuning import (
     HyperParameterOptimizationDirection,
 )
@@ -497,6 +498,66 @@ class TestTaskSerializationRoundTrip:
         assert hasattr(result, "discounted_return") or hasattr(
             result, "history"
         )  # Check for History attributes
+
+    def test_task_serialization_produces_identical_results(self):
+        """Test that running before vs after pickling produces identical results.
+
+        Purpose: Validates that pickling doesn't affect task execution results
+
+        Given: Two identical EpisodeSimulationTask instances with same seed
+        When: One task is run directly, the other is pickled then run
+        Then: Both produce identical results (discounted return, episode length)
+
+        Test type: integration
+        """
+        # Create two identical tasks with same seed for deterministic execution
+        task1 = EpisodeSimulationTask(
+            environment=self.env,
+            policy=self.policy,
+            initial_belief=self.belief,
+            num_steps=3,
+            episode_id=1,
+            seed=12345,
+            discount_factor=0.95,
+            episode_number=1,
+            console_output=False,
+        )
+
+        task2 = EpisodeSimulationTask(
+            environment=self.env,
+            policy=self.policy,
+            initial_belief=self.belief,
+            num_steps=3,
+            episode_id=2,
+            seed=12345,  # Same seed for identical results
+            discount_factor=0.95,
+            episode_number=2,
+            console_output=False,
+        )
+
+        # Run task1 directly (no pickling)
+        result1 = task1.run()
+
+        # Pickle task2, unpickle, then run
+        pickled = pickle.dumps(task2)
+        unpickled_task = pickle.loads(pickled)
+        result2 = unpickled_task.run()
+
+        # Verify both results are valid
+        assert result1 is not None
+        assert result2 is not None
+
+        # Calculate discounted returns using utility function
+        discounted_return1 = history_to_discounted_return_value(result1)
+        discounted_return2 = history_to_discounted_return_value(result2)
+
+        # Compare results - they should be identical due to same seed
+        assert discounted_return1 == discounted_return2
+        assert result1.actual_num_steps == result2.actual_num_steps
+        assert result1.reach_terminal_state == result2.reach_terminal_state
+
+        # Verify history length matches
+        assert len(result1.history) == len(result2.history)
 
     def test_multiple_tasks_serialization_together(self):
         """Test serialization of different task types together.
