@@ -102,6 +102,53 @@ class PacManStateTransitionModel(StateTransitionModel):
         next_state = self._compute_next_state()
         return [next_state] * n_samples
 
+    def probability(self, values: List[PacManState]) -> np.ndarray:
+        """Calculate transition probabilities to next states.
+
+        Args:
+            values: List of potential next states
+
+        Returns:
+            Array of probabilities for each state in values
+        """
+        if self.state.terminal:
+            # Terminal states only transition to themselves with probability 1
+            return np.array([1.0 if s == self.state else 0.0 for s in values])
+
+        # Determine PacMan's next position (deterministic)
+        pacman_next_pos = self._move_pacman()
+
+        probs = []
+        for next_state in values:
+            # Check if this is a valid next state
+            if next_state.pacman_pos != pacman_next_pos:
+                # PacMan position doesn't match - impossible transition
+                probs.append(0.0)
+                continue
+
+            # Calculate probability of ghost movements
+            ghost_prob = self._calculate_ghost_transition_probability(next_state.ghost_positions)
+
+            # Verify pellet and score consistency
+            if not self._is_valid_pellet_configuration(next_state):
+                probs.append(0.0)
+                continue
+
+            # Verify terminal status consistency
+            if not self._is_valid_terminal_status(next_state, pacman_next_pos):
+                probs.append(0.0)
+                continue
+
+            probs.append(ghost_prob)
+
+        # Normalize probabilities
+        probs = np.array(probs)
+        total = np.sum(probs)
+        if total > 0:
+            probs = probs / total
+
+        return probs
+
     def _compute_next_state(self) -> PacManState:
         """Compute the next state."""
         if self.state.terminal:
@@ -380,6 +427,130 @@ class PacManStateTransitionModel(StateTransitionModel):
             and 0 <= col < self.pomdp.maze_size[1]
             and pos not in self.pomdp.walls
         )
+
+    def _calculate_ghost_transition_probability(
+        self, target_ghost_positions: Tuple[Tuple[int, int], ...]
+    ) -> float:
+        """Calculate probability of ghosts moving to target positions."""
+        if len(target_ghost_positions) != len(self.state.ghost_positions):
+            return 0.0
+
+        total_prob = 1.0
+
+        for i, (current_ghost_pos, target_ghost_pos) in enumerate(
+            zip(self.state.ghost_positions, target_ghost_positions)
+        ):
+            ghost_prob = self._single_ghost_move_probability(current_ghost_pos, target_ghost_pos, i)
+            total_prob *= ghost_prob
+
+            # If any ghost has zero probability, entire transition is impossible
+            if total_prob == 0.0:
+                return 0.0
+
+        return total_prob
+
+    def _single_ghost_move_probability(
+        self, current_pos: Tuple[int, int], target_pos: Tuple[int, int], ghost_id: int
+    ) -> float:
+        """Calculate probability of a single ghost moving to target position."""
+        possible_moves = self._get_valid_ghost_moves(current_pos)
+
+        if target_pos not in possible_moves:
+            return 0.0
+
+        # Get strategy for this ghost
+        if self.pomdp.ghost_coordination == "independent":
+            return self._independent_ghost_move_probability(
+                current_pos, target_pos, possible_moves, ghost_id
+            )
+        elif self.pomdp.ghost_coordination == "coordinated":
+            return self._coordinated_ghost_move_probability(
+                current_pos, target_pos, possible_moves, ghost_id
+            )
+        else:  # "mixed"
+            if ghost_id % 2 == 0:
+                return self._coordinated_ghost_move_probability(
+                    current_pos, target_pos, possible_moves, ghost_id
+                )
+            else:
+                return self._independent_ghost_move_probability(
+                    current_pos, target_pos, possible_moves, ghost_id
+                )
+
+    def _independent_ghost_move_probability(
+        self,
+        current_pos: Tuple[int, int],
+        target_pos: Tuple[int, int],
+        possible_moves: List[Tuple[int, int]],
+        ghost_id: int,
+    ) -> float:
+        """Calculate probability for independent ghost movement."""
+        # Check for special strategies
+        if hasattr(self.pomdp, "ghost_strategies") and ghost_id < len(self.pomdp.ghost_strategies):
+            strategy = self.pomdp.ghost_strategies[ghost_id]
+            if strategy in ["patrol", "ambush"]:
+                # For patrol and ambush, we use uniform probability as exact policy is complex
+                return 1.0 / len(possible_moves)
+
+        # Default aggressive behavior - softmax based on distance to PacMan
+        pacman_pos = self.state.pacman_pos
+        move_scores = []
+
+        for move_pos in possible_moves:
+            distance = abs(move_pos[0] - pacman_pos[0]) + abs(move_pos[1] - pacman_pos[1])
+            move_scores.append(-distance)  # Negative distance (closer is better)
+
+        # Softmax with temperature
+        temperature = self.pomdp.ghost_aggressiveness
+        exp_scores = np.exp(np.array(move_scores) / temperature)
+        probabilities = exp_scores / np.sum(exp_scores)
+
+        # Find index of target position
+        target_idx = possible_moves.index(target_pos)
+        return float(probabilities[target_idx])
+
+    def _coordinated_ghost_move_probability(
+        self,
+        current_pos: Tuple[int, int],
+        target_pos: Tuple[int, int],
+        possible_moves: List[Tuple[int, int]],
+        ghost_id: int,
+    ) -> float:
+        """Calculate probability for coordinated ghost movement."""
+        # For coordinated movement, use uniform probability as exact policy is complex
+        # The coordination involves predicting PacMan's escape routes which is deterministic
+        # but complex to compute probability for
+        return 1.0 / len(possible_moves)
+
+    def _is_valid_pellet_configuration(self, next_state: PacManState) -> bool:
+        """Check if pellet configuration is consistent with transition."""
+        pacman_next_pos = self._move_pacman()
+
+        # Check if pellets were collected correctly
+        if pacman_next_pos in self.state.pellets:
+            # PacMan moved to a pellet position - pellet should be removed
+            expected_pellets = [p for p in self.state.pellets if p != pacman_next_pos]
+            expected_score = self.state.score + self.pomdp.pellet_reward
+
+            return (
+                set(next_state.pellets) == set(expected_pellets)
+                and next_state.score == expected_score
+            )
+        else:
+            # No pellet collected - pellets and score should remain the same
+            return next_state.pellets == self.state.pellets and next_state.score == self.state.score
+
+    def _is_valid_terminal_status(
+        self, next_state: PacManState, pacman_next_pos: Tuple[int, int]
+    ) -> bool:
+        """Check if terminal status is consistent with the transition."""
+        # Terminal if collision or all pellets collected
+        collision = pacman_next_pos in next_state.ghost_positions
+        all_pellets_collected = len(next_state.pellets) == 0
+
+        expected_terminal = collision or all_pellets_collected
+
+        return next_state.terminal == expected_terminal
 
 
 class PacManObservationModel(ObservationModel):
