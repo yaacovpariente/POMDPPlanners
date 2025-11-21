@@ -82,6 +82,26 @@ class RockSampleStateTransitionModel(StateTransitionModel):
         next_state = self._compute_next_state()
         return [next_state] * n_samples
 
+    def probability(self, values: List[RockSampleState]) -> np.ndarray:
+        """Calculate transition probabilities for given next states.
+
+        Since RockSample has deterministic transitions, the probability is 1.0
+        for the correct next state and 0.0 for all others.
+
+        Args:
+            values: List of next state values to calculate probabilities for
+
+        Returns:
+            Array of transition probabilities (1.0 for correct state, 0.0 otherwise)
+        """
+        # Compute the deterministic next state
+        expected_next_state = self._compute_next_state()
+
+        # Check which states match the expected next state
+        probs = np.array([1.0 if state == expected_next_state else 0.0 for state in values])
+
+        return probs
+
     def _compute_next_state(self) -> RockSampleState:
         """Compute the deterministic next state."""
         robot_row, robot_col = self.state.robot_pos
