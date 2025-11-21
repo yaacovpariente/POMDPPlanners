@@ -21,6 +21,11 @@ from POMDPPlanners.environments.push_pomdp.push_pomdp import (
     PushPOMDP,
     PushStateTransition,
 )
+from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
+    RockSamplePOMDP,
+    RockSampleState,
+    RockSampleStateTransitionModel,
+)
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP, SanityStateTransitionModel
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP, TigerStateTransition
 from POMDPPlanners.tests.test_utils.test_probability_utils import (
@@ -185,6 +190,69 @@ class TestLaserTagPOMDPProbability:
 
         assert results["probabilities_normalized"]
         assert results["distance"] < 0.05
+
+
+class TestRockSamplePOMDPProbability:
+    """Test probability method for RockSample POMDP."""
+
+    def test_rock_sample_movement_probability(self):
+        """Test RockSample POMDP probability method with movement action.
+
+        Purpose: Validates that probability() method matches empirical distribution
+
+        Given: RockSample POMDP with basic configuration and movement action
+        When: Comparing computed probabilities to empirical sampling
+        Then: Probabilities match within tolerance and are properly normalized
+
+        Test type: unit
+        """
+        pomdp = RockSamplePOMDP(map_size=(5, 5))
+
+        # Get initial state
+        initial_state = pomdp.initial_state_dist().sample()[0]
+
+        # Get a valid action (movement action - deterministic)
+        actions = pomdp.get_actions()
+        action = actions[1]  # North
+
+        transition = RockSampleStateTransitionModel(state=initial_state, action=action, pomdp=pomdp)
+        results = validate_probability_matches_empirical_distribution(
+            transition, num_samples=1000, max_js_divergence=0.01
+        )
+
+        assert results["probabilities_normalized"]
+        assert results["distance"] < 0.01  # Should be nearly perfect (deterministic)
+        assert results["num_unique_states"] == 1  # Deterministic transition
+
+    def test_rock_sample_sample_action_probability(self):
+        """Test RockSample POMDP probability method with sample action.
+
+        Purpose: Validates that probability() method works correctly for sample actions
+
+        Given: RockSample POMDP with robot at a rock position
+        When: Executing sample action and comparing probabilities to empirical distribution
+        Then: Probabilities match within tolerance (deterministic transition)
+
+        Test type: unit
+        """
+        # Create environment with known rock positions
+        rock_positions = [(0, 0), (2, 2)]
+        pomdp = RockSamplePOMDP(map_size=(5, 5), rock_positions=rock_positions, init_pos=(0, 0))
+
+        # Create state where robot is at a rock position
+        initial_state = RockSampleState(robot_pos=(0, 0), rocks=(True, True))
+
+        # Sample action
+        action = 0
+
+        transition = RockSampleStateTransitionModel(state=initial_state, action=action, pomdp=pomdp)
+        results = validate_probability_matches_empirical_distribution(
+            transition, num_samples=1000, max_js_divergence=0.01
+        )
+
+        assert results["probabilities_normalized"]
+        assert results["distance"] < 0.01  # Deterministic
+        assert results["num_unique_states"] == 1  # Only one possible next state
 
 
 class TestSanityPOMDPProbability:
