@@ -329,8 +329,8 @@ class TestEnvironmentStateSerialization:
         pickled_state = pickle.dumps(state)
         unpickled_state = pickle.loads(pickled_state)
 
-        assert unpickled_state.robot_pos == state.robot_pos
-        assert unpickled_state.rocks == state.rocks
+        # State is a numpy array, not an object with attributes
+        assert np.array_equal(unpickled_state, state)
 
 
 class TestEnvironmentTransitionModelSerialization:
