@@ -712,3 +712,233 @@ class TestPushPOMDP:
                         pytest.fail(
                             f"sample_next_step produced invalid observation {observation} with shape {observation.shape}: {e}"
                         )
+
+    def test_state_transition_probability_deterministic(self):
+        """Test that state transition probability correctly identifies deterministic transitions.
+
+        Purpose: Validates that probability() returns 1.0 for the correct next state and 0.0 for others
+
+        Given: A PushStateTransition with a known current state and action
+        When: The probability method is called with various potential next states
+        Then: Only the actual next state should have probability 1.0, all others should be 0.0
+
+        Test type: unit
+        """
+        state = np.array([2.0, 2.0, 3.0, 3.0, 9.0, 9.0])
+        action = "right"
+
+        transition = PushStateTransition(
+            state=state,
+            action=action,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            obstacles=[],
+            obstacle_radius=0.5,
+        )
+
+        # Get the actual next state
+        actual_next_state = transition.sample()[0]
+
+        # Test probability for actual next state
+        prob_actual = transition.probability([actual_next_state])
+        assert len(prob_actual) == 1
+        assert prob_actual[0] == 1.0, "Actual next state should have probability 1.0"
+
+        # Test probability for different states
+        different_state1 = np.array([2.0, 2.0, 3.0, 3.0, 9.0, 9.0])  # Same as initial
+        different_state2 = np.array([5.0, 5.0, 5.0, 5.0, 9.0, 9.0])  # Completely different
+        different_state3 = actual_next_state + np.array(
+            [0.1, 0.0, 0.0, 0.0, 0.0, 0.0]
+        )  # Slightly off
+
+        prob_diff1 = transition.probability([different_state1])
+        prob_diff2 = transition.probability([different_state2])
+        prob_diff3 = transition.probability([different_state3])
+
+        assert prob_diff1[0] == 0.0, "Different state should have probability 0.0"
+        assert prob_diff2[0] == 0.0, "Different state should have probability 0.0"
+        assert prob_diff3[0] == 0.0, "Slightly different state should have probability 0.0"
+
+    def test_state_transition_probability_with_obstacles(self):
+        """Test state transition probability when robot collides with obstacles.
+
+        Purpose: Validates that probability() correctly handles obstacle collision scenarios
+
+        Given: A state where robot movement will be blocked by an obstacle
+        When: The probability method is called with potential next states
+        Then: Only the state where robot stays in place should have probability 1.0
+
+        Test type: unit
+        """
+        obstacles = [(3.0, 3.0)]
+        state = np.array([2.5, 3.0, 1.0, 1.0, 9.0, 9.0])  # Robot just left of obstacle
+        action = "right"  # Will collide with obstacle
+
+        transition = PushStateTransition(
+            state=state,
+            action=action,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            obstacles=obstacles,
+            obstacle_radius=0.5,
+        )
+
+        # Get the actual next state (robot should stay in place due to collision)
+        actual_next_state = transition.sample()[0]
+
+        # Verify robot didn't move (stayed at same position due to collision)
+        assert np.allclose(
+            actual_next_state[:2], state[:2]
+        ), "Robot should stay in place when colliding with obstacle"
+
+        # Test probability for actual next state
+        prob_actual = transition.probability([actual_next_state])
+        assert prob_actual[0] == 1.0, "Actual next state should have probability 1.0"
+
+        # Test probability for state where robot would have moved (if no obstacle)
+        hypothetical_moved_state = state.copy()
+        hypothetical_moved_state[0] += 1.0  # Robot moved right
+        prob_moved = transition.probability([hypothetical_moved_state])
+        assert prob_moved[0] == 0.0, "State with robot moved should have probability 0.0"
+
+    def test_state_transition_probability_pushing_object(self):
+        """Test state transition probability when robot pushes object.
+
+        Purpose: Validates that probability() correctly handles object pushing with friction
+
+        Given: A state where robot is close enough to push the object
+        When: The probability method is called with potential next states
+        Then: Only the state with correct push dynamics should have probability 1.0
+
+        Test type: unit
+        """
+        state = np.array([2.0, 2.0, 2.5, 2.0, 9.0, 9.0])  # Robot close to object
+        action = "right"
+        friction = 0.5
+
+        transition = PushStateTransition(
+            state=state,
+            action=action,
+            grid_size=10,
+            push_threshold=1.0,  # Robot is within push threshold
+            friction_coefficient=friction,
+            obstacles=[],
+            obstacle_radius=0.5,
+        )
+
+        # Get the actual next state with push dynamics
+        actual_next_state = transition.sample()[0]
+
+        # Verify both robot and object moved
+        assert actual_next_state[0] > state[0], "Robot should have moved right"
+        assert actual_next_state[2] > state[2], "Object should have been pushed right"
+
+        # Verify friction was applied (object moves less than robot)
+        expected_object_movement = 1.0 * (1 - friction)  # movement * (1 - friction)
+        actual_object_movement = actual_next_state[2] - state[2]
+        assert np.isclose(
+            actual_object_movement, expected_object_movement, atol=0.01
+        ), "Object movement should account for friction"
+
+        # Test probability for actual next state
+        prob_actual = transition.probability([actual_next_state])
+        assert prob_actual[0] == 1.0, "Actual next state should have probability 1.0"
+
+        # Test probability for state where object didn't move
+        no_push_state = state.copy()
+        no_push_state[0] += 1.0  # Only robot moved
+        prob_no_push = transition.probability([no_push_state])
+        assert prob_no_push[0] == 0.0, "State without object push should have probability 0.0"
+
+    def test_state_transition_probability_boundary_clipping(self):
+        """Test state transition probability with boundary clipping.
+
+        Purpose: Validates that probability() correctly handles grid boundary constraints
+
+        Given: A state where robot is at grid boundary
+        When: Robot attempts to move beyond boundary
+        Then: Only the state with clipped position should have probability 1.0
+
+        Test type: unit
+        """
+        state = np.array([0.0, 0.0, 2.0, 2.0, 9.0, 9.0])  # Robot at corner
+        action = "left"  # Try to move beyond boundary
+
+        transition = PushStateTransition(
+            state=state,
+            action=action,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            obstacles=[],
+            obstacle_radius=0.5,
+        )
+
+        # Get actual next state (should be clipped at boundary)
+        actual_next_state = transition.sample()[0]
+
+        # Verify robot position was clipped at boundary
+        assert actual_next_state[0] == 0.0, "Robot x-position should be clipped at 0"
+        assert actual_next_state[1] == 0.0, "Robot y-position should remain at 0"
+
+        # Test probability for actual next state
+        prob_actual = transition.probability([actual_next_state])
+        assert prob_actual[0] == 1.0, "Actual next state should have probability 1.0"
+
+        # Test probability for state with negative position (if no clipping)
+        hypothetical_negative_state = state.copy()
+        hypothetical_negative_state[0] = -1.0  # Beyond boundary
+        prob_negative = transition.probability([hypothetical_negative_state])
+        assert prob_negative[0] == 0.0, "State beyond boundary should have probability 0.0"
+
+    def test_state_transition_probability_multiple_states(self):
+        """Test state transition probability with multiple candidate states.
+
+        Purpose: Validates that probability() correctly handles batch evaluation of multiple states
+
+        Given: A state transition and a list of multiple potential next states
+        When: The probability method is called with the list
+        Then: Should return probability array with 1.0 only for the correct state
+
+        Test type: unit
+        """
+        state = np.array([5.0, 5.0, 6.0, 5.0, 9.0, 9.0])
+        action = "up"
+
+        transition = PushStateTransition(
+            state=state,
+            action=action,
+            grid_size=10,
+            push_threshold=1.0,
+            friction_coefficient=0.3,
+            obstacles=[],
+            obstacle_radius=0.5,
+        )
+
+        # Get actual next state
+        actual_next_state = transition.sample()[0]
+
+        # Create list of candidate states (only one should be correct)
+        candidate_states = [
+            np.array([5.0, 6.0, 6.0, 5.7, 9.0, 9.0]),  # Possible next state
+            actual_next_state,  # The correct next state
+            np.array([5.0, 5.0, 6.0, 5.0, 9.0, 9.0]),  # Initial state (shouldn't match)
+            np.array([4.0, 5.0, 5.0, 5.0, 9.0, 9.0]),  # Different state
+        ]
+
+        # Test probability for all candidates
+        probs = transition.probability(candidate_states)
+
+        # Verify output shape
+        assert len(probs) == 4, "Should return probability for each candidate"
+
+        # Verify only the actual next state has probability 1.0
+        assert probs[1] == 1.0, "Actual next state should have probability 1.0"
+        assert probs[0] == 0.0, "Incorrect state should have probability 0.0"
+        assert probs[2] == 0.0, "Initial state should have probability 0.0"
+        assert probs[3] == 0.0, "Different state should have probability 0.0"
+
+        # Verify probabilities sum to 1.0 (since only one state is possible)
+        assert np.sum(probs) == 1.0, "Probabilities should sum to 1.0"
