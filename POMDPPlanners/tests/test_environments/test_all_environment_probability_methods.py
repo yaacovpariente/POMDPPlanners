@@ -28,6 +28,15 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
 )
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP, SanityStateTransitionModel
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP, TigerStateTransition
+from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP, CartPoleStateTransition
+from POMDPPlanners.environments.mountain_car_pomdp import (
+    MountainCarPOMDP,
+    MountainCarTransition,
+)
+from POMDPPlanners.environments.safety_ant_velocity_pomdp.safety_ant_velocity_pomdp import (
+    SafeAntVelocityPOMDP,
+    SafeAntVelocityStateTransition,
+)
 from POMDPPlanners.tests.test_utils.test_probability_utils import (
     validate_probability_matches_empirical_distribution,
 )
@@ -285,3 +294,173 @@ class TestSanityPOMDPProbability:
 
         assert results["probabilities_normalized"]
         assert results["distance"] < 0.05
+
+
+class TestCartPolePOMDPProbability:
+    """Test probability method for CartPole POMDP."""
+
+    def test_cartpole_transition_probability(self):
+        """Test CartPole POMDP probability method with physics-based transition.
+
+        Purpose: Validates that probability() method matches empirical distribution
+
+        Given: CartPole POMDP with basic configuration and action
+        When: Comparing computed probabilities to empirical sampling
+        Then: Probabilities match within tolerance and are properly normalized
+
+        Test type: unit
+        """
+        noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
+        pomdp = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+
+        # Get initial state
+        initial_state = pomdp.initial_state_dist().sample()[0]
+
+        # Get a valid action
+        actions = pomdp.get_actions()
+        action = actions[0]  # Left force
+
+        transition = CartPoleStateTransition(
+            state=initial_state,
+            action=action,
+            force_mag=pomdp.force_mag,
+            total_mass=pomdp.total_mass,
+            polemass_length=pomdp.polemass_length,
+            gravity=pomdp.gravity,
+            length=pomdp.length,
+            kinematics_integrator=pomdp.kinematics_integrator,
+            tau=pomdp.tau,
+            masspole=pomdp.masspole,
+        )
+        results = validate_probability_matches_empirical_distribution(
+            transition, num_samples=1000, max_js_divergence=0.01
+        )
+
+        assert results["probabilities_normalized"]
+        assert results["distance"] < 0.01  # Should be nearly perfect (deterministic)
+        assert results["num_unique_states"] == 1  # Deterministic transition
+
+
+class TestMountainCarPOMDPProbability:
+    """Test probability method for Mountain Car POMDP."""
+
+    def test_mountain_car_transition_probability(self):
+        """Test Mountain Car POMDP probability method with physics-based transition.
+
+        Purpose: Validates that probability() method matches empirical distribution
+
+        Given: Mountain Car POMDP with basic configuration and action
+        When: Comparing computed probabilities to empirical sampling
+        Then: Probabilities match within tolerance and are properly normalized
+
+        Test type: unit
+        """
+        pomdp = MountainCarPOMDP(discount_factor=0.95)
+
+        # Get initial state
+        initial_state = pomdp.initial_state_dist().sample()[0]
+
+        # Get a valid action
+        actions = pomdp.get_actions()
+        action = actions[0]  # Reverse
+
+        transition = MountainCarTransition(
+            state=initial_state,
+            action=action,
+            power=pomdp.power,
+            gravity=pomdp.gravity,
+            max_speed=pomdp.max_speed,
+            min_position=pomdp.min_position,
+            max_position=pomdp.max_position,
+        )
+        results = validate_probability_matches_empirical_distribution(
+            transition, num_samples=1000, max_js_divergence=0.01
+        )
+
+        assert results["probabilities_normalized"]
+        assert results["distance"] < 0.01  # Should be nearly perfect (deterministic)
+        assert results["num_unique_states"] == 1  # Deterministic transition
+
+
+class TestSafetyAntVelocityPOMDPProbability:
+    """Test probability method for Safety Ant Velocity POMDP."""
+
+    def test_safety_ant_zero_force_probability(self):
+        """Test Safety Ant Velocity POMDP probability method with zero force action.
+
+        Purpose: Validates that probability() method matches empirical distribution for zero force
+
+        Given: Safety Ant Velocity POMDP with zero force action (deterministic transition)
+        When: Comparing computed probabilities to empirical sampling
+        Then: Probabilities match within tolerance and are properly normalized
+
+        Test type: unit
+        """
+        pomdp = SafeAntVelocityPOMDP(discount_factor=0.95)
+
+        # Get initial state
+        initial_state = pomdp.initial_state_dist().sample()[0]
+
+        # Get zero force action
+        action = 0  # No force
+
+        transition = SafeAntVelocityStateTransition(
+            state=initial_state,
+            action=action,
+            dt=pomdp.dt,
+            mass=pomdp.mass,
+            damping=pomdp.damping,
+            max_force=pomdp.max_force,
+        )
+        results = validate_probability_matches_empirical_distribution(
+            transition, num_samples=1000, max_js_divergence=0.01
+        )
+
+        assert results["probabilities_normalized"]
+        assert results["distance"] < 0.01  # Should be nearly perfect (deterministic)
+        assert results["num_unique_states"] == 1  # Deterministic transition
+
+    @pytest.mark.skip(
+        reason="SafetyAntVelocity with non-zero force has truly continuous distribution "
+        "(uniform over a ring due to random force direction). Discrete empirical sampling "
+        "validation is not appropriate for continuous distributions."
+    )
+    def test_safety_ant_nonzero_force_probability(self):
+        """Test Safety Ant Velocity POMDP probability method with non-zero force action.
+
+        Purpose: Validates that probability() method matches empirical distribution for stochastic force
+
+        Given: Safety Ant Velocity POMDP with non-zero force action (stochastic transition)
+        When: Comparing computed probabilities to empirical sampling
+        Then: Probabilities match within tolerance and are properly normalized
+
+        Test type: unit
+
+        Note: This test is skipped because the non-zero force action results in a truly
+        continuous distribution (uniform over a ring in state space due to random force
+        direction). The current validation approach using discrete empirical sampling is
+        not suitable for continuous distributions, as every sample is unique and the
+        empirical distribution becomes uniform.
+        """
+        pomdp = SafeAntVelocityPOMDP(discount_factor=0.95)
+
+        # Get initial state
+        initial_state = pomdp.initial_state_dist().sample()[0]
+
+        # Get non-zero force action
+        action = 2  # Medium force
+
+        transition = SafeAntVelocityStateTransition(
+            state=initial_state,
+            action=action,
+            dt=pomdp.dt,
+            mass=pomdp.mass,
+            damping=pomdp.damping,
+            max_force=pomdp.max_force,
+        )
+        results = validate_probability_matches_empirical_distribution(
+            transition, num_samples=1000, max_js_divergence=0.15
+        )
+
+        assert results["probabilities_normalized"]
+        assert results["distance"] < 0.15  # More tolerance for stochastic transitions

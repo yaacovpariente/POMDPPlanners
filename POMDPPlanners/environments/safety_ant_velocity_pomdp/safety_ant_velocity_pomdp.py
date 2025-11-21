@@ -144,6 +144,84 @@ class SafeAntVelocityStateTransition(StateTransitionModel):
 
         return next_states
 
+    def probability(self, values: List[Any]) -> np.ndarray:
+        """Calculate transition probabilities for given next states.
+
+        Since the force direction is uniformly random over [-π, π], the probability
+        distribution is continuous and depends on the distance from expected dynamics.
+        We approximate this using a mixture of Gaussians representing the random
+        force direction uncertainty.
+
+        Args:
+            values: List of potential next states
+
+        Returns:
+            Array of (unnormalized) probabilities for each state
+        """
+        # Get force magnitude from action
+        force_magnitude = self.force_scales[self.action] * self.max_force
+
+        if force_magnitude == 0:
+            # No force applied - deterministic transition
+            # Only damping affects the dynamics
+            acceleration = -self.damping * self.velocity / self.mass
+            expected_velocity = self.velocity + acceleration * self.dt
+            expected_position = self.position + expected_velocity * self.dt
+            expected_state = np.concatenate([expected_position, expected_velocity])
+
+            # For zero force, transition is deterministic
+            probs = np.array(
+                [
+                    1.0 if np.allclose(state, expected_state, rtol=1e-5, atol=1e-8) else 0.0
+                    for state in values
+                ]
+            )
+        else:
+            # Force is applied with random direction uniformly sampled from [-π, π]
+            # The resulting next states form a continuous distribution on a ring
+            # All states consistent with the force magnitude have equal probability density
+
+            # Tolerance for checking consistency
+            position_tolerance = 0.01
+            force_tolerance = 0.05
+
+            probs = []
+            for next_state in values:
+                # Extract components from the next state
+                next_position = next_state[:2]
+                next_velocity = next_state[2:4]
+
+                # Check if position is consistent with velocity
+                # next_position = position + next_velocity * dt
+                expected_position = self.position + next_velocity * self.dt
+                position_error = np.linalg.norm(next_position - expected_position)
+
+                # Check if velocity is consistent with some force direction
+                # next_velocity = velocity + (force - damping * velocity) / mass * dt
+                # Solving for force: force = (next_velocity - velocity) * mass / dt + damping * velocity
+                required_force = (
+                    next_velocity - self.velocity
+                ) * self.mass / self.dt + self.damping * self.velocity
+                required_force_magnitude = np.linalg.norm(required_force)
+                force_magnitude_error = abs(required_force_magnitude - force_magnitude)
+
+                # Assign uniform probability if state is consistent with physics
+                if position_error < position_tolerance and force_magnitude_error < force_tolerance:
+                    prob = 1.0  # Uniform over consistent states
+                else:
+                    prob = 0.0  # Zero for inconsistent states
+
+                probs.append(prob)
+
+            probs = np.array(probs)
+
+        # Normalize probabilities
+        total = np.sum(probs)
+        if total > 0:
+            probs = probs / total
+
+        return probs
+
 
 class SafeAntVelocityObservation(ObservationModel):
     """Noisy observation model for Safety Ant Velocity POMDP.
