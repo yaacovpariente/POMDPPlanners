@@ -1,8 +1,11 @@
-"""Tests for probability methods across all POMDP environments.
+"""Interface compliance tests for StateTransitionModel implementations.
 
 This module validates that all state transition models correctly implement
-the probability() method by comparing computed probabilities against empirical
-sampling distributions.
+the StateTransitionModel interface, particularly the probability() method,
+by comparing computed probabilities against empirical sampling distributions.
+
+This is part of the interface compliance test suite that ensures all
+implementations satisfy their respective contracts.
 """
 
 import numpy as np
