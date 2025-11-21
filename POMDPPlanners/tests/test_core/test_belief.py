@@ -25,7 +25,7 @@ from POMDPPlanners.core.belief import (
 from POMDPPlanners.core.config_types import BeliefConfig
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.environments.cartpole_pomdp import CartPolePOMDP
-from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP, LaserTagState
+from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.utils.weighted_particle_beliefs import (
@@ -3142,9 +3142,9 @@ def test_is_terminal_belief_all_terminal_particles():
     env = LaserTagPOMDP(discount_factor=0.95)
 
     # Create terminal states
-    terminal_state1 = LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=True)
-    terminal_state2 = LaserTagState(robot=(2, 2), opponent=(3, 3), terminal=True)
-    terminal_state3 = LaserTagState(robot=(4, 4), opponent=(5, 5), terminal=True)
+    terminal_state1 = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
+    terminal_state2 = np.array([2.0, 2.0, 3.0, 3.0, 1.0])
+    terminal_state3 = np.array([4.0, 4.0, 5.0, 5.0, 1.0])
 
     # Create belief with all terminal particles
     particles = [terminal_state1, terminal_state2, terminal_state3]
@@ -3164,9 +3164,9 @@ def test_is_terminal_belief_no_terminal_particles():
     env = LaserTagPOMDP(discount_factor=0.95)
 
     # Create non-terminal states
-    non_terminal_state1 = LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=False)
-    non_terminal_state2 = LaserTagState(robot=(2, 2), opponent=(3, 3), terminal=False)
-    non_terminal_state3 = LaserTagState(robot=(4, 4), opponent=(5, 5), terminal=False)
+    non_terminal_state1 = np.array([0.0, 0.0, 1.0, 1.0, 0.0])
+    non_terminal_state2 = np.array([2.0, 2.0, 3.0, 3.0, 0.0])
+    non_terminal_state3 = np.array([4.0, 4.0, 5.0, 5.0, 0.0])
 
     # Create belief with all non-terminal particles
     particles = [non_terminal_state1, non_terminal_state2, non_terminal_state3]
@@ -3186,9 +3186,9 @@ def test_is_terminal_belief_mixed_particles():
     env = LaserTagPOMDP(discount_factor=0.95)
 
     # Create mixed states (some terminal, some not)
-    terminal_state = LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=True)
-    non_terminal_state1 = LaserTagState(robot=(2, 2), opponent=(3, 3), terminal=False)
-    non_terminal_state2 = LaserTagState(robot=(4, 4), opponent=(5, 5), terminal=False)
+    terminal_state = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
+    non_terminal_state1 = np.array([2.0, 2.0, 3.0, 3.0, 0.0])
+    non_terminal_state2 = np.array([4.0, 4.0, 5.0, 5.0, 0.0])
 
     # Create belief with mixed particles
     particles = [terminal_state, non_terminal_state1, non_terminal_state2]
@@ -3208,7 +3208,7 @@ def test_is_terminal_belief_single_terminal_particle():
     env = LaserTagPOMDP(discount_factor=0.95)
 
     # Create single terminal state
-    terminal_state = LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=True)
+    terminal_state = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
 
     # Create belief with single terminal particle
     particles = [terminal_state]
@@ -3228,7 +3228,7 @@ def test_is_terminal_belief_single_non_terminal_particle():
     env = LaserTagPOMDP(discount_factor=0.95)
 
     # Create single non-terminal state
-    non_terminal_state = LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=False)
+    non_terminal_state = np.array([0.0, 0.0, 1.0, 1.0, 0.0])
 
     # Create belief with single non-terminal particle
     particles = [non_terminal_state]
@@ -3263,8 +3263,8 @@ def test_is_terminal_belief_with_weighted_particle_belief_state_update():
     env = LaserTagPOMDP(discount_factor=0.95)
 
     # Create terminal and non-terminal states
-    terminal_state = LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=True)
-    non_terminal_state = LaserTagState(robot=(2, 2), opponent=(3, 3), terminal=False)
+    terminal_state = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
+    non_terminal_state = np.array([2.0, 2.0, 3.0, 3.0, 0.0])
 
     # Create WeightedParticleBeliefStateUpdate with mixed particles
     particles = [terminal_state, non_terminal_state]
@@ -3284,8 +3284,8 @@ def test_is_terminal_belief_with_unweighted_particle_belief_state_update():
     env = LaserTagPOMDP(discount_factor=0.95)
 
     # Create all terminal states
-    terminal_state1 = LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=True)
-    terminal_state2 = LaserTagState(robot=(2, 2), opponent=(3, 3), terminal=True)
+    terminal_state1 = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
+    terminal_state2 = np.array([2.0, 2.0, 3.0, 3.0, 1.0])
 
     # Create UnweightedParticleBeliefStateUpdate with all terminal particles
     particles = [terminal_state1, terminal_state2]
@@ -3305,7 +3305,7 @@ def test_is_terminal_belief_with_different_environments():
     tiger_env = TigerPOMDP(discount_factor=0.95)
 
     # Create LaserTag terminal state
-    laser_tag_terminal = LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=True)
+    laser_tag_terminal = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
 
     # Create belief with LaserTag state
     particles = [laser_tag_terminal]
@@ -3331,8 +3331,8 @@ def test_is_terminal_belief_large_particle_set():
     # Create large set of terminal particles
     particles = []
     for i in range(100):
-        terminal_state = LaserTagState(
-            robot=(i % 7, i % 11), opponent=((i + 1) % 7, (i + 1) % 11), terminal=True
+        terminal_state = np.array(
+            [float(i % 7), float(i % 11), float((i + 1) % 7), float((i + 1) % 11), 1.0]
         )
         particles.append(terminal_state)
 
@@ -3355,10 +3355,14 @@ def test_is_terminal_belief_large_mixed_particle_set():
     particles = []
     for i in range(100):
         terminal = i % 2 == 0  # Every other particle is terminal
-        state = LaserTagState(
-            robot=(i % 7, i % 11),
-            opponent=((i + 1) % 7, (i + 1) % 11),
-            terminal=terminal,
+        state = np.array(
+            [
+                float(i % 7),
+                float(i % 11),
+                float((i + 1) % 7),
+                float((i + 1) % 11),
+                1.0 if terminal else 0.0,
+            ]
         )
         particles.append(state)
 
@@ -3378,9 +3382,9 @@ def test_is_terminal_belief_edge_case_all_false():
     env = LaserTagPOMDP(discount_factor=0.95)
 
     # Create states with explicit False terminal flags
-    state1 = LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=False)
-    state2 = LaserTagState(robot=(2, 2), opponent=(3, 3), terminal=False)
-    state3 = LaserTagState(robot=(4, 4), opponent=(5, 5), terminal=False)
+    state1 = np.array([0.0, 0.0, 1.0, 1.0, 0.0])
+    state2 = np.array([2.0, 2.0, 3.0, 3.0, 0.0])
+    state3 = np.array([4.0, 4.0, 5.0, 5.0, 0.0])
 
     particles = [state1, state2, state3]
     log_weights = np.log(np.ones(3) / 3)
@@ -3399,9 +3403,9 @@ def test_is_terminal_belief_edge_case_all_true():
     env = LaserTagPOMDP(discount_factor=0.95)
 
     # Create states with explicit True terminal flags
-    state1 = LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=True)
-    state2 = LaserTagState(robot=(2, 2), opponent=(3, 3), terminal=True)
-    state3 = LaserTagState(robot=(4, 4), opponent=(5, 5), terminal=True)
+    state1 = np.array([0.0, 0.0, 1.0, 1.0, 1.0])
+    state2 = np.array([2.0, 2.0, 3.0, 3.0, 1.0])
+    state3 = np.array([4.0, 4.0, 5.0, 5.0, 1.0])
 
     particles = [state1, state2, state3]
     log_weights = np.log(np.ones(3) / 3)
@@ -3421,9 +3425,9 @@ def test_is_terminal_belief_comprehensive_scenarios():
 
     # Scenario 1: All terminal
     all_terminal_particles = [
-        LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=True),
-        LaserTagState(robot=(2, 2), opponent=(3, 3), terminal=True),
-        LaserTagState(robot=(4, 4), opponent=(5, 5), terminal=True),
+        np.array([0.0, 0.0, 1.0, 1.0, 1.0]),
+        np.array([2.0, 2.0, 3.0, 3.0, 1.0]),
+        np.array([4.0, 4.0, 5.0, 5.0, 1.0]),
     ]
     log_weights = np.log(np.ones(3) / 3)
     belief_all_terminal = WeightedParticleBelief(
@@ -3432,9 +3436,9 @@ def test_is_terminal_belief_comprehensive_scenarios():
 
     # Scenario 2: All non-terminal
     all_non_terminal_particles = [
-        LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=False),
-        LaserTagState(robot=(2, 2), opponent=(3, 3), terminal=False),
-        LaserTagState(robot=(4, 4), opponent=(5, 5), terminal=False),
+        np.array([0.0, 0.0, 1.0, 1.0, 0.0]),
+        np.array([2.0, 2.0, 3.0, 3.0, 0.0]),
+        np.array([4.0, 4.0, 5.0, 5.0, 0.0]),
     ]
     belief_all_non_terminal = WeightedParticleBelief(
         particles=all_non_terminal_particles, log_weights=log_weights
@@ -3442,9 +3446,9 @@ def test_is_terminal_belief_comprehensive_scenarios():
 
     # Scenario 3: Mixed (majority terminal)
     mixed_particles_majority_terminal = [
-        LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=True),
-        LaserTagState(robot=(2, 2), opponent=(3, 3), terminal=True),
-        LaserTagState(robot=(4, 4), opponent=(5, 5), terminal=False),
+        np.array([0.0, 0.0, 1.0, 1.0, 1.0]),
+        np.array([2.0, 2.0, 3.0, 3.0, 1.0]),
+        np.array([4.0, 4.0, 5.0, 5.0, 0.0]),
     ]
     belief_mixed_majority_terminal = WeightedParticleBelief(
         particles=mixed_particles_majority_terminal, log_weights=log_weights
@@ -3452,9 +3456,9 @@ def test_is_terminal_belief_comprehensive_scenarios():
 
     # Scenario 4: Mixed (majority non-terminal)
     mixed_particles_majority_non_terminal = [
-        LaserTagState(robot=(0, 0), opponent=(1, 1), terminal=False),
-        LaserTagState(robot=(2, 2), opponent=(3, 3), terminal=False),
-        LaserTagState(robot=(4, 4), opponent=(5, 5), terminal=True),
+        np.array([0.0, 0.0, 1.0, 1.0, 0.0]),
+        np.array([2.0, 2.0, 3.0, 3.0, 0.0]),
+        np.array([4.0, 4.0, 5.0, 5.0, 1.0]),
     ]
     belief_mixed_majority_non_terminal = WeightedParticleBelief(
         particles=mixed_particles_majority_non_terminal, log_weights=log_weights

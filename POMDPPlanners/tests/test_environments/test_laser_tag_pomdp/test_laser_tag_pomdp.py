@@ -22,7 +22,6 @@ from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.laser_tag_pomdp import (
     LaserTagObservation,
     LaserTagPOMDP,
-    LaserTagState,
     LaserTagStateTransition,
 )
 from POMDPPlanners.simulations.episodes import run_episode
@@ -79,43 +78,46 @@ class TestLaserTagState:
     """
 
     def test_state_creation_and_equality(self):
-        """Test LaserTagState creation and equality comparison.
+        """Test LaserTag state creation and equality comparison.
 
         Purpose: Validates state creation and equality comparison functionality
 
-        Given: Two identical LaserTag states and one different state
-        When: States are created and compared using == operator
+        Given: Two identical LaserTag states and one different state as numpy arrays
+        When: States are created and compared using np.array_equal
         Then: Identical states are equal and different states are not equal
 
         Test type: unit
         """
-        state1 = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
-        state2 = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
-        state3 = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=True)
+        state1 = np.array([3.0, 5.0, 2.0, 4.0, 0.0])
+        state2 = np.array([3.0, 5.0, 2.0, 4.0, 0.0])
+        state3 = np.array([3.0, 5.0, 2.0, 4.0, 1.0])
 
-        assert state1 == state2
-        assert state1 != state3
-        assert state1 != "not a state"
+        assert np.array_equal(state1, state2)
+        assert not np.array_equal(state1, state3)
 
-    def test_state_hashing(self):
-        """Test LaserTagState hashing for use in sets and dictionaries.
+    def test_state_structure(self):
+        """Test LaserTag state vector structure.
 
-        Purpose: Validates that identical states have same hash for container usage
+        Purpose: Validates state vector structure and element access
 
-        Given: Two identical LaserTag states
-        When: Hash values are computed
-        Then: States have same hash and can be used as dictionary keys
+        Given: A LaserTag state as numpy array
+        When: Elements are accessed by index
+        Then: Correct values are returned for robot pos, opponent pos, and terminal flag
 
         Test type: unit
         """
-        state1 = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
-        state2 = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
+        state = np.array([3.0, 5.0, 2.0, 4.0, 0.0])
 
-        assert hash(state1) == hash(state2)
+        # Test robot position access
+        assert int(state[0]) == 3
+        assert int(state[1]) == 5
 
-        # Test usage in set
-        state_set = {state1, state2}
-        assert len(state_set) == 1
+        # Test opponent position access
+        assert int(state[2]) == 2
+        assert int(state[3]) == 4
+
+        # Test terminal flag
+        assert bool(state[4]) == False
 
 
 class TestLaserTagStateTransition:
@@ -141,7 +143,7 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 5), opponent=(1, 1), terminal=False)
+        state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
         floor_shape = (7, 11)
         walls = set()
 
@@ -149,8 +151,8 @@ class TestLaserTagStateTransition:
         transition = LaserTagStateTransition(state, 0, floor_shape, walls)
         next_states = transition.sample(n_samples=10)
         for next_state in next_states:
-            assert next_state.robot == (2, 5)  # One row up
-            assert not next_state.terminal
+            assert (int(next_state[0]), int(next_state[1])) == (2, 5)  # One row up
+            assert not bool(next_state[4])
 
     def test_robot_boundary_collision(self):
         """Test robot cannot move outside grid boundaries.
@@ -167,11 +169,11 @@ class TestLaserTagStateTransition:
         walls = set()
 
         # Test robot at top boundary trying to go North
-        state = LaserTagState(robot=(0, 5), opponent=(3, 3), terminal=False)
+        state = np.array([0.0, 5.0, 3.0, 3.0, 0.0])
         transition = LaserTagStateTransition(state, 0, floor_shape, walls)
         next_states = transition.sample(n_samples=5)
         for next_state in next_states:
-            assert next_state.robot == (0, 5)  # Should stay in place
+            assert (int(next_state[0]), int(next_state[1])) == (0, 5)  # Should stay in place
 
     def test_robot_wall_collision(self):
         """Test robot cannot move into walls.
@@ -184,7 +186,7 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 2), opponent=(1, 1), terminal=False)
+        state = np.array([3.0, 2.0, 1.0, 1.0, 0.0])
         floor_shape = (7, 11)
         walls = {(3, 3)}  # Wall to the East
 
@@ -192,7 +194,7 @@ class TestLaserTagStateTransition:
         transition = LaserTagStateTransition(state, 2, floor_shape, walls)
         next_states = transition.sample(n_samples=5)
         for next_state in next_states:
-            assert next_state.robot == (3, 2)  # Should stay in place
+            assert (int(next_state[0]), int(next_state[1])) == (3, 2)  # Should stay in place
 
     def test_opponent_movement_toward_robot(self):
         """Test opponent tends to move toward robot position.
@@ -205,7 +207,7 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(2, 5), opponent=(5, 5), terminal=False)
+        state = np.array([2.0, 5.0, 5.0, 5.0, 0.0])
         floor_shape = (7, 11)
         walls = set()
 
@@ -213,7 +215,7 @@ class TestLaserTagStateTransition:
         samples = transition.sample(n_samples=1000)
 
         # Count opponent positions
-        opponent_positions = [s.opponent for s in samples]
+        opponent_positions = [(int(s[2]), int(s[3])) for s in samples]
         pos_counts = Counter(opponent_positions)
 
         # Opponent should prefer moving toward robot (should prefer North: (4,5))
@@ -237,7 +239,7 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=False)
+        state = np.array([3.0, 5.0, 3.0, 5.0, 0.0])
         floor_shape = (7, 11)
         walls = set()
 
@@ -245,9 +247,9 @@ class TestLaserTagStateTransition:
         next_states = transition.sample(n_samples=10)
 
         for next_state in next_states:
-            assert next_state.terminal
-            assert next_state.robot == (3, 5)
-            assert next_state.opponent == (3, 5)
+            assert bool(next_state[4])
+            assert (int(next_state[0]), int(next_state[1])) == (3, 5)
+            assert (int(next_state[2]), int(next_state[3])) == (3, 5)
 
     def test_failed_tagging(self):
         """Test failed tagging does not create terminal state.
@@ -260,7 +262,7 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
+        state = np.array([3.0, 5.0, 2.0, 4.0, 0.0])
         floor_shape = (7, 11)
         walls = set()
 
@@ -268,8 +270,8 @@ class TestLaserTagStateTransition:
         next_states = transition.sample(n_samples=10)
 
         for next_state in next_states:
-            assert not next_state.terminal
-            assert next_state.robot == (3, 5)  # Robot doesn't move on tag
+            assert not bool(next_state[4])
+            assert (int(next_state[0]), int(next_state[1])) == (3, 5)  # Robot doesn't move on tag
 
     def test_probability_successful_tag(self):
         """Test probability calculation for successful tag transition.
@@ -282,18 +284,18 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=False)
+        state = np.array([3.0, 5.0, 3.0, 5.0, 0.0])
         floor_shape = (7, 11)
         walls = set()
 
         transition = LaserTagStateTransition(state, 4, floor_shape, walls)
 
         # Correct terminal state
-        correct_terminal = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=True)
+        correct_terminal = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
         # Wrong terminal state (different position)
-        wrong_terminal = LaserTagState(robot=(3, 4), opponent=(3, 4), terminal=True)
+        wrong_terminal = np.array([3.0, 4.0, 3.0, 4.0, 1.0])
         # Non-terminal state
-        non_terminal = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=False)
+        non_terminal = np.array([3.0, 5.0, 3.0, 5.0, 0.0])
 
         test_states = [correct_terminal, wrong_terminal, non_terminal]
         probs = transition.probability(test_states)
@@ -313,7 +315,7 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 5), opponent=(5, 5), terminal=False)
+        state = np.array([3.0, 5.0, 5.0, 5.0, 0.0])
         floor_shape = (7, 11)
         walls = set()
 
@@ -324,18 +326,10 @@ class TestLaserTagStateTransition:
         # Expected moves: North to (4, 5) with prob 0.4, stay at (5, 5) with prob 0.2
         # No horizontal movement since same column
 
-        next_state_north = LaserTagState(
-            robot=(4, 5), opponent=(4, 5), terminal=False
-        )  # Opponent moves North
-        next_state_stay = LaserTagState(
-            robot=(4, 5), opponent=(5, 5), terminal=False
-        )  # Opponent stays
-        next_state_south = LaserTagState(
-            robot=(4, 5), opponent=(6, 5), terminal=False
-        )  # Opponent moves South
-        next_state_wrong_robot = LaserTagState(
-            robot=(3, 5), opponent=(4, 5), terminal=False
-        )  # Wrong robot position
+        next_state_north = np.array([4.0, 5.0, 4.0, 5.0, 0.0])  # Opponent moves North
+        next_state_stay = np.array([4.0, 5.0, 5.0, 5.0, 0.0])  # Opponent stays
+        next_state_south = np.array([4.0, 5.0, 6.0, 5.0, 0.0])  # Opponent moves South
+        next_state_wrong_robot = np.array([3.0, 5.0, 4.0, 5.0, 0.0])  # Wrong robot position
 
         test_states = [next_state_north, next_state_stay, next_state_south, next_state_wrong_robot]
         probs = transition.probability(test_states)
@@ -373,7 +367,7 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 5), opponent=(3, 3), terminal=False)
+        state = np.array([3.0, 5.0, 3.0, 3.0, 0.0])
         floor_shape = (7, 11)
         walls = {(3, 4), (4, 3)}  # Walls to the East and South of opponent
 
@@ -387,9 +381,9 @@ class TestLaserTagStateTransition:
         # West move (3, 2) is valid
         # Stay at (3, 3) absorbs blocked probability
 
-        next_state_stay = LaserTagState(robot=(2, 5), opponent=(3, 3), terminal=False)
-        next_state_north = LaserTagState(robot=(2, 5), opponent=(2, 3), terminal=False)
-        next_state_east_blocked = LaserTagState(robot=(2, 5), opponent=(3, 4), terminal=False)
+        next_state_stay = np.array([2.0, 5.0, 3.0, 3.0, 0.0])
+        next_state_north = np.array([2.0, 5.0, 2.0, 3.0, 0.0])
+        next_state_east_blocked = np.array([2.0, 5.0, 3.0, 4.0, 0.0])
 
         test_states = [next_state_stay, next_state_north, next_state_east_blocked]
         probs = transition.probability(test_states)
@@ -412,7 +406,7 @@ class TestLaserTagStateTransition:
             (3, 2),  # West
         ]
         all_states = [
-            LaserTagState(robot=(2, 5), opponent=pos, terminal=False)
+            np.array([2.0, 5.0, float(pos[0]), float(pos[1]), 0.0])
             for pos in all_possible_positions
         ]
         all_probs = transition.probability(all_states)
@@ -432,7 +426,7 @@ class TestLaserTagStateTransition:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
+        state = np.array([3.0, 5.0, 2.0, 4.0, 0.0])
         floor_shape = (7, 11)
         walls = set()
 
@@ -469,7 +463,7 @@ class TestLaserTagObservation:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(2, 2), opponent=(2, 4), terminal=False)
+        state = np.array([2.0, 2.0, 2.0, 4.0, 0.0])
         obs_model = LaserTagObservation(
             state,
             0,
@@ -504,7 +498,7 @@ class TestLaserTagObservation:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=True)
+        state = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
         obs_model = LaserTagObservation(
             state, 4, measurement_noise=1.0, floor_shape=(7, 11), walls=set()
         )
@@ -525,7 +519,7 @@ class TestLaserTagObservation:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=True)
+        state = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
         obs_model = LaserTagObservation(
             state, 4, measurement_noise=1.0, floor_shape=(7, 11), walls=set()
         )
@@ -553,7 +547,7 @@ class TestLaserTagObservation:
         Test type: unit
         """
         # Create simple scenario with robot in center of empty grid
-        state = LaserTagState(robot=(3, 3), opponent=(5, 5), terminal=False)
+        state = np.array([3.0, 3.0, 5.0, 5.0, 0.0])
         obs_model = LaserTagObservation(
             state, 0, measurement_noise=1.0, floor_shape=(7, 7), walls=set()
         )
@@ -593,7 +587,7 @@ class TestLaserTagObservation:
         Test type: unit
         """
         # Place robot at (3, 3) with wall at (3, 5) to the East
-        state = LaserTagState(robot=(3, 3), opponent=(5, 5), terminal=False)
+        state = np.array([3.0, 3.0, 5.0, 5.0, 0.0])
         walls = {(3, 5)}
         obs_model = LaserTagObservation(
             state, 0, measurement_noise=0.5, floor_shape=(7, 7), walls=walls
@@ -626,7 +620,7 @@ class TestLaserTagObservation:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 3), opponent=(5, 5), terminal=False)
+        state = np.array([3.0, 3.0, 5.0, 5.0, 0.0])
         obs_model = LaserTagObservation(
             state, 0, measurement_noise=1.0, floor_shape=(7, 7), walls=set()
         )
@@ -660,7 +654,7 @@ class TestLaserTagObservation:
 
         Test type: unit
         """
-        state = LaserTagState(robot=(3, 3), opponent=(5, 5), terminal=False)
+        state = np.array([3.0, 3.0, 5.0, 5.0, 0.0])
         measurement_noise = 1.0
         obs_model = LaserTagObservation(
             state, 0, measurement_noise=measurement_noise, floor_shape=(7, 7), walls=set()
@@ -765,12 +759,12 @@ class TestLaserTagPOMDP:
         env = LaserTagPOMDP(discount_factor=0.95, dangerous_areas=set())
 
         # Test successful tag - using position (1, 1) which is not in default dangerous areas
-        same_pos_state = LaserTagState(robot=(1, 1), opponent=(1, 1), terminal=False)
+        same_pos_state = np.array([1.0, 1.0, 1.0, 1.0, 0.0])
         tag_reward = env.reward(same_pos_state, 4)
         assert tag_reward == env.tag_reward
 
         # Test failed tag
-        diff_pos_state = LaserTagState(robot=(1, 1), opponent=(2, 4), terminal=False)
+        diff_pos_state = np.array([1.0, 1.0, 2.0, 4.0, 0.0])
         failed_tag_reward = env.reward(diff_pos_state, 4)
         assert failed_tag_reward == -env.tag_penalty
 
@@ -779,7 +773,7 @@ class TestLaserTagPOMDP:
         assert move_reward == -env.step_cost
 
         # Test terminal state
-        terminal_state = LaserTagState(robot=(1, 1), opponent=(1, 1), terminal=True)
+        terminal_state = np.array([1.0, 1.0, 1.0, 1.0, 1.0])
         terminal_reward = env.reward(terminal_state, 0)
         assert terminal_reward == 0.0
 
@@ -796,8 +790,8 @@ class TestLaserTagPOMDP:
         """
         env = LaserTagPOMDP(discount_factor=0.95)
 
-        non_terminal = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
-        terminal = LaserTagState(robot=(3, 5), opponent=(3, 5), terminal=True)
+        non_terminal = np.array([3.0, 5.0, 2.0, 4.0, 0.0])
+        terminal = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
 
         assert not env.is_terminal(non_terminal)
         assert env.is_terminal(terminal)
@@ -850,9 +844,12 @@ class TestLaserTagPOMDP:
         initial_states = initial_dist.sample(n_samples=10)
 
         for state in initial_states:
-            assert isinstance(state, LaserTagState)
-            assert state.robot != state.opponent  # Should start at different positions
-            assert not state.terminal
+            assert isinstance(state, np.ndarray) and len(state) == 5
+            assert (int(state[0]), int(state[1])) != (
+                int(state[2]),
+                int(state[3]),
+            )  # Should start at different positions
+            assert not bool(state[4])
 
     def test_observation_equality(self):
         """Test observation equality comparison.
@@ -890,20 +887,18 @@ class TestLaserTagPOMDP:
 
         # Create mock history with wall collision
         # Create a simple belief for testing
-        dummy_particles = [LaserTagState(robot=(3, 2), opponent=(1, 1), terminal=False)]
+        dummy_particles = [np.array([3.0, 2.0, 1.0, 1.0, 0.0])]
         dummy_log_weights = np.array([-0.1])  # Small non-zero log weight
         test_belief = WeightedParticleBelief(
             particles=dummy_particles, log_weights=dummy_log_weights
         )
 
         # Step 1: Robot tries to move East into wall
-        state1 = LaserTagState(robot=(3, 2), opponent=(1, 1), terminal=False)
+        state1 = np.array([3.0, 2.0, 1.0, 1.0, 0.0])
         step1 = StepData(
             state=state1,
             action=2,  # East
-            next_state=LaserTagState(
-                robot=(3, 2), opponent=(1, 0), terminal=False
-            ),  # Robot stayed due to wall
+            next_state=np.array([3.0, 2.0, 1.0, 0.0, 0.0]),  # Robot stayed due to wall
             observation=(
                 1.1,
                 0.9,
@@ -919,11 +914,11 @@ class TestLaserTagPOMDP:
         )
 
         # Step 2: Normal movement
-        state2 = LaserTagState(robot=(3, 2), opponent=(1, 0), terminal=False)
+        state2 = np.array([3.0, 2.0, 1.0, 0.0, 0.0])
         step2 = StepData(
             state=state2,
             action=0,  # North
-            next_state=LaserTagState(robot=(2, 2), opponent=(1, 1), terminal=False),
+            next_state=np.array([2.0, 2.0, 1.0, 1.0, 0.0]),
             observation=(
                 1.0,
                 1.1,
@@ -996,7 +991,7 @@ class TestLaserTagPOMDP:
         )
 
         # Test wall collision penalty
-        state = LaserTagState(robot=(3, 2), opponent=(1, 1), terminal=False)
+        state = np.array([3.0, 2.0, 1.0, 1.0, 0.0])
 
         # Try to move East into wall at (3, 3)
         reward = env.reward(state, 2)  # East action
@@ -1133,7 +1128,9 @@ class TestLaserTagPOMDP:
             assert len(history.history) > 0, "History should contain steps"
 
             for step in history.history:
-                assert isinstance(step.state, LaserTagState), "State should be LaserTagState"
+                assert (
+                    isinstance(step.state, np.ndarray) and len(step.state) == 5
+                ), "State should be LaserTagState"
                 assert (
                     step.action in env.get_actions()
                 ), f"Action {step.action} not in valid actions"
@@ -1141,8 +1138,8 @@ class TestLaserTagPOMDP:
                 assert len(step.observation) == 8, "LaserTag observation should be 8-dimensional"
 
                 # Validate robot and opponent positions are within grid bounds
-                robot_pos = step.state.robot
-                opponent_pos = step.state.opponent
+                robot_pos = (int(step.state[0]), int(step.state[1]))
+                opponent_pos = (int(step.state[2]), int(step.state[3]))
                 assert (
                     0 <= robot_pos[0] < env.floor_shape[0]
                 ), f"Robot row {robot_pos[0]} out of bounds"
@@ -1170,7 +1167,7 @@ class TestLaserTagPOMDP:
         env = LaserTagPOMDP(discount_factor=0.95)
 
         # Create test belief
-        dummy_particles = [LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)]
+        dummy_particles = [np.array([3.0, 5.0, 2.0, 4.0, 0.0])]
         dummy_log_weights = np.array([-0.1])  # Small non-zero log weight
         test_belief = WeightedParticleBelief(
             particles=dummy_particles, log_weights=dummy_log_weights
@@ -1178,9 +1175,9 @@ class TestLaserTagPOMDP:
 
         # Step 1: Normal reward
         step1 = StepData(
-            state=LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False),
+            state=np.array([3.0, 5.0, 2.0, 4.0, 0.0]),
             action=0,  # North
-            next_state=LaserTagState(robot=(2, 5), opponent=(1, 4), terminal=False),
+            next_state=np.array([2.0, 5.0, 1.0, 4.0, 0.0]),
             observation=(1.0, 2.0, 3.0, 1.5, 2.5, 1.2, 0.8, 2.1),
             reward=-1.0,
             belief=test_belief,
@@ -1188,9 +1185,9 @@ class TestLaserTagPOMDP:
 
         # Step 2: None reward (this should not crash)
         step2 = StepData(
-            state=LaserTagState(robot=(2, 5), opponent=(1, 4), terminal=False),
+            state=np.array([2.0, 5.0, 1.0, 4.0, 0.0]),
             action=4,  # Tag action
-            next_state=LaserTagState(robot=(2, 5), opponent=(0, 4), terminal=False),
+            next_state=np.array([2.0, 5.0, 0.0, 4.0, 0.0]),
             observation=(1.1, 2.1, 3.1, 1.6, 2.6, 1.3, 0.9, 2.2),
             reward=None,  # This is the problematic case
             belief=test_belief,
@@ -1198,9 +1195,9 @@ class TestLaserTagPOMDP:
 
         # Step 3: Successful tag with positive reward
         step3 = StepData(
-            state=LaserTagState(robot=(2, 5), opponent=(0, 4), terminal=False),
+            state=np.array([2.0, 5.0, 0.0, 4.0, 0.0]),
             action=4,  # Tag action
-            next_state=LaserTagState(robot=(2, 5), opponent=(2, 5), terminal=True),
+            next_state=np.array([2.0, 5.0, 2.0, 5.0, 1.0]),
             observation=(
                 -1.0,
                 -1.0,

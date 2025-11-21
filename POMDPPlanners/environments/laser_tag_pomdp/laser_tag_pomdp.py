@@ -20,7 +20,6 @@ Classes:
     LaserTagPOMDP: Main environment class implementing the LaserTag problem
 """
 
-from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -50,40 +49,28 @@ class LaserTagPOMDPMetrics(Enum):
     AVERAGE_ALL_DANGEROUS_ENCOUNTERS = "average_all_dangerous_encounters"
 
 
-@dataclass
-class LaserTagState:
-    """State representation for LaserTag POMDP.
-
-    Attributes:
-        robot: Robot's position as (row, col) tuple
-        opponent: Opponent's position as (row, col) tuple
-        terminal: Whether the episode has terminated
-
-    Example:
-        >>> state = LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)
-        >>> state.robot
-        (0, 0)
-        >>> state.opponent
-        (6, 10)
-        >>> state.terminal
-        False
-    """
-
-    robot: Tuple[int, int]
-    opponent: Tuple[int, int]
-    terminal: bool = False
-
-    def __eq__(self, other):
-        if not isinstance(other, LaserTagState):
-            return False
-        return (
-            self.robot == other.robot
-            and self.opponent == other.opponent
-            and self.terminal == other.terminal
-        )
-
-    def __hash__(self):
-        return hash((self.robot, self.opponent, self.terminal))
+# State representation for LaserTag POMDP as numpy array
+# LaserTagState: np.ndarray with shape (5,) and dtype float64
+#
+# State vector structure:
+#   Index 0: Robot row position (int stored as float)
+#   Index 1: Robot column position (int stored as float)
+#   Index 2: Opponent row position (int stored as float)
+#   Index 3: Opponent column position (int stored as float)
+#   Index 4: Terminal flag (0.0 = non-terminal, 1.0 = terminal)
+#
+# Example:
+#   state = np.array([0.0, 0.0, 6.0, 10.0, 0.0])
+#   # Robot at (0, 0), opponent at (6, 10), non-terminal
+#
+# Access patterns:
+#   robot_row = int(state[0])
+#   robot_col = int(state[1])
+#   robot_pos = (int(state[0]), int(state[1]))
+#   opponent_row = int(state[2])
+#   opponent_col = int(state[3])
+#   opponent_pos = (int(state[2]), int(state[3]))
+#   is_terminal = bool(state[4])
 
 
 class LaserTagStateTransition(StateTransitionModel):
@@ -93,7 +80,7 @@ class LaserTagStateTransition(StateTransitionModel):
     (probabilistic, with tendency to move toward robot's position).
 
     Attributes:
-        state: Current LaserTagState
+        state: Current state as numpy array (shape (5,))
         action: Action to be executed (0=North, 1=South, 2=East, 3=West, 4=Tag)
         floor_shape: Tuple of (rows, cols) for grid dimensions
         walls: Set of wall positions
@@ -101,7 +88,7 @@ class LaserTagStateTransition(StateTransitionModel):
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
-        >>> state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
+        >>> state = np.array([3.0, 5.0, 2.0, 4.0, 0.0])  # Robot at (3,5), opponent at (2,4)
         >>> transition = LaserTagStateTransition(
         ...     state=state,
         ...     action=0,  # North
@@ -114,7 +101,7 @@ class LaserTagStateTransition(StateTransitionModel):
 
     def __init__(
         self,
-        state: LaserTagState,
+        state: np.ndarray,
         action: int,
         floor_shape: Tuple[int, int],
         walls: Set[Tuple[int, int]],
@@ -122,7 +109,7 @@ class LaserTagStateTransition(StateTransitionModel):
         """Initialize the state transition model.
 
         Args:
-            state: Current LaserTagState
+            state: Current state as numpy array with shape (5,)
             action: Action to execute (0=North, 1=South, 2=East, 3=West, 4=Tag)
             floor_shape: Grid dimensions as (rows, cols)
             walls: Set of wall positions as (row, col) tuples
@@ -150,16 +137,16 @@ class LaserTagStateTransition(StateTransitionModel):
     def _get_robot_next_position(self) -> Tuple[int, int]:
         """Get robot's next position based on action."""
         if self.action == 4:  # Tag action
-            return self.state.robot
+            return (int(self.state[0]), int(self.state[1]))
 
         dr, dc = self._action_directions[self.action]
-        new_pos = (self.state.robot[0] + dr, self.state.robot[1] + dc)
+        new_pos = (int(self.state[0]) + dr, int(self.state[1]) + dc)
 
         # If new position is invalid, stay at current position
         if self._is_valid_position(new_pos):
             return new_pos
         else:
-            return self.state.robot
+            return (int(self.state[0]), int(self.state[1]))
 
     def _create_position(
         self, fixed_coord: int, moving_coord: int, is_horizontal: bool
@@ -250,7 +237,7 @@ class LaserTagStateTransition(StateTransitionModel):
         - 0.4 probability to move in y-direction (toward/away from robot)
         - 0.2 probability to stay in place
         """
-        current_opp = self.state.opponent
+        current_opp = (int(self.state[2]), int(self.state[3]))
         robot_row, robot_col = robot_pos
         opp_row, opp_col = current_opp
 
@@ -261,16 +248,28 @@ class LaserTagStateTransition(StateTransitionModel):
         # Combine and normalize
         return self._normalize_move_probabilities(x_moves + y_moves, current_opp, stay_prob=0.2)
 
-    def sample(self, n_samples: int = 1) -> List[LaserTagState]:
+    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
         """Sample next states from the transition model."""
         samples = []
         robot_next = self._get_robot_next_position()
+        robot_current = (int(self.state[0]), int(self.state[1]))
+        opponent_current = (int(self.state[2]), int(self.state[3]))
 
         # Check if tagging occurred
-        if self.action == 4 and self.state.robot == self.state.opponent:
+        if self.action == 4 and robot_current == opponent_current:
             # Successful tag - terminal state
             for _ in range(n_samples):
-                samples.append(LaserTagState(robot_next, self.state.opponent, terminal=True))
+                samples.append(
+                    np.array(
+                        [
+                            float(robot_next[0]),
+                            float(robot_next[1]),
+                            float(opponent_current[0]),
+                            float(opponent_current[1]),
+                            1.0,
+                        ]
+                    )
+                )
         else:
             # Regular transition
             opp_moves = self._get_opponent_move_probabilities(robot_next)
@@ -278,7 +277,18 @@ class LaserTagStateTransition(StateTransitionModel):
 
             for _ in range(n_samples):
                 opp_next = np.random.choice(len(positions), p=probabilities)
-                samples.append(LaserTagState(robot_next, positions[opp_next], terminal=False))
+                opp_next_pos = positions[opp_next]
+                samples.append(
+                    np.array(
+                        [
+                            float(robot_next[0]),
+                            float(robot_next[1]),
+                            float(opp_next_pos[0]),
+                            float(opp_next_pos[1]),
+                            0.0,
+                        ]
+                    )
+                )
 
         return samples
 
@@ -286,33 +296,38 @@ class LaserTagStateTransition(StateTransitionModel):
         """Calculate transition probabilities for given next states."""
         result = np.zeros(len(values))
         robot_next = self._get_robot_next_position()
+        robot_current = (int(self.state[0]), int(self.state[1]))
+        opponent_current = (int(self.state[2]), int(self.state[3]))
 
         # Check if tagging occurred
-        if self.action == 4 and self.state.robot == self.state.opponent:
+        if self.action == 4 and robot_current == opponent_current:
             # Successful tag case
             for i, next_state in enumerate(values):
-                if (
-                    isinstance(next_state, LaserTagState)
-                    and next_state.robot == robot_next
-                    and next_state.opponent == self.state.opponent
-                    and next_state.terminal
-                ):
-                    result[i] = 1.0
+                if isinstance(next_state, np.ndarray) and len(next_state) == 5:
+                    next_robot = (int(next_state[0]), int(next_state[1]))
+                    next_opponent = (int(next_state[2]), int(next_state[3]))
+                    next_terminal = bool(next_state[4])
+                    if (
+                        next_robot == robot_next
+                        and next_opponent == opponent_current
+                        and next_terminal
+                    ):
+                        result[i] = 1.0
         else:
             # Regular transition case
             opp_moves = self._get_opponent_move_probabilities(robot_next)
 
             for i, next_state in enumerate(values):
-                if (
-                    isinstance(next_state, LaserTagState)
-                    and next_state.robot == robot_next
-                    and not next_state.terminal
-                ):
-                    # Find probability for this opponent position
-                    for opp_pos, prob in opp_moves:
-                        if next_state.opponent == opp_pos:
-                            result[i] = prob
-                            break
+                if isinstance(next_state, np.ndarray) and len(next_state) == 5:
+                    next_robot = (int(next_state[0]), int(next_state[1]))
+                    next_opponent = (int(next_state[2]), int(next_state[3]))
+                    next_terminal = bool(next_state[4])
+                    if next_robot == robot_next and not next_terminal:
+                        # Find probability for this opponent position
+                        for opp_pos, prob in opp_moves:
+                            if next_opponent == opp_pos:
+                                result[i] = prob
+                                break
 
         return result
 
@@ -325,7 +340,7 @@ class LaserTagObservation(ObservationModel):
     before hitting a wall or boundary, with Gaussian noise.
 
     Attributes:
-        next_state: The state after action execution
+        next_state: The state after action execution as numpy array (shape (5,))
         action: The action that was taken
         measurement_noise: Standard deviation of Gaussian measurement noise
         floor_shape: Grid dimensions as (rows, cols)
@@ -334,7 +349,7 @@ class LaserTagObservation(ObservationModel):
     Example:
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
-        >>> state = LaserTagState(robot=(3, 5), opponent=(2, 4), terminal=False)
+        >>> state = np.array([3.0, 5.0, 2.0, 4.0, 0.0])  # Robot at (3,5), opponent at (2,4)
         >>> obs_model = LaserTagObservation(
         ...     next_state=state,
         ...     action=0,
@@ -348,7 +363,7 @@ class LaserTagObservation(ObservationModel):
 
     def __init__(
         self,
-        next_state: LaserTagState,
+        next_state: np.ndarray,
         action: int,
         measurement_noise: float = 1.0,
         floor_shape: Tuple[int, int] = (7, 11),
@@ -357,7 +372,7 @@ class LaserTagObservation(ObservationModel):
         """Initialize the observation model.
 
         Args:
-            next_state: State after taking the action
+            next_state: State after taking the action as numpy array with shape (5,)
             action: Action that was executed
             measurement_noise: Standard deviation of Gaussian measurement noise
             floor_shape: Grid dimensions as (rows, cols)
@@ -408,8 +423,8 @@ class LaserTagObservation(ObservationModel):
 
             # Check if hit wall
             if (row, col) in self.walls or (row, col) == (
-                self.next_state.opponent[0],
-                self.next_state.opponent[1],
+                int(self.next_state[2]),
+                int(self.next_state[3]),
             ):
                 break
 
@@ -423,13 +438,13 @@ class LaserTagObservation(ObservationModel):
         """
         samples: List[Tuple[float, ...]] = []
 
-        if self.next_state.terminal:
+        if bool(self.next_state[4]):
             # Terminal state - return special terminal observation
             for _ in range(n_samples):
                 samples.append((-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0))
         else:
             # Get true laser measurements from robot position
-            robot_pos = self.next_state.robot
+            robot_pos = (int(self.next_state[0]), int(self.next_state[1]))
             true_measurements = []
 
             for direction in self._laser_directions:
@@ -452,7 +467,7 @@ class LaserTagObservation(ObservationModel):
         """Calculate observation probabilities for given values."""
         result = np.zeros(len(values))
 
-        if self.next_state.terminal:
+        if bool(self.next_state[4]):
             # Terminal state case
             terminal_obs = (-1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0, -1.0)
             for i, obs in enumerate(values):
@@ -460,7 +475,7 @@ class LaserTagObservation(ObservationModel):
                     result[i] = 1.0
         else:
             # Get true laser measurements
-            robot_pos = self.next_state.robot
+            robot_pos = (int(self.next_state[0]), int(self.next_state[1]))
             true_measurements = []
 
             for direction in self._laser_directions:
@@ -498,7 +513,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     and must decide when and where to attempt tagging.
 
     Problem Structure:
-    - States: Robot position, opponent position, terminal flag
+    - States: numpy array [robot_row, robot_col, opp_row, opp_col, terminal]
     - Actions: North(0), South(1), East(2), West(3), Tag(4)
     - Observations: 8-directional laser measurements (N,NE,E,SE,S,SW,W,NW)
     - Rewards: Tag success(+10), Tag failure(-10), Movement(-1)
@@ -612,13 +627,13 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self.actions = [0, 1, 2, 3, 4]  # North, South, East, West, Tag
         self.action_names = ["North", "South", "East", "West", "Tag"]
 
-    def state_transition_model(self, state: LaserTagState, action: int) -> StateTransitionModel:
+    def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
         """Get the state transition model for a given state-action pair."""
         return LaserTagStateTransition(
             state=state, action=action, floor_shape=self.floor_shape, walls=self.walls
         )
 
-    def observation_model(self, next_state: LaserTagState, action: int) -> ObservationModel:
+    def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
         """Get the observation model for a given next state and action."""
         return LaserTagObservation(
             next_state=next_state,
@@ -650,15 +665,17 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         return False
 
-    def reward(self, state: LaserTagState, action: int) -> float:
+    def reward(self, state: np.ndarray, action: int) -> float:
         """Calculate the immediate reward for a state-action pair."""
-        if state.terminal:
+        if bool(state[4]):
             return 0.0  # No reward in terminal state
 
         base_reward = 0.0
+        robot_pos = (int(state[0]), int(state[1]))
+        opponent_pos = (int(state[2]), int(state[3]))
 
         if action == 4:  # Tag action
-            if state.robot == state.opponent:
+            if robot_pos == opponent_pos:
                 base_reward = self.tag_reward  # Successful tag
             else:
                 base_reward = -self.tag_penalty  # Failed tag attempt
@@ -670,7 +687,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             # Calculate intended position based on action
             action_directions = {0: (-1, 0), 1: (1, 0), 2: (0, 1), 3: (0, -1)}
             dr, dc = action_directions[action]
-            intended_pos = (state.robot[0] + dr, state.robot[1] + dc)
+            intended_pos = (robot_pos[0] + dr, robot_pos[1] + dc)
 
             # Check if intended position is a wall (collision)
             if intended_pos in self.walls:
@@ -678,7 +695,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 base_reward -= self.dangerous_area_penalty
 
         # Add dangerous area penalty/bonus with 50% probability
-        if self._is_in_dangerous_area(state.robot):
+        if self._is_in_dangerous_area(robot_pos):
             # Random penalty or bonus with equal probability
             danger_modifier = (
                 self.dangerous_area_penalty
@@ -689,9 +706,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         return base_reward
 
-    def is_terminal(self, state: LaserTagState) -> bool:
+    def is_terminal(self, state: np.ndarray) -> bool:
         """Check if a state is terminal."""
-        return state.terminal
+        return bool(state[4])
 
     def initial_state_dist(self) -> Distribution:
         """Get the initial state distribution."""
@@ -707,7 +724,17 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         for robot_pos in valid_positions:
             for opp_pos in valid_positions:
                 if robot_pos != opp_pos:  # Robot and opponent start at different positions
-                    initial_states.append(LaserTagState(robot_pos, opp_pos, terminal=False))
+                    initial_states.append(
+                        np.array(
+                            [
+                                float(robot_pos[0]),
+                                float(robot_pos[1]),
+                                float(opp_pos[0]),
+                                float(opp_pos[1]),
+                                0.0,
+                            ]
+                        )
+                    )
 
         # Uniform distribution over all initial states
         num_states = len(initial_states)
@@ -760,24 +787,26 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             if step.action == 4 and step.reward is not None and step.reward < 0:
                 episode_failed_tags += 1
 
-            if isinstance(step.state, LaserTagState):
-                if self._is_in_dangerous_area(step.state.robot):
+            if isinstance(step.state, np.ndarray) and len(step.state) == 5:
+                robot_pos = (int(step.state[0]), int(step.state[1]))
+                if self._is_in_dangerous_area(robot_pos):
                     episode_dangerous_area_steps += 1
 
             if step.action in [0, 1, 2, 3]:
                 if (
-                    isinstance(step.state, LaserTagState)
+                    isinstance(step.state, np.ndarray)
+                    and len(step.state) == 5
                     and hasattr(step, "next_state")
-                    and isinstance(step.next_state, LaserTagState)
+                    and isinstance(step.next_state, np.ndarray)
+                    and len(step.next_state) == 5
                 ):
                     if step.action in action_dirs:
                         dr, dc = action_dirs[step.action]
-                        intended_pos = (
-                            step.state.robot[0] + dr,
-                            step.state.robot[1] + dc,
-                        )
+                        robot_pos = (int(step.state[0]), int(step.state[1]))
+                        next_robot_pos = (int(step.next_state[0]), int(step.next_state[1]))
+                        intended_pos = (robot_pos[0] + dr, robot_pos[1] + dc)
 
-                        if intended_pos in self.walls and step.next_state.robot == step.state.robot:
+                        if intended_pos in self.walls and next_robot_pos == robot_pos:
                             episode_obstacle_collisions += 1
 
         return (
