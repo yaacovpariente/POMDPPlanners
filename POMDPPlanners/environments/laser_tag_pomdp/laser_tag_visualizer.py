@@ -14,8 +14,6 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 import numpy as np
 
-from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import LaserTagState
-
 from POMDPPlanners.core.simulation import StepData
 
 
@@ -214,11 +212,13 @@ class LaserTagVisualizer:
         beliefs = []
 
         for step in history:
-            if not isinstance(step.state, LaserTagState):
-                raise ValueError(f"Expected LaserTagState, got {type(step.state)}")
+            if not isinstance(step.state, np.ndarray) or len(step.state) != 5:
+                raise ValueError(
+                    f"Expected numpy array state with shape (5,), got {type(step.state)}"
+                )
 
-            robot_path.append(step.state.robot)
-            opponent_path.append(step.state.opponent)
+            robot_path.append((int(step.state[0]), int(step.state[1])))
+            opponent_path.append((int(step.state[2]), int(step.state[3])))
             actions.append(step.action)
 
             if hasattr(step, "belief") and step.belief is not None:
@@ -377,10 +377,10 @@ class LaserTagVisualizer:
                 robot_belief_weights = []
 
                 for i, state in enumerate(unique_belief.values):
-                    if isinstance(state, LaserTagState):
-                        opponent_belief_positions.append([state.opponent[0], state.opponent[1]])
+                    if isinstance(state, np.ndarray) and len(state) == 5:
+                        opponent_belief_positions.append([int(state[2]), int(state[3])])
                         opponent_belief_weights.append(unique_belief.probs[i] * 100)
-                        robot_belief_positions.append([state.robot[0], state.robot[1]])
+                        robot_belief_positions.append([int(state[0]), int(state[1])])
                         robot_belief_weights.append(unique_belief.probs[i] * 100)
 
                 if opponent_belief_positions:

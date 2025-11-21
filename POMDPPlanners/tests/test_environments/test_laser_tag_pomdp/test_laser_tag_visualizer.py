@@ -15,10 +15,7 @@ import pytest
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
-from POMDPPlanners.environments.laser_tag_pomdp import (
-    LaserTagPOMDP,
-    LaserTagState,
-)
+from POMDPPlanners.environments.laser_tag_pomdp import LaserTagPOMDP
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -53,7 +50,7 @@ class TestLaserTagVisualization:
         # Create simple test history
 
         # Create a belief for testing
-        dummy_particles = [LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)]
+        dummy_particles = [np.array([0.0, 0.0, 6.0, 10.0, 0.0])]
         dummy_log_weights = np.array([-0.1])  # Small non-zero log weight
         test_belief = WeightedParticleBelief(
             particles=dummy_particles, log_weights=dummy_log_weights
@@ -61,7 +58,7 @@ class TestLaserTagVisualization:
 
         steps = []
         for i in range(3):
-            state = LaserTagState(robot=(i, 0), opponent=(6 - i, 10), terminal=False)
+            state = np.array([float(i), 0.0, float(6 - i), 10.0, 0.0])
             step = StepData(
                 state=state,
                 action=1,  # South
@@ -135,13 +132,13 @@ class TestLaserTagVisualization:
         )
 
         # Create non-empty history for cache_path tests
-        dummy_particles = [LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)]
+        dummy_particles = [np.array([0.0, 0.0, 6.0, 10.0, 0.0])]
         dummy_log_weights = np.array([-0.1])
         test_belief = WeightedParticleBelief(
             particles=dummy_particles, log_weights=dummy_log_weights
         )
 
-        state = LaserTagState(robot=(0, 0), opponent=(6, 10), terminal=False)
+        state = np.array([0.0, 0.0, 6.0, 10.0, 0.0])
         step = StepData(
             state=state,
             action=1,  # South
