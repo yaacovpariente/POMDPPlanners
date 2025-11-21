@@ -166,6 +166,30 @@ class PushStateTransition(StateTransitionModel):
         next_state = np.concatenate([new_robot_pos, new_object_pos, self.target_pos])
         return [next_state] * n_samples
 
+    def probability(self, values: List[Any]) -> np.ndarray:
+        """Calculate probability of transitioning to given next states.
+
+        Since the push dynamics are deterministic, the probability is 1.0
+        for the correct next state and 0.0 for all other states.
+
+        Args:
+            values: List of potential next states to evaluate
+
+        Returns:
+            Array of probabilities for each state in values
+        """
+        probabilities = []
+        expected_next_state = self.sample()[0]
+
+        for state in values:
+            # Check if this state matches the expected deterministic next state
+            if np.array_equal(state, expected_next_state):
+                probabilities.append(1.0)
+            else:
+                probabilities.append(0.0)
+
+        return np.array(probabilities)
+
     def _is_colliding_with_obstacle(self, position: np.ndarray) -> bool:
         """Check if a position collides with any obstacle."""
         if not self.obstacles:
