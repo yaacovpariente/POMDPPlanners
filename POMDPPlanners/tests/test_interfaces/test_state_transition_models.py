@@ -167,6 +167,117 @@ class TestPushPOMDPProbability:
         assert results["probabilities_normalized"]
         assert results["distance"] < 0.10  # More tolerance for continuous states
 
+    def test_push_with_obstacles_probability(self):
+        """Test Push POMDP probability method with obstacle collision.
+
+        Purpose: Validates that probability() method correctly handles obstacle collisions
+
+        Given: Push POMDP with obstacles and robot positioned to collide with obstacle
+        When: Comparing computed probabilities to empirical sampling
+        Then: Probabilities match within tolerance (deterministic collision handling)
+
+        Test type: unit
+        """
+        # Create environment with obstacles
+        obstacles = [(2.5, 2.5)]
+        pomdp = PushPOMDP(
+            discount_factor=0.95, grid_size=5, obstacles=obstacles, obstacle_radius=0.5
+        )
+
+        # State where robot will collide with obstacle when moving right
+        # [robot_x, robot_y, object_x, object_y, target_x, target_y]
+        state = np.array([2.0, 2.5, 0.5, 0.5, 4.0, 4.0])
+        action = "right"  # This will cause collision
+
+        transition = PushStateTransition(
+            state=state,
+            action=action,
+            grid_size=pomdp.grid_size,
+            push_threshold=pomdp.push_threshold,
+            friction_coefficient=pomdp.friction_coefficient,
+            obstacles=pomdp.obstacles,
+            obstacle_radius=pomdp.obstacle_radius,
+        )
+        results = validate_probability_matches_empirical_distribution(
+            transition, num_samples=1000, max_js_divergence=0.01
+        )
+
+        assert results["probabilities_normalized"]
+        assert results["distance"] < 0.01  # Should be nearly perfect (deterministic)
+        assert results["num_unique_states"] == 1  # Deterministic transition
+
+    def test_push_object_with_friction_probability(self):
+        """Test Push POMDP probability method when robot pushes object with friction.
+
+        Purpose: Validates that probability() method correctly handles object pushing with friction
+
+        Given: Push POMDP with robot positioned to push object with friction applied
+        When: Comparing computed probabilities to empirical sampling
+        Then: Probabilities match within tolerance (deterministic push with friction)
+
+        Test type: unit
+        """
+        pomdp = PushPOMDP(
+            discount_factor=0.95, grid_size=5, push_threshold=1.0, friction_coefficient=0.5
+        )
+
+        # State where robot is close enough to push object
+        # [robot_x, robot_y, object_x, object_y, target_x, target_y]
+        state = np.array([1.5, 1.5, 2.0, 1.5, 4.0, 4.0])
+        action = "right"  # Robot moves right and pushes object
+
+        transition = PushStateTransition(
+            state=state,
+            action=action,
+            grid_size=pomdp.grid_size,
+            push_threshold=pomdp.push_threshold,
+            friction_coefficient=pomdp.friction_coefficient,
+            obstacles=pomdp.obstacles,
+            obstacle_radius=pomdp.obstacle_radius,
+        )
+        results = validate_probability_matches_empirical_distribution(
+            transition, num_samples=1000, max_js_divergence=0.01
+        )
+
+        assert results["probabilities_normalized"]
+        assert results["distance"] < 0.01  # Should be nearly perfect (deterministic)
+        assert results["num_unique_states"] == 1  # Deterministic transition
+
+    def test_push_grid_boundary_probability(self):
+        """Test Push POMDP probability method at grid boundaries.
+
+        Purpose: Validates that probability() method correctly handles grid boundary constraints
+
+        Given: Push POMDP with robot at grid boundary
+        When: Comparing computed probabilities to empirical sampling
+        Then: Probabilities match within tolerance (deterministic boundary clipping)
+
+        Test type: unit
+        """
+        pomdp = PushPOMDP(discount_factor=0.95, grid_size=5)
+
+        # State where robot is at grid boundary
+        # [robot_x, robot_y, object_x, object_y, target_x, target_y]
+        state = np.array([0.0, 0.0, 1.0, 1.0, 4.0, 4.0])
+        action = "left"  # Try to move beyond boundary
+
+        transition = PushStateTransition(
+            state=state,
+            action=action,
+            grid_size=pomdp.grid_size,
+            push_threshold=pomdp.push_threshold,
+            friction_coefficient=pomdp.friction_coefficient,
+            obstacles=pomdp.obstacles,
+            obstacle_radius=pomdp.obstacle_radius,
+        )
+        results = validate_probability_matches_empirical_distribution(
+            transition, num_samples=1000, max_js_divergence=0.01
+        )
+
+        assert results["probabilities_normalized"]
+        assert results["distance"] < 0.01  # Should be nearly perfect (deterministic)
+        assert results["num_unique_states"] == 1  # Deterministic transition
+
 
 class TestLaserTagPOMDPProbability:
     """Test probability method for LaserTag POMDP."""
