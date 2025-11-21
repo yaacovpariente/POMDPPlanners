@@ -28,6 +28,7 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     RockSamplePOMDP,
     RockSampleState,
     RockSampleStateTransitionModel,
+    create_rock_sample_state,
 )
 from POMDPPlanners.environments.sanity_pomdp import SanityPOMDP, SanityStateTransitionModel
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP, TigerStateTransition
@@ -252,7 +253,7 @@ class TestRockSamplePOMDPProbability:
         pomdp = RockSamplePOMDP(map_size=(5, 5), rock_positions=rock_positions, init_pos=(0, 0))
 
         # Create state where robot is at a rock position
-        initial_state = RockSampleState(robot_pos=(0, 0), rocks=(True, True))
+        initial_state = create_rock_sample_state(robot_pos=(0, 0), rocks=(True, True))
 
         # Sample action
         action = 0
