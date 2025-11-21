@@ -24,6 +24,9 @@ from POMDPPlanners.environments.pacman_pomdp import (
     PacManStateTransitionModel,
     create_simple_maze_pacman,
 )
+from POMDPPlanners.tests.test_utils.test_probability_utils import (
+    validate_probability_matches_empirical_distribution,
+)
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -406,6 +409,57 @@ class TestPacManStateTransitionModel:
 
         # Ghost should move (not stay at (2, 2) every time)
         assert len(ghost_positions) > 1
+
+    def test_probability_vs_empirical_distribution(self):
+        """Test that computed probabilities match empirical sampling distribution.
+
+        Purpose: Validates that the probability() method correctly computes transition probabilities
+                 by comparing them to empirical frequencies from sampling
+
+        Given: A state-transition model with stochastic ghost movements
+        When: Computing probabilities for sampled states and comparing to empirical distribution
+        Then: Computed probabilities should closely match empirical frequencies from sampling
+
+        Test type: unit
+        """
+        # Set seed for reproducibility
+        np.random.seed(42)
+
+        # Create a simple environment for testing
+        pomdp = PacManPOMDP(
+            maze_size=(5, 5),
+            walls=set(),  # No walls for simplicity
+            initial_pellets=[(2, 2)],
+            initial_pacman_pos=(0, 0),
+            num_ghosts=1,
+            initial_ghost_positions=[(3, 3)],
+            ghost_aggressiveness=2.0,
+        )
+
+        # Create initial state
+        state = PacManState(
+            pacman_pos=(0, 0), ghost_positions=((3, 3),), pellets=((2, 2),), score=0
+        )
+
+        # Choose action (move east)
+        action = 1
+        transition_model = PacManStateTransitionModel(state, action, pomdp)
+
+        # Use the general utility function to validate probability method
+        results = validate_probability_matches_empirical_distribution(
+            transition_model, num_samples=1000, max_js_divergence=0.05
+        )
+
+        # Verify results
+        assert results["probabilities_normalized"]
+        assert results["distance"] < 0.05
+
+        print(f"\nProbability validation results:")
+        print(f"Number of unique states: {results['num_unique_states']}")
+        print(f"Computed probabilities: {results['computed_probs']}")
+        print(f"Empirical probabilities: {results['empirical_probs']}")
+        print(f"JS Divergence: {results['distance']:.6f}")
+        print(f"State counts: {results['state_counts']}")
 
 
 class TestPacManObservationModel:
