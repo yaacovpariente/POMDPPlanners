@@ -243,9 +243,12 @@ class RockSampleVisualizer:
         return animate
 
     def _update_rock_displays(self, state: "RockSampleState", rock_scatters: List[Any]) -> None:
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import get_rocks
+
+        rocks = get_rocks(state)
         for i, rock_pos in enumerate(self.rock_positions):
-            if i < len(state.rocks):
-                color = "green" if state.rocks[i] else "red"
+            if i < len(rocks):
+                color = "green" if rocks[i] else "red"
                 rock_scatters[i].set_offsets([[rock_pos[1], rock_pos[0]]])
                 rock_scatters[i].set_color(color)
 
@@ -257,7 +260,9 @@ class RockSampleVisualizer:
         actions: List[int],
         elements: Dict[str, Any],
     ) -> None:
-        robot_pos = state.robot_pos
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import get_robot_pos
+
+        robot_pos = get_robot_pos(state)
         if robot_pos == (-1, -1):
             elements["robot_scatter"].set_offsets(np.empty((0, 2)))
             elements["arrow"].set_visible(False)
@@ -292,8 +297,10 @@ class RockSampleVisualizer:
     def _update_path_line(
         self, path: List["RockSampleState"], frame: int, elements: Dict[str, Any]
     ) -> None:
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import get_robot_pos
+
         valid_positions = [
-            pos for pos in [p.robot_pos for p in path[: frame + 1]] if pos != (-1, -1)
+            pos for pos in [get_robot_pos(p) for p in path[: frame + 1]] if pos != (-1, -1)
         ]
         if valid_positions:
             path_x = [pos[1] for pos in valid_positions]
@@ -330,10 +337,16 @@ class RockSampleVisualizer:
             elements["sample_text"].set_visible(False)
 
     def _check_sample_success(self, state: "RockSampleState") -> bool:
-        robot_row, robot_col = state.robot_pos
+        from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
+            get_robot_pos,
+            get_rocks,
+        )
+
+        robot_row, robot_col = get_robot_pos(state)
+        rocks = get_rocks(state)
         for i, rock_pos in enumerate(self.rock_positions):
             if (robot_row, robot_col) == rock_pos:
-                return state.rocks[i]
+                return rocks[i]
         return False
 
     def _show_sample_success(self, elements: Dict[str, Any]) -> None:

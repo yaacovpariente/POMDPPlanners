@@ -17,6 +17,10 @@ from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_pomdp import (
     RockSampleState,
     RockSampleStateTransitionModel,
     create_random_rock_sample,
+    create_rock_sample_state,
+    get_robot_pos,
+    get_rocks,
+    states_equal,
 )
 from POMDPPlanners.environments.rock_sample_pomdp.rock_sample_visualizer import (
     RockSampleVisualizer,
@@ -29,4 +33,8 @@ __all__ = [
     "RockSampleObservationModel",
     "RockSampleVisualizer",
     "create_random_rock_sample",
+    "create_rock_sample_state",
+    "get_robot_pos",
+    "get_rocks",
+    "states_equal",
 ]

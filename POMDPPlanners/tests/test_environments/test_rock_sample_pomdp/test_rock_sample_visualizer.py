@@ -16,6 +16,7 @@ from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.rock_sample_pomdp import (
     RockSamplePOMDP,
     RockSampleState,
+    create_rock_sample_state,
 )
 
 
@@ -34,7 +35,7 @@ class TestVisualization:
         Test type: unit
         """
         pomdp = RockSamplePOMDP()
-        state = RockSampleState((0, 0), (True, False))
+        state = create_rock_sample_state((0, 0), (True, False))
 
         with pytest.raises(TypeError, match="cache_path must be a Path object"):
             pomdp.visualize_path([state], [1], "invalid_path")  # type: ignore
@@ -88,8 +89,8 @@ class TestVisualization:
         pomdp = RockSamplePOMDP()
 
         # Create history with steps
-        state1 = RockSampleState((0, 0), (True, False))
-        state2 = RockSampleState((0, 1), (True, False))
+        state1 = create_rock_sample_state((0, 0), (True, False))
+        state2 = create_rock_sample_state((0, 1), (True, False))
 
         step1 = StepData(
             state=state1,

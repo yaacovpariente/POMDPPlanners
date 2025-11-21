@@ -13,7 +13,6 @@ Classes:
 """
 
 import math
-from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
@@ -43,24 +42,65 @@ class RockSamplePOMDPMetrics(Enum):
     AVERAGE_DANGEROUS_AREA_STEPS = "average_dangerous_area_steps"
 
 
-@dataclass(frozen=True)
-class RockSampleState:
-    """State representation for RockSample POMDP.
+# Type alias for RockSampleState
+RockSampleState = np.ndarray
 
-    Attributes:
+
+def create_rock_sample_state(
+    robot_pos: Tuple[int, int], rocks: Tuple[bool, ...]
+) -> RockSampleState:
+    """Create a RockSample state as a numpy array.
+
+    Args:
         robot_pos: Robot position as (row, col) tuple
-        rocks: Boolean array indicating rock quality (True=good, False=bad)
+        rocks: Tuple of booleans indicating rock quality (True=good, False=bad)
+
+    Returns:
+        State as numpy array: [robot_row, robot_col, rock_0, rock_1, ..., rock_n]
+        where rock values are 1.0 for good (True) and 0.0 for bad (False)
     """
+    state = np.zeros(2 + len(rocks), dtype=np.float32)
+    state[0] = robot_pos[0]
+    state[1] = robot_pos[1]
+    state[2:] = np.array([1.0 if r else 0.0 for r in rocks], dtype=np.float32)
+    return state
 
-    robot_pos: Tuple[int, int]
-    rocks: Tuple[bool, ...]  # Tuple for immutability
 
-    def __post_init__(self):
-        """Validate state components."""
-        if not isinstance(self.robot_pos, tuple) or len(self.robot_pos) != 2:
-            raise ValueError("robot_pos must be a tuple of two integers")
-        if not isinstance(self.rocks, tuple):
-            raise ValueError("rocks must be a tuple of booleans")
+def get_robot_pos(state: RockSampleState) -> Tuple[int, int]:
+    """Extract robot position from state array.
+
+    Args:
+        state: State array
+
+    Returns:
+        Robot position as (row, col) tuple
+    """
+    return (int(state[0]), int(state[1]))
+
+
+def get_rocks(state: RockSampleState) -> Tuple[bool, ...]:
+    """Extract rock qualities from state array.
+
+    Args:
+        state: State array
+
+    Returns:
+        Tuple of booleans indicating rock quality
+    """
+    return tuple(bool(r > 0.5) for r in state[2:])
+
+
+def states_equal(state1: RockSampleState, state2: RockSampleState) -> bool:
+    """Check if two states are equal.
+
+    Args:
+        state1: First state
+        state2: Second state
+
+    Returns:
+        True if states are equal
+    """
+    return np.array_equal(state1, state2)
 
 
 class RockSampleStateTransitionModel(StateTransitionModel):
@@ -98,18 +138,20 @@ class RockSampleStateTransitionModel(StateTransitionModel):
         expected_next_state = self._compute_next_state()
 
         # Check which states match the expected next state
-        probs = np.array([1.0 if state == expected_next_state else 0.0 for state in values])
+        probs = np.array(
+            [1.0 if states_equal(state, expected_next_state) else 0.0 for state in values]
+        )
 
         return probs
 
     def _compute_next_state(self) -> RockSampleState:
         """Compute the deterministic next state."""
-        robot_row, robot_col = self.state.robot_pos
-        rocks = list(self.state.rocks)
+        robot_row, robot_col = get_robot_pos(self.state)
+        rocks = list(get_rocks(self.state))
 
         # Handle terminal state
         if robot_col >= self.pomdp.map_size[1]:
-            return RockSampleState((-1, -1), tuple(rocks))
+            return create_rock_sample_state((-1, -1), tuple(rocks))
 
         # Movement actions
         if self.action == 1:  # North
@@ -135,9 +177,9 @@ class RockSampleStateTransitionModel(StateTransitionModel):
 
         # Handle exit condition - robot must move beyond right boundary to exit
         if new_pos[1] >= self.pomdp.map_size[1]:
-            return RockSampleState((-1, -1), tuple(rocks))
+            return create_rock_sample_state((-1, -1), tuple(rocks))
 
-        return RockSampleState(new_pos, tuple(rocks))
+        return create_rock_sample_state(new_pos, tuple(rocks))
 
 
 class RockSampleObservationModel(ObservationModel):
@@ -165,9 +207,10 @@ class RockSampleObservationModel(ObservationModel):
             return ["none"] * n_samples
 
         # Calculate observation probabilities based on distance and rock quality
-        robot_pos = self.next_state.robot_pos
+        robot_pos = get_robot_pos(self.next_state)
         rock_pos = self.pomdp.rock_positions[rock_idx]
-        rock_quality = self.next_state.rocks[rock_idx]
+        rocks = get_rocks(self.next_state)
+        rock_quality = rocks[rock_idx]
 
         # Calculate Euclidean distance
         distance = math.sqrt((robot_pos[0] - rock_pos[0]) ** 2 + (robot_pos[1] - rock_pos[1]) ** 2)
@@ -199,9 +242,10 @@ class RockSampleObservationModel(ObservationModel):
             probs = np.array([1.0 if obs == "none" else 0.0 for obs in values])
             return probs
 
-        robot_pos = self.next_state.robot_pos
+        robot_pos = get_robot_pos(self.next_state)
         rock_pos = self.pomdp.rock_positions[rock_idx]
-        rock_quality = self.next_state.rocks[rock_idx]
+        rocks = get_rocks(self.next_state)
+        rock_quality = rocks[rock_idx]
 
         distance = math.sqrt((robot_pos[0] - rock_pos[0]) ** 2 + (robot_pos[1] - rock_pos[1]) ** 2)
 
@@ -411,16 +455,17 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         total_reward = self.step_penalty
 
         # Check if robot exits the grid
-        robot_row, robot_col = state.robot_pos
+        robot_row, robot_col = get_robot_pos(state)
         if action == 2 and robot_col == self.map_size[1] - 1:  # East at right edge
             total_reward += self.exit_reward
             return total_reward
 
         # Sample action rewards
         if action == 0:  # Sample
+            rocks = get_rocks(state)
             for i, rock_pos in enumerate(self.rock_positions):
                 if (robot_row, robot_col) == rock_pos:
-                    if state.rocks[i]:  # Good rock
+                    if rocks[i]:  # Good rock
                         total_reward += self.good_rock_reward
                     else:  # Bad rock
                         total_reward += self.bad_rock_penalty
@@ -431,7 +476,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
             total_reward += self.sensor_use_penalty
 
         # Add dangerous area penalty/bonus with 50% probability
-        if self._is_in_dangerous_area(state.robot_pos):
+        if self._is_in_dangerous_area((robot_row, robot_col)):
             # Random penalty or bonus with equal probability
             danger_modifier = (
                 self.dangerous_area_penalty
@@ -444,7 +489,8 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
 
     def is_terminal(self, state: RockSampleState) -> bool:
         """Check if state is terminal."""
-        return state.robot_pos == (-1, -1)
+        robot_pos = get_robot_pos(state)
+        return robot_pos == (-1, -1)
 
     def initial_state_dist(self) -> DiscreteDistribution:
         """Get initial state distribution."""
@@ -455,7 +501,7 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         # Generate all possible rock configurations
         for i in range(2**num_rocks):
             rock_config = tuple(bool(i & (1 << j)) for j in range(num_rocks))
-            initial_state = RockSampleState(self.init_pos, rock_config)
+            initial_state = create_rock_sample_state(self.init_pos, rock_config)
             possible_rock_states.append(initial_state)
 
         # Equal probability for all configurations
@@ -531,7 +577,8 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         for history in histories:
             steps_in_danger = 0
             for step in history.history:
-                if self._is_in_dangerous_area(step.state.robot_pos):
+                robot_pos = get_robot_pos(step.state)
+                if self._is_in_dangerous_area(robot_pos):
                     steps_in_danger += 1
             dangerous_area_steps.append(steps_in_danger)
 
