@@ -305,6 +305,61 @@ class PushObservation(ObservationModel):
         return np.array(probabilities)
 
 
+class FixedStateDistribution(Distribution):
+    """Deterministic distribution that always returns the same fixed state."""
+
+    def __init__(self, state: np.ndarray):
+        self.state = state.copy()
+
+    def sample(self, n_samples: int = 1) -> List[Any]:
+        return [self.state.copy() for _ in range(n_samples)]
+
+
+class RandomInitialStateDistribution(Distribution):
+    """Random initial state distribution for Push POMDP."""
+
+    def __init__(
+        self,
+        grid_size: int,
+        target_pos: np.ndarray,
+        obstacles: List[Tuple[float, float]],
+        obstacle_radius: float,
+        parent: "PushPOMDP",
+    ):
+        self.grid_size = grid_size
+        self.target_pos = target_pos
+        self.obstacles = obstacles
+        self.obstacle_radius = obstacle_radius
+        self.parent = parent
+
+    def sample(self, n_samples: int = 1) -> List[Any]:
+        initial_states = []
+        for _ in range(n_samples):
+            robot_pos = self._generate_robot_position()
+            object_pos = self._generate_object_position()
+            initial_state = np.concatenate([robot_pos, object_pos, self.target_pos])
+            initial_states.append(initial_state)
+        return initial_states
+
+    def _generate_robot_position(self) -> np.ndarray:
+        max_attempts = 100
+        for _ in range(max_attempts):
+            robot_pos = np.random.uniform(0, self.grid_size - 1, size=2)
+            if not self.parent._is_colliding_with_obstacle(robot_pos):
+                return robot_pos
+        return np.random.uniform(0, self.grid_size - 1, size=2)
+
+    def _generate_object_position(self) -> np.ndarray:
+        max_attempts = 100
+        for _ in range(max_attempts):
+            object_pos = np.random.uniform(0, self.grid_size - 1, size=2)
+            if np.linalg.norm(
+                object_pos - self.target_pos
+            ) >= 2.0 and not self.parent._is_colliding_with_obstacle(object_pos):
+                return object_pos
+        return np.random.uniform(0, self.grid_size - 1, size=2)
+
+
 class PushPOMDP(DiscreteActionsEnvironment):
     """Robotic push task formulated as a POMDP.
 
@@ -357,6 +412,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         obstacles: Optional[List[Tuple[float, float]]] = None,
         obstacle_radius: float = 0.5,
         obstacle_penalty: float = -10.0,
+        initial_state: Optional[np.ndarray] = None,
         name: str = "PushPOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,
@@ -369,6 +425,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         self.obstacles: List[Tuple[float, float]] = obstacles if obstacles is not None else []
         self.obstacle_radius = obstacle_radius
         self.obstacle_penalty = obstacle_penalty
+        self._initial_state = initial_state
 
         # Define actions
         self.actions = ["up", "down", "right", "left"]
@@ -467,51 +524,11 @@ class PushPOMDP(DiscreteActionsEnvironment):
         return bool(np.linalg.norm(object_pos - target_pos) < 0.5)
 
     def initial_state_dist(self) -> Distribution:
-        class InitialState(Distribution):
-            def __init__(
-                self,
-                grid_size: int,
-                target_pos: np.ndarray,
-                obstacles: List[Tuple[float, float]],
-                obstacle_radius: float,
-                parent: "PushPOMDP",
-            ):
-                self.grid_size = grid_size
-                self.target_pos = target_pos
-                self.obstacles = obstacles
-                self.obstacle_radius = obstacle_radius
-                self.parent = parent
+        # If a fixed initial state is provided, return a deterministic distribution
+        if self._initial_state is not None:
+            return FixedStateDistribution(self._initial_state)
 
-            def sample(self, n_samples: int = 1) -> List[Any]:
-                initial_states = []
-                for _ in range(n_samples):
-                    # Random initial positions for robot and object, avoiding obstacles
-                    max_attempts = 100
-
-                    # Generate robot position
-                    attempts = 0
-                    while attempts < max_attempts:
-                        robot_pos = np.random.uniform(0, self.grid_size - 1, size=2)
-                        if not self.parent._is_colliding_with_obstacle(robot_pos):
-                            break
-                        attempts += 1
-
-                    # Generate object position
-                    attempts = 0
-                    while attempts < max_attempts:
-                        object_pos = np.random.uniform(0, self.grid_size - 1, size=2)
-                        # Ensure object is not too close to target initially and not in obstacles
-                        if np.linalg.norm(
-                            object_pos - self.target_pos
-                        ) >= 2.0 and not self.parent._is_colliding_with_obstacle(object_pos):
-                            break
-                        attempts += 1
-
-                    initial_state = np.concatenate([robot_pos, object_pos, self.target_pos])  # type: ignore
-                    initial_states.append(initial_state)
-                return initial_states
-
-        return InitialState(
+        return RandomInitialStateDistribution(
             self.grid_size, self.target_pos, self.obstacles, self.obstacle_radius, self
         )
 
