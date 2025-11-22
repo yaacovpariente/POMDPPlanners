@@ -942,3 +942,162 @@ class TestPushPOMDP:
 
         # Verify probabilities sum to 1.0 (since only one state is possible)
         assert np.sum(probs) == 1.0, "Probabilities should sum to 1.0"
+
+    def test_fixed_initial_state_returns_exact_state(self):
+        """Test that fixed initial state distribution returns the exact specified state.
+
+        Purpose: Validates that providing initial_state parameter creates a deterministic
+                 distribution that always returns the same state.
+
+        Given: A PushPOMDP environment initialized with a fixed initial_state
+        When: Sampling from initial_state_dist multiple times
+        Then: All samples should be identical to the provided initial_state
+
+        Test type: unit
+        """
+        fixed_state = np.array([2.0, 3.0, 5.0, 5.0, 9.0, 9.0])
+        env = PushPOMDP(discount_factor=0.95, initial_state=fixed_state)
+
+        # Sample multiple times
+        samples = [env.initial_state_dist().sample()[0] for _ in range(5)]
+
+        for sample in samples:
+            assert np.array_equal(
+                sample, fixed_state
+            ), f"Sample {sample} should equal fixed state {fixed_state}"
+
+    def test_fixed_initial_state_n_samples(self):
+        """Test that fixed initial state distribution returns correct number of samples.
+
+        Purpose: Validates that n_samples parameter works correctly with fixed state.
+
+        Given: A PushPOMDP environment initialized with a fixed initial_state
+        When: Calling sample with n_samples > 1
+        Then: All returned samples should be identical to the provided initial_state
+
+        Test type: unit
+        """
+        fixed_state = np.array([1.0, 2.0, 4.0, 4.0, 9.0, 9.0])
+        env = PushPOMDP(discount_factor=0.95, initial_state=fixed_state)
+
+        samples = env.initial_state_dist().sample(n_samples=10)
+
+        assert len(samples) == 10, "Should return exactly 10 samples"
+        for i, sample in enumerate(samples):
+            assert np.array_equal(sample, fixed_state), f"Sample {i} should equal fixed state"
+
+    def test_fixed_initial_state_is_copied(self):
+        """Test that fixed initial state samples are independent copies.
+
+        Purpose: Validates that modifying a sampled state doesn't affect other samples.
+
+        Given: A PushPOMDP environment initialized with a fixed initial_state
+        When: Sampling and modifying one sample
+        Then: Other samples and future samples should remain unchanged
+
+        Test type: unit
+        """
+        fixed_state = np.array([2.0, 3.0, 5.0, 5.0, 9.0, 9.0])
+        env = PushPOMDP(discount_factor=0.95, initial_state=fixed_state)
+
+        sample1 = env.initial_state_dist().sample()[0]
+        sample1[0] = 999.0  # Modify the sample
+
+        sample2 = env.initial_state_dist().sample()[0]
+
+        assert sample2[0] == 2.0, "Second sample should be unaffected by modification"
+        assert np.array_equal(sample2, fixed_state), "Second sample should equal original"
+
+    def test_fixed_initial_state_observation_dist(self):
+        """Test that initial_observation_dist also uses fixed state.
+
+        Purpose: Validates that initial_observation_dist returns the same fixed state.
+
+        Given: A PushPOMDP environment initialized with a fixed initial_state
+        When: Sampling from initial_observation_dist
+        Then: The returned observation should match the fixed state
+
+        Test type: unit
+        """
+        fixed_state = np.array([3.0, 4.0, 6.0, 6.0, 9.0, 9.0])
+        env = PushPOMDP(discount_factor=0.95, initial_state=fixed_state)
+
+        observation = env.initial_observation_dist().sample()[0]
+
+        assert np.array_equal(
+            observation, fixed_state
+        ), "Initial observation should equal fixed state"
+
+    def test_no_initial_state_returns_random_states(self):
+        """Test that without initial_state, distribution returns random states.
+
+        Purpose: Validates that default behavior (no initial_state) produces random states.
+
+        Given: A PushPOMDP environment without initial_state parameter
+        When: Sampling multiple times from initial_state_dist
+        Then: At least some samples should be different from each other
+
+        Test type: unit
+        """
+        env = PushPOMDP(discount_factor=0.95)
+
+        samples = [env.initial_state_dist().sample()[0] for _ in range(10)]
+
+        # Check that not all samples are identical (random behavior)
+        all_same = all(np.array_equal(samples[0], s) for s in samples[1:])
+        assert not all_same, "Random initial states should produce different samples"
+
+    def test_random_initial_state_avoids_obstacles(self):
+        """Test that random initial state distribution avoids obstacle positions.
+
+        Purpose: Validates that randomly generated states don't place robot or object
+                 in obstacle positions.
+
+        Given: A PushPOMDP environment with obstacles and no fixed initial_state
+        When: Sampling multiple initial states
+        Then: Neither robot nor object should be within obstacle radius
+
+        Test type: unit
+        """
+        obstacles = [(3.0, 3.0), (7.0, 7.0)]
+        env = PushPOMDP(
+            discount_factor=0.95,
+            obstacles=obstacles,
+            obstacle_radius=0.5,
+        )
+
+        for _ in range(20):
+            state = env.initial_state_dist().sample()[0]
+            robot_pos = state[:2]
+            object_pos = state[2:4]
+
+            assert not env._is_colliding_with_obstacle(
+                robot_pos
+            ), f"Robot at {robot_pos} should not be in obstacle"
+            assert not env._is_colliding_with_obstacle(
+                object_pos
+            ), f"Object at {object_pos} should not be in obstacle"
+
+    def test_random_initial_state_object_away_from_target(self):
+        """Test that random initial state places object away from target.
+
+        Purpose: Validates that randomly generated states place the object at least
+                 2.0 units away from the target position.
+
+        Given: A PushPOMDP environment without fixed initial_state
+        When: Sampling multiple initial states
+        Then: Object should be at least 2.0 units from target position
+
+        Test type: unit
+        """
+        env = PushPOMDP(discount_factor=0.95, grid_size=10)
+
+        for _ in range(20):
+            state = env.initial_state_dist().sample()[0]
+            object_pos = state[2:4]
+            target_pos = state[4:6]
+
+            distance = np.linalg.norm(object_pos - target_pos)
+            assert (
+                distance >= 2.0
+            ), f"Object at {object_pos} should be >= 2.0 units from target {target_pos}"
