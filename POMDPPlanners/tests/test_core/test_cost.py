@@ -233,8 +233,8 @@ def test_particle_belief_entropy():
     entropy = particle_belief_entropy(belief=belief)
 
     # For uniform distribution: entropy = -sum(p * log(p)) = -2 * (0.5 * log(0.5)) = log(2)
-    entropy_calc = -np.sum(belief.normalized_weights * np.log(belief.normalized_weights))
-    expected_entropy = float(entropy_calc)
+    entropy_calc = -float(np.sum(belief.normalized_weights * np.log(belief.normalized_weights)))
+    expected_entropy = entropy_calc
     assert entropy == pytest.approx(expected_entropy)
     assert entropy == pytest.approx(np.log(2))
 
