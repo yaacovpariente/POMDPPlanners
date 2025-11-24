@@ -64,9 +64,9 @@ def validate_probability_matches_empirical_distribution(
     Example:
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerStateTransition
         >>> transition = TigerStateTransition(state="tiger_left", action="listen")
-        >>> results = validate_probability_matches_empirical_distribution(transition)
+        >>> results = validate_probability_matches_empirical_distribution(transition, seed=42)
         >>> print(f"JS Divergence: {results['distance']:.6f}")
-        JS Divergence: 0.000123
+        JS Divergence: 0.000000
     """
     # Set random seed for reproducibility
     np.random.seed(seed)
@@ -215,9 +215,9 @@ def validate_distribution_probability_matches_empirical(
         >>> import numpy as np
         >>> from POMDPPlanners.core.distributions import DiscreteDistribution
         >>> dist = DiscreteDistribution(["a", "b", "c"], np.array([0.5, 0.3, 0.2]))
-        >>> results = validate_distribution_probability_matches_empirical(dist)
+        >>> results = validate_distribution_probability_matches_empirical(dist, seed=42)
         >>> print(f"JS Divergence: {results['distance']:.6f}")
-        JS Divergence: 0.000123
+        JS Divergence: 0.002131
     """
     # Set random seed for reproducibility
     np.random.seed(seed)
@@ -363,9 +363,9 @@ def validate_observation_probability_matches_empirical_distribution(
     Example:
         >>> from POMDPPlanners.environments.tiger_pomdp import TigerObservation
         >>> obs_model = TigerObservation(next_state="tiger_left", action="listen")
-        >>> results = validate_observation_probability_matches_empirical_distribution(obs_model)
+        >>> results = validate_observation_probability_matches_empirical_distribution(obs_model, seed=42)
         >>> print(f"JS Divergence: {results['distance']:.6f}")
-        JS Divergence: 0.000123
+        JS Divergence: 0.002958
     """
     # Set random seed for reproducibility
     np.random.seed(seed)
@@ -507,12 +507,13 @@ def validate_continuous_observation_model_with_ks_test(
     Example:
         >>> from POMDPPlanners.environments.cartpole_pomdp import CartPoleObservation
         >>> import numpy as np
+        >>> np.random.seed(42)
         >>> noise_cov = np.diag([0.1, 0.1, 0.1, 0.1])
         >>> true_state = np.array([0.1, 0.05, 0.02, -0.1])
         >>> obs_model = CartPoleObservation(next_state=true_state, action=0, noise_cov=noise_cov)
-        >>> results = validate_continuous_observation_model_with_ks_test(obs_model)
+        >>> results = validate_continuous_observation_model_with_ks_test(obs_model, seed=42)
         >>> print(f"KS p-value: {results['p_value']:.4f}")
-        KS p-value: 0.8521
+        KS p-value: 0.0000
     """
     np.random.seed(seed)
 
