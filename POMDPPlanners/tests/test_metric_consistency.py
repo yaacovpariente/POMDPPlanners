@@ -13,7 +13,7 @@ import pytest
 
 from POMDPPlanners.core.belief import Belief, get_initial_belief
 from POMDPPlanners.core.policy import PolicyRunData
-from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.environments.push_pomdp.push_pomdp import PushPOMDP
 from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
@@ -27,6 +27,7 @@ from POMDPPlanners.tests.test_metric_consistency_utils import (
     verify_environment_metric_consistency,
     verify_policy_metric_consistency,
 )
+from POMDPPlanners.tests.test_utils.history_builders import build_test_history
 
 np.random.seed(42)
 random.seed(42)
@@ -62,16 +63,9 @@ class TestEnvironmentMetricConsistency:
         ]
 
         histories = [
-            History(
-                history=steps,
-                discount_factor=0.95,
-                average_state_sampling_time=0.0,
-                average_action_time=0.0,
-                average_observation_time=0.0,
-                average_belief_update_time=0.0,
-                average_reward_time=0.0,
-                actual_num_steps=len(steps),
-                reach_terminal_state=True,
+            build_test_history(
+                steps=steps,
+                reach_terminal=True,
                 policy_run_data=[PolicyRunData(info_variables=[])],
             )
         ]
@@ -111,16 +105,9 @@ class TestEnvironmentMetricConsistency:
         ]
 
         histories = [
-            History(
-                history=steps,
-                discount_factor=0.95,
-                average_state_sampling_time=0.0,
-                average_action_time=0.0,
-                average_observation_time=0.0,
-                average_belief_update_time=0.0,
-                average_reward_time=0.0,
-                actual_num_steps=len(steps),
-                reach_terminal_state=False,
+            build_test_history(
+                steps=steps,
+                reach_terminal=False,
                 policy_run_data=[PolicyRunData(info_variables=[])],
             )
         ]

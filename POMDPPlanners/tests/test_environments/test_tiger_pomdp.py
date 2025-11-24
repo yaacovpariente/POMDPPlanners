@@ -6,11 +6,12 @@ import pytest
 
 from POMDPPlanners.core.belief import Belief
 from POMDPPlanners.core.policy import PolicyRunData
-from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
 from POMDPPlanners.tests.test_utils.confidence_interval_utils import (
     verify_metrics_within_confidence_intervals,
 )
+from POMDPPlanners.tests.test_utils.history_builders import build_test_history
 
 np.random.seed(42)
 random.seed(42)
@@ -427,16 +428,10 @@ class TestTigerPOMDPMetrics:
                 )
             )
             histories.append(
-                History(
-                    history=steps,
-                    discount_factor=0.95,
-                    average_state_sampling_time=0.0,
-                    average_action_time=0.0,
-                    average_observation_time=0.0,
-                    average_belief_update_time=0.0,
-                    average_reward_time=0.0,
+                build_test_history(
+                    steps=steps,
                     actual_num_steps=4,
-                    reach_terminal_state=True,
+                    reach_terminal=True,
                     policy_run_data=[PolicyRunData(info_variables=[])],
                 )
             )
@@ -493,16 +488,10 @@ class TestTigerPOMDPMetrics:
                 )
             )
             histories.append(
-                History(
-                    history=steps,
-                    discount_factor=0.95,
-                    average_state_sampling_time=0.0,
-                    average_action_time=0.0,
-                    average_observation_time=0.0,
-                    average_belief_update_time=0.0,
-                    average_reward_time=0.0,
+                build_test_history(
+                    steps=steps,
                     actual_num_steps=3,
-                    reach_terminal_state=True,
+                    reach_terminal=True,
                     policy_run_data=[PolicyRunData(info_variables=[])],
                 )
             )
@@ -559,16 +548,9 @@ class TestTigerPOMDPMetrics:
                 )
             )
             histories.append(
-                History(
-                    history=steps,
-                    discount_factor=0.95,
-                    average_state_sampling_time=0.0,
-                    average_action_time=0.0,
-                    average_observation_time=0.0,
-                    average_belief_update_time=0.0,
-                    average_reward_time=0.0,
-                    actual_num_steps=len(steps),
-                    reach_terminal_state=True,
+                build_test_history(
+                    steps=steps,
+                    reach_terminal=True,
                     policy_run_data=[PolicyRunData(info_variables=[])],
                 )
             )
@@ -660,16 +642,9 @@ def test_metrics_confidence_intervals(tiger_pomdp):
         )
 
         histories.append(
-            History(
-                history=steps,
-                discount_factor=0.95,
-                average_state_sampling_time=0.0,
-                average_action_time=0.0,
-                average_observation_time=0.0,
-                average_belief_update_time=0.0,
-                average_reward_time=0.0,
-                actual_num_steps=len(steps),
-                reach_terminal_state=True,
+            build_test_history(
+                steps=steps,
+                reach_terminal=True,
                 policy_run_data=[PolicyRunData(info_variables=[])],
             )
         )
@@ -710,16 +685,9 @@ def test_metric_name_consistency(tiger_pomdp):
     ]
 
     histories = [
-        History(
-            history=steps,
-            discount_factor=0.95,
-            average_state_sampling_time=0.0,
-            average_action_time=0.0,
-            average_observation_time=0.0,
-            average_belief_update_time=0.0,
-            average_reward_time=0.0,
-            actual_num_steps=len(steps),
-            reach_terminal_state=True,
+        build_test_history(
+            steps=steps,
+            reach_terminal=True,
             policy_run_data=[PolicyRunData(info_variables=[])],
         )
     ]

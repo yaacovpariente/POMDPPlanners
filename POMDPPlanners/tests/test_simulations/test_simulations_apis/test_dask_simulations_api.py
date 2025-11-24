@@ -1,77 +1,14 @@
-import random
-import shutil
-import tempfile
-import time
-from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
-import numpy as np
 import pandas as pd
 import pytest
 
-from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.simulation import EnvironmentRunParams
 from POMDPPlanners.core.policy import PolicySpaceInfo
 from POMDPPlanners.core.environment import SpaceType
-from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
-from POMDPPlanners.planners.mcts_planners.sparse_pft import SparsePFT
 from POMDPPlanners.simulations.simulation_apis.dask_simulations_api import DaskSimulationsAPI
 
-np.random.seed(42)
-random.seed(42)
-
-
-@pytest.fixture
-def temp_cache_dir():
-    """Fixture to create a temporary cache directory."""
-    temp_dir = tempfile.mkdtemp()
-    try:
-        yield Path(temp_dir)
-    finally:
-        # Add a small delay to ensure all file handles are released
-        time.sleep(0.1)
-        # Ensure cleanup happens even if test fails
-        try:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-        except Exception:
-            pass
-
-
-@pytest.fixture
-def tiger_environment():
-    """Fixture to create a TigerPOMDP environment."""
-    return TigerPOMDP(discount_factor=0.95, name="test_tiger")
-
-
-@pytest.fixture
-def sparse_pft_policy(tiger_environment):
-    """Fixture to create a SparsePFT policy for the Tiger environment."""
-    return SparsePFT(
-        environment=tiger_environment,
-        discount_factor=0.95,
-        gamma=0.95,
-        depth=10,
-        c_ucb=1.0,
-        beta_ucb=0.5,
-        belief_child_num=5,
-        n_simulations=100,
-        name="test_sparse_pft",
-    )
-
-
-@pytest.fixture
-def sample_environment_run_params(tiger_environment, sparse_pft_policy):
-    """Fixture to create sample environment run parameters using TigerPOMDP and SparsePFT."""
-    initial_belief = get_initial_belief(tiger_environment, n_particles=100)
-    return [
-        EnvironmentRunParams(
-            environment=tiger_environment,
-            belief=initial_belief,
-            policies=[sparse_pft_policy],
-            num_episodes=2,
-            num_steps=10,
-        )
-    ]
+# Fixtures temp_cache_dir, tiger_environment, sparse_pft_policy, and
+# sample_environment_run_params are now provided by the top-level conftest.py
 
 
 class TestDaskSimulationsAPI:

@@ -5,7 +5,7 @@ methods correctly match empirical sampling distributions across different POMDP
 environments.
 """
 
-from typing import Any, Callable, List, Optional
+from typing import Any, Callable, List, Optional, cast
 
 import numpy as np
 from scipy.spatial.distance import jensenshannon
@@ -556,7 +556,9 @@ def validate_continuous_observation_model_with_ks_test(
 
     # Use KS test on normalized PDF values against uniform distribution
     # If sampling is correct, normalized PDF ranks should be roughly uniform
-    ks_statistic, p_value = kstest(normalized_pdf, "uniform", args=(0, np.max(normalized_pdf)))
+    ks_result = kstest(normalized_pdf, "uniform", args=(0, np.max(normalized_pdf)))
+    ks_statistic = float(cast(float, ks_result[0]))  # statistic is first element
+    p_value = float(cast(float, ks_result[1]))  # pvalue is second element
 
     # For multivariate Gaussians, a more appropriate test:
     # Check that high-PDF samples are concentrated near the mean
@@ -569,8 +571,8 @@ def validate_continuous_observation_model_with_ks_test(
     # multivariate KS tests, but scipy doesn't provide these directly.
 
     return {
-        "ks_statistic": float(ks_statistic),
-        "p_value": float(p_value),
+        "ks_statistic": ks_statistic,
+        "p_value": p_value,
         "passed": passed,
         "num_samples": num_samples,
         "significance_level": significance_level,
