@@ -8,6 +8,7 @@ This is part of the interface compliance test suite that ensures all
 implementations satisfy their respective contracts.
 """
 
+import random
 import numpy as np
 import pytest
 
@@ -40,6 +41,7 @@ from POMDPPlanners.tests.test_utils.test_probability_utils import (
 
 # Set random seed for reproducibility across all tests
 np.random.seed(42)
+random.seed(42)
 
 
 class TestTigerObservationProbability:
