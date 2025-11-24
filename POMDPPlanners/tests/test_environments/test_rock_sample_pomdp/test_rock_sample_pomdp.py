@@ -14,7 +14,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import Belief
-from POMDPPlanners.core.simulation import History, StepData
+from POMDPPlanners.core.simulation import StepData
 from POMDPPlanners.environments.rock_sample_pomdp import (
     RockSampleObservationModel,
     RockSamplePOMDP,
@@ -26,6 +26,7 @@ from POMDPPlanners.environments.rock_sample_pomdp import (
     get_rocks,
     states_equal,
 )
+from POMDPPlanners.tests.test_utils.history_builders import build_test_history
 
 # Set seeds for reproducible tests
 np.random.seed(42)
@@ -897,18 +898,7 @@ class TestMetricsComputation:
             )
             steps.append(step)
 
-            history = History(
-                history=steps,
-                discount_factor=0.95,
-                average_state_sampling_time=0.0,
-                average_action_time=0.0,
-                average_observation_time=0.0,
-                average_belief_update_time=0.0,
-                average_reward_time=0.0,
-                actual_num_steps=len(steps),
-                reach_terminal_state=False,
-                policy_run_data=[],
-            )
+            history = build_test_history(steps=steps, reach_terminal=False)
             histories.append(history)
 
         metrics = pomdp.compute_metrics(histories)
@@ -943,17 +933,8 @@ class TestMetricsComputation:
             reward=10.0,
             belief=Mock(spec=Belief),
         )
-        success_history = History(
-            history=[success_step],
-            discount_factor=0.95,
-            average_state_sampling_time=0.0,
-            average_action_time=0.0,
-            average_observation_time=0.0,
-            average_belief_update_time=0.0,
-            average_reward_time=0.0,
-            actual_num_steps=1,
-            reach_terminal_state=True,
-            policy_run_data=[],
+        success_history = build_test_history(
+            steps=[success_step], actual_num_steps=1, reach_terminal=True
         )
         histories.append(success_history)
 
@@ -967,17 +948,8 @@ class TestMetricsComputation:
             reward=-1.0,
             belief=Mock(spec=Belief),
         )
-        fail_history = History(
-            history=[fail_step],
-            discount_factor=0.95,
-            average_state_sampling_time=0.0,
-            average_action_time=0.0,
-            average_observation_time=0.0,
-            average_belief_update_time=0.0,
-            average_reward_time=0.0,
-            actual_num_steps=1,
-            reach_terminal_state=False,
-            policy_run_data=[],
+        fail_history = build_test_history(
+            steps=[fail_step], actual_num_steps=1, reach_terminal=False
         )
         histories.append(fail_history)
 
