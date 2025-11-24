@@ -286,7 +286,11 @@ class PushObservation(ObservationModel):
 
     def probability(self, values: List[Any]) -> np.ndarray:
         # Calculate probabilities based on Gaussian noise model for list of observations
+        # Using 2D Gaussian PDF: (1/(2*pi*sigma^2)) * exp(-0.5 * ||diff||^2 / sigma^2)
         probabilities = []
+        variance = self.observation_noise**2
+        normalization = 1.0 / (2.0 * np.pi * variance)
+
         for observation in values:
             # Ensure observation is numpy array with correct shape
             if not isinstance(observation, np.ndarray) or observation.size == 0:
@@ -298,8 +302,8 @@ class PushObservation(ObservationModel):
                 raise ValueError(f"Expected observation shape (6,), got {observation.shape}")
 
             object_pos_diff = observation[2:4] - self.object_pos
-            log_prob = -0.5 * np.sum(object_pos_diff**2) / (self.observation_noise**2)
-            prob = np.exp(log_prob)
+            log_prob = -0.5 * np.sum(object_pos_diff**2) / variance
+            prob = normalization * np.exp(log_prob)
             probabilities.append(prob)
 
         return np.array(probabilities)

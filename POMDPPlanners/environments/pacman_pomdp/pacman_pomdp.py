@@ -685,11 +685,13 @@ class PacManObservationModel(ObservationModel):
                         # Terminal observation for individual ghost in non-terminal state
                         ghost_prob = 0.0
                     else:
-                        # Gaussian probability for this ghost
+                        # 2D Gaussian PDF: (1/(2*pi*sigma^2)) * exp(-d^2/(2*sigma^2))
                         row_diff = obs_pos[0] - true_ghost_pos[0]
                         col_diff = obs_pos[1] - true_ghost_pos[1]
                         distance_sq = row_diff**2 + col_diff**2
-                        ghost_prob = np.exp(-distance_sq / (2 * noise_std**2))
+                        variance = noise_std**2
+                        normalization = 1.0 / (2.0 * np.pi * variance)
+                        ghost_prob = normalization * np.exp(-distance_sq / (2 * variance))
 
                     total_prob *= ghost_prob
 
@@ -697,12 +699,7 @@ class PacManObservationModel(ObservationModel):
 
             probs.append(prob)
 
-        probs = np.array(probs)
-        total: float = float(np.sum(probs))
-        if total > 0:
-            probs = probs / total
-
-        return probs
+        return np.array(probs)
 
 
 class PacManPOMDP(DiscreteActionsEnvironment):
