@@ -16,6 +16,7 @@ import pytest
 from typing import List
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
+from POMDPPlanners.core.distributions import DiscreteDistribution
 from POMDPPlanners.core.environment import SpaceType
 from POMDPPlanners.core.policy import Policy, PolicyRunData, PolicySpaceInfo
 from POMDPPlanners.core.simulation import History, StepData
@@ -850,6 +851,70 @@ class TestLaserTagPOMDP:
                 int(state[3]),
             )  # Should start at different positions
             assert not bool(state[4])
+
+    def test_initial_state_functionality(self):
+        """Test initial_state parameter functionality.
+
+        Purpose: Validates that initial_state parameter correctly sets initial state distribution
+
+        Given: LaserTag environment with initial_state parameter set or None
+        When: Initial state distribution is sampled
+        Then: Returns uniform distribution when None, or single state with probability 1.0 when set
+
+        Test type: unit
+        """
+        # Test 1: When initial_state is None (default), should return uniform distribution
+        env_default = LaserTagPOMDP(discount_factor=0.95)
+        assert env_default.initial_state is None
+
+        initial_dist_default = env_default.initial_state_dist()
+        initial_states_default = initial_dist_default.sample(n_samples=20)
+
+        # Should get different states (not all the same)
+        unique_states = set(
+            tuple(state) for state in initial_states_default
+        )  # Convert to tuple for hashing
+        assert (
+            len(unique_states) > 1
+        ), "Default distribution should return multiple different states"
+
+        # Test 2: When initial_state is set, should return that state with probability 1.0
+        start_state = np.array([2.0, 3.0, 5.0, 6.0, 0.0])
+        env_custom = LaserTagPOMDP(discount_factor=0.95, initial_state=start_state)
+        assert env_custom.initial_state is not None
+        assert np.array_equal(env_custom.initial_state, start_state)
+
+        initial_dist_custom = env_custom.initial_state_dist()
+        initial_states_custom = initial_dist_custom.sample(n_samples=50)
+
+        # All sampled states should be the same as start_state
+        for state in initial_states_custom:
+            assert np.array_equal(
+                state, start_state
+            ), f"Expected all states to be {start_state}, got {state}"
+
+        # Test probability: should be 1.0 for the start state
+        probs = initial_dist_custom.probability([start_state])
+        assert probs[0] == 1.0, f"Expected probability 1.0 for start state, got {probs[0]}"
+
+        # Test probability: should be 0.0 for any other state
+        other_state = np.array([1.0, 1.0, 2.0, 2.0, 0.0])
+        probs_other = initial_dist_custom.probability([other_state])
+        assert (
+            probs_other[0] == 0.0
+        ), f"Expected probability 0.0 for other state, got {probs_other[0]}"
+
+        # Test 3: Verify that the distribution has only one state
+        # Check that it's a DiscreteDistribution and verify its structure
+        assert isinstance(
+            initial_dist_custom, DiscreteDistribution
+        ), "Initial state distribution should be DiscreteDistribution"
+        assert (
+            len(initial_dist_custom.values) == 1
+        ), "Custom distribution should have only one state"
+        assert np.array_equal(
+            initial_dist_custom.values[0], start_state
+        ), "Distribution should contain the start state"
 
     def test_observation_equality(self):
         """Test observation equality comparison.

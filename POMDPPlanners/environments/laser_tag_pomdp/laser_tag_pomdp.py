@@ -571,6 +571,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         output_dir: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
+        initial_state: Optional[np.ndarray] = None,
     ):
         """Initialize the LaserTag POMDP environment.
 
@@ -589,6 +590,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             dangerous_area_penalty: Penalty magnitude applied randomly when in dangerous areas. Defaults to 2.0.
             output_dir: Optional directory for logging output. Defaults to None.
             debug: Enable debug logging. Defaults to False.
+            initial_state: Optional initial state as numpy array with shape (5,). If provided,
+                the initial state distribution will return this state with probability 1.0.
+                If None, returns uniform distribution over all valid initial states. Defaults to None.
 
         Raises:
             ValueError: If discount_factor is not in valid range [0, 1]
@@ -622,6 +626,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         )
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
+        self.initial_state = initial_state
 
         # Action definitions
         self.actions = [0, 1, 2, 3, 4]  # North, South, East, West, Tag
@@ -712,6 +717,10 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
     def initial_state_dist(self) -> Distribution:
         """Get the initial state distribution."""
+        # If initial_state is provided, return distribution with that state at probability 1
+        if self.initial_state is not None:
+            return DiscreteDistribution(values=[self.initial_state], probs=np.array([1.0]))
+
         # Generate all valid robot and opponent positions
         valid_positions = []
         for row in range(self.floor_shape[0]):
