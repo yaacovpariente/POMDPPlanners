@@ -457,11 +457,21 @@ class PushPOMDP(DiscreteActionsEnvironment):
             use_queue_logger=use_queue_logger,
         )
 
-    def _is_colliding_with_obstacle(self, position: np.ndarray) -> bool:
+        self.action_to_vector = {
+            "up": np.array([0, 1]),
+            "down": np.array([0, -1]),
+            "right": np.array([1, 0]),
+            "left": np.array([-1, 0]),
+        }
+
+    def _is_colliding_with_obstacle(
+        self, position: np.ndarray, action: Optional[str] = None
+    ) -> bool:
         """Check if a position collides with any obstacle.
 
         Args:
             position: Position to check as [x, y] array
+            action: Optional action to check collision after movement. If None, checks current position.
 
         Returns:
             True if position is within obstacle_radius of any obstacle center
@@ -469,11 +479,16 @@ class PushPOMDP(DiscreteActionsEnvironment):
         if not self.obstacles:
             return False
 
-        pos_x, pos_y = position
+        if action is not None:
+            # Check collision at next position after taking action
+            check_pos_x, check_pos_y = position + self.action_to_vector[action]
+        else:
+            # Check collision at current position
+            check_pos_x, check_pos_y = position
 
         for obs_x, obs_y in self.obstacles:
             # Calculate Euclidean distance
-            distance = np.sqrt((pos_x - obs_x) ** 2 + (pos_y - obs_y) ** 2)
+            distance = np.sqrt((check_pos_x - obs_x) ** 2 + (check_pos_y - obs_y) ** 2)
             if distance <= self.obstacle_radius:
                 return True
 
@@ -514,7 +529,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         if distance_to_target < 0.5:
             reward += 100.0
 
-        if self._is_colliding_with_obstacle(robot_pos):
+        if self._is_colliding_with_obstacle(robot_pos, action):
             reward += self.obstacle_penalty
 
         return float(reward)
