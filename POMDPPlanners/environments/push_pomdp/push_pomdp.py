@@ -529,7 +529,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         if distance_to_target < 0.5:
             reward += 100.0
 
-        if self._is_colliding_with_obstacle(robot_pos, action):
+        if self._is_colliding_with_obstacle(robot_pos):
             reward += self.obstacle_penalty
 
         return float(reward)
