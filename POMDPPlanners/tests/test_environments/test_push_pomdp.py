@@ -66,16 +66,19 @@ class TestPushPOMDP:
         )  # Outside radius
 
     def test_reward_difference_obstacle_vs_safe(self):
-        """Test that rewards in obstacle states are lower than in safe states."""
-        # Create states with robot in different areas
-        obstacle_state = np.concatenate(
+        """Test that rewards for actions leading to obstacle collision are lower than safe actions."""
+        # Create state where robot action will lead to obstacle collision
+        # Robot at (2.5, 3.0), obstacle at (3.0, 3.0) with radius 0.5
+        # Action "right" will move to (3.5, 3.0), distance = 0.5, exactly at boundary (collision)
+        will_collide_state = np.concatenate(
             [
-                self.obstacle_pos,  # Robot in obstacle
+                np.array([2.5, 3.0]),  # Robot position before action
                 self.object_pos,  # Object position
                 self.target_pos,  # Target position
             ]
         )
 
+        # Create state where robot action will NOT lead to obstacle collision
         safe_state = np.concatenate(
             [
                 self.safe_pos,  # Robot in safe area
@@ -85,65 +88,71 @@ class TestPushPOMDP:
         )
 
         # Test movement action ("right")
-        obstacle_reward = self.env.reward(obstacle_state, action="right")
+        # For will_collide_state: (2.5, 3.0) + "right" = (3.5, 3.0), distance from (3.0, 3.0) = 0.5 <= 0.5 (collision!)
+        # For safe_state: (1.0, 1.0) + "right" = (2.0, 1.0), no collision
+        will_collide_reward = self.env.reward(will_collide_state, action="right")
         safe_reward = self.env.reward(safe_state, action="right")
 
-        # Robot in obstacle should get obstacle penalty (-10.0) in addition to distance reward
-        # Robot in safe area should only get distance reward
+        # Action leading to collision should get obstacle penalty (-10.0) in addition to distance reward
+        # Safe action should only get distance reward
 
-        # The reward in obstacle state should be lower than safe state
+        # The reward for collision action should be lower than safe action
         assert (
-            obstacle_reward < safe_reward
-        ), f"Obstacle state reward ({obstacle_reward}) should be < safe state reward ({safe_reward})"
+            will_collide_reward < safe_reward
+        ), f"Collision action reward ({will_collide_reward}) should be < safe action reward ({safe_reward})"
 
         # Both should be negative (due to distance to target)
-        assert obstacle_reward < 0
+        assert will_collide_reward < 0
         assert safe_reward < 0
 
     def test_robot_obstacle_collision_penalty(self):
-        """Test that robot collision with obstacles applies penalty."""
-        # Create state with robot in obstacle
-        obstacle_state = np.concatenate(
+        """Test that actions leading to robot collision with obstacles apply penalty."""
+        # Create state where action will lead to collision
+        # Robot at (2.0, 3.0), obstacle at (3.0, 3.0) with radius 0.5
+        # Action "right" will move to (3.0, 3.0), distance = 0.0 (collision!)
+        will_collide_state = np.concatenate(
             [
-                self.obstacle_pos,  # Robot in obstacle
+                np.array([2.0, 3.0]),  # Robot position before action
                 self.object_pos,  # Object position
                 self.target_pos,  # Target position
             ]
         )
 
-        # Create state with robot just outside obstacle
-        near_obstacle_state = np.concatenate(
+        # Create state where action will NOT lead to collision
+        # Robot at (3.6, 3.6), action "up" moves to (3.6, 4.6)
+        # Distance from (3.0, 3.0) = sqrt((3.6-3.0)^2 + (4.6-3.0)^2) = sqrt(0.36 + 2.56) ≈ 1.71 > 0.5 (no collision)
+        no_collision_state = np.concatenate(
             [
-                np.array([3.6, 3.6]),  # Robot just outside obstacle radius
+                np.array([3.6, 3.6]),  # Robot position before action
                 self.object_pos,  # Object position
                 self.target_pos,  # Target position
             ]
         )
 
-        # Test same action on both states
-        obstacle_reward = self.env.reward(obstacle_state, action="up")
-        near_obstacle_reward = self.env.reward(near_obstacle_state, action="up")
+        # Test actions that will/won't lead to collision
+        will_collide_reward = self.env.reward(will_collide_state, action="right")
+        no_collision_reward = self.env.reward(no_collision_state, action="up")
 
-        # Robot in obstacle should get lower reward due to penalty
+        # Action leading to collision should get lower reward due to penalty
         assert (
-            obstacle_reward < near_obstacle_reward
-        ), f"Robot in obstacle reward ({obstacle_reward}) should be < near obstacle reward ({near_obstacle_reward})"
+            will_collide_reward < no_collision_reward
+        ), f"Collision action reward ({will_collide_reward}) should be < no collision action reward ({no_collision_reward})"
 
-        # Calculate expected penalty
-        distance_to_target_obstacle = np.linalg.norm(self.object_pos - self.target_pos)
-        distance_to_target_near = np.linalg.norm(self.object_pos - self.target_pos)
+        # Calculate expected penalties (both states have same object position, so same distance to target)
+        distance_to_target = np.linalg.norm(self.object_pos - self.target_pos)
 
-        # Both should have same distance component, but obstacle state has additional penalty
-        expected_obstacle_reward = -distance_to_target_obstacle + self.env.obstacle_penalty
-        expected_near_reward = -distance_to_target_near
+        # Collision action should have distance component + penalty
+        expected_collision_reward = -distance_to_target + self.env.obstacle_penalty
+        # No collision action should only have distance component
+        expected_no_collision_reward = -distance_to_target
 
         # Verify the penalty is applied correctly
         assert (
-            abs(obstacle_reward - expected_obstacle_reward) < 1e-6
-        ), f"Expected obstacle reward {expected_obstacle_reward}, got {obstacle_reward}"
+            abs(will_collide_reward - expected_collision_reward) < 1e-6
+        ), f"Expected collision reward {expected_collision_reward}, got {will_collide_reward}"
         assert (
-            abs(near_obstacle_reward - expected_near_reward) < 1e-6
-        ), f"Expected near obstacle reward {expected_near_reward}, got {near_obstacle_reward}"
+            abs(no_collision_reward - expected_no_collision_reward) < 1e-6
+        ), f"Expected no collision reward {expected_no_collision_reward}, got {no_collision_reward}"
 
     def test_object_obstacle_collision_penalty(self):
         """Test that object collision with obstacles does not apply penalty (only robot collision does)."""
@@ -186,17 +195,21 @@ class TestPushPOMDP:
         ), f"Expected object near obstacle reward {expected_near_reward}, got {object_near_obstacle_reward}"
 
     def test_both_robot_and_object_obstacle_collision(self):
-        """Test that only robot collision applies penalty (not object collision)."""
-        # Create state with both robot and object in obstacles
-        both_obstacle_state = np.concatenate(
+        """Test that only robot action collision applies penalty (not object position in obstacle)."""
+        # Create state where robot action will lead to collision, object is in obstacle
+        # Robot at (2.0, 3.0), action "right" moves to (3.0, 3.0) - collision!
+        # Object at (7.0, 7.0) which is in the second obstacle - but this shouldn't affect penalty
+        robot_collision_state = np.concatenate(
             [
-                self.obstacle_pos,  # Robot in obstacle
+                np.array([2.0, 3.0]),  # Robot position before action
                 np.array([7.0, 7.0]),  # Object in different obstacle
                 self.target_pos,  # Target position
             ]
         )
 
-        # Create state with both robot and object in safe areas
+        # Create state where robot action will NOT lead to collision, object is safe
+        # Robot at (1.0, 1.0), action "up" moves to (1.0, 2.0) - no collision
+        # Object at (2.0, 2.0) which is in safe area
         both_safe_state = np.concatenate(
             [
                 self.safe_pos,  # Robot in safe area
@@ -205,27 +218,31 @@ class TestPushPOMDP:
             ]
         )
 
-        # Test same action on both states
-        both_obstacle_reward = self.env.reward(both_obstacle_state, action="up")
+        # Test actions on both states
+        robot_collision_reward = self.env.reward(robot_collision_state, action="right")
         both_safe_reward = self.env.reward(both_safe_state, action="up")
 
-        # Robot in obstacle state should get lower reward due to robot penalty
+        # Robot action leading to collision should get lower reward due to penalty
+        # Note: robot_collision_state has object closer to target, so without penalty it would have higher reward
+        # But with penalty, it should be lower
         assert (
-            both_obstacle_reward < both_safe_reward
-        ), f"Both obstacle reward ({both_obstacle_reward}) should be < both safe reward ({both_safe_reward})"
+            robot_collision_reward < both_safe_reward
+        ), f"Robot collision reward ({robot_collision_reward}) should be < both safe reward ({both_safe_reward})"
 
         # Calculate expected penalties
-        distance_to_target_obstacle = np.linalg.norm(np.array([7.0, 7.0]) - self.target_pos)
+        distance_to_target_robot_collision = np.linalg.norm(np.array([7.0, 7.0]) - self.target_pos)
         distance_to_target_safe = np.linalg.norm(np.array([2.0, 2.0]) - self.target_pos)
 
-        # Only robot collision applies penalty (not object collision)
-        expected_obstacle_reward = -distance_to_target_obstacle + self.env.obstacle_penalty
+        # Only robot action collision applies penalty (not object position in obstacle)
+        expected_robot_collision_reward = (
+            -distance_to_target_robot_collision + self.env.obstacle_penalty
+        )
         expected_safe_reward = -distance_to_target_safe
 
-        # Verify the penalties are applied correctly (only one penalty for robot collision)
+        # Verify the penalties are applied correctly (only one penalty for robot action collision)
         assert (
-            abs(both_obstacle_reward - expected_obstacle_reward) < 1e-6
-        ), f"Expected both obstacle reward {expected_obstacle_reward}, got {both_obstacle_reward}"
+            abs(robot_collision_reward - expected_robot_collision_reward) < 1e-6
+        ), f"Expected robot collision reward {expected_robot_collision_reward}, got {robot_collision_reward}"
         assert (
             abs(both_safe_reward - expected_safe_reward) < 1e-6
         ), f"Expected both safe reward {expected_safe_reward}, got {both_safe_reward}"
