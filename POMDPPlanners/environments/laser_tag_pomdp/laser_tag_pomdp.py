@@ -687,6 +687,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         else:
             base_reward = -self.step_cost  # Movement cost
 
+        intended_pos = (robot_pos[0], robot_pos[1])
         # Check for wall collision and apply dangerous area penalty
         if action in [0, 1, 2, 3]:  # Movement actions
             # Calculate intended position based on action
@@ -694,20 +695,9 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             dr, dc = action_directions[action]
             intended_pos = (robot_pos[0] + dr, robot_pos[1] + dc)
 
-            # Check if intended position is a wall (collision)
-            if intended_pos in self.walls:
-                # Apply dangerous area penalty for wall collision
-                base_reward -= self.dangerous_area_penalty
-
-        # Add dangerous area penalty/bonus with 50% probability
-        if self._is_in_dangerous_area(robot_pos):
-            # Random penalty or bonus with equal probability
-            danger_modifier = (
-                self.dangerous_area_penalty
-                if np.random.random() < 0.5
-                else -self.dangerous_area_penalty
-            )
-            base_reward += danger_modifier
+        if intended_pos in self.walls or self._is_in_dangerous_area(intended_pos):
+            # Apply dangerous area penalty for wall collision and danerous area
+            base_reward -= self.dangerous_area_penalty
 
         return base_reward
 
