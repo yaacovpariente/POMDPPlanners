@@ -838,6 +838,157 @@ class TestRewardFunction:
         assert pomdp2.reward_range == (expected_min2, expected_max2)
 
 
+class TestDangerousArea:
+    """Test dangerous area detection."""
+
+    def test_is_in_dangerous_area_no_dangerous_areas(self):
+        """Test dangerous area check with no dangerous areas defined.
+
+        Purpose: Validates that method returns False when no dangerous areas are configured
+
+        Given: POMDP with no dangerous areas
+        When: _is_in_dangerous_area() is called with any position
+        Then: Returns False
+
+        Test type: unit
+        """
+        pomdp = RockSamplePOMDP()
+        assert pomdp._is_in_dangerous_area((0, 0)) is False
+        assert pomdp._is_in_dangerous_area((2, 2)) is False
+        assert pomdp._is_in_dangerous_area((4, 4)) is False
+
+    def test_is_in_dangerous_area_within_radius(self):
+        """Test dangerous area check when position is within radius.
+
+        Purpose: Validates that positions within dangerous area radius are correctly identified
+
+        Given: POMDP with dangerous area at (2, 2) with radius 1.5
+        When: _is_in_dangerous_area() is called with position within radius
+        Then: Returns True
+
+        Test type: unit
+        """
+        pomdp = RockSamplePOMDP(dangerous_areas=[(2, 2)], dangerous_area_radius=1.5)
+        # Position at center
+        assert pomdp._is_in_dangerous_area((2, 2)) is True
+        # Position adjacent (distance = 1.0)
+        assert pomdp._is_in_dangerous_area((2, 3)) is True
+        assert pomdp._is_in_dangerous_area((3, 2)) is True
+        assert pomdp._is_in_dangerous_area((1, 2)) is True
+        assert pomdp._is_in_dangerous_area((2, 1)) is True
+        # Position diagonal (distance = sqrt(2) ≈ 1.41)
+        assert pomdp._is_in_dangerous_area((3, 3)) is True
+        assert pomdp._is_in_dangerous_area((1, 1)) is True
+
+    def test_is_in_dangerous_area_outside_radius(self):
+        """Test dangerous area check when position is outside radius.
+
+        Purpose: Validates that positions beyond dangerous area radius are correctly identified
+
+        Given: POMDP with dangerous area at (2, 2) with radius 1.0
+        When: _is_in_dangerous_area() is called with position beyond radius
+        Then: Returns False
+
+        Test type: unit
+        """
+        pomdp = RockSamplePOMDP(dangerous_areas=[(2, 2)], dangerous_area_radius=1.0)
+        # Position at center (distance = 0.0)
+        assert pomdp._is_in_dangerous_area((2, 2)) is True
+        # Position adjacent (distance = 1.0, exactly at boundary)
+        assert pomdp._is_in_dangerous_area((2, 3)) is True
+        # Position two steps away (distance = 2.0)
+        assert pomdp._is_in_dangerous_area((2, 4)) is False
+        assert pomdp._is_in_dangerous_area((4, 2)) is False
+        # Position far away
+        assert pomdp._is_in_dangerous_area((0, 0)) is False
+        assert pomdp._is_in_dangerous_area((4, 4)) is False
+
+    def test_is_in_dangerous_area_exact_radius_boundary(self):
+        """Test dangerous area check at exact radius boundary.
+
+        Purpose: Validates boundary condition where distance equals radius
+
+        Given: POMDP with dangerous area at (2, 2) with radius sqrt(2) ≈ 1.414
+        When: _is_in_dangerous_area() is called with position at exact boundary
+        Then: Returns True (distance <= radius)
+
+        Test type: unit
+        """
+        import math
+
+        pomdp = RockSamplePOMDP(dangerous_areas=[(2, 2)], dangerous_area_radius=math.sqrt(2))
+        # Position diagonal (distance = sqrt(2), exactly at boundary)
+        assert pomdp._is_in_dangerous_area((3, 3)) is True
+        assert pomdp._is_in_dangerous_area((1, 1)) is True
+        # Position slightly further (distance = 2.0)
+        assert pomdp._is_in_dangerous_area((2, 4)) is False
+
+    def test_is_in_dangerous_area_multiple_areas(self):
+        """Test dangerous area check with multiple dangerous areas.
+
+        Purpose: Validates that method checks all dangerous areas and returns True if any match
+
+        Given: POMDP with multiple dangerous areas
+        When: _is_in_dangerous_area() is called with position within any area
+        Then: Returns True
+
+        Test type: unit
+        """
+        pomdp = RockSamplePOMDP(dangerous_areas=[(1, 1), (3, 3)], dangerous_area_radius=1.5)
+        # Position within first area
+        assert pomdp._is_in_dangerous_area((1, 1)) is True
+        assert pomdp._is_in_dangerous_area((2, 1)) is True
+        # Position within second area
+        assert pomdp._is_in_dangerous_area((3, 3)) is True
+        assert pomdp._is_in_dangerous_area((4, 3)) is True
+        # Position outside both areas (distance > 1.5 from both centers)
+        # (0, 3) is sqrt((0-1)^2 + (3-1)^2) = sqrt(5) ≈ 2.24 from (1,1) and
+        # sqrt((0-3)^2 + (3-3)^2) = 3.0 from (3,3), both > 1.5
+        assert pomdp._is_in_dangerous_area((0, 3)) is False
+        # (4, 0) is sqrt((4-1)^2 + (0-1)^2) = sqrt(10) ≈ 3.16 from (1,1) and
+        # sqrt((4-3)^2 + (0-3)^2) = sqrt(10) ≈ 3.16 from (3,3), both > 1.5
+        assert pomdp._is_in_dangerous_area((4, 0)) is False
+
+    def test_is_in_dangerous_area_large_radius(self):
+        """Test dangerous area check with large radius covering entire map.
+
+        Purpose: Validates behavior with very large dangerous area radius
+
+        Given: POMDP with dangerous area at center and large radius
+        When: _is_in_dangerous_area() is called with any position
+        Then: Returns True for all positions within radius
+
+        Test type: unit
+        """
+        pomdp = RockSamplePOMDP(
+            map_size=(5, 5),
+            dangerous_areas=[(2, 2)],
+            dangerous_area_radius=10.0,  # Large enough to cover entire map
+        )
+        # All positions should be within radius
+        assert pomdp._is_in_dangerous_area((0, 0)) is True
+        assert pomdp._is_in_dangerous_area((2, 2)) is True
+        assert pomdp._is_in_dangerous_area((4, 4)) is True
+
+    def test_is_in_dangerous_area_small_radius(self):
+        """Test dangerous area check with very small radius.
+
+        Purpose: Validates behavior with very small dangerous area radius
+
+        Given: POMDP with dangerous area at (2, 2) and radius 0.1
+        When: _is_in_dangerous_area() is called
+        Then: Returns True only for position at exact center
+
+        Test type: unit
+        """
+        pomdp = RockSamplePOMDP(dangerous_areas=[(2, 2)], dangerous_area_radius=0.1)
+        # Only exact center should be within radius
+        assert pomdp._is_in_dangerous_area((2, 2)) is True
+        # Adjacent positions should be outside
+        assert pomdp._is_in_dangerous_area((2, 3)) is False
+        assert pomdp._is_in_dangerous_area((3, 2)) is False
+
+
 class TestMetricsComputation:
     """Test metrics computation."""
 
