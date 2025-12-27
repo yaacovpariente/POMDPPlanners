@@ -13,7 +13,7 @@ from collections import Counter
 import numpy as np
 import pytest
 
-from typing import List
+from typing import Dict, List, Tuple
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
@@ -34,6 +34,15 @@ from POMDPPlanners.utils.logger import get_logger
 # Set seeds for reproducible tests
 np.random.seed(42)
 random.seed(42)
+
+# Action directions mapping for LaserTagStateTransition
+ACTION_DIRECTIONS: Dict[int, Tuple[int, int]] = {
+    0: (-1, 0),  # North (up)
+    1: (1, 0),  # South (down)
+    2: (0, 1),  # East (right)
+    3: (0, -1),  # West (left)
+    4: (0, 0),  # Tag (no movement)
+}
 
 
 class RandomPolicy(Policy):
@@ -149,7 +158,7 @@ class TestLaserTagStateTransition:
         walls = set()
 
         # Test North movement (action 0)
-        transition = LaserTagStateTransition(state, 0, floor_shape, walls)
+        transition = LaserTagStateTransition(state, 0, ACTION_DIRECTIONS, floor_shape, walls)
         next_states = transition.sample(n_samples=10)
         for next_state in next_states:
             assert (int(next_state[0]), int(next_state[1])) == (2, 5)  # One row up
@@ -171,7 +180,7 @@ class TestLaserTagStateTransition:
 
         # Test robot at top boundary trying to go North
         state = np.array([0.0, 5.0, 3.0, 3.0, 0.0])
-        transition = LaserTagStateTransition(state, 0, floor_shape, walls)
+        transition = LaserTagStateTransition(state, 0, ACTION_DIRECTIONS, floor_shape, walls)
         next_states = transition.sample(n_samples=5)
         for next_state in next_states:
             assert (int(next_state[0]), int(next_state[1])) == (0, 5)  # Should stay in place
@@ -192,7 +201,7 @@ class TestLaserTagStateTransition:
         walls = {(3, 3)}  # Wall to the East
 
         # Test robot trying to move East into wall
-        transition = LaserTagStateTransition(state, 2, floor_shape, walls)
+        transition = LaserTagStateTransition(state, 2, ACTION_DIRECTIONS, floor_shape, walls)
         next_states = transition.sample(n_samples=5)
         for next_state in next_states:
             assert (int(next_state[0]), int(next_state[1])) == (3, 2)  # Should stay in place
@@ -212,7 +221,9 @@ class TestLaserTagStateTransition:
         floor_shape = (7, 11)
         walls = set()
 
-        transition = LaserTagStateTransition(state, 1, floor_shape, walls)  # Robot moves South
+        transition = LaserTagStateTransition(
+            state, 1, ACTION_DIRECTIONS, floor_shape, walls
+        )  # Robot moves South
         samples = transition.sample(n_samples=1000)
 
         # Count opponent positions
@@ -244,7 +255,7 @@ class TestLaserTagStateTransition:
         floor_shape = (7, 11)
         walls = set()
 
-        transition = LaserTagStateTransition(state, 4, floor_shape, walls)
+        transition = LaserTagStateTransition(state, 4, ACTION_DIRECTIONS, floor_shape, walls)
         next_states = transition.sample(n_samples=10)
 
         for next_state in next_states:
@@ -267,7 +278,7 @@ class TestLaserTagStateTransition:
         floor_shape = (7, 11)
         walls = set()
 
-        transition = LaserTagStateTransition(state, 4, floor_shape, walls)
+        transition = LaserTagStateTransition(state, 4, ACTION_DIRECTIONS, floor_shape, walls)
         next_states = transition.sample(n_samples=10)
 
         for next_state in next_states:
@@ -289,7 +300,7 @@ class TestLaserTagStateTransition:
         floor_shape = (7, 11)
         walls = set()
 
-        transition = LaserTagStateTransition(state, 4, floor_shape, walls)
+        transition = LaserTagStateTransition(state, 4, ACTION_DIRECTIONS, floor_shape, walls)
 
         # Correct terminal state
         correct_terminal = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
@@ -321,7 +332,7 @@ class TestLaserTagStateTransition:
         walls = set()
 
         # Robot moves South (action 1), so next robot position is (4, 5)
-        transition = LaserTagStateTransition(state, 1, floor_shape, walls)
+        transition = LaserTagStateTransition(state, 1, ACTION_DIRECTIONS, floor_shape, walls)
 
         # Opponent at (5, 5) should prefer moving toward robot at (4, 5)
         # Expected moves: North to (4, 5) with prob 0.4, stay at (5, 5) with prob 0.2
@@ -373,7 +384,7 @@ class TestLaserTagStateTransition:
         walls = {(3, 4), (4, 3)}  # Walls to the East and South of opponent
 
         # Robot moves North (action 0), so next robot position is (2, 5)
-        transition = LaserTagStateTransition(state, 0, floor_shape, walls)
+        transition = LaserTagStateTransition(state, 0, ACTION_DIRECTIONS, floor_shape, walls)
 
         # Opponent should try to move toward robot
         # East move (3, 4) is blocked by wall
@@ -431,7 +442,7 @@ class TestLaserTagStateTransition:
         floor_shape = (7, 11)
         walls = set()
 
-        transition = LaserTagStateTransition(state, 0, floor_shape, walls)
+        transition = LaserTagStateTransition(state, 0, ACTION_DIRECTIONS, floor_shape, walls)
 
         # Test with invalid inputs
         invalid_states = ["not a state", None, 42, {"robot": (3, 5)}]
