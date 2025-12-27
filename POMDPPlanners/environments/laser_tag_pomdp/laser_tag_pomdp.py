@@ -89,9 +89,17 @@ class LaserTagStateTransition(StateTransitionModel):
         >>> import numpy as np
         >>> np.random.seed(42)  # For reproducible results
         >>> state = np.array([3.0, 5.0, 2.0, 4.0, 0.0])  # Robot at (3,5), opponent at (2,4)
+        >>> action_directions = {
+        ...     0: (-1, 0),  # North (up)
+        ...     1: (1, 0),   # South (down)
+        ...     2: (0, 1),   # East (right)
+        ...     3: (0, -1),  # West (left)
+        ...     4: (0, 0),   # Tag (no movement)
+        ... }
         >>> transition = LaserTagStateTransition(
         ...     state=state,
         ...     action=0,  # North
+        ...     action_directions=action_directions,
         ...     floor_shape=(7, 11),
         ...     walls=set()
         ... )
