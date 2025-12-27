@@ -103,6 +103,7 @@ class LaserTagStateTransition(StateTransitionModel):
         self,
         state: np.ndarray,
         action: int,
+        action_directions: Dict[int, Tuple[int, int]],
         floor_shape: Tuple[int, int],
         walls: Set[Tuple[int, int]],
     ):
@@ -117,13 +118,7 @@ class LaserTagStateTransition(StateTransitionModel):
         super().__init__(state, action)
         self.floor_shape: Tuple[int, int] = floor_shape
         self.walls: Set[Tuple[int, int]] = walls
-        self._action_directions: Dict[int, Tuple[int, int]] = {
-            0: (-1, 0),  # North (up)
-            1: (1, 0),  # South (down)
-            2: (0, 1),  # East (right)
-            3: (0, -1),  # West (left)
-            4: (0, 0),  # Tag (no movement)
-        }
+        self.action_directions: Dict[int, Tuple[int, int]] = action_directions
 
     def _is_valid_position(self, pos: Tuple[int, int]) -> bool:
         """Check if position is within bounds and not a wall."""
@@ -139,7 +134,7 @@ class LaserTagStateTransition(StateTransitionModel):
         if self.action == 4:  # Tag action
             return (int(self.state[0]), int(self.state[1]))
 
-        dr, dc = self._action_directions[self.action]
+        dr, dc = self.action_directions[self.action]
         new_pos = (int(self.state[0]) + dr, int(self.state[1]) + dc)
 
         # If new position is invalid, stay at current position
@@ -631,11 +626,22 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # Action definitions
         self.actions = [0, 1, 2, 3, 4]  # North, South, East, West, Tag
         self.action_names = ["North", "South", "East", "West", "Tag"]
+        self._action_directions: Dict[int, Tuple[int, int]] = {
+            0: (-1, 0),  # North (up)
+            1: (1, 0),  # South (down)
+            2: (0, 1),  # East (right)
+            3: (0, -1),  # West (left)
+            4: (0, 0),  # Tag (no movement)
+        }
 
     def state_transition_model(self, state: np.ndarray, action: int) -> StateTransitionModel:
         """Get the state transition model for a given state-action pair."""
         return LaserTagStateTransition(
-            state=state, action=action, floor_shape=self.floor_shape, walls=self.walls
+            state=state,
+            action=action,
+            action_directions=self._action_directions,
+            floor_shape=self.floor_shape,
+            walls=self.walls,
         )
 
     def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:
@@ -691,8 +697,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         # Check for wall collision and apply dangerous area penalty
         if action in [0, 1, 2, 3]:  # Movement actions
             # Calculate intended position based on action
-            action_directions = {0: (-1, 0), 1: (1, 0), 2: (0, 1), 3: (0, -1)}
-            dr, dc = action_directions[action]
+            dr, dc = self._action_directions[action]
             intended_pos = (robot_pos[0] + dr, robot_pos[1] + dc)
 
         if intended_pos in self.walls or self._is_in_dangerous_area(intended_pos):
