@@ -307,6 +307,7 @@ class TestLaserTagPOMDPProbability:
             action=action,
             floor_shape=pomdp.floor_shape,
             walls=pomdp.walls,
+            action_directions=pomdp._action_directions,
         )
         results = validate_probability_matches_empirical_distribution(
             transition, num_samples=1000, max_js_divergence=0.05
