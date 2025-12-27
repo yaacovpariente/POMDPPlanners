@@ -1124,3 +1124,130 @@ class TestPushPOMDP:
             assert (
                 distance >= 2.0
             ), f"Object at {object_pos} should be >= 2.0 units from target {target_pos}"
+
+    def test_state_transition_all_actions_deterministic(self):
+        """Test state transition sample() and probability() for all actions with transition_error_prob=0.
+
+        Purpose: Validates that all actions (up, down, left, right) execute correctly in deterministic mode
+
+        Given: A PushStateTransition with transition_error_prob=0 and hardcoded states
+        When: Each action is executed
+        Then: Resulting state should exactly match hardcoded expected state
+
+        Test type: unit
+        """
+        # Hardcoded initial state: robot at (5.0, 5.0), object at (5.0, 5.0), target at (9.0, 9.0)
+        # Robot and object are at same position, so pushing will occur
+        initial_state = np.array([5.0, 5.0, 5.0, 5.0, 9.0, 9.0])
+        push_threshold = 2.0  # Large enough so robot stays within threshold after moving
+        friction_coefficient = 0.3
+        grid_size = 10
+
+        # Hardcoded expected states for each action
+        # Robot moves by 1.0, object moves by 1.0 * (1 - 0.3) = 0.7
+        expected_states = {
+            "up": np.array([5.0, 6.0, 5.0, 5.7, 9.0, 9.0]),  # Robot up, object pushed up
+            "down": np.array([5.0, 4.0, 5.0, 4.3, 9.0, 9.0]),  # Robot down, object pushed down
+            "right": np.array([6.0, 5.0, 5.7, 5.0, 9.0, 9.0]),  # Robot right, object pushed right
+            "left": np.array([4.0, 5.0, 4.3, 5.0, 9.0, 9.0]),  # Robot left, object pushed left
+        }
+
+        for action_name, expected_state in expected_states.items():
+            transition = PushStateTransition(
+                state=initial_state.copy(),
+                action=action_name,
+                grid_size=grid_size,
+                push_threshold=push_threshold,
+                friction_coefficient=friction_coefficient,
+                obstacles=[],
+                obstacle_radius=0.5,
+                transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
+            )
+
+            # Test sample() method - should return exact expected state
+            next_state = transition.sample()[0]
+            assert np.array_equal(
+                next_state, expected_state
+            ), f"Action '{action_name}': Expected {expected_state}, got {next_state}"
+
+            # Test probability() method - should return 1.0 for expected state
+            prob_expected = transition.probability([expected_state])
+            assert len(prob_expected) == 1
+            assert prob_expected[0] == 1.0, (
+                f"Action '{action_name}': Expected state should have probability 1.0, "
+                f"got {prob_expected[0]}"
+            )
+
+            # Test probability for initial state (should be 0.0)
+            prob_initial = transition.probability([initial_state])
+            assert prob_initial[0] == 0.0, (
+                f"Action '{action_name}': Initial state should have probability 0.0, "
+                f"got {prob_initial[0]}"
+            )
+
+            # Test multiple samples - should all be identical (deterministic)
+            samples = transition.sample(n_samples=5)
+            assert len(samples) == 5
+            for i, sample in enumerate(samples):
+                assert np.array_equal(
+                    sample, expected_state
+                ), f"Action '{action_name}': Sample {i} should equal expected state"
+
+    def test_state_transition_all_actions_no_push_deterministic(self):
+        """Test state transition for all actions when robot is too far to push object.
+
+        Purpose: Validates that all actions work correctly when robot cannot push object
+
+        Given: A PushStateTransition with robot far from object and transition_error_prob=0
+        When: Each action is executed
+        Then: Resulting state should exactly match hardcoded expected state (robot moves, object doesn't)
+
+        Test type: unit
+        """
+        # Hardcoded initial state: robot at (1.0, 1.0), object at (8.0, 8.0), target at (9.0, 9.0)
+        # Robot is far from object, so no pushing will occur
+        initial_state = np.array([1.0, 1.0, 8.0, 8.0, 9.0, 9.0])
+        push_threshold = 1.0
+        friction_coefficient = 0.3
+        grid_size = 10
+
+        # Hardcoded expected states for each action
+        # Robot moves by 1.0, object stays at (8.0, 8.0)
+        expected_states = {
+            "up": np.array([1.0, 2.0, 8.0, 8.0, 9.0, 9.0]),  # Robot up, object unchanged
+            "down": np.array([1.0, 0.0, 8.0, 8.0, 9.0, 9.0]),  # Robot down, object unchanged
+            "right": np.array([2.0, 1.0, 8.0, 8.0, 9.0, 9.0]),  # Robot right, object unchanged
+            "left": np.array([0.0, 1.0, 8.0, 8.0, 9.0, 9.0]),  # Robot left, object unchanged
+        }
+
+        for action_name, expected_state in expected_states.items():
+            transition = PushStateTransition(
+                state=initial_state.copy(),
+                action=action_name,
+                grid_size=grid_size,
+                push_threshold=push_threshold,
+                friction_coefficient=friction_coefficient,
+                obstacles=[],
+                obstacle_radius=0.5,
+                transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
+            )
+
+            # Test sample() method - should return exact expected state
+            next_state = transition.sample()[0]
+            assert np.array_equal(
+                next_state, expected_state
+            ), f"Action '{action_name}': Expected {expected_state}, got {next_state}"
+
+            # Test probability() method - should return 1.0 for expected state
+            prob_expected = transition.probability([expected_state])
+            assert prob_expected[0] == 1.0, (
+                f"Action '{action_name}': Expected state should have probability 1.0, "
+                f"got {prob_expected[0]}"
+            )
+
+            # Test probability for initial state (should be 0.0)
+            prob_initial = transition.probability([initial_state])
+            assert prob_initial[0] == 0.0, (
+                f"Action '{action_name}': Initial state should have probability 0.0, "
+                f"got {prob_initial[0]}"
+            )

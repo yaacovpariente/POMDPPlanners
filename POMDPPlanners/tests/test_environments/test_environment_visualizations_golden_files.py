@@ -339,6 +339,7 @@ def create_deterministic_push_episode(seed: int = 42) -> List[StepData]:
     env = PushPOMDP(
         discount_factor=0.95,
         grid_size=8,
+        transition_error_prob=0.0,  # Explicitly set for deterministic behavior
     )
 
     state = env.initial_state_dist().sample()[0]
@@ -615,6 +616,7 @@ class TestVisualizationConsistency:
         env = PushPOMDP(
             discount_factor=0.95,
             grid_size=8,
+            transition_error_prob=0.0,  # Explicitly set for deterministic behavior
         )
         visualizer = PushPOMDPVisualizer(env)
 
