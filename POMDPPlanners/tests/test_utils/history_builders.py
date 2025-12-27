@@ -44,7 +44,10 @@ def build_test_history(
 
     Example:
         >>> from POMDPPlanners.core.simulation import StepData
-        >>> steps = [StepData(state=0, action=1, observation=2, reward=10.0)]
+        >>> from POMDPPlanners.core.belief import WeightedParticleBelief
+        >>> import numpy as np
+        >>> belief = WeightedParticleBelief(particles=[0, 1], log_weights=np.array([0.0, -0.1]))
+        >>> steps = [StepData(state=0, action=1, next_state=0, observation=2, reward=10.0, belief=belief)]
         >>> history = build_test_history(steps, reach_terminal=True)
         >>> history.reach_terminal_state
         True
