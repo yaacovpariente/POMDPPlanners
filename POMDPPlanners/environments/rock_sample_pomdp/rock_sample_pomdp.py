@@ -475,15 +475,10 @@ class RockSamplePOMDP(DiscreteActionsEnvironment):
         if action >= 5:  # Check actions
             total_reward += self.sensor_use_penalty
 
-        # Add dangerous area penalty/bonus with 50% probability
-        if self._is_in_dangerous_area((robot_row, robot_col)):
-            # Random penalty or bonus with equal probability
-            danger_modifier = (
-                self.dangerous_area_penalty
-                if np.random.random() < 0.5
-                else -self.dangerous_area_penalty
-            )
-            total_reward += danger_modifier
+        next_state = self.state_transition_model(state, action).sample()[0]
+        # Add dangerous area penalty (always applied to create risk)
+        if self._is_in_dangerous_area(get_robot_pos(next_state)):
+            total_reward += self.dangerous_area_penalty
 
         return total_reward
 
