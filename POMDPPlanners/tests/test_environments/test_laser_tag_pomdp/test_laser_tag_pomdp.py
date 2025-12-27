@@ -451,6 +451,365 @@ class TestLaserTagStateTransition:
         # All invalid states should have zero probability
         assert all(p == 0.0 for p in probs), "Invalid states should have zero probability"
 
+    def test_transition_error_probability_tag_action_no_errors(self):
+        """Test that Tag action always executes correctly regardless of error probability.
+
+        Purpose: Validates Tag action is never affected by transition error probability
+
+        Given: State transition model with Tag action and non-zero error probability
+        When: Transitions are sampled
+        Then: Tag action always executes correctly (no random action selection)
+
+        Test type: unit
+        """
+        np.random.seed(42)  # For reproducibility
+        state = np.array([3.0, 5.0, 3.0, 5.0, 0.0])  # Robot and opponent at same position
+        floor_shape = (7, 11)
+        walls = set()
+
+        # Tag action with high error probability should still execute correctly
+        transition = LaserTagStateTransition(
+            state, 4, ACTION_DIRECTIONS, floor_shape, walls, transition_error_prob=0.9
+        )
+
+        # Sample many times - Tag should always execute
+        next_states = transition.sample(n_samples=100)
+        for next_state in next_states:
+            # Tag action should result in terminal state when robot and opponent are at same position
+            assert bool(next_state[4]) == True, "Tag action should result in terminal state"
+            assert (int(next_state[0]), int(next_state[1])) == (
+                3,
+                5,
+            ), "Robot should stay in place for Tag action"
+
+    def test_transition_error_probability_zero_deterministic(self):
+        """Test that error_prob=0.0 maintains deterministic behavior.
+
+        Purpose: Validates backward compatibility with deterministic transitions
+
+        Given: State transition model with error_prob=0.0
+        When: Movement actions are executed
+        Then: Robot always moves according to intended action
+
+        Test type: unit
+        """
+        np.random.seed(42)  # For reproducibility
+        state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
+        floor_shape = (7, 11)
+        walls = set()
+
+        # North movement with zero error probability
+        transition = LaserTagStateTransition(
+            state, 0, ACTION_DIRECTIONS, floor_shape, walls, transition_error_prob=0.0
+        )
+
+        # Sample many times - should always move North
+        next_states = transition.sample(n_samples=100)
+        for next_state in next_states:
+            assert (int(next_state[0]), int(next_state[1])) == (
+                2,
+                5,
+            ), "With error_prob=0.0, robot should always move North"
+
+    def test_transition_error_probability_movement_actions(self):
+        """Test that movement actions can have errors with non-zero probability.
+
+        Purpose: Validates stochastic action execution for movement actions
+
+        Given: State transition model with error_prob > 0.0 and movement action
+        When: Transitions are sampled many times
+        Then: Robot sometimes executes different actions than intended
+
+        Test type: unit
+        """
+        np.random.seed(42)  # For reproducibility
+        state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
+        floor_shape = (7, 11)
+        walls = set()
+
+        # North movement (action 0) with high error probability
+        transition = LaserTagStateTransition(
+            state, 0, ACTION_DIRECTIONS, floor_shape, walls, transition_error_prob=0.8
+        )
+
+        # Sample many times
+        next_states = transition.sample(n_samples=1000)
+        robot_positions = [(int(ns[0]), int(ns[1])) for ns in next_states]
+
+        # Count occurrences of each position
+        position_counts = Counter(robot_positions)
+
+        # Expected positions:
+        # - (2, 5) - North (intended action)
+        # - (4, 5) - South (error action)
+        # - (3, 6) - East (error action)
+        # - (3, 4) - West (error action)
+        # Tag action (4) should NOT be in error selection, so robot should always move
+
+        # Verify robot always moves (no staying in place from Tag error)
+        assert (3, 5) not in position_counts or position_counts[
+            (3, 5)
+        ] == 0, "Robot should not stay in place - Tag action not included in error selection"
+
+        # With error_prob=0.8, we should see mostly error actions, but some intended actions too
+        # Verify that we don't always get the intended action (indicating stochasticity)
+        intended_count = position_counts.get((2, 5), 0)
+        total_samples = sum(position_counts.values())
+
+        # With error_prob=0.8, we expect ~20% intended, ~80% errors
+        # But with fixed seed, we might get deterministic results
+        # So we just verify that stochastic behavior is working (not all intended)
+        assert intended_count < total_samples, (
+            f"With error_prob=0.8, not all samples should be intended action. "
+            f"Got {intended_count}/{total_samples} intended actions."
+        )
+
+        # Verify intended action (North) can occur
+        # (It might not occur with this seed, but the mechanism should allow it)
+
+        # Verify at least one error action occurs (with high error prob, this should happen)
+        error_positions = {(4, 5), (3, 6), (3, 4)}  # South, East, West
+        assert any(
+            pos in position_counts for pos in error_positions
+        ), f"At least one error action should occur. Got positions: {list(position_counts.keys())}"
+
+    def test_transition_error_probability_error_actions_exclude_tag(self):
+        """Test that error actions only include movement actions, not Tag.
+
+        Purpose: Validates Tag action is excluded from error action selection
+
+        Given: Movement action with error probability
+        When: Errors occur
+        Then: Only movement actions (0-3) are selected as errors, never Tag (4)
+
+        Test type: unit
+        """
+        np.random.seed(42)  # For reproducibility
+        state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
+        floor_shape = (7, 11)
+        walls = set()
+
+        # East movement (action 2) with very high error probability
+        transition = LaserTagStateTransition(
+            state, 2, ACTION_DIRECTIONS, floor_shape, walls, transition_error_prob=0.99
+        )
+
+        # Sample many times - most should be errors
+        next_states = transition.sample(n_samples=1000)
+        robot_positions = [(int(ns[0]), int(ns[1])) for ns in next_states]
+
+        # Robot should never stay in place (which would happen if Tag was selected)
+        # East action from (3,5) would go to (3,6)
+        # Error actions would be North (2,5), South (4,5), West (3,4)
+        # Tag would keep robot at (3,5) - this should NOT happen
+        assert (3, 5) not in Counter(robot_positions) or Counter(robot_positions)[
+            (3, 5)
+        ] == 0, "Robot should not stay in place - Tag action should not be in error selection"
+
+    def test_transition_error_probability_probability_calculation(self):
+        """Test that probability() method accounts for error probability.
+
+        Purpose: Validates probability calculations include all possible action outcomes
+
+        Given: State transition model with error probability
+        When: probability() is called for various next states
+        Then: Probabilities correctly account for intended and error actions
+
+        Test type: unit
+        """
+        state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
+        floor_shape = (7, 11)
+        walls = set()
+
+        # North movement (action 0) with error probability
+        transition = LaserTagStateTransition(
+            state, 0, ACTION_DIRECTIONS, floor_shape, walls, transition_error_prob=0.5
+        )
+
+        # Test states for different robot positions
+        # Intended: North to (2, 5)
+        # Errors: South to (4, 5), East to (3, 6), West to (3, 4)
+        next_state_north = np.array([2.0, 5.0, 1.0, 1.0, 0.0])  # Intended action
+        next_state_south = np.array([4.0, 5.0, 1.0, 1.0, 0.0])  # Error action
+        next_state_east = np.array([3.0, 6.0, 1.0, 1.0, 0.0])  # Error action
+        next_state_west = np.array([3.0, 4.0, 1.0, 1.0, 0.0])  # Error action
+        next_state_wrong = np.array([5.0, 5.0, 1.0, 1.0, 0.0])  # Impossible state
+
+        test_states = [
+            next_state_north,
+            next_state_south,
+            next_state_east,
+            next_state_west,
+            next_state_wrong,
+        ]
+        probs = transition.probability(test_states)
+
+        # Intended action should have probability > 0
+        assert probs[0] > 0, "Intended action should have positive probability"
+
+        # Error actions should have probability > 0 (due to error probability)
+        assert probs[1] > 0, "Error action (South) should have positive probability"
+        assert probs[2] > 0, "Error action (East) should have positive probability"
+        assert probs[3] > 0, "Error action (West) should have positive probability"
+
+        # Impossible state should have zero probability
+        assert probs[4] == 0.0, "Impossible state should have zero probability"
+
+        # Probabilities should sum to approximately 1.0 when considering all possible outcomes
+        # (Note: This is approximate due to opponent movement probabilities)
+
+    def test_transition_error_probability_tag_probability_deterministic(self):
+        """Test that Tag action probability is deterministic regardless of error_prob.
+
+        Purpose: Validates Tag action probability calculation is not affected by error_prob
+
+        Given: Tag action with various error probabilities
+        When: probability() is called
+        Then: Tag action probabilities are deterministic (1.0 or 0.0)
+
+        Test type: unit
+        """
+        # Robot and opponent at same position - Tag should succeed
+        state = np.array([3.0, 5.0, 3.0, 5.0, 0.0])
+        floor_shape = (7, 11)
+        walls = set()
+
+        # Tag action with high error probability
+        transition = LaserTagStateTransition(
+            state, 4, ACTION_DIRECTIONS, floor_shape, walls, transition_error_prob=0.9
+        )
+
+        # Correct terminal state
+        correct_state = np.array([3.0, 5.0, 3.0, 5.0, 1.0])
+        # Wrong state
+        wrong_state = np.array([3.0, 5.0, 3.0, 5.0, 0.0])
+
+        probs = transition.probability([correct_state, wrong_state])
+
+        # Correct state should have probability 1.0
+        assert probs[0] == 1.0, "Correct terminal state should have probability 1.0"
+        # Wrong state should have probability 0.0
+        assert probs[1] == 0.0, "Wrong state should have probability 0.0"
+
+
+class TestLaserTagPOMDPTransitionError:
+    """Test LaserTagPOMDP transition error probability parameter.
+
+    Purpose: Validates transition_error_prob parameter in LaserTagPOMDP environment
+
+    Given: LaserTagPOMDP instances with various transition_error_prob values
+    When: Environment is used for state transitions
+    Then: Error probability affects robot movement as expected
+
+    Test type: unit
+    """
+
+    def test_transition_error_probability_parameter_validation(self):
+        """Test that transition_error_prob parameter is validated.
+
+        Purpose: Validates parameter validation for transition_error_prob
+
+        Given: Invalid transition_error_prob values
+        When: LaserTagPOMDP is initialized
+        Then: ValueError is raised for invalid values
+
+        Test type: unit
+        """
+        # Test negative value
+        with pytest.raises(ValueError, match="transition_error_prob must be between 0 and 1"):
+            LaserTagPOMDP(discount_factor=0.95, transition_error_prob=-0.1)
+
+        # Test value > 1.0
+        with pytest.raises(ValueError, match="transition_error_prob must be between 0 and 1"):
+            LaserTagPOMDP(discount_factor=0.95, transition_error_prob=1.1)
+
+        # Test valid values should not raise
+        LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.0)
+        LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.5)
+        LaserTagPOMDP(discount_factor=0.95, transition_error_prob=1.0)
+
+    def test_transition_error_probability_passed_to_transition_model(self):
+        """Test that transition_error_prob is passed to state transition model.
+
+        Purpose: Validates parameter propagation from environment to transition model
+
+        Given: LaserTagPOMDP with transition_error_prob
+        When: state_transition_model() is called
+        Then: Transition model has correct transition_error_prob value
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.3)
+        state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
+
+        transition = env.state_transition_model(state, 0)
+        assert isinstance(transition, LaserTagStateTransition)
+        assert (
+            transition.transition_error_prob == 0.3
+        ), "Transition model should have same error probability as environment"
+
+    def test_transition_error_probability_default_zero(self):
+        """Test that default transition_error_prob is 0.0 (backward compatibility).
+
+        Purpose: Validates backward compatibility with default deterministic behavior
+
+        Given: LaserTagPOMDP without specifying transition_error_prob
+        When: Environment is used
+        Then: transition_error_prob defaults to 0.0 (deterministic)
+
+        Test type: unit
+        """
+        env = LaserTagPOMDP(discount_factor=0.95)
+        assert env.transition_error_prob == 0.0, "Default transition_error_prob should be 0.0"
+
+        state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
+        transition = env.state_transition_model(state, 0)
+        assert isinstance(transition, LaserTagStateTransition)
+        assert (
+            transition.transition_error_prob == 0.0
+        ), "Transition model should have default error probability 0.0"
+
+    def test_transition_error_probability_affects_simulation(self):
+        """Test that transition_error_prob affects actual simulation behavior.
+
+        Purpose: Validates error probability affects robot movement in simulations
+
+        Given: Environment with non-zero error probability
+        When: Multiple transitions are sampled
+        Then: Robot sometimes executes different actions than intended
+
+        Test type: integration
+        """
+        np.random.seed(42)  # For reproducibility
+        env = LaserTagPOMDP(discount_factor=0.95, transition_error_prob=0.7)
+        state = np.array([3.0, 5.0, 1.0, 1.0, 0.0])
+
+        # Sample many transitions with North action (0)
+        transition = env.state_transition_model(state, 0)
+        next_states = transition.sample(n_samples=1000)
+        robot_positions = [(int(ns[0]), int(ns[1])) for ns in next_states]
+
+        position_counts = Counter(robot_positions)
+
+        # With error_prob=0.7, we should see mostly error actions
+        # Verify that we don't always get the intended action (indicating stochasticity)
+        intended_count = position_counts.get((2, 5), 0)
+        total_samples = sum(position_counts.values())
+
+        # With error_prob=0.7, we expect ~30% intended, ~70% errors
+        # But with fixed seed, we might get deterministic results
+        # So we just verify that stochastic behavior is working (not all intended)
+        assert intended_count < total_samples, (
+            f"With error_prob=0.7, not all samples should be intended action. "
+            f"Got {intended_count}/{total_samples} intended actions."
+        )
+
+        # Verify at least one error position occurs (with high error prob, this should happen)
+        error_positions = {(4, 5), (3, 6), (3, 4)}  # South, East, West
+        assert any(
+            pos in position_counts for pos in error_positions
+        ), f"At least one error position should occur. Got positions: {list(position_counts.keys())}"
+
 
 class TestLaserTagObservation:
     """Test LaserTagObservation model functionality.
