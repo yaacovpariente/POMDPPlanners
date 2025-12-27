@@ -106,6 +106,7 @@ class LaserTagStateTransition(StateTransitionModel):
         action_directions: Dict[int, Tuple[int, int]],
         floor_shape: Tuple[int, int],
         walls: Set[Tuple[int, int]],
+        transition_error_prob: float = 0.0,
     ):
         """Initialize the state transition model.
 
@@ -114,11 +115,15 @@ class LaserTagStateTransition(StateTransitionModel):
             action: Action to execute (0=North, 1=South, 2=East, 3=West, 4=Tag)
             floor_shape: Grid dimensions as (rows, cols)
             walls: Set of wall positions as (row, col) tuples
+            transition_error_prob: Probability that the robot executes a random movement action
+                instead of the intended one. Only applies to movement actions (0-3), not Tag (4).
+                Defaults to 0.0 (deterministic transitions).
         """
         super().__init__(state, action)
         self.floor_shape: Tuple[int, int] = floor_shape
         self.walls: Set[Tuple[int, int]] = walls
         self.action_directions: Dict[int, Tuple[int, int]] = action_directions
+        self.transition_error_prob = transition_error_prob
 
     def _is_valid_position(self, pos: Tuple[int, int]) -> bool:
         """Check if position is within bounds and not a wall."""
@@ -129,12 +134,21 @@ class LaserTagStateTransition(StateTransitionModel):
             and pos not in self.walls
         )
 
-    def _get_robot_next_position(self) -> Tuple[int, int]:
-        """Get robot's next position based on action."""
-        if self.action == 4:  # Tag action
+    def _get_robot_next_position(self, action: Optional[int] = None) -> Tuple[int, int]:
+        """Get robot's next position based on action.
+
+        Args:
+            action: Action to execute. If None, uses self.action. Defaults to None.
+
+        Returns:
+            Robot's next position as (row, col) tuple.
+        """
+        actual_action = self.action if action is None else action
+
+        if actual_action == 4:  # Tag action
             return (int(self.state[0]), int(self.state[1]))
 
-        dr, dc = self.action_directions[self.action]
+        dr, dc = self.action_directions[actual_action]
         new_pos = (int(self.state[0]) + dr, int(self.state[1]) + dc)
 
         # If new position is invalid, stay at current position
@@ -243,15 +257,38 @@ class LaserTagStateTransition(StateTransitionModel):
         # Combine and normalize
         return self._normalize_move_probabilities(x_moves + y_moves, current_opp, stay_prob=0.2)
 
+    def _get_actual_action(self) -> int:
+        """Get the actual action to execute, accounting for transition errors.
+
+        Returns:
+            The action that will actually be executed. For Tag action (4), always returns
+            the intended action. For movement actions (0-3), with probability (1-p)
+            returns the intended action, with probability p returns a uniformly random
+            action from {0,1,2,3} excluding the intended action.
+        """
+        # Tag action always executes correctly
+        if self.action == 4:
+            return self.action
+
+        # For movement actions, apply error probability
+        if np.random.random() < self.transition_error_prob:
+            # Select uniformly from {0,1,2,3} excluding the intended action
+            available_actions = [a for a in [0, 1, 2, 3] if a != self.action]
+            return np.random.choice(available_actions)
+        else:
+            return self.action
+
     def sample(self, n_samples: int = 1) -> List[np.ndarray]:
         """Sample next states from the transition model."""
         samples = []
-        robot_next = self._get_robot_next_position()
+        # Get actual action to execute (may differ from intended due to errors)
+        actual_action = self._get_actual_action()
+        robot_next = self._get_robot_next_position(action=actual_action)
         robot_current = (int(self.state[0]), int(self.state[1]))
         opponent_current = (int(self.state[2]), int(self.state[3]))
 
-        # Check if tagging occurred
-        if self.action == 4 and robot_current == opponent_current:
+        # Check if tagging occurred (using actual action)
+        if actual_action == 4 and robot_current == opponent_current:
             # Successful tag - terminal state
             for _ in range(n_samples):
                 samples.append(
@@ -287,42 +324,77 @@ class LaserTagStateTransition(StateTransitionModel):
 
         return samples
 
-    def probability(self, values: List[Any]) -> np.ndarray:
-        """Calculate transition probabilities for given next states."""
-        result = np.zeros(len(values))
-        robot_next = self._get_robot_next_position()
+    def _compute_transition_probability_for_action(
+        self, next_state: np.ndarray, action: int
+    ) -> float:
+        """Compute transition probability for a given next state and action.
+
+        Args:
+            next_state: The next state as numpy array with shape (5,)
+            action: The action to consider
+
+        Returns:
+            Probability of transitioning to next_state given action
+        """
+        if not isinstance(next_state, np.ndarray) or len(next_state) != 5:
+            return 0.0
+
+        robot_next = self._get_robot_next_position(action=action)
         robot_current = (int(self.state[0]), int(self.state[1]))
         opponent_current = (int(self.state[2]), int(self.state[3]))
 
+        next_robot = (int(next_state[0]), int(next_state[1]))
+        next_opponent = (int(next_state[2]), int(next_state[3]))
+        next_terminal = bool(next_state[4])
+
         # Check if tagging occurred
-        if self.action == 4 and robot_current == opponent_current:
+        if action == 4 and robot_current == opponent_current:
             # Successful tag case
-            for i, next_state in enumerate(values):
-                if isinstance(next_state, np.ndarray) and len(next_state) == 5:
-                    next_robot = (int(next_state[0]), int(next_state[1]))
-                    next_opponent = (int(next_state[2]), int(next_state[3]))
-                    next_terminal = bool(next_state[4])
-                    if (
-                        next_robot == robot_next
-                        and next_opponent == opponent_current
-                        and next_terminal
-                    ):
-                        result[i] = 1.0
+            if next_robot == robot_next and next_opponent == opponent_current and next_terminal:
+                return 1.0
+            else:
+                return 0.0
         else:
             # Regular transition case
-            opp_moves = self._get_opponent_move_probabilities(robot_next)
+            if next_robot == robot_next and not next_terminal:
+                opp_moves = self._get_opponent_move_probabilities(robot_next)
+                # Find probability for this opponent position
+                for opp_pos, prob in opp_moves:
+                    if next_opponent == opp_pos:
+                        return prob
+            return 0.0
 
+    def probability(self, values: List[Any]) -> np.ndarray:
+        """Calculate transition probabilities for given next states."""
+        result = np.zeros(len(values))
+
+        # Tag action always executes correctly (no errors)
+        if self.action == 4:
             for i, next_state in enumerate(values):
-                if isinstance(next_state, np.ndarray) and len(next_state) == 5:
-                    next_robot = (int(next_state[0]), int(next_state[1]))
-                    next_opponent = (int(next_state[2]), int(next_state[3]))
-                    next_terminal = bool(next_state[4])
-                    if next_robot == robot_next and not next_terminal:
-                        # Find probability for this opponent position
-                        for opp_pos, prob in opp_moves:
-                            if next_opponent == opp_pos:
-                                result[i] = prob
-                                break
+                result[i] = self._compute_transition_probability_for_action(next_state, self.action)
+        else:
+            # Movement action: account for error probability
+            # With probability (1-p): execute intended action
+            # With probability p: execute one of 3 error actions uniformly
+            for i, next_state in enumerate(values):
+                # Probability from intended action
+                prob_intended = (1.0 - self.transition_error_prob) * (
+                    self._compute_transition_probability_for_action(next_state, self.action)
+                )
+
+                # Probability from error actions
+                error_actions = [a for a in [0, 1, 2, 3] if a != self.action]
+                prob_error = 0.0
+                if self.transition_error_prob > 0.0 and len(error_actions) > 0:
+                    error_prob_sum = sum(
+                        self._compute_transition_probability_for_action(next_state, error_action)
+                        for error_action in error_actions
+                    )
+                    prob_error = (
+                        self.transition_error_prob * (1.0 / len(error_actions)) * error_prob_sum
+                    )
+
+                result[i] = prob_intended + prob_error
 
         return result
 
@@ -567,6 +639,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         debug: bool = False,
         use_queue_logger: bool = False,
         initial_state: Optional[np.ndarray] = None,
+        transition_error_prob: float = 0.0,
     ):
         """Initialize the LaserTag POMDP environment.
 
@@ -588,12 +661,20 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             initial_state: Optional initial state as numpy array with shape (5,). If provided,
                 the initial state distribution will return this state with probability 1.0.
                 If None, returns uniform distribution over all valid initial states. Defaults to None.
+            transition_error_prob: Probability that the robot executes a random movement action
+                instead of the intended one. Only applies to movement actions (0-3), not Tag (4).
+                With probability (1-p), the intended action is executed. With probability p, a random
+                action is selected uniformly from {0,1,2,3} excluding the intended action.
+                Defaults to 0.0 (deterministic transitions).
 
         Raises:
-            ValueError: If discount_factor is not in valid range [0, 1]
+            ValueError: If discount_factor is not in valid range [0, 1] or if transition_error_prob
+                is not in valid range [0, 1]
         """
         if not (0.0 <= discount_factor <= 1.0):
             raise ValueError("discount_factor must be between 0 and 1 (inclusive)")
+        if not (0.0 <= transition_error_prob <= 1.0):
+            raise ValueError("transition_error_prob must be between 0 and 1 (inclusive)")
 
         space_info = SpaceInfo(
             action_space=SpaceType.DISCRETE,  # 5 discrete actions
@@ -622,6 +703,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self.dangerous_area_radius = dangerous_area_radius
         self.dangerous_area_penalty = dangerous_area_penalty
         self.initial_state = initial_state
+        self.transition_error_prob = transition_error_prob
 
         # Action definitions
         self.actions = [0, 1, 2, 3, 4]  # North, South, East, West, Tag
@@ -642,6 +724,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             action_directions=self._action_directions,
             floor_shape=self.floor_shape,
             walls=self.walls,
+            transition_error_prob=self.transition_error_prob,
         )
 
     def observation_model(self, next_state: np.ndarray, action: int) -> ObservationModel:

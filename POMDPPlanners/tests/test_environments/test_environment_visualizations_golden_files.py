@@ -391,6 +391,7 @@ def create_deterministic_laser_tag_episode(seed: int = 42) -> List[StepData]:
     np.random.seed(seed)
     env = LaserTagPOMDP(
         discount_factor=0.95,
+        transition_error_prob=0.0,  # Explicitly set for deterministic behavior
     )
 
     state = env.initial_state_dist().sample()[0]
@@ -645,6 +646,7 @@ class TestVisualizationConsistency:
         # Create environment and visualizer
         env = LaserTagPOMDP(
             discount_factor=0.95,
+            transition_error_prob=0.0,  # Explicitly set for deterministic behavior
         )
         visualizer = LaserTagVisualizer(
             floor_shape=env.floor_shape,
