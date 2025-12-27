@@ -108,6 +108,7 @@ class PushStateTransition(StateTransitionModel):
         friction_coefficient: float,
         obstacles: Optional[List[Tuple[float, float]]] = None,
         obstacle_radius: float = 0.5,
+        transition_error_prob: float = 0.0,
     ):
         super().__init__(state, action)
         self.grid_size = grid_size
@@ -115,11 +116,15 @@ class PushStateTransition(StateTransitionModel):
         self.friction_coefficient = friction_coefficient
         self.obstacles = obstacles if obstacles is not None else []
         self.obstacle_radius = obstacle_radius
+        self.transition_error_prob = transition_error_prob
 
         # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
         self.robot_pos = state[:2]
         self.object_pos = state[2:4]
         self.target_pos = state[4:6]
+
+        # Available actions
+        self.available_actions = ["up", "down", "right", "left"]
 
         # Action to movement mapping
         self.action_to_vector = {
@@ -129,9 +134,87 @@ class PushStateTransition(StateTransitionModel):
             "left": np.array([-1, 0]),
         }
 
+    def _get_actual_action(self) -> str:
+        """Get the actual action to execute, accounting for transition errors.
+
+        Returns:
+            The action that will actually be executed. With probability (1-p)
+            returns the intended action, with probability p returns a uniformly
+            random action from the available actions excluding the intended action.
+        """
+        # Apply error probability
+        if np.random.random() < self.transition_error_prob:
+            # Select uniformly from available actions excluding the intended action
+            error_actions = [a for a in self.available_actions if a != self.action]
+            return np.random.choice(error_actions)
+        else:
+            return self.action
+
     def sample(self, n_samples: int = 1) -> List[Any]:
+        next_states = []
+        for _ in range(n_samples):
+            # Get the actual action to execute (may differ from intended due to errors)
+            actual_action = self._get_actual_action()
+            # Compute next state for this actual action
+            next_state = self._compute_next_state_for_action(actual_action)
+            next_states.append(next_state)
+        return next_states
+
+    def probability(self, values: List[Any]) -> np.ndarray:
+        """Calculate probability of transitioning to given next states.
+
+        Accounts for transition error probability. With probability (1-p), the
+        intended action executes. With probability p, a random error action
+        (excluding the intended one) is selected uniformly.
+
+        Args:
+            values: List of potential next states to evaluate
+
+        Returns:
+            Array of probabilities for each state in values
+        """
+        probabilities = []
+
+        # Compute next state for intended action
+        intended_next_state = self._compute_next_state_for_action(self.action)
+
+        # Get error actions (all actions except intended)
+        error_actions = [a for a in self.available_actions if a != self.action]
+        num_error_actions = len(error_actions)
+
+        for state in values:
+            # Probability from intended action
+            prob_intended = 0.0
+            if np.array_equal(state, intended_next_state):
+                prob_intended = 1.0
+
+            # Probability from error actions
+            prob_error = 0.0
+            if self.transition_error_prob > 0.0 and num_error_actions > 0:
+                error_prob_sum = 0.0
+                for error_action in error_actions:
+                    error_next_state = self._compute_next_state_for_action(error_action)
+                    if np.array_equal(state, error_next_state):
+                        error_prob_sum += 1.0
+                prob_error = self.transition_error_prob * (1.0 / num_error_actions) * error_prob_sum
+
+            # Total probability is sum of intended and error contributions
+            total_prob = (1.0 - self.transition_error_prob) * prob_intended + prob_error
+            probabilities.append(total_prob)
+
+        return np.array(probabilities)
+
+    def _compute_next_state_for_action(self, action: str) -> np.ndarray:
+        """Compute the next state for a given action (without error probability).
+
+        Args:
+            action: Action to compute next state for
+
+        Returns:
+            Next state array
+        """
         # Get movement vector for the action
-        movement = self.action_to_vector[self.action]
+        movement = self.action_to_vector[action]
 
         # Calculate intended new robot position
         intended_robot_pos = self.robot_pos + movement
@@ -164,31 +247,7 @@ class PushStateTransition(StateTransitionModel):
 
         # Combine all state components
         next_state = np.concatenate([new_robot_pos, new_object_pos, self.target_pos])
-        return [next_state] * n_samples
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        """Calculate probability of transitioning to given next states.
-
-        Since the push dynamics are deterministic, the probability is 1.0
-        for the correct next state and 0.0 for all other states.
-
-        Args:
-            values: List of potential next states to evaluate
-
-        Returns:
-            Array of probabilities for each state in values
-        """
-        probabilities = []
-        expected_next_state = self.sample()[0]
-
-        for state in values:
-            # Check if this state matches the expected deterministic next state
-            if np.array_equal(state, expected_next_state):
-                probabilities.append(1.0)
-            else:
-                probabilities.append(0.0)
-
-        return np.array(probabilities)
+        return next_state
 
     def _is_colliding_with_obstacle(self, position: np.ndarray) -> bool:
         """Check if a position collides with any obstacle."""
@@ -417,6 +476,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         obstacle_radius: float = 0.5,
         obstacle_penalty: float = -10.0,
         initial_state: Optional[np.ndarray] = None,
+        transition_error_prob: float = 0.0,
         name: str = "PushPOMDP",
         output_dir: Optional[Path] = None,
         debug: bool = False,
@@ -430,6 +490,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         self.obstacle_radius = obstacle_radius
         self.obstacle_penalty = obstacle_penalty
         self._initial_state = initial_state
+        self.transition_error_prob = transition_error_prob
 
         # Define actions
         self.actions = ["up", "down", "right", "left"]
@@ -503,6 +564,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
             friction_coefficient=self.friction_coefficient,
             obstacles=self.obstacles,
             obstacle_radius=self.obstacle_radius,
+            transition_error_prob=self.transition_error_prob,
         )
 
     def observation_model(self, next_state: np.ndarray, action: str) -> ObservationModel:
@@ -514,13 +576,16 @@ class PushPOMDP(DiscreteActionsEnvironment):
         )
 
     def reward(self, state: np.ndarray, action: str) -> float:
-        # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
-        robot_pos = state[:2]
-        object_pos = state[2:4]
-        target_pos = state[4:6]
+        # Compute next state to evaluate reward based on action result
+        next_state = self.state_transition_model(state, action).sample()[0]
 
-        # Calculate distance to target
-        distance_to_target = np.linalg.norm(object_pos - target_pos)
+        # State components: [robot_x, robot_y, object_x, object_y, target_x, target_y]
+        next_robot_pos = next_state[:2]
+        next_object_pos = next_state[2:4]
+        target_pos = next_state[4:6]
+
+        # Calculate distance to target using next state (after action is applied)
+        distance_to_target = np.linalg.norm(next_object_pos - target_pos)
 
         # Base reward is negative distance to encourage moving closer to target
         reward = -distance_to_target
@@ -529,7 +594,7 @@ class PushPOMDP(DiscreteActionsEnvironment):
         if distance_to_target < 0.5:
             reward += 100.0
 
-        if self._is_colliding_with_obstacle(robot_pos, action):
+        if self._is_colliding_with_obstacle(state[:2], action):
             reward += self.obstacle_penalty
 
         return float(reward)
