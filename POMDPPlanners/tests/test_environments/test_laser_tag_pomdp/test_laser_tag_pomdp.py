@@ -691,6 +691,231 @@ class TestLaserTagStateTransition:
         # Wrong state should have probability 0.0
         assert probs[1] == 0.0, "Wrong state should have probability 0.0"
 
+    def test_state_transition_all_actions_deterministic(self):
+        """Test state transition sample() and probability() for all actions with transition_error_prob=0.
+
+        Purpose: Validates that all movement actions (0-3) execute correctly in deterministic mode
+                 and robot moves to expected positions
+
+        Given: A LaserTagStateTransition with transition_error_prob=0 and hardcoded states
+        When: Each movement action is executed
+        Then: Robot moves to expected adjacent positions and opponent movement probabilities are correct
+
+        Test type: unit
+        """
+        # Hardcoded initial state: robot at (5, 5), opponent at (3, 3), non-terminal
+        # Robot is at center, opponent is away, so no tagging will occur
+        initial_state = np.array([5.0, 5.0, 3.0, 3.0, 0.0])
+        floor_shape = (11, 11)  # Large enough grid to avoid boundaries
+        walls = set()
+
+        # Hardcoded expected robot positions for each action
+        # Robot moves by 1 cell in the action direction
+        expected_robot_positions = {
+            0: (4, 5),  # North: robot moves up (row decreases)
+            1: (6, 5),  # South: robot moves down (row increases)
+            2: (5, 6),  # East: robot moves right (col increases)
+            3: (5, 4),  # West: robot moves left (col decreases)
+        }
+
+        for action, expected_robot_pos in expected_robot_positions.items():
+            transition = LaserTagStateTransition(
+                initial_state.copy(),
+                action,
+                ACTION_DIRECTIONS,
+                floor_shape,
+                walls,
+                transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
+            )
+
+            # Test sample() method - robot should move to expected position
+            next_state = transition.sample()[0]
+            actual_robot_pos = (int(next_state[0]), int(next_state[1]))
+
+            assert (
+                actual_robot_pos == expected_robot_pos
+            ), f"Action {action}: Expected robot at {expected_robot_pos}, got {actual_robot_pos}"
+
+            # Verify opponent moved (stochastic, but should be valid)
+            opponent_pos = (int(next_state[2]), int(next_state[3]))
+            assert 0 <= opponent_pos[0] < floor_shape[0], "Opponent row out of bounds"
+            assert 0 <= opponent_pos[1] < floor_shape[1], "Opponent col out of bounds"
+
+            # Verify state is non-terminal (no tagging occurred)
+            assert not bool(next_state[4]), "State should be non-terminal"
+
+            # Test probability() method - create state with correct robot position
+            # We'll test with the actual sampled state to verify probability > 0
+            prob_actual = transition.probability([next_state])
+            assert len(prob_actual) == 1
+            assert prob_actual[0] > 0.0, (
+                f"Action {action}: Actual next state should have positive probability, "
+                f"got {prob_actual[0]}"
+            )
+
+            # Test probability for state with wrong robot position (should be 0.0)
+            # Create a state where robot is at initial position (clearly wrong)
+            wrong_robot_state = np.array(
+                [
+                    initial_state[0],  # Robot at initial position (wrong)
+                    initial_state[1],
+                    next_state[2],  # Opponent at next position (might match)
+                    next_state[3],
+                    0.0,  # Non-terminal
+                ]
+            )
+            prob_wrong = transition.probability([wrong_robot_state])
+            assert prob_wrong[0] == 0.0, (
+                f"Action {action}: State with wrong robot position should have probability 0.0, "
+                f"got {prob_wrong[0]}"
+            )
+
+            # Test multiple samples - robot position should always be the same (deterministic)
+            samples = transition.sample(n_samples=5)
+            assert len(samples) == 5
+            for i, sample in enumerate(samples):
+                sample_robot_pos = (int(sample[0]), int(sample[1]))
+                assert sample_robot_pos == expected_robot_pos, (
+                    f"Action {action}: Sample {i} robot should be at {expected_robot_pos}, "
+                    f"got {sample_robot_pos}"
+                )
+
+    def test_state_transition_tag_action_deterministic(self):
+        """Test state transition for Tag action (4) when robot and opponent are at same position.
+
+        Purpose: Validates that Tag action works correctly when robot and opponent are at same position
+
+        Given: A LaserTagStateTransition with Tag action and robot/opponent at same position
+        When: Tag action is executed
+        Then: Resulting state should be terminal with robot and opponent at same position
+
+        Test type: unit
+        """
+        # Hardcoded initial state: robot and opponent at same position (5, 5), non-terminal
+        initial_state = np.array([5.0, 5.0, 5.0, 5.0, 0.0])
+        floor_shape = (11, 11)
+        walls = set()
+
+        # Tag action (4)
+        action = 4
+
+        transition = LaserTagStateTransition(
+            initial_state.copy(),
+            action,
+            ACTION_DIRECTIONS,
+            floor_shape,
+            walls,
+            transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
+        )
+
+        # Expected terminal state: robot and opponent at (5, 5), terminal flag = 1.0
+        expected_state = np.array([5.0, 5.0, 5.0, 5.0, 1.0])
+
+        # Test sample() method - should return exact expected state
+        next_state = transition.sample()[0]
+        assert np.array_equal(
+            next_state, expected_state
+        ), f"Tag action: Expected {expected_state}, got {next_state}"
+
+        # Test probability() method - should return 1.0 for expected state
+        prob_expected = transition.probability([expected_state])
+        assert len(prob_expected) == 1
+        assert (
+            prob_expected[0] == 1.0
+        ), f"Tag action: Expected state should have probability 1.0, got {prob_expected[0]}"
+
+        # Test probability for non-terminal state (should be 0.0)
+        non_terminal_state = np.array([5.0, 5.0, 5.0, 5.0, 0.0])
+        prob_non_terminal = transition.probability([non_terminal_state])
+        assert prob_non_terminal[0] == 0.0, (
+            f"Tag action: Non-terminal state should have probability 0.0, "
+            f"got {prob_non_terminal[0]}"
+        )
+
+        # Test probability for initial state (should be 0.0)
+        prob_initial = transition.probability([initial_state])
+        assert (
+            prob_initial[0] == 0.0
+        ), f"Tag action: Initial state should have probability 0.0, got {prob_initial[0]}"
+
+        # Test multiple samples - should all be identical (deterministic)
+        samples = transition.sample(n_samples=5)
+        assert len(samples) == 5
+        for i, sample in enumerate(samples):
+            assert np.array_equal(
+                sample, expected_state
+            ), f"Tag action: Sample {i} should equal expected state"
+
+    def test_state_transition_all_actions_boundary_handling(self):
+        """Test state transition for all actions when robot is at grid boundaries.
+
+        Purpose: Validates that all actions work correctly when robot is at grid boundaries
+
+        Given: A LaserTagStateTransition with robot at grid boundaries and transition_error_prob=0
+        When: Each action is executed
+        Then: Robot stays in place when action would move outside boundaries
+
+        Test type: unit
+        """
+        floor_shape = (7, 7)  # Smaller grid for boundary testing
+        walls = set()
+
+        # Test cases: (initial_robot_pos, action, expected_robot_pos)
+        # Robot at boundaries trying to move outside
+        test_cases = [
+            ((0, 3), 0, (0, 3)),  # Top boundary, try North - should stay
+            ((6, 3), 1, (6, 3)),  # Bottom boundary, try South - should stay
+            ((3, 6), 2, (3, 6)),  # Right boundary, try East - should stay
+            ((3, 0), 3, (3, 0)),  # Left boundary, try West - should stay
+        ]
+
+        for (robot_row, robot_col), action, expected_robot_pos in test_cases:
+            initial_state = np.array(
+                [float(robot_row), float(robot_col), 2.0, 2.0, 0.0]
+            )  # Opponent away from boundary
+
+            transition = LaserTagStateTransition(
+                initial_state.copy(),
+                action,
+                ACTION_DIRECTIONS,
+                floor_shape,
+                walls,
+                transition_error_prob=0.0,  # Explicitly set to 0 for deterministic behavior
+            )
+
+            # Test sample() method - robot should stay at boundary
+            next_state = transition.sample()[0]
+            actual_robot_pos = (int(next_state[0]), int(next_state[1]))
+
+            assert actual_robot_pos == expected_robot_pos, (
+                f"Action {action} at boundary ({robot_row}, {robot_col}): "
+                f"Expected robot at {expected_robot_pos}, got {actual_robot_pos}"
+            )
+
+            # Test probability() method - state with robot at boundary should have positive probability
+            prob_actual = transition.probability([next_state])
+            assert prob_actual[0] > 0.0, (
+                f"Action {action} at boundary: Actual next state should have positive probability, "
+                f"got {prob_actual[0]}"
+            )
+
+            # Test probability for state with robot moved outside boundary (should be 0.0)
+            outside_boundary_state = next_state.copy()
+            if action == 0:  # North
+                outside_boundary_state[0] = -1.0  # Outside top boundary
+            elif action == 1:  # South
+                outside_boundary_state[0] = floor_shape[0]  # Outside bottom boundary
+            elif action == 2:  # East
+                outside_boundary_state[1] = floor_shape[1]  # Outside right boundary
+            elif action == 3:  # West
+                outside_boundary_state[1] = -1.0  # Outside left boundary
+
+            prob_outside = transition.probability([outside_boundary_state])
+            assert prob_outside[0] == 0.0, (
+                f"Action {action} at boundary: State with robot outside boundary should have "
+                f"probability 0.0, got {prob_outside[0]}"
+            )
+
 
 class TestLaserTagPOMDPTransitionError:
     """Test LaserTagPOMDP transition error probability parameter.
@@ -1436,6 +1661,58 @@ class TestLaserTagPOMDP:
         assert (
             reward == expected_reward
         ), f"Expected {expected_reward} for wall collision, got {reward}"
+
+    def test_reward_difference_wall_collision_vs_safe(self):
+        """Test that rewards for actions leading to wall collision are lower than safe actions.
+
+        Purpose: Validates that wall collision actions receive lower rewards than safe actions
+
+        Given: LaserTag environment with walls and two states (one leading to collision, one safe)
+        When: Same action is executed in both states
+        Then: Reward for collision action should be lower than safe action reward
+
+        Test type: unit
+        """
+        walls = {(3, 3)}
+        env = LaserTagPOMDP(
+            discount_factor=0.95, walls=walls, dangerous_area_penalty=5.0, step_cost=1.0
+        )
+
+        # Create state where robot action will lead to wall collision
+        # Robot at (3, 2), wall at (3, 3), action East (2) will try to move to (3, 3) - collision!
+        will_collide_state = np.array([3.0, 2.0, 1.0, 1.0, 0.0])
+
+        # Create state where robot action will NOT lead to wall collision
+        # Robot at (1, 1), action East (2) will move to (1, 2) - no collision
+        safe_state = np.array([1.0, 1.0, 1.0, 1.0, 0.0])
+
+        # Test movement action (East = 2)
+        # For will_collide_state: (3, 2) + East = (3, 3) which is a wall - collision!
+        # For safe_state: (1, 1) + East = (1, 2) which is safe - no collision
+        will_collide_reward = env.reward(will_collide_state, 2)  # East action
+        safe_reward = env.reward(safe_state, 2)  # East action
+
+        # Action leading to collision should get dangerous_area_penalty (-5.0) in addition to step_cost (-1.0)
+        # Safe action should only get step_cost (-1.0)
+
+        # The reward for collision action should be lower than safe action
+        assert (
+            will_collide_reward < safe_reward
+        ), f"Collision action reward ({will_collide_reward}) should be < safe action reward ({safe_reward})"
+
+        # Both should be negative (due to step cost)
+        assert (
+            will_collide_reward < 0
+        ), f"Collision reward should be negative, got {will_collide_reward}"
+        assert safe_reward < 0, f"Safe reward should be negative, got {safe_reward}"
+
+        # Verify the difference is exactly the dangerous_area_penalty
+        expected_difference = env.dangerous_area_penalty
+        actual_difference = safe_reward - will_collide_reward
+        assert abs(actual_difference - expected_difference) < 1e-6, (
+            f"Reward difference should be {expected_difference} (dangerous_area_penalty), "
+            f"got {actual_difference}"
+        )
 
     def test_compute_metrics_with_simulator_generated_history(self):
         """Test compute_metrics with realistic history generated using environment simulation.
