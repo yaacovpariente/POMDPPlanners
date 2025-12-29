@@ -332,11 +332,11 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
             raise ValueError(f"min_samples_per_node must be >= 1, got {min_samples_per_node}")
         if k_a <= 0:
             raise ValueError(f"k_a must be positive, got {k_a}")
-        if alpha_a <= 0 or alpha_a > 1:
+        if alpha_a < 0 or alpha_a > 1:
             raise ValueError(f"alpha_a must be in (0, 1], got {alpha_a}")
         if k_o <= 0:
             raise ValueError(f"k_o must be positive, got {k_o}")
-        if alpha_o <= 0 or alpha_o > 1:
+        if alpha_o < 0 or alpha_o > 1:
             raise ValueError(f"alpha_o must be in (0, 1], got {alpha_o}")
         if exploration_constant < 0:
             raise ValueError(
