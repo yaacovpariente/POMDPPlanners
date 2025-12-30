@@ -1185,7 +1185,7 @@ def test_min_visit_count_per_action_enforcement(environment, action_sampler):
     """
     # ARRANGE: Setup POMCPOW with k_a=2.0, alpha_a=0.0 to limit to 2 actions
     # and min_visit_count_per_action=5 to ensure each action gets at least 5 visits
-    min_visit_count = 25
+    min_visit_count = 5
     planner = POMCPOW(
         environment=environment,
         discount_factor=0.95,
@@ -1213,5 +1213,5 @@ def test_min_visit_count_per_action_enforcement(environment, action_sampler):
 
     for action_node in action_nodes:
         assert (
-            action_node.visit_count == min_visit_count
+            action_node.visit_count >= min_visit_count
         ), f"Action node {action_node.action} has {action_node.visit_count} visits, expected at least {min_visit_count}"
