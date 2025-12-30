@@ -43,7 +43,6 @@ def planner(environment, action_sampler):
         alpha_o=0.5,
         exploration_constant=1.0,
         n_simulations=100,
-        min_samples_per_node=10,
         min_visit_count_per_action=1,
     )
 
@@ -69,7 +68,6 @@ def test_initialization(planner):
     Test type: unit
     """
     assert planner.depth == 5
-    assert planner.min_samples_per_node == 10
     assert planner.min_visit_count_per_action == 1
     assert planner.k_a == 1.0
     assert planner.alpha_a == 0.5
@@ -443,7 +441,6 @@ def test_pft_dpw_timeout_configuration(environment, action_sampler):
         alpha_o=0.5,
         exploration_constant=1.0,
         time_out_in_seconds=2,  # Use timeout instead of n_simulations
-        min_samples_per_node=10,
         min_visit_count_per_action=1,
     )
 
@@ -487,7 +484,6 @@ def test_pft_dpw_mutual_exclusivity_constraint(environment, action_sampler):
             exploration_constant=1.0,
             time_out_in_seconds=2,  # Both parameters provided
             n_simulations=100,  # Both parameters provided
-            min_samples_per_node=10,
             min_visit_count_per_action=1,
         )
 
@@ -515,7 +511,6 @@ def test_pft_dpw_timeout_policy_execution(environment, action_sampler):
         alpha_o=0.5,
         exploration_constant=1.0,
         time_out_in_seconds=1,  # Short timeout for testing
-        min_samples_per_node=5,  # Reduced for faster execution
         min_visit_count_per_action=1,
     )
 
@@ -623,7 +618,6 @@ def test_min_visit_count_per_action_enforcement(environment, action_sampler):
         alpha_o=0.5,
         exploration_constant=1.0,
         n_simulations=50,  # Enough simulations to reach min_visit_count
-        min_samples_per_node=min_visit_count,  # Must be >= min_visit_count_per_action
         min_visit_count_per_action=min_visit_count,
     )
 

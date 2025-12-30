@@ -578,45 +578,6 @@ def test_pomcp_config_id_consistency_across_evaluations(
     assert final_config_id == initial_config_id
 
 
-def test_pomcp_config_id_different_min_samples_per_node(
-    environment, discount_factor, depth, exploration_constant, n_simulations
-):
-    """Test that config_id changes when min_samples_per_node differs.
-
-    Purpose: Validates that config_id changes when min_samples_per_node parameter differs
-
-    Given: Two POMCP instances with different min_samples_per_node values
-    When: config_id is accessed on both instances
-    Then: config_id values are different
-
-    Test type: unit
-    """
-    pomcp1 = POMCP(
-        environment=environment,
-        discount_factor=discount_factor,
-        depth=depth,
-        exploration_constant=exploration_constant,
-        name="POMCP_Test",
-        n_simulations=n_simulations,
-        min_samples_per_node=10,
-    )
-
-    pomcp2 = POMCP(
-        environment=environment,
-        discount_factor=discount_factor,
-        depth=depth,
-        exploration_constant=exploration_constant,
-        name="POMCP_Test",
-        n_simulations=n_simulations,
-        min_samples_per_node=20,  # Different min_samples_per_node
-    )
-
-    config_id1 = pomcp1.config_id
-    config_id2 = pomcp2.config_id
-
-    assert config_id1 != config_id2
-
-
 def test_pomcp_config_id_hash_properties(
     environment, discount_factor, depth, exploration_constant, n_simulations
 ):

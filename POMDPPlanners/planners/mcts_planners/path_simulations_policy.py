@@ -184,7 +184,6 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
     Attributes:
         depth: Maximum search depth for tree expansion
         exploration_constant: UCB1 exploration parameter (c in UCB1 formula)
-        min_samples_per_node: Minimum samples before a node is considered reliable
         action_sampler: Action sampling strategy for progressive widening
         k_o: Observation progressive widening coefficient (k_o > 0)
         k_a: Action progressive widening coefficient (k_a > 0)
@@ -213,7 +212,6 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
         k_o: float,
         alpha_o: float,
         exploration_constant: float,
-        min_samples_per_node: int = 10,
         min_visit_count_per_action: int = 1,
         time_out_in_seconds: Optional[int] = None,
         n_simulations: Optional[int] = None,
@@ -234,7 +232,6 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
             k_o: Observation progressive widening coefficient (k_o > 0)
             alpha_o: Observation progressive widening exponent (0 < α_o ≤ 1)
             exploration_constant: UCB1 exploration parameter (exploration_constant ≥ 0)
-            min_samples_per_node: Minimum samples before node is reliable (min_samples_per_node ≥ 1)
             min_visit_count_per_action: Minimum visit count per action (min_visit_count_per_action ≥ 1)
             time_out_in_seconds: Time limit for planning (mutually exclusive with n_simulations)
             n_simulations: Number of simulations to run (mutually exclusive with timeout)
@@ -254,7 +251,6 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
             k_o=k_o,
             alpha_o=alpha_o,
             exploration_constant=exploration_constant,
-            min_samples_per_node=min_samples_per_node,
         )
 
         # Call parent class constructor
@@ -273,7 +269,6 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
         # Initialize progressive widening attributes
         self.depth = depth
         self.exploration_constant = exploration_constant
-        self.min_samples_per_node = min_samples_per_node
         self.min_visit_count_per_action = min_visit_count_per_action
         self.action_sampler: ActionSampler = action_sampler
 
@@ -291,7 +286,6 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
         k_o: float,
         alpha_o: float,
         exploration_constant: float,
-        min_samples_per_node: int,
     ) -> None:
         """Validate progressive widening parameters.
 
@@ -302,7 +296,6 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
             k_o: Observation progressive widening coefficient
             alpha_o: Observation progressive widening exponent
             exploration_constant: UCB1 exploration parameter
-            min_samples_per_node: Minimum samples per node
 
         Raises:
             TypeError: If parameters have incorrect types
@@ -311,10 +304,6 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
         # Type checks
         if not isinstance(depth, int):
             raise TypeError(f"depth must be an int, got {type(depth).__name__}")
-        if not isinstance(min_samples_per_node, int):
-            raise TypeError(
-                f"min_samples_per_node must be an int, got {type(min_samples_per_node).__name__}"
-            )
         if not isinstance(k_a, (int, float)):
             raise TypeError(f"k_a must be a number, got {type(k_a).__name__}")
         if not isinstance(alpha_a, (int, float)):
@@ -331,8 +320,6 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
         # Value checks
         if depth <= 0:
             raise ValueError(f"depth must be positive, got {depth}")
-        if min_samples_per_node < 1:
-            raise ValueError(f"min_samples_per_node must be >= 1, got {min_samples_per_node}")
         if k_a <= 0:
             raise ValueError(f"k_a must be positive, got {k_a}")
         if alpha_a < 0 or alpha_a > 1:

@@ -127,7 +127,6 @@ class PFT_DPW(DoubleProgressiveWideningMCTSPolicy):
         exploration_constant: float = 1.0,
         time_out_in_seconds: Optional[int] = None,
         n_simulations: Optional[int] = None,
-        min_samples_per_node: int = 10,
         min_visit_count_per_action: int = 1,
         log_path: Optional[Path] = None,
         debug: bool = False,
@@ -148,7 +147,6 @@ class PFT_DPW(DoubleProgressiveWideningMCTSPolicy):
             exploration_constant: UCB1 exploration parameter (default: 1.0)
             time_out_in_seconds: Time limit for planning
             n_simulations: Number of simulations to run
-            min_samples_per_node: Minimum samples before node is reliable (default: 10)
             min_visit_count_per_action: Minimum visits per action (PFT_DPW-specific, default: 1)
             log_path: Optional path for logging
             debug: Enable debug logging
@@ -160,7 +158,6 @@ class PFT_DPW(DoubleProgressiveWideningMCTSPolicy):
         """
         # Validate PFT_DPW-specific parameters before calling super
         self._validate_pft_dpw_params(
-            min_samples_per_node=min_samples_per_node,
             min_visit_count_per_action=min_visit_count_per_action,
         )
 
@@ -176,7 +173,6 @@ class PFT_DPW(DoubleProgressiveWideningMCTSPolicy):
             k_o=k_o,
             alpha_o=alpha_o,
             exploration_constant=exploration_constant,
-            min_samples_per_node=min_samples_per_node,
             min_visit_count_per_action=min_visit_count_per_action,
             time_out_in_seconds=time_out_in_seconds,
             n_simulations=n_simulations,
@@ -190,13 +186,11 @@ class PFT_DPW(DoubleProgressiveWideningMCTSPolicy):
 
     @staticmethod
     def _validate_pft_dpw_params(
-        min_samples_per_node: int,
         min_visit_count_per_action: int,
     ) -> None:
         """Validate PFT_DPW-specific parameters.
 
         Args:
-            min_samples_per_node: Minimum samples per node
             min_visit_count_per_action: Minimum visits per action
 
         Raises:
@@ -211,13 +205,6 @@ class PFT_DPW(DoubleProgressiveWideningMCTSPolicy):
         if min_visit_count_per_action < 1:
             raise ValueError(
                 f"min_visit_count_per_action must be >= 1, got {min_visit_count_per_action}"
-            )
-        # Note: min_samples_per_node validation is already done in base class
-        # This additional check ensures consistency for PFT_DPW
-        if min_samples_per_node < min_visit_count_per_action:
-            raise ValueError(
-                f"min_samples_per_node ({min_samples_per_node}) should be >= "
-                f"min_visit_count_per_action ({min_visit_count_per_action})"
             )
 
     def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
@@ -235,7 +222,7 @@ class PFT_DPW(DoubleProgressiveWideningMCTSPolicy):
             action_sampler=self.action_sampler,
             exploration_constant=self.exploration_constant,
             k_a=self.k_a,
-            min_visit_count_per_action=self.min_samples_per_node,
+            min_visit_count_per_action=self.min_visit_count_per_action,
         )
 
         return_sample = self._simulate_return(
