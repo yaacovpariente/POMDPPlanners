@@ -61,6 +61,8 @@ class ContinuousLightDarkPOMDPMetrics(Enum):
     GOAL_REACHING_RATE = "goal_reaching_rate"
     OBSTACLE_HIT_RATE = "obstacle_hit_rate"
     AVG_OBSTACLE_HIT_COUNTER = "avg_obstacle_hit_counter"
+    OUT_OF_GRID_RATE = "out_of_grid_rate"
+    AVG_DANGEROUS_STATES_COUNTER = "avg_dangerous_states_counter"
 
 
 class RewardModelType(Enum):
@@ -382,7 +384,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
 
         Returns:
             List containing metric names: goal_reaching_rate, obstacle_hit_rate,
-            and avg_obstacle_hit_counter
+            avg_obstacle_hit_counter, out_of_grid_rate, and avg_dangerous_states_counter
         """
         return [metric.value for metric in ContinuousLightDarkPOMDPMetrics]
 
@@ -390,10 +392,14 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         goal_reached = []
         obstacle_hits = []
         obstacle_hit_counter = []
+        out_of_grid = []
+        dangerous_states_counter = []
         for history in histories:
             goal_reached_in_history = False
             obstacle_hit_in_history = False
             obstacle_hit_counter_in_history = 0
+            out_of_grid_in_history = False
+            out_of_grid_counter_in_history = 0
 
             for i, step in enumerate(history.history):
                 if np.linalg.norm(step.state - self.goal_state) <= self.goal_state_radius:
@@ -406,16 +412,33 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                     obstacle_hit_in_history = True
                     obstacle_hit_counter_in_history += 1
 
+                # Check if step is out of grid
+                is_out_of_grid = np.any(step.state < 0) or np.any(step.state > self.grid_size)
+                if is_out_of_grid:
+                    out_of_grid_in_history = True
+                    out_of_grid_counter_in_history += 1
+
             goal_reached.append(1 if goal_reached_in_history else 0)
             obstacle_hits.append(1 if obstacle_hit_in_history else 0)
             obstacle_hit_counter.append(obstacle_hit_counter_in_history)
+            out_of_grid.append(1 if out_of_grid_in_history else 0)
+            # Sum obstacle hits and out-of-grid occurrences as dangerous states
+            dangerous_states_counter.append(
+                obstacle_hit_counter_in_history + out_of_grid_counter_in_history
+            )
 
         avg_goal_reached = float(np.mean(goal_reached))
         avg_obstacle_hits = float(np.mean(obstacle_hits))
         avg_obstacle_hit_counter = float(np.mean(obstacle_hit_counter))
+        avg_out_of_grid = float(np.mean(out_of_grid))
+        avg_dangerous_states_counter = float(np.mean(dangerous_states_counter))
         goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
         obstacle_hits_ci = confidence_interval(data=obstacle_hits, confidence=0.95)
         obstacle_hit_counter_ci = confidence_interval(data=obstacle_hit_counter, confidence=0.95)
+        out_of_grid_ci = confidence_interval(data=out_of_grid, confidence=0.95)
+        dangerous_states_counter_ci = confidence_interval(
+            data=dangerous_states_counter, confidence=0.95
+        )
 
         return [
             MetricValue(
@@ -435,6 +458,18 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
                 value=avg_obstacle_hit_counter,
                 lower_confidence_bound=obstacle_hit_counter_ci[0],
                 upper_confidence_bound=obstacle_hit_counter_ci[1],
+            ),
+            MetricValue(
+                name=ContinuousLightDarkPOMDPMetrics.OUT_OF_GRID_RATE.value,
+                value=avg_out_of_grid,
+                lower_confidence_bound=out_of_grid_ci[0],
+                upper_confidence_bound=out_of_grid_ci[1],
+            ),
+            MetricValue(
+                name=ContinuousLightDarkPOMDPMetrics.AVG_DANGEROUS_STATES_COUNTER.value,
+                value=avg_dangerous_states_counter,
+                lower_confidence_bound=dangerous_states_counter_ci[0],
+                upper_confidence_bound=dangerous_states_counter_ci[1],
             ),
         ]
 
