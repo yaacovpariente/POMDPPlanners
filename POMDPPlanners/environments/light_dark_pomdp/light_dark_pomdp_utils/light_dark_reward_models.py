@@ -40,19 +40,29 @@ class ContinuousLightDarkRewardModel(BaseLightDarkRewardModel):
         self.goal_reward = goal_reward
         self.fuel_cost = fuel_cost
 
-    def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
-        next_state = state + action
+    def _is_goal_state(self, state: np.ndarray) -> bool:
+        """Check if state is within goal state radius."""
+        return bool(np.linalg.norm(state - self.goal_state) <= self.goal_state_radius)
 
-        is_goal_state = bool(np.linalg.norm(next_state - self.goal_state) <= self.goal_state_radius)
-
-        is_in_obstacle_range = bool(
+    def _is_in_obstacle_range(self, state: np.ndarray) -> bool:
+        """Check if state is within obstacle radius of any obstacle."""
+        return bool(
             (
-                np.linalg.norm(next_state.reshape(-1, 1) - self.obstacles, axis=0)
+                np.linalg.norm(state.reshape(-1, 1) - self.obstacles, axis=0)
                 <= self.obstacle_radius
             ).any()
         )
 
-        is_out_of_grid = bool(np.any(next_state < 0) or np.any(next_state > self.grid_size))
+    def _is_out_of_grid(self, state: np.ndarray) -> bool:
+        """Check if state is outside the grid boundaries."""
+        return bool(np.any(state < 0) or np.any(state > self.grid_size))
+
+    def _compute_reward(self, state: np.ndarray, action: np.ndarray) -> float:
+        next_state = state + action
+
+        is_goal_state = self._is_goal_state(next_state)
+        is_in_obstacle_range = self._is_in_obstacle_range(next_state)
+        is_out_of_grid = self._is_out_of_grid(next_state)
 
         reward = float(-self.fuel_cost - np.linalg.norm(next_state - self.goal_state))
 
