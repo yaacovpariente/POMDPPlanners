@@ -795,7 +795,7 @@ def test_single_obstacle_reward_behavior():
         -2.0 - np.linalg.norm(np.array([5.0, 6.0]) - np.array([10, 5])) + (-15.0)
     )
     assert all(
-        abs(r - expected_obstacle_reward) < 0.1 for r in obstacle_rewards
+        abs(r - expected_obstacle_reward) < 0.0001 for r in obstacle_rewards
     ), f"Obstacle center rewards should be around {expected_obstacle_reward}, got {obstacle_rewards[:5]}"
 
     # Test state outside obstacle radius (7, 5) - distance 2 from center

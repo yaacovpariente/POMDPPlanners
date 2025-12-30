@@ -208,6 +208,90 @@ class TestContinuousLightDarkRewardModel:
         is_outside = np.any(at_boundary < 0) or np.any(at_boundary > self.grid_size)
         assert not is_outside
 
+    def test_is_goal_state_method(self):
+        """Test the _is_goal_state method."""
+        # State exactly at goal
+        state_at_goal = np.array([8.0, 8.0])
+        assert self.model._is_goal_state(state_at_goal)
+
+        # State within goal radius
+        state_near_goal = np.array([8.5, 8.5])
+        assert self.model._is_goal_state(state_near_goal)
+
+        # State at goal radius boundary
+        state_at_boundary = np.array([9.0, 8.0])  # Distance = 1.0, exactly at radius
+        assert self.model._is_goal_state(state_at_boundary)
+
+        # State just outside goal radius
+        state_outside_goal = np.array([9.1, 8.0])  # Distance > 1.0
+        assert not self.model._is_goal_state(state_outside_goal)
+
+        # State far from goal
+        state_far = np.array([1.0, 1.0])
+        assert not self.model._is_goal_state(state_far)
+
+    def test_is_in_obstacle_range_method(self):
+        """Test the _is_in_obstacle_range method."""
+        # State exactly at obstacle
+        state_at_obstacle = np.array([3.0, 3.0])
+        assert self.model._is_in_obstacle_range(state_at_obstacle)
+
+        # State within obstacle radius
+        state_near_obstacle = np.array([3.5, 3.5])
+        assert self.model._is_in_obstacle_range(state_near_obstacle)
+
+        # State at obstacle radius boundary
+        # Distance from (3,3) to (4,3) = 1.0, exactly at radius
+        state_at_boundary = np.array([4.0, 3.0])
+        assert self.model._is_in_obstacle_range(state_at_boundary)
+
+        # State just outside obstacle radius
+        # Distance from (3,3) to (4.1,3) > 1.0
+        state_outside_range = np.array([4.1, 3.0])
+        assert not self.model._is_in_obstacle_range(state_outside_range)
+
+        # State far from all obstacles
+        state_far = np.array([1.0, 1.0])
+        assert not self.model._is_in_obstacle_range(state_far)
+
+        # State near second obstacle
+        state_near_second = np.array([6.5, 6.5])
+        assert self.model._is_in_obstacle_range(state_near_second)
+
+    def test_is_out_of_grid_method(self):
+        """Test the _is_out_of_grid method."""
+        # State inside grid
+        state_inside = np.array([5.0, 5.0])
+        assert not self.model._is_out_of_grid(state_inside)
+
+        # State at lower boundary (0, 0)
+        state_at_lower = np.array([0.0, 0.0])
+        assert not self.model._is_out_of_grid(state_at_lower)
+
+        # State at upper boundary (10, 10)
+        state_at_upper = np.array([10.0, 10.0])
+        assert not self.model._is_out_of_grid(state_at_upper)
+
+        # State below lower boundary
+        state_below = np.array([-0.1, 5.0])
+        assert self.model._is_out_of_grid(state_below)
+
+        # State above upper boundary
+        state_above = np.array([10.1, 5.0])
+        assert self.model._is_out_of_grid(state_above)
+
+        # State with negative x coordinate
+        state_negative_x = np.array([-1.0, 5.0])
+        assert self.model._is_out_of_grid(state_negative_x)
+
+        # State with negative y coordinate
+        state_negative_y = np.array([5.0, -1.0])
+        assert self.model._is_out_of_grid(state_negative_y)
+
+        # State with both coordinates out of bounds
+        state_both_out = np.array([11.0, 11.0])
+        assert self.model._is_out_of_grid(state_both_out)
+
 
 class TestContinuousLDDangerousStatesRewardModel:
     """Test cases for dangerous states reward model."""
