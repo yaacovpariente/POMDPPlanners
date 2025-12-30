@@ -177,6 +177,7 @@ class PFT_DPW(DoubleProgressiveWideningMCTSPolicy):
             alpha_o=alpha_o,
             exploration_constant=exploration_constant,
             min_samples_per_node=min_samples_per_node,
+            min_visit_count_per_action=min_visit_count_per_action,
             time_out_in_seconds=time_out_in_seconds,
             n_simulations=n_simulations,
             log_path=log_path,
@@ -234,6 +235,7 @@ class PFT_DPW(DoubleProgressiveWideningMCTSPolicy):
             action_sampler=self.action_sampler,
             exploration_constant=self.exploration_constant,
             k_a=self.k_a,
+            min_visit_count_per_action=self.min_samples_per_node,
         )
 
         return_sample = self._simulate_return(

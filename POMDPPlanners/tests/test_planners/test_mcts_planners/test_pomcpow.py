@@ -1169,3 +1169,49 @@ def test_pomcpow_config_id_hash_properties(
     # Should be a valid hexadecimal hash (SHA-256 produces 64 hex characters)
     assert len(config_id) == 64
     assert all(c in "0123456789abcdef" for c in config_id.lower())
+
+
+def test_min_visit_count_per_action_enforcement(environment, action_sampler):
+    """Test that min_visit_count_per_action ensures minimum visits for each action node.
+
+    Purpose: Validates that min_visit_count_per_action parameter correctly enforces minimum visit counts
+    for each action node at the root when using k_a=2.0 and alpha_a=0.0
+
+    Given: POMCPOW planner with k_a=2.0, alpha_a=0.0, and min_visit_count_per_action=5
+    When: Planning is performed with sufficient simulations
+    Then: All action nodes at the root have at least min_visit_count_per_action visits
+
+    Test type: unit
+    """
+    # ARRANGE: Setup POMCPOW with k_a=2.0, alpha_a=0.0 to limit to 2 actions
+    # and min_visit_count_per_action=5 to ensure each action gets at least 5 visits
+    min_visit_count = 25
+    planner = POMCPOW(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=2.0,  # With alpha_a=0.0, this allows max 2 actions
+        alpha_o=0.5,
+        alpha_a=0.0,  # alpha_a=0.0 means k_a * n^0 = k_a = 2.0 (constant)
+        n_simulations=50,  # Enough simulations to reach min_visit_count
+        action_sampler=action_sampler,
+        name="TestPOMCPOW_MinVisit",
+        min_visit_count_per_action=min_visit_count,
+    )
+
+    n_particles = 100
+    belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
+
+    # ACT: Build tree using _learn_tree method
+    root_belief_node = planner._learn_tree(belief=belief)
+
+    # ASSERT: Verify all action nodes at root have at least min_visit_count_per_action visits
+    action_nodes = [child for child in root_belief_node.children if isinstance(child, ActionNode)]
+    assert len(action_nodes) > 0, "At least one action node should be created"
+
+    for action_node in action_nodes:
+        assert (
+            action_node.visit_count == min_visit_count
+        ), f"Action node {action_node.action} has {action_node.visit_count} visits, expected at least {min_visit_count}"

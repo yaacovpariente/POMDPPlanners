@@ -146,6 +146,7 @@ class POMCP_DPW(DoubleProgressiveWideningMCTSPolicy):
         time_out_in_seconds: Optional[int] = None,
         n_simulations: Optional[int] = None,
         min_samples_per_node: int = 10,
+        min_visit_count_per_action: int = 1,
         log_path: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
@@ -187,6 +188,7 @@ class POMCP_DPW(DoubleProgressiveWideningMCTSPolicy):
             alpha_o=alpha_o,
             exploration_constant=exploration_constant,
             min_samples_per_node=min_samples_per_node,
+            min_visit_count_per_action=min_visit_count_per_action,
             time_out_in_seconds=time_out_in_seconds,
             n_simulations=n_simulations,
             log_path=log_path,
@@ -246,6 +248,7 @@ class POMCP_DPW(DoubleProgressiveWideningMCTSPolicy):
             action_sampler=self.action_sampler,
             exploration_constant=self.exploration_constant,
             k_a=self.k_a,
+            min_visit_count_per_action=self.min_visit_count_per_action,
         )
 
         if len(action_node.children) <= self.k_o * action_node.visit_count**self.alpha_o:

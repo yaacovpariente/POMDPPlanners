@@ -214,6 +214,7 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
         alpha_o: float,
         exploration_constant: float,
         min_samples_per_node: int = 10,
+        min_visit_count_per_action: int = 1,
         time_out_in_seconds: Optional[int] = None,
         n_simulations: Optional[int] = None,
         log_path: Optional[Path] = None,
@@ -234,6 +235,7 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
             alpha_o: Observation progressive widening exponent (0 < α_o ≤ 1)
             exploration_constant: UCB1 exploration parameter (exploration_constant ≥ 0)
             min_samples_per_node: Minimum samples before node is reliable (min_samples_per_node ≥ 1)
+            min_visit_count_per_action: Minimum visit count per action (min_visit_count_per_action ≥ 1)
             time_out_in_seconds: Time limit for planning (mutually exclusive with n_simulations)
             n_simulations: Number of simulations to run (mutually exclusive with timeout)
             log_path: Optional path for logging policy execution
@@ -272,6 +274,7 @@ class DoubleProgressiveWideningMCTSPolicy(PathSimulationPolicy):
         self.depth = depth
         self.exploration_constant = exploration_constant
         self.min_samples_per_node = min_samples_per_node
+        self.min_visit_count_per_action = min_visit_count_per_action
         self.action_sampler: ActionSampler = action_sampler
 
         # Progressive widening parameters

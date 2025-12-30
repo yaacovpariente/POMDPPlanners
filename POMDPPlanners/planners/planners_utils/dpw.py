@@ -237,6 +237,7 @@ def action_progressive_widening(
     action_sampler: ActionSampler,
     exploration_constant: float,
     k_a: float,
+    min_visit_count_per_action: int = 1,
 ) -> ActionNode:
     """Select or add action using progressive widening strategy.
 
@@ -356,6 +357,11 @@ def action_progressive_widening(
                 total_new_actions = sum(action_counts)
                 print(f"Alpha {alpha}: {total_new_actions} new actions in 20 visits")
     """
+    if belief_node.depth == 0:
+        for action_node in belief_node.children:
+            if action_node.visit_count < min_visit_count_per_action:
+                return action_node
+
     if (
         belief_node.is_leaf
         or belief_node.visit_count == 0
