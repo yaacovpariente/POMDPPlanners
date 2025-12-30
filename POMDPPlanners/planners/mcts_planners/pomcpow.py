@@ -245,7 +245,7 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
             action_sampler=self.action_sampler,
             exploration_constant=self.exploration_constant,
             k_a=self.k_a,
-            min_visit_count_per_action=self.min_visit_count_per_action,
+            min_visit_count_per_action=self.min_visit_count_per_action - 1,
         )
 
         next_state, next_observation, reward = self.environment.sample_next_step(

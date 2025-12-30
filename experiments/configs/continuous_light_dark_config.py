@@ -55,7 +55,6 @@ policies = [
         alpha_o=0.5,
         exploration_constant=1.0,
         n_simulations=1000,
-        min_samples_per_node=10,
         min_visit_count_per_action=1,
     )
 ]

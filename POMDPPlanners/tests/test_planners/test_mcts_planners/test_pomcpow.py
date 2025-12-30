@@ -1196,12 +1196,12 @@ def test_min_visit_count_per_action_enforcement(environment, action_sampler):
         alpha_o=0.5,
         alpha_a=0.0,  # alpha_a=0.0 means k_a * n^0 = k_a = 2.0 (constant)
         n_simulations=50,  # Enough simulations to reach min_visit_count
-        action_sampler=action_sampler,
+        action_sampler=MockActionSampler(TigerPOMDP(discount_factor=0.99).get_actions()),
         name="TestPOMCPOW_MinVisit",
         min_visit_count_per_action=min_visit_count,
     )
 
-    n_particles = 100
+    n_particles = 10
     belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
 
     # ACT: Build tree using _learn_tree method

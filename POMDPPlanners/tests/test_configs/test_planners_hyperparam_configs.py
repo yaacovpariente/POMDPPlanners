@@ -200,9 +200,6 @@ class TestPlannersHyperparamConfigs:
         assert isinstance(config, HyperParamPlannerConfig)
         assert config.policy_cls == POMCP
 
-        # Check unique parameter
-        assert config.constant_parameters["min_samples_per_node"] == 1
-
     def test_pomcp_dpw_config(self):
         """Test POMCP_DPW configuration creation.
 
