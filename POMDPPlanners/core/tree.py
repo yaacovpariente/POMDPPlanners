@@ -104,7 +104,11 @@ class BeliefNode(BaseNode):
 
     def get_child(self, action: Any) -> Union["ActionNode", None]:
         for child in self.children:
-            if child.action == action:
+            # Handle numpy array comparisons properly
+            if isinstance(child.action, np.ndarray) and isinstance(action, np.ndarray):
+                if np.array_equal(child.action, action):
+                    return child
+            elif child.action == action:
                 return child
 
         return None
