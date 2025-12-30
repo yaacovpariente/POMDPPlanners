@@ -170,7 +170,6 @@ class PlannersHyperparamConfigs:
             "discount_factor": self.discount_factor,
             "name": name,
             "environment": env,
-            "min_samples_per_node": 1,
             "time_out_in_seconds": time_out_in_seconds,
         }
 
@@ -203,7 +202,6 @@ class PlannersHyperparamConfigs:
             NumericalHyperParameter(
                 0.01, 0.5, "alpha_o"
             ),  # Observation progressive widening exponent
-            NumericalHyperParameter(5, 50, "min_samples_per_node"),  # Minimum samples per node
         ]
 
         constant_parameters = {
