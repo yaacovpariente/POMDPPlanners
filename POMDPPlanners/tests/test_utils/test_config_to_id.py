@@ -622,7 +622,6 @@ class TestConfigToIdIntegration:
             "depth": planner1.depth,
             "exploration_constant": planner1.exploration_constant,
             "n_simulations": planner1.n_simulations,
-            "min_samples_per_node": planner1.min_samples_per_node,
         }
 
         config2 = {
@@ -630,7 +629,6 @@ class TestConfigToIdIntegration:
             "depth": planner2.depth,
             "exploration_constant": planner2.exploration_constant,
             "n_simulations": planner2.n_simulations,
-            "min_samples_per_node": planner2.min_samples_per_node,
         }
 
         # Generate config IDs

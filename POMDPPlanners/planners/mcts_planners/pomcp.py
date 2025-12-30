@@ -58,7 +58,6 @@ class POMCP(PathSimulationPolicy):
         exploration_constant: UCB1 exploration parameter (higher = more exploration)
         timeout_in_seconds: Time limit for planning (mutually exclusive with n_simulations)
         n_simulations: Number of simulations to run (mutually exclusive with timeout)
-        min_samples_per_node: Minimum samples before a node is considered reliable
 
     Note:
         In the original POMCP paper, the belief structure used was an unweighted particle belief
@@ -107,7 +106,6 @@ class POMCP(PathSimulationPolicy):
         name: str,
         time_out_in_seconds: Optional[int] = None,
         n_simulations: Optional[int] = None,
-        min_samples_per_node: int = 10,
         log_path: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
@@ -130,7 +128,6 @@ class POMCP(PathSimulationPolicy):
 
         self.depth = depth
         self.exploration_constant = exploration_constant
-        self.min_samples_per_node = min_samples_per_node
 
     def _simulate_path(self, belief_node: BeliefNode, depth: int) -> float:
         state = belief_node.belief.sample()

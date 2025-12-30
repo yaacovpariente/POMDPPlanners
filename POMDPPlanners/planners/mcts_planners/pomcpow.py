@@ -81,7 +81,6 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
         action_sampler: Action sampling strategy for progressive widening
         time_out_in_seconds: Time limit for planning (mutually exclusive with n_simulations)
         n_simulations: Number of simulations to run (mutually exclusive with timeout)
-        min_samples_per_node: Minimum samples before a node is considered reliable
         log_path: Optional path for logging policy execution
         debug: Enable debug logging if True
 
@@ -145,7 +144,6 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
         action_sampler: ActionSampler,
         time_out_in_seconds: Optional[int] = None,
         n_simulations: Optional[int] = None,
-        min_samples_per_node: int = 10,
         min_visit_count_per_action: int = 1,
         log_path: Optional[Path] = None,
         debug: bool = False,
@@ -166,7 +164,6 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
             action_sampler: Action sampling strategy for progressive widening
             time_out_in_seconds: Time limit for planning in seconds (mutually exclusive with n_simulations)
             n_simulations: Number of MCTS simulations to run (mutually exclusive with time_out_in_seconds)
-            min_samples_per_node: Minimum samples before a node is considered reliable
             min_visit_count_per_action: Minimum visit count per action (min_visit_count_per_action ≥ 1)
             log_path: Optional path for logging policy execution
             debug: Enable debug logging if True
@@ -188,7 +185,6 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
             k_o=k_o,
             alpha_o=alpha_o,
             exploration_constant=exploration_constant,
-            min_samples_per_node=min_samples_per_node,
             min_visit_count_per_action=min_visit_count_per_action,
             time_out_in_seconds=time_out_in_seconds,
             n_simulations=n_simulations,

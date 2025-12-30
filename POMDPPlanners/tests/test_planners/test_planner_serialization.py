@@ -390,7 +390,6 @@ class TestPlannerConfigSerialization:
             exploration_constant=20.0,
             name="POMCP_Config_Test",
             n_simulations=200,
-            min_samples_per_node=5,
         )
 
         pickled = pickle.dumps(planner)
