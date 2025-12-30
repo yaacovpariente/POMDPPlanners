@@ -362,7 +362,10 @@ def action_progressive_widening(
         or len(belief_node.children) <= k_a * belief_node.visit_count**alpha_a
     ):
         action = action_sampler.sample()
-        action_node = ActionNode(action=action, parent=belief_node)
+        action_node = belief_node.get_child(action=action)
+        if action_node is None:
+            action_node = ActionNode(action=action, parent=belief_node)
+
         return action_node
 
     return ucb1_exploration(belief_node=belief_node, exploration_constant=exploration_constant)
