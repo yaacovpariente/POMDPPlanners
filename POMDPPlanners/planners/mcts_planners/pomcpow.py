@@ -146,6 +146,7 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
         time_out_in_seconds: Optional[int] = None,
         n_simulations: Optional[int] = None,
         min_samples_per_node: int = 10,
+        min_visit_count_per_action: int = 1,
         log_path: Optional[Path] = None,
         debug: bool = False,
         use_queue_logger: bool = False,
@@ -166,6 +167,7 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
             time_out_in_seconds: Time limit for planning in seconds (mutually exclusive with n_simulations)
             n_simulations: Number of MCTS simulations to run (mutually exclusive with time_out_in_seconds)
             min_samples_per_node: Minimum samples before a node is considered reliable
+            min_visit_count_per_action: Minimum visit count per action (min_visit_count_per_action ≥ 1)
             log_path: Optional path for logging policy execution
             debug: Enable debug logging if True
 
@@ -187,6 +189,7 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
             alpha_o=alpha_o,
             exploration_constant=exploration_constant,
             min_samples_per_node=min_samples_per_node,
+            min_visit_count_per_action=min_visit_count_per_action,
             time_out_in_seconds=time_out_in_seconds,
             n_simulations=n_simulations,
             log_path=log_path,
@@ -246,6 +249,7 @@ class POMCPOW(DoubleProgressiveWideningMCTSPolicy):
             action_sampler=self.action_sampler,
             exploration_constant=self.exploration_constant,
             k_a=self.k_a,
+            min_visit_count_per_action=self.min_visit_count_per_action,
         )
 
         next_state, next_observation, reward = self.environment.sample_next_step(

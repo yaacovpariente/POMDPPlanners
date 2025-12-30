@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import get_initial_belief
-from POMDPPlanners.core.tree import BeliefNode
+from POMDPPlanners.core.tree import ActionNode, BeliefNode
 from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp import (
     ContinuousLightDarkPOMDP,
 )
@@ -594,3 +594,50 @@ def test_pft_dpw_config_id_timeout_consistency(environment, action_sampler):
     assert pft_dpw2.time_out_in_seconds == 3
     assert pft_dpw1.n_simulations is None
     assert pft_dpw2.n_simulations is None
+
+
+def test_min_visit_count_per_action_enforcement(environment, action_sampler):
+    """Test that min_visit_count_per_action ensures minimum visits for each action node.
+
+    Purpose: Validates that min_visit_count_per_action parameter correctly enforces minimum visit counts
+    for each action node at the root when using k_a=2.0 and alpha_a=0.0
+
+    Given: PFT_DPW planner with k_a=2.0, alpha_a=0.0, and min_visit_count_per_action=5
+    When: Planning is performed with sufficient simulations
+    Then: All action nodes at the root have at least min_visit_count_per_action visits
+
+    Test type: unit
+    """
+    # ARRANGE: Setup PFT_DPW with k_a=2.0, alpha_a=0.0 to limit to 2 actions
+    # and min_visit_count_per_action=5 to ensure each action gets at least 5 visits
+    min_visit_count = 25
+    planner = PFT_DPW(
+        environment=environment,
+        discount_factor=0.95,
+        depth=3,
+        name="TestPFT_DPW_MinVisit",
+        action_sampler=action_sampler,
+        k_a=2.0,  # With alpha_a=0.0, this allows max 2 actions
+        alpha_a=0.0,  # alpha_a=0.0 means k_a * n^0 = k_a = 2.0 (constant)
+        k_o=1.0,
+        alpha_o=0.5,
+        exploration_constant=1.0,
+        n_simulations=50,  # Enough simulations to reach min_visit_count
+        min_samples_per_node=min_visit_count,  # Must be >= min_visit_count_per_action
+        min_visit_count_per_action=min_visit_count,
+    )
+
+    n_particles = 10
+    belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
+
+    # ACT: Build tree using _learn_tree method
+    root_belief_node = planner._learn_tree(belief=belief)
+
+    # ASSERT: Verify all action nodes at root have at least min_visit_count_per_action visits
+    action_nodes = [child for child in root_belief_node.children if isinstance(child, ActionNode)]
+    assert len(action_nodes) > 0, "At least one action node should be created"
+
+    for action_node in action_nodes:
+        assert (
+            action_node.visit_count == min_visit_count
+        ), f"Action node {action_node.action} has {action_node.visit_count} visits, expected at least {min_visit_count}"
