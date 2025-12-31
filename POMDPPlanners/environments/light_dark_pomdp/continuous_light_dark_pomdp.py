@@ -44,6 +44,7 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_lig
     BaseLightDarkPOMDP,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
+    ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel,
     ContinuousLightDarkNormalNoiseObservationModel,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
@@ -69,6 +70,11 @@ class RewardModelType(Enum):
     STANDARD = "standard"
     DECAYING_HIT_PROBABILITY = "decaying_hit_probability"
     DANGEROUS_STATES = "dangerous_states"
+
+
+class ObservationModelType(Enum):
+    NORMAL_NOISE = "normal_noise"
+    NORMAL_NOISE_NO_OBS_IN_DARK = "normal_noise_no_obs_in_dark"
 
 
 class ContinuousLightDarkStateTransitionModel(StateTransitionModel):
@@ -147,6 +153,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
     Key features:
     - Continuous 2D state and action spaces
     - Light beacons reduce observation noise when nearby
+    - Multiple observation models available (normal noise, normal noise with no observation in dark)
     - Multiple reward models available (standard, decaying hit probability, dangerous states)
     - Optional obstacles with configurable hit penalties
     - Terminal conditions for goal reaching, obstacle hits, and boundary violations
@@ -203,6 +210,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         beacon_radius: float = 1.0,
         obstacle_radius: float = 1.5,
         reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        observation_model_type: ObservationModelType = ObservationModelType.NORMAL_NOISE,
         penalty_decay: float = 1.0,
         is_obstacle_hit_terminal: bool = True,
     ):
@@ -266,6 +274,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         self.observation_cov_matrix = observation_cov_matrix
         self.goal_state_radius = goal_state_radius
         self.beacon_radius = beacon_radius
+        self.observation_model_type = observation_model_type
         self.penalty_decay = penalty_decay
         self.is_obstacle_hit_terminal = is_obstacle_hit_terminal
 
@@ -348,14 +357,26 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
         if action.shape != (2,):
             raise ValueError("action must be a 2D vector")
 
-        return ContinuousLightDarkNormalNoiseObservationModel(
-            next_state=next_state,
-            action=action,
-            observation_cov_matrix=self.observation_cov_matrix,
-            grid_size=self.grid_size,
-            beacons=self.beacons,
-            beacon_radius=self.beacon_radius,
-        )
+        if self.observation_model_type == ObservationModelType.NORMAL_NOISE:
+            return ContinuousLightDarkNormalNoiseObservationModel(
+                next_state=next_state,
+                action=action,
+                observation_cov_matrix=self.observation_cov_matrix,
+                grid_size=self.grid_size,
+                beacons=self.beacons,
+                beacon_radius=self.beacon_radius,
+            )
+        elif self.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK:
+            return ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
+                next_state=next_state,
+                action=action,
+                observation_cov_matrix=self.observation_cov_matrix,
+                grid_size=self.grid_size,
+                beacons=self.beacons,
+                beacon_radius=self.beacon_radius,
+            )
+        else:
+            raise ValueError(f"Unknown observation model type: {self.observation_model_type}")
 
     def reward(self, state: np.ndarray, action: np.ndarray) -> float:
         return self.reward_model.compute_reward(state, action)
@@ -486,6 +507,7 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             and self.goal_state_radius == other.goal_state_radius
             and self.beacon_radius == other.beacon_radius
             and self.obstacle_radius == other.obstacle_radius
+            and self.observation_model_type == other.observation_model_type
         )
 
 
@@ -555,6 +577,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
         start_state: np.ndarray = np.array([0, 5]),
         obstacles: List[Tuple[float, float]] = [(3, 7), (5, 5)],
         reward_model_type: RewardModelType = RewardModelType.STANDARD,
+        observation_model_type: ObservationModelType = ObservationModelType.NORMAL_NOISE,
         penalty_decay: float = 1.0,
         is_obstacle_hit_terminal: bool = True,
     ):
@@ -576,6 +599,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
             beacon_radius=beacon_radius,
             obstacle_radius=obstacle_radius,
             reward_model_type=reward_model_type,
+            observation_model_type=observation_model_type,
             penalty_decay=penalty_decay,
             is_obstacle_hit_terminal=is_obstacle_hit_terminal,
         )
@@ -628,6 +652,7 @@ class ContinuousLightDarkPOMDPDiscreteActions(ContinuousLightDarkPOMDP, Discrete
             and self.goal_state_radius == other.goal_state_radius
             and self.beacon_radius == other.beacon_radius
             and self.obstacle_radius == other.obstacle_radius
+            and self.observation_model_type == other.observation_model_type
             and self.penalty_decay == other.penalty_decay
             and self.actions == other.actions
             and all(

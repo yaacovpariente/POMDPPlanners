@@ -26,10 +26,12 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     ContinuousLightDarkPOMDP,
     ContinuousLightDarkPOMDPDiscreteActions,
     ContinuousLightDarkStateTransitionModel,
+    ObservationModelType,
     RewardModelType,
     StateTransitionModel,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
+    ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel,
     ContinuousLightDarkNormalNoiseObservationModel,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_reward_models import (
@@ -1879,3 +1881,125 @@ def test_continuous_light_dark_state_transition_model_sample_returns_list_of_num
     assert np.allclose(
         actual_mean, expected_mean, atol=0.5
     ), f"Sample mean {actual_mean} should be close to expected mean {expected_mean}"
+
+
+def test_normal_noise_observation_model():
+    """Test that the environment uses the normal noise observation model when specified."""
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2),
+        observation_cov_matrix=np.eye(2),
+        obstacle_hit_probability=0.2,
+        obstacle_reward=-10.0,
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        goal_state_radius=1.5,
+        beacon_radius=1.0,
+        obstacle_radius=1.5,
+        observation_model_type=ObservationModelType.NORMAL_NOISE,
+    )
+    assert env.observation_model_type == ObservationModelType.NORMAL_NOISE
+
+    # Test that the correct observation model is returned
+    state = np.array([5.0, 5.0])
+    action = "up"
+    obs_model = env.observation_model(state, action)
+    assert isinstance(obs_model, ContinuousLightDarkNormalNoiseObservationModel)
+
+    # Test that observations are always returned (never None)
+    observations = obs_model.sample(n_samples=10)
+    assert all(
+        obs is not None for obs in observations
+    ), "Normal noise model should always return observations"
+
+
+def test_normal_noise_no_obs_in_dark_observation_model():
+    """Test that the environment uses the normal noise no obs in dark observation model when specified."""
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2),
+        observation_cov_matrix=np.eye(2),
+        obstacle_hit_probability=0.2,
+        obstacle_reward=-10.0,
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        goal_state_radius=1.5,
+        beacon_radius=1.0,
+        obstacle_radius=1.5,
+        observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+    )
+    assert env.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK
+
+    # Test that the correct observation model is returned
+    state = np.array([5.0, 5.0])
+    action = "up"
+    obs_model = env.observation_model(state, action)
+    assert isinstance(obs_model, ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel)
+
+    # Test near beacon - should return observations
+    state_near = np.array([0.5, 0.5])  # Near beacon at (0,0)
+    obs_model_near = env.observation_model(state_near, action)
+    observations_near = obs_model_near.sample(n_samples=10)
+    assert all(
+        obs is not None for obs in observations_near
+    ), "No obs in dark model should return observations when near beacon"
+
+    # Test far from beacon - should return None
+    state_far = np.array([3.0, 3.0])  # Far from beacons
+    obs_model_far = env.observation_model(state_far, action)
+    observations_far = obs_model_far.sample(n_samples=10)
+    assert all(
+        obs is None for obs in observations_far
+    ), "No obs in dark model should return None when far from beacons"
+
+
+def test_default_observation_model_type():
+    """Test that the default observation model type is NORMAL_NOISE (backward compatibility)."""
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2),
+        observation_cov_matrix=np.eye(2),
+    )
+    assert env.observation_model_type == ObservationModelType.NORMAL_NOISE
+
+    # Verify it uses the normal noise model
+    state = np.array([5.0, 5.0])
+    action = "up"
+    obs_model = env.observation_model(state, action)
+    assert isinstance(obs_model, ContinuousLightDarkNormalNoiseObservationModel)
+
+
+def test_observation_model_type_equality():
+    """Test that environments with different observation model types are not equal."""
+    env1 = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        observation_model_type=ObservationModelType.NORMAL_NOISE,
+    )
+    env2 = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+    )
+    assert env1 != env2, "Environments with different observation model types should not be equal"
+
+
+def test_continuous_light_dark_pomdp_observation_model_type():
+    """Test observation model type selection for ContinuousLightDarkPOMDP (continuous actions)."""
+    env = ContinuousLightDarkPOMDP(
+        discount_factor=0.95,
+        observation_model_type=ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK,
+    )
+    assert env.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK
+
+    # Test that the correct observation model is returned
+    state = np.array([3.0, 3.0])
+    action = np.array([0.0, 0.0])
+    obs_model = env.observation_model(state, action)
+    assert isinstance(obs_model, ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel)
+
+    # Test far from beacon - should return None
+    observations = obs_model.sample(n_samples=5)
+    assert all(
+        obs is None for obs in observations
+    ), "No obs in dark model should return None when far from beacons"
