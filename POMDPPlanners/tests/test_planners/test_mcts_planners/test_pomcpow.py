@@ -13,6 +13,7 @@ import random
 
 import numpy as np
 import pytest
+from anytree import PostOrderIter
 
 from POMDPPlanners.core.belief import (
     WeightedParticleBelief,
@@ -1215,3 +1216,71 @@ def test_min_visit_count_per_action_enforcement(environment, action_sampler):
         assert (
             action_node.visit_count >= min_visit_count
         ), f"Action node {action_node.action} has {action_node.visit_count} visits, expected at least {min_visit_count}"
+
+
+def test_max_depth_reached_with_timeout():
+    """Test tree structure construction with timeout.
+
+    Purpose: Validates that POMCPOW builds proper tree structure with BeliefNode and ActionNode hierarchy during MCTS
+    when using a time-based termination criterion
+
+    Given: POMCPOW planner with timeout=0.5 seconds, TigerPOMDP environment, initial belief
+    When: MCTS tree construction creates belief-action tree structure with timeout
+    Then: Tree has root BeliefNode, action children, belief grandchildren, proper parent-child relationships,
+    and reaches the configured maximum depth
+
+    Test type: unit
+    """
+    depth = 3
+    environment = TigerPOMDP(discount_factor=0.95)
+    action_sampler = MockActionSampler(environment.get_actions())
+
+    planner = POMCPOW(
+        environment=environment,
+        discount_factor=0.95,
+        depth=depth,
+        exploration_constant=1.0,
+        k_o=3.0,
+        k_a=3.0,
+        alpha_o=0.5,
+        alpha_a=0.5,
+        time_out_in_seconds=0.5,  # type: ignore[arg-type]  # Plan for 0.5 seconds
+        action_sampler=action_sampler,
+        name="TestPOMCPOW_MaxDepth",
+    )
+
+    n_particles = 100
+    belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
+    root_belief_node = BeliefNode(belief=belief, observation=None)
+
+    planner._construct_tree_using_timeout(belief_node=root_belief_node)
+
+    # POMCPOW with progressive widening reaches 2*depth+2 (one more level than POMCP)
+    assert root_belief_node.height == 2 * (depth + 1)
+    for node in PostOrderIter(root_belief_node):
+        assert node.visit_count >= 0
+        if isinstance(node, BeliefNode):
+            assert node.belief is not None
+            assert node.v_value is not None
+
+            if node.height > 1 and node.depth > 0:
+                assert node.v_value != 0
+                assert node.observation is not None
+                # For POMCPOW with progressive widening, visit count relationship may differ
+                n_children_visits = sum(child.visit_count for child in node.children)
+                assert node.visit_count >= n_children_visits
+
+        elif isinstance(node, ActionNode):
+            assert node.action is not None
+            assert node.q_value is not None
+            if not node.is_leaf:
+                assert node.q_value != 0
+                # For POMCPOW with progressive widening, visit count relationship may differ
+                assert node.visit_count >= sum(child.visit_count for child in node.children)
+
+    # Verify root belief node
+    assert root_belief_node.observation is None
+    assert root_belief_node.parent is None
+    assert len(root_belief_node.children) > 0
+    assert root_belief_node.visit_count > 0
+    assert root_belief_node.v_value is not None
