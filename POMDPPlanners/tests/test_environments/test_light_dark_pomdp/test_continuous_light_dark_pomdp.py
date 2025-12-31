@@ -30,7 +30,10 @@ from POMDPPlanners.environments.light_dark_pomdp.continuous_light_dark_pomdp imp
     RewardModelType,
     StateTransitionModel,
 )
+
+# pylint: disable=no-name-in-module
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
+    ContinuousLightDarkDistanceBasedObservationModel,  # pyright: ignore[reportAttributeAccessIssue]
     ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel,
     ContinuousLightDarkNormalNoiseObservationModel,
 )
@@ -1420,10 +1423,10 @@ def test_beacon_proximity_with_multiple_beacons():
     )
 
     # Verify proximity detection for each beacon
-    assert obs_model_1.near_beacon == True, "Should detect proximity to first beacon (0,0)"
-    assert obs_model_2.near_beacon == True, "Should detect proximity to middle beacon (5,5)"
-    assert obs_model_3.near_beacon == True, "Should detect proximity to last beacon (10,10)"
-    assert obs_model_4.near_beacon == False, "Should not detect proximity when far from all beacons"
+    assert obs_model_1.near_beacon is True, "Should detect proximity to first beacon (0,0)"
+    assert obs_model_2.near_beacon is True, "Should detect proximity to middle beacon (5,5)"
+    assert obs_model_3.near_beacon is True, "Should detect proximity to last beacon (10,10)"
+    assert obs_model_4.near_beacon is False, "Should not detect proximity when far from all beacons"
 
     # Verify covariance reduction for near-beacon cases
     expected_reduced_cov = observation_cov_matrix * 0.5
@@ -1709,7 +1712,7 @@ def test_risk_averse_environment_config_start_state_validity():
     env_configs = RiskAverseEnvironmentConfigsAPI(discount_factor=0.95)
     (
         light_dark_env,
-        initial_belief,
+        _initial_belief,  # pylint: disable=unused-variable
     ) = env_configs.continuous_observations_discrete_actions_light_dark_pomdp_config(n_particles=50)
 
     # Cast to specific type to access attributes
@@ -1983,6 +1986,14 @@ def test_observation_model_type_equality():
     )
     assert env1 != env2, "Environments with different observation model types should not be equal"
 
+    # Test distance-based vs others
+    env3 = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        observation_model_type=ObservationModelType.DISTANCE_BASED,
+    )
+    assert env1 != env3, "Distance-based should not equal normal noise"
+    assert env2 != env3, "Distance-based should not equal no obs in dark"
+
 
 def test_continuous_light_dark_pomdp_observation_model_type():
     """Test observation model type selection for ContinuousLightDarkPOMDP (continuous actions)."""
@@ -2003,3 +2014,159 @@ def test_continuous_light_dark_pomdp_observation_model_type():
     assert all(
         obs is None for obs in observations
     ), "No obs in dark model should return None when far from beacons"
+
+
+def test_distance_based_observation_model():
+    """Test that the environment uses the distance-based observation model when specified."""
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2),
+        observation_cov_matrix=np.eye(2),
+        obstacle_hit_probability=0.2,
+        obstacle_reward=-10.0,
+        goal_reward=10.0,
+        fuel_cost=2.0,
+        grid_size=11,
+        goal_state_radius=1.5,
+        beacon_radius=1.0,
+        obstacle_radius=1.5,
+        observation_model_type=ObservationModelType.DISTANCE_BASED,
+    )
+    assert env.observation_model_type == ObservationModelType.DISTANCE_BASED
+
+    # Test that the correct observation model is returned
+    state = np.array([5.0, 5.0])
+    action = "up"
+    obs_model = env.observation_model(state, action)
+    assert isinstance(obs_model, ContinuousLightDarkDistanceBasedObservationModel)
+
+    # Test near beacon - should return observations with continuous distance-based scaling
+    # Use state at exactly distance 0.5 from beacon (0,0) - place at (0.5, 0.0)
+    state_near = np.array([0.5, 0.0])  # Exactly 0.5 distance from beacon at (0,0)
+    obs_model_near = env.observation_model(state_near, action)
+    observations_near = obs_model_near.sample(n_samples=10)
+    assert all(
+        obs is not None for obs in observations_near
+    ), "Distance-based model should return observations when near beacon"
+
+    # Verify continuous scaling (not binary)
+    # At distance 0.5 from beacon (half of beacon_radius), scale should be between min_scale and 1.0
+    # Formula: scale = 0.00001 + (1.0 - 0.00001) * (0.5 / 1.0) ≈ 0.500005
+    min_scale = 0.00001
+    expected_scale = min_scale + (1.0 - min_scale) * (0.5 / 1.0)
+    expected_cov = np.eye(2) * expected_scale
+    obs_model_near_typed = cast(ContinuousLightDarkDistanceBasedObservationModel, obs_model_near)
+    assert np.allclose(
+        obs_model_near_typed.observation_cov_matrix, expected_cov, atol=1e-5
+    ), f"Distance-based model should scale covariance continuously. Expected scale {expected_scale}, got {obs_model_near_typed.observation_cov_matrix[0, 0]}"
+
+    # Test far from beacon - should return None
+    state_far = np.array([3.0, 3.0])  # Far from beacons (distance > beacon_radius)
+    obs_model_far = env.observation_model(state_far, action)
+    observations_far = obs_model_far.sample(n_samples=10)
+    assert all(
+        obs is None for obs in observations_far
+    ), "Distance-based model should return None when far from beacons"
+
+    # Test at beacon radius boundary - should return observations
+    state_at_radius = np.array([1.0, 0.0])  # Exactly at beacon_radius from beacon at (0,0)
+    obs_model_at_radius = env.observation_model(state_at_radius, action)
+    observations_at_radius = obs_model_at_radius.sample(n_samples=10)
+    assert all(
+        obs is not None for obs in observations_at_radius
+    ), "Distance-based model should return observations when exactly at beacon radius"
+
+    # Verify scaling at boundary (should be 1.0 * base)
+    expected_boundary_scale = 1.0
+    expected_boundary_cov = np.eye(2) * expected_boundary_scale
+    obs_model_at_radius_typed = cast(
+        ContinuousLightDarkDistanceBasedObservationModel, obs_model_at_radius
+    )
+    assert np.allclose(
+        obs_model_at_radius_typed.observation_cov_matrix, expected_boundary_cov, atol=1e-10
+    ), f"At beacon radius, scale should be 1.0. Got {obs_model_at_radius_typed.observation_cov_matrix[0, 0]}"
+
+
+def test_distance_based_observation_model_continuous_scaling():
+    """Test that distance-based observation model provides continuous scaling, not binary."""
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2),
+        observation_cov_matrix=np.eye(2) * 2.0,  # Base covariance
+        beacon_radius=2.0,  # Larger radius for more test points
+        observation_model_type=ObservationModelType.DISTANCE_BASED,
+    )
+
+    action = "up"
+    base_cov = np.eye(2) * 2.0
+
+    # Test at different distances
+    test_distances = [0.0, 0.5, 1.0, 1.5, 2.0]
+    scales = []
+
+    for d in test_distances:
+        state = np.array([d, 0.0])  # Place state at distance d from beacon at (0,0)
+        obs_model = env.observation_model(state, action)
+        # Extract scale factor
+        obs_model_typed = cast(ContinuousLightDarkDistanceBasedObservationModel, obs_model)
+        scale = obs_model_typed.observation_cov_matrix[0, 0] / base_cov[0, 0]
+        scales.append(scale)
+
+    # Verify continuous scaling (not just min_scale or 1.0)
+    min_scale = 0.00001
+    assert np.isclose(
+        scales[0], min_scale, atol=1e-6
+    ), f"At distance 0, scale should be {min_scale}"
+    assert np.isclose(scales[-1], 1.0, atol=1e-10), "At distance beacon_radius, scale should be 1.0"
+    # Verify intermediate values are different and continuous
+    assert not np.isclose(scales[1], min_scale, atol=1e-6) and not np.isclose(
+        scales[1], 1.0, atol=1e-10
+    ), "Intermediate scale should be between min_scale and 1.0"
+    assert not np.isclose(scales[2], min_scale, atol=1e-6) and not np.isclose(
+        scales[2], 1.0, atol=1e-10
+    ), "Intermediate scale should be between min_scale and 1.0"
+    # Verify monotonic increase
+    for i in range(len(scales) - 1):
+        assert (
+            scales[i] <= scales[i + 1]
+        ), f"Scale should increase with distance: {scales[i]} <= {scales[i + 1]}"
+
+
+def test_distance_based_observation_model_probability():
+    """Test probability calculations for distance-based observation model."""
+    env = ContinuousLightDarkPOMDPDiscreteActions(
+        discount_factor=0.95,
+        state_transition_cov_matrix=np.eye(2),
+        observation_cov_matrix=np.eye(2),
+        beacon_radius=1.0,
+        observation_model_type=ObservationModelType.DISTANCE_BASED,
+    )
+
+    action = "up"
+
+    # Test probability of None when far from beacon
+    state_far = np.array([3.0, 3.0])
+    obs_model_far = env.observation_model(state_far, action)
+    prob_none = obs_model_far.probability([None])[0]
+    assert np.isclose(
+        prob_none, 1.0
+    ), f"Probability of None when far from beacon should be 1.0, got {prob_none}"
+
+    # Test probability of None when near beacon
+    state_near = np.array([0.5, 0.5])
+    obs_model_near = env.observation_model(state_near, action)
+    prob_none_near = obs_model_near.probability([None])[0]
+    assert np.isclose(
+        prob_none_near, 0.0
+    ), f"Probability of None when near beacon should be 0.0, got {prob_none_near}"
+
+    # Test probability of actual observation when near beacon
+    obs_value = np.array([0.5, 0.5])
+    prob_obs = obs_model_near.probability([obs_value])[0]
+    assert prob_obs > 0, "Probability of actual observation when near beacon should be positive"
+
+    # Test probability of actual observation when far from beacon
+    prob_obs_far = obs_model_far.probability([obs_value])[0]
+    assert np.isclose(
+        prob_obs_far, 0.0
+    ), f"Probability of actual observation when far from beacon should be 0.0, got {prob_obs_far}"
