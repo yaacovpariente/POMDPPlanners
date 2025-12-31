@@ -43,7 +43,12 @@ from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
     BaseLightDarkPOMDP,
 )
+
+# pylint: disable=no-name-in-module
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
+    # Type checkers have trouble resolving this import despite the class being properly defined
+    # and listed in __all__. The import works correctly at runtime.
+    ContinuousLightDarkDistanceBasedObservationModel,  # pyright: ignore[reportAttributeAccessIssue]
     ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel,
     ContinuousLightDarkNormalNoiseObservationModel,
 )
@@ -75,6 +80,7 @@ class RewardModelType(Enum):
 class ObservationModelType(Enum):
     NORMAL_NOISE = "normal_noise"
     NORMAL_NOISE_NO_OBS_IN_DARK = "normal_noise_no_obs_in_dark"
+    DISTANCE_BASED = "distance_based"
 
 
 class ContinuousLightDarkStateTransitionModel(StateTransitionModel):
@@ -368,6 +374,15 @@ class ContinuousLightDarkPOMDP(BaseLightDarkPOMDP):
             )
         elif self.observation_model_type == ObservationModelType.NORMAL_NOISE_NO_OBS_IN_DARK:
             return ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
+                next_state=next_state,
+                action=action,
+                observation_cov_matrix=self.observation_cov_matrix,
+                grid_size=self.grid_size,
+                beacons=self.beacons,
+                beacon_radius=self.beacon_radius,
+            )
+        elif self.observation_model_type == ObservationModelType.DISTANCE_BASED:
+            return ContinuousLightDarkDistanceBasedObservationModel(
                 next_state=next_state,
                 action=action,
                 observation_cov_matrix=self.observation_cov_matrix,
