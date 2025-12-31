@@ -19,6 +19,11 @@ from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
+    ObservationModelType,
+)
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
+    DiscreteLDObservationModel,
+    DiscreteLDObservationModelNoObsInDark,
 )
 
 # Set seeds for reproducible tests
@@ -1256,3 +1261,111 @@ def test_compute_metrics():
         <= obstacle_rate.value
         <= obstacle_rate.upper_confidence_bound
     )
+
+
+def test_normal_observation_model():
+    """Test that the environment uses the normal observation model when specified."""
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        observation_model_type=ObservationModelType.NORMAL,
+    )
+    assert env.observation_model_type == ObservationModelType.NORMAL
+
+    # Test that the correct observation model is returned
+    state = np.array([5, 5])
+    action = "up"
+    obs_model = env.observation_model(state, action)
+    assert isinstance(obs_model, DiscreteLDObservationModel)
+
+    # Test that observations are always returned (never None)
+    observations = obs_model.sample(n_samples=10)
+    assert all(
+        obs is not None for obs in observations
+    ), "Normal observation model should always return observations"
+
+
+def test_no_obs_in_dark_observation_model():
+    """Test that the environment uses the no obs in dark observation model when specified."""
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
+    )
+    assert env.observation_model_type == ObservationModelType.NO_OBS_IN_DARK
+
+    # Test that the correct observation model is returned
+    state = np.array([5, 5])
+    action = "up"
+    obs_model = env.observation_model(state, action)
+    assert isinstance(obs_model, DiscreteLDObservationModelNoObsInDark)
+
+    # Test near beacon - should return observations
+    state_near = np.array([0, 0])  # Near beacon at (0,0)
+    obs_model_near = env.observation_model(state_near, action)
+    observations_near = obs_model_near.sample(n_samples=10)
+    assert all(
+        obs is not None for obs in observations_near
+    ), "No obs in dark model should return observations when near beacon"
+
+    # Test far from beacon - should return None
+    state_far = np.array([3, 3])  # Far from beacons
+    obs_model_far = env.observation_model(state_far, action)
+    observations_far = obs_model_far.sample(n_samples=10)
+    assert all(
+        obs is None for obs in observations_far
+    ), "No obs in dark model should return None when far from beacons"
+
+
+def test_default_observation_model_type():
+    """Test that the default observation model type is NORMAL (backward compatibility)."""
+    env = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+    )
+    assert env.observation_model_type == ObservationModelType.NORMAL
+
+    # Verify it uses the normal observation model
+    state = np.array([5, 5])
+    action = "up"
+    obs_model = env.observation_model(state, action)
+    assert isinstance(obs_model, DiscreteLDObservationModel)
+
+
+def test_observation_model_type_equality():
+    """Test that environments with different observation model types are not equal."""
+    env1 = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        observation_model_type=ObservationModelType.NORMAL,
+    )
+    env2 = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
+    )
+    assert env1 != env2, "Environments with different observation model types should not be equal"
+
+
+def test_observation_model_type_config_id():
+    """Test that config_id changes with different observation model types."""
+    env1 = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        observation_model_type=ObservationModelType.NORMAL,
+    )
+    env2 = DiscreteLightDarkPOMDP(
+        discount_factor=0.95,
+        transition_error_prob=0.05,
+        observation_error_prob=0.05,
+        observation_model_type=ObservationModelType.NO_OBS_IN_DARK,
+    )
+    assert (
+        env1.config_id != env2.config_id
+    ), "Different observation model types should produce different config_ids"
