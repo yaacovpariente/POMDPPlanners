@@ -16,7 +16,7 @@ from POMDPPlanners.environments.cartpole_pomdp import CartPoleObservation
 from POMDPPlanners.environments.laser_tag_pomdp.laser_tag_pomdp import (
     LaserTagObservation,
 )
-from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
     DiscreteLDObservationModel,
 )
 from POMDPPlanners.environments.mountain_car_pomdp import MountainCarObservation
