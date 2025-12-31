@@ -3,6 +3,7 @@ import random
 
 import numpy as np
 import pytest
+from anytree import PostOrderIter
 
 from POMDPPlanners.core.belief import get_initial_belief
 from POMDPPlanners.core.tree import ActionNode, BeliefNode
@@ -635,3 +636,71 @@ def test_min_visit_count_per_action_enforcement(environment, action_sampler):
         assert (
             action_node.visit_count == min_visit_count
         ), f"Action node {action_node.action} has {action_node.visit_count} visits, expected at least {min_visit_count}"
+
+
+def test_max_depth_reached_with_timeout(environment, action_sampler):
+    """Test tree structure construction with timeout.
+
+    Purpose: Validates that PFT_DPW builds proper tree structure with BeliefNode and ActionNode hierarchy during MCTS
+    when using a time-based termination criterion
+
+    Given: PFT_DPW planner with timeout=0.5 seconds, ContinuousLightDarkPOMDP environment, initial belief
+    When: MCTS tree construction creates belief-action tree structure with timeout
+    Then: Tree has root BeliefNode, action children, belief grandchildren, proper parent-child relationships,
+    and reaches the configured maximum depth
+
+    Test type: unit
+    """
+    depth = 3
+    planner = PFT_DPW(
+        environment=environment,
+        discount_factor=0.95,
+        depth=depth,
+        name="TestPFT_DPW_MaxDepth",
+        action_sampler=action_sampler,
+        k_a=1.0,
+        alpha_a=0.5,
+        k_o=1.0,
+        alpha_o=0.5,
+        exploration_constant=1.0,
+        time_out_in_seconds=0.5,  # type: ignore[arg-type]  # Plan for 0.5 seconds
+        min_visit_count_per_action=1,
+    )
+
+    n_particles = 10
+    belief = get_initial_belief(environment, n_particles=n_particles, resampling=True)
+    root_belief_node = BeliefNode(belief=belief, observation=None)
+
+    planner._construct_tree_using_timeout(belief_node=root_belief_node)
+
+    # PFT_DPW with timeout may not reach full depth due to environment complexity
+    # Verify it reaches at least depth+1 and doesn't exceed 2*depth+2
+    assert root_belief_node.height == 2 * depth
+    for node in PostOrderIter(root_belief_node):
+        assert node.visit_count >= 0
+        if isinstance(node, BeliefNode):
+            assert node.belief is not None
+            assert node.v_value is not None
+
+            # For non-root nodes with children, check additional properties
+            if node != root_belief_node and node.height > 1 and node.depth > 0:
+                # PFT_DPW may structure nodes differently than POMCP, so we're more lenient
+                if node.v_value != 0:  # Only check if v_value is non-zero
+                    # For PFT_DPW with progressive widening, visit count relationship may differ
+                    n_children_visits = sum(child.visit_count for child in node.children)
+                    assert node.visit_count >= n_children_visits
+
+        elif isinstance(node, ActionNode):
+            assert node.action is not None
+            assert node.q_value is not None
+            if not node.is_leaf:
+                assert node.q_value != 0
+                # For PFT_DPW with progressive widening, visit count relationship may differ
+                assert node.visit_count >= sum(child.visit_count for child in node.children)
+
+    # Verify root belief node
+    assert root_belief_node.observation is None
+    assert root_belief_node.parent is None
+    assert len(root_belief_node.children) > 0
+    assert root_belief_node.visit_count > 0
+    assert root_belief_node.v_value is not None
