@@ -15,6 +15,7 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_lig
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
     DiscreteLDObservationModel,
+    DiscreteLDObservationModelNoObsInDark,
 )
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
@@ -27,6 +28,11 @@ class DiscreteLightDarkPOMDPMetrics(Enum):
     AVG_OBSTACLE_HIT_COUNTER = "avg_obstacle_hit_counter"
     OUT_OF_GRID_RATE = "out_of_grid_rate"
     AVG_DANGEROUS_STATES_COUNTER = "avg_dangerous_states_counter"
+
+
+class ObservationModelType(Enum):
+    NORMAL = "normal"
+    NO_OBS_IN_DARK = "no_obs_in_dark"
 
 
 class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsEnvironment):
@@ -48,6 +54,7 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
     Key Features:
     - Discrete state space: Robot positions are restricted to grid cells
     - Discrete action space: North, South, East, West movements
+    - Multiple observation models available (normal, no observation in dark)
     - Distance-dependent observation accuracy: Closer to beacons = better observations
     - Stochastic transitions: Actions may fail with configurable probability
     - Obstacle avoidance: Penalties for hitting obstacles during navigation
@@ -141,10 +148,12 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         fuel_cost: float = 2.0,
         grid_size: int = 11,
         is_stochastic_reward: bool = True,
+        observation_model_type: ObservationModelType = ObservationModelType.NORMAL,
     ):
         self.transition_error_prob = transition_error_prob
         self.observation_error_prob = observation_error_prob
         self.is_stochastic_reward = is_stochastic_reward
+        self.observation_model_type = observation_model_type
 
         super().__init__(
             discount_factor=discount_factor,
@@ -175,14 +184,26 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
         return DiscreteDistribution(values, probs)  # type: ignore[return-value]
 
     def observation_model(self, next_state: np.ndarray, action: Any) -> ObservationModel:
-        return DiscreteLDObservationModel(
-            next_state=next_state,
-            action=action,
-            beacons=self.beacons,
-            obstacles=self.obstacles,
-            beacon_radius=self.beacon_radius,
-            observation_error_prob=self.observation_error_prob,
-        )
+        if self.observation_model_type == ObservationModelType.NORMAL:
+            return DiscreteLDObservationModel(
+                next_state=next_state,
+                action=action,
+                beacons=self.beacons,
+                obstacles=self.obstacles,
+                beacon_radius=self.beacon_radius,
+                observation_error_prob=self.observation_error_prob,
+            )
+        elif self.observation_model_type == ObservationModelType.NO_OBS_IN_DARK:
+            return DiscreteLDObservationModelNoObsInDark(
+                next_state=next_state,
+                action=action,
+                beacons=self.beacons,
+                obstacles=self.obstacles,
+                beacon_radius=self.beacon_radius,
+                observation_error_prob=self.observation_error_prob,
+            )
+        else:
+            raise ValueError(f"Unknown observation model type: {self.observation_model_type}")
 
     def reward(self, state: np.ndarray, action: Any) -> float:
         if state.shape != (2,):
