@@ -23,8 +23,10 @@ from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp impor
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
     BaseContinuousLightDarkObservationModel,
+    ContinuousLightDarkDistanceBasedObservationModel,
     ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel,
     ContinuousLightDarkNormalNoiseObservationModel,
+    DiscreteLDDistanceBasedObservationModel,
     DiscreteLDObservationModel,
     DiscreteLDObservationModelNoObsInDark,
 )
@@ -1402,3 +1404,652 @@ class TestDiscreteLDObservationModelNoObsInDark:
         assert (
             obs_model_far.distribution is None
         ), "Distribution should be None when far from beacon"
+
+
+class TestContinuousLightDarkDistanceBasedObservationModel:
+    """Test cases for ContinuousLightDarkDistanceBasedObservationModel."""
+
+    def setup_method(self):
+        """Set up test environment before each test method."""
+        self.next_state = np.array([5.0, 3.0])
+        self.action = np.array([0, 0])
+        self.observation_cov_matrix = np.eye(2) * 0.25
+        self.grid_size = 11
+        self.beacons = np.array([[0, 10], [0, 10]])  # Beacons at (0,0) and (10,10)
+        self.beacon_radius = 1.0
+
+    def test_initialization_computes_distance(self):
+        """Test that initialization computes distance to nearest beacon."""
+        next_state_near = np.array([0.5, 0.5])  # Near beacon at (0,0)
+        obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+            next_state=next_state_near,
+            action=self.action,
+            observation_cov_matrix=self.observation_cov_matrix,
+            grid_size=self.grid_size,
+            beacons=self.beacons,
+            beacon_radius=self.beacon_radius,
+        )
+
+        # Distance to (0,0) should be approximately sqrt(0.5^2 + 0.5^2) = sqrt(0.5) ≈ 0.707
+        expected_distance = np.sqrt(0.5**2 + 0.5**2)
+        assert np.isclose(
+            obs_model.min_distance_to_beacon, expected_distance, atol=1e-6
+        ), f"Distance should be {expected_distance}, got {obs_model.min_distance_to_beacon}"
+
+    def test_continuous_scaling_at_beacon(self):
+        """Test that covariance scales to 0.5 at beacon (distance=0)."""
+        next_state_at_beacon = np.array([0.0, 0.0])  # Exactly at beacon
+        obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+            next_state=next_state_at_beacon,
+            action=self.action,
+            observation_cov_matrix=self.observation_cov_matrix,
+            grid_size=self.grid_size,
+            beacons=self.beacons,
+            beacon_radius=self.beacon_radius,
+        )
+
+        min_scale = 0.00001
+        expected_cov = self.observation_cov_matrix * min_scale
+        assert np.allclose(
+            obs_model.observation_cov_matrix, expected_cov, atol=1e-6
+        ), f"Covariance should be {min_scale} * base at beacon. Expected {expected_cov}, got {obs_model.observation_cov_matrix}"
+
+    def test_continuous_scaling_at_beacon_radius(self):
+        """Test that covariance scales to 1.0 at beacon_radius."""
+        # Place state exactly at beacon_radius from beacon at (0,0)
+        next_state_at_radius = np.array([1.0, 0.0])  # Distance = 1.0 = beacon_radius
+        obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+            next_state=next_state_at_radius,
+            action=self.action,
+            observation_cov_matrix=self.observation_cov_matrix,
+            grid_size=self.grid_size,
+            beacons=self.beacons,
+            beacon_radius=self.beacon_radius,
+        )
+
+        expected_cov = self.observation_cov_matrix * 1.0
+        assert np.allclose(
+            obs_model.observation_cov_matrix, expected_cov, atol=1e-10
+        ), f"Covariance should be 1.0 * base at beacon_radius. Expected {expected_cov}, got {obs_model.observation_cov_matrix}"
+
+    def test_continuous_scaling_between_beacon_and_radius(self):
+        """Test that covariance scales continuously between beacon and radius."""
+        # Place state at half the beacon_radius
+        next_state_half = np.array([0.5, 0.0])  # Distance = 0.5 = 0.5 * beacon_radius
+        obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+            next_state=next_state_half,
+            action=self.action,
+            observation_cov_matrix=self.observation_cov_matrix,
+            grid_size=self.grid_size,
+            beacons=self.beacons,
+            beacon_radius=self.beacon_radius,
+        )
+
+        # Expected scale: 0.00001 + (1 - 0.00001) * (0.5 / 1.0) ≈ 0.500005
+        min_scale = 0.00001
+        expected_scale = min_scale + (1.0 - min_scale) * (0.5 / 1.0)
+        expected_cov = self.observation_cov_matrix * expected_scale
+        assert np.allclose(
+            obs_model.observation_cov_matrix, expected_cov, atol=1e-5
+        ), f"Covariance should scale to {expected_scale} * base. Expected {expected_cov}, got {obs_model.observation_cov_matrix}"
+
+    def test_sample_returns_none_when_far_from_beacon(self):
+        """Test that sampling returns None when distance > beacon_radius."""
+        obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+            next_state=self.next_state,
+            action=self.action,
+            observation_cov_matrix=self.observation_cov_matrix,
+            grid_size=self.grid_size,
+            beacons=self.beacons,
+            beacon_radius=self.beacon_radius,
+        )
+
+        # Sample multiple observations
+        observations = obs_model.sample(n_samples=10)
+
+        assert len(observations) == 10, "Should return requested number of samples"
+        assert all(
+            obs is None for obs in observations
+        ), "All observations should be None when far from beacon"
+
+    def test_sample_returns_observations_when_near_beacon(self):
+        """Test that sampling returns actual observations when distance <= beacon_radius."""
+        next_state_near = np.array([0.5, 0.5])  # Near beacon at (0,0)
+        obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+            next_state=next_state_near,
+            action=self.action,
+            observation_cov_matrix=self.observation_cov_matrix,
+            grid_size=self.grid_size,
+            beacons=self.beacons,
+            beacon_radius=self.beacon_radius,
+        )
+
+        # Sample multiple observations
+        observations = obs_model.sample(n_samples=10)
+
+        assert len(observations) == 10, "Should return requested number of samples"
+        assert all(
+            obs is not None for obs in observations
+        ), "All observations should be non-None when near beacon"
+        assert all(
+            isinstance(obs, np.ndarray) for obs in observations
+        ), "All observations should be numpy arrays"
+        assert all(
+            obs.shape == (2,) for obs in observations
+        ), "All observations should be 2D vectors"
+
+    def test_probability_none_when_far_from_beacon(self):
+        """Test probability calculation for None when far from beacon."""
+        obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+            next_state=self.next_state,
+            action=self.action,
+            observation_cov_matrix=self.observation_cov_matrix,
+            grid_size=self.grid_size,
+            beacons=self.beacons,
+            beacon_radius=self.beacon_radius,
+        )
+
+        probabilities = obs_model.probability([None])
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 1, "Should return one probability"
+        assert np.isclose(
+            probabilities[0], 1.0
+        ), f"Probability of None when far from beacon should be 1.0, got {probabilities[0]}"
+
+    def test_probability_none_when_near_beacon(self):
+        """Test probability calculation for None when near beacon."""
+        next_state_near = np.array([0.5, 0.5])
+        obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+            next_state=next_state_near,
+            action=self.action,
+            observation_cov_matrix=self.observation_cov_matrix,
+            grid_size=self.grid_size,
+            beacons=self.beacons,
+            beacon_radius=self.beacon_radius,
+        )
+
+        probabilities = obs_model.probability([None])
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 1, "Should return one probability"
+        assert np.isclose(
+            probabilities[0], 0.0
+        ), f"Probability of None when near beacon should be 0.0, got {probabilities[0]}"
+
+    def test_probability_actual_observation_when_near_beacon(self):
+        """Test probability calculation for actual observation when near beacon."""
+        next_state_near = np.array([5.0, 3.0])
+        # Move beacon closer to next_state
+        beacons_near = np.array([[5, 10], [3, 10]])
+        obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+            next_state=next_state_near,
+            action=self.action,
+            observation_cov_matrix=self.observation_cov_matrix,
+            grid_size=self.grid_size,
+            beacons=beacons_near,
+            beacon_radius=self.beacon_radius,
+        )
+
+        # Test probability of observation at mean
+        observation_values = [np.array([5.0, 3.0])]
+        probabilities = obs_model.probability(observation_values)  # type: ignore
+
+        # Calculate expected probability using scipy with scaled covariance
+        expected_prob = multivariate_normal.pdf(
+            observation_values[0], mean=next_state_near, cov=obs_model.observation_cov_matrix  # type: ignore
+        )
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 1, "Should return one probability"
+        assert np.isclose(
+            probabilities[0], expected_prob, rtol=1e-10
+        ), f"Probability {probabilities[0]} should match expected {expected_prob}"
+
+    def test_probability_actual_observation_when_far_from_beacon(self):
+        """Test probability calculation for actual observation when far from beacon."""
+        obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+            next_state=self.next_state,
+            action=self.action,
+            observation_cov_matrix=self.observation_cov_matrix,
+            grid_size=self.grid_size,
+            beacons=self.beacons,
+            beacon_radius=self.beacon_radius,
+        )
+
+        # Test probability of actual observation when far from beacon
+        observation_values = [np.array([5.0, 3.0])]
+        probabilities = obs_model.probability(observation_values)  # type: ignore
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 1, "Should return one probability"
+        assert np.isclose(
+            probabilities[0], 0.0
+        ), f"Probability of actual observation when far from beacon should be 0.0, got {probabilities[0]}"
+
+    def test_continuous_scaling_vs_binary_scaling(self):
+        """Test that distance-based scaling is continuous, not binary."""
+        base_cov = np.eye(2) * 1.0
+        beacons = np.array([[0], [0]])
+        beacon_radius = 2.0
+
+        # Test at different distances
+        distances = [0.0, 0.5, 1.0, 1.5, 2.0]
+        covariances = []
+
+        for d in distances:
+            # Place state at distance d from beacon
+            next_state = np.array([d, 0.0])
+            obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+                next_state=next_state,
+                action=self.action,
+                observation_cov_matrix=base_cov,
+                grid_size=self.grid_size,
+                beacons=beacons,
+                beacon_radius=beacon_radius,
+            )
+            # Extract scale factor (covariance / base_cov)
+            scale = obs_model.observation_cov_matrix[0, 0] / base_cov[0, 0]
+            covariances.append(scale)
+
+        # Verify continuous scaling (not just min_scale or 1.0)
+        min_scale = 0.00001
+        assert np.isclose(
+            covariances[0], min_scale, atol=1e-6
+        ), f"At distance 0, scale should be {min_scale}"
+        assert np.isclose(
+            covariances[-1], 1.0, atol=1e-10
+        ), "At distance beacon_radius, scale should be 1.0"
+        # Verify intermediate values are different (continuous)
+        assert not np.isclose(covariances[1], min_scale, atol=1e-6) and not np.isclose(
+            covariances[1], 1.0, atol=1e-10
+        ), "Intermediate scale should be between min_scale and 1.0"
+        assert (
+            covariances[2] != 0.5 and covariances[2] != 1.0
+        ), "Intermediate scale should be between 0.5 and 1.0"
+        # Verify monotonic increase
+        for i in range(len(covariances) - 1):
+            assert (
+                covariances[i] <= covariances[i + 1]
+            ), f"Scale should increase with distance: {covariances[i]} <= {covariances[i + 1]}"
+
+    def test_edge_case_exactly_on_beacon_radius(self):
+        """Test behavior when state is exactly on beacon radius boundary."""
+        next_state_on_boundary = np.array([1.0, 0.0])  # Exactly 1.0 from beacon at (0,0)
+        beacons = np.array([[0], [0]])
+        beacon_radius = 1.0
+
+        obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+            next_state=next_state_on_boundary,
+            action=self.action,
+            observation_cov_matrix=self.observation_cov_matrix,
+            grid_size=self.grid_size,
+            beacons=beacons,
+            beacon_radius=beacon_radius,
+        )
+
+        # Should still return observations (distance == radius, so <= radius)
+        observations = obs_model.sample(n_samples=5)
+        assert all(
+            o is not None for o in observations
+        ), "Should return observations when exactly on boundary"
+
+    def test_edge_case_just_outside_beacon_radius(self):
+        """Test behavior when state is just outside beacon radius."""
+        epsilon = 0.01
+        next_state_outside = np.array([1.0 + epsilon, 0.0])
+        beacons = np.array([[0], [0]])
+        beacon_radius = 1.0
+
+        obs_model = ContinuousLightDarkDistanceBasedObservationModel(
+            next_state=next_state_outside,
+            action=self.action,
+            observation_cov_matrix=self.observation_cov_matrix,
+            grid_size=self.grid_size,
+            beacons=beacons,
+            beacon_radius=beacon_radius,
+        )
+
+        # Should return None (distance > radius)
+        observations = obs_model.sample(n_samples=5)
+        assert all(o is None for o in observations), "Should return None when outside boundary"
+
+
+class TestDiscreteLDDistanceBasedObservationModel:
+    """Test cases for DiscreteLDDistanceBasedObservationModel."""
+
+    def setup_method(self):
+        """Set up test environment before each test method."""
+        self.next_state = np.array([5.0, 5.0])
+        self.action = "up"
+        self.beacons = np.array([[0, 10], [0, 10]])  # Beacons at (0,0) and (10,10)
+        self.obstacles = np.array([[3, 5], [7, 5]])
+        self.beacon_radius = 1.0
+        self.observation_error_prob = 0.1
+
+    def test_initialization_computes_distance(self):
+        """Test that initialization computes distance to nearest beacon."""
+        next_state_near = np.array([0.5, 0.5])  # Near beacon at (0,0)
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=next_state_near,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Distance to (0,0) should be approximately sqrt(0.5^2 + 0.5^2) = sqrt(0.5) ≈ 0.707
+        expected_distance = np.sqrt(0.5**2 + 0.5**2)
+        assert np.isclose(
+            obs_model.min_distance_to_beacon, expected_distance, atol=1e-6
+        ), f"Distance should be {expected_distance}, got {obs_model.min_distance_to_beacon}"
+
+    def test_continuous_scaling_at_beacon(self):
+        """Test that error factor scales to 0.2 at beacon (distance=0)."""
+        next_state_at_beacon = np.array([0.0, 0.0])  # Exactly at beacon
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=next_state_at_beacon,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Error factor should be 0.0001, so error_prob = 0.1 * 0.0001 = 0.00001
+        min_factor = 0.0001
+        expected_error_prob = self.observation_error_prob * min_factor
+        # The correct state (last in distribution) should have probability 1 - expected_error_prob
+        correct_state_prob = obs_model.distribution.probs[-1]  # type: ignore[index]
+        assert np.isclose(
+            correct_state_prob, 1.0 - expected_error_prob, atol=1e-5
+        ), f"Correct state probability should be {1.0 - expected_error_prob}, got {correct_state_prob}"
+
+    def test_continuous_scaling_at_beacon_radius(self):
+        """Test that error factor scales to 1.0 at beacon_radius."""
+        # Place state exactly at beacon_radius from beacon at (0,0)
+        next_state_at_radius = np.array([1.0, 0.0])  # Distance = 1.0 = beacon_radius
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=next_state_at_radius,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Error factor should be 1.0, so error_prob = 0.1 * 1.0 = 0.1
+        expected_error_prob = self.observation_error_prob * 1.0
+        correct_state_prob = obs_model.distribution.probs[-1]  # type: ignore[index]
+        assert np.isclose(
+            correct_state_prob, 1.0 - expected_error_prob, atol=1e-10
+        ), f"Correct state probability should be {1.0 - expected_error_prob}, got {correct_state_prob}"
+
+    def test_continuous_scaling_between_beacon_and_radius(self):
+        """Test that error factor scales continuously between beacon and radius."""
+        # Place state at half the beacon_radius
+        next_state_half = np.array([0.5, 0.0])  # Distance = 0.5 = 0.5 * beacon_radius
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=next_state_half,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Expected error factor: 0.0001 + (1 - 0.0001) * (0.5 / 1.0) ≈ 0.50005
+        min_factor = 0.0001
+        expected_error_factor = min_factor + (1.0 - min_factor) * (0.5 / 1.0)
+        expected_error_prob = self.observation_error_prob * expected_error_factor
+        correct_state_prob = obs_model.distribution.probs[-1]  # type: ignore[index]
+        assert np.isclose(
+            correct_state_prob, 1.0 - expected_error_prob, atol=1e-5
+        ), f"Correct state probability should be {1.0 - expected_error_prob}, got {correct_state_prob}"
+
+    def test_sample_returns_none_when_far_from_beacon(self):
+        """Test that sampling returns None when distance > beacon_radius."""
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=self.next_state,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Sample multiple observations
+        observations = obs_model.sample(n_samples=10)
+
+        assert len(observations) == 10, "Should return requested number of samples"
+        assert all(
+            obs is None for obs in observations
+        ), "All observations should be None when far from beacon"
+
+    def test_sample_returns_observations_when_near_beacon(self):
+        """Test that sampling returns actual observations when distance <= beacon_radius."""
+        next_state_near = np.array([0.5, 0.5])  # Near beacon at (0,0)
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=next_state_near,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Sample multiple observations
+        observations = obs_model.sample(n_samples=10)
+
+        assert len(observations) == 10, "Should return requested number of samples"
+        assert all(
+            obs is not None for obs in observations
+        ), "All observations should be non-None when near beacon"
+        assert all(
+            isinstance(obs, np.ndarray) for obs in observations
+        ), "All observations should be numpy arrays"
+        assert all(
+            obs.shape == (2,) for obs in observations
+        ), "All observations should be 2D vectors"
+
+    def test_distribution_created_when_near_beacon(self):
+        """Test that distribution is created when near beacon."""
+        next_state_near = np.array([0.5, 0.5])
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=next_state_near,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        assert obs_model.distribution is not None, "Distribution should be created when near beacon"
+
+    def test_distribution_not_created_when_far_from_beacon(self):
+        """Test that distribution is None when far from beacon."""
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=self.next_state,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        assert obs_model.distribution is None, "Distribution should be None when far from beacon"
+
+    def test_probability_none_when_far_from_beacon(self):
+        """Test probability calculation for None when far from beacon."""
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=self.next_state,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        probabilities = obs_model.probability([None])
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 1, "Should return one probability"
+        assert np.isclose(
+            probabilities[0], 1.0
+        ), f"Probability of None when far from beacon should be 1.0, got {probabilities[0]}"
+
+    def test_probability_none_when_near_beacon(self):
+        """Test probability calculation for None when near beacon."""
+        next_state_near = np.array([0.5, 0.5])
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=next_state_near,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        probabilities = obs_model.probability([None])
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 1, "Should return one probability"
+        assert np.isclose(
+            probabilities[0], 0.0
+        ), f"Probability of None when near beacon should be 0.0, got {probabilities[0]}"
+
+    def test_probability_actual_observation_when_near_beacon(self):
+        """Test probability calculation for actual observation when near beacon."""
+        next_state_near = np.array([0.5, 0.5])
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=next_state_near,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Test probability of observation at correct state (should have high probability)
+        observation_values = [next_state_near]
+        probabilities = obs_model.probability(observation_values)
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 1, "Should return one probability"
+        assert probabilities[0] > 0, "Probability should be positive"
+        # The correct state should have high probability
+        assert probabilities[0] > 0.5, "Correct state should have high probability"
+
+    def test_probability_actual_observation_when_far_from_beacon(self):
+        """Test probability calculation for actual observation when far from beacon."""
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=self.next_state,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Test probability of actual observation when far from beacon
+        observation_values = [np.array([5.0, 5.0])]
+        probabilities = obs_model.probability(observation_values)
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 1, "Should return one probability"
+        assert np.isclose(
+            probabilities[0], 0.0
+        ), f"Probability of actual observation when far from beacon should be 0.0, got {probabilities[0]}"
+
+    def test_continuous_scaling_vs_binary_scaling(self):
+        """Test that error factor scaling is continuous, not binary."""
+        beacons = np.array([[0], [0]])
+        beacon_radius = 2.0
+
+        # Test at different distances
+        distances = [0.0, 0.5, 1.0, 1.5, 2.0]
+        error_factors = []
+
+        for d in distances:
+            # Place state at distance d from beacon
+            next_state = np.array([d, 0.0])
+            obs_model = DiscreteLDDistanceBasedObservationModel(
+                next_state=next_state,
+                action=self.action,
+                beacons=beacons,
+                obstacles=self.obstacles,
+                beacon_radius=beacon_radius,
+                observation_error_prob=self.observation_error_prob,
+            )
+            # Extract error factor from distribution
+            # error_prob = base_error * error_factor
+            # correct_state_prob = 1 - error_prob
+            # error_prob = 1 - correct_state_prob
+            # error_factor = error_prob / base_error
+            correct_state_prob = obs_model.distribution.probs[-1]  # type: ignore[index]
+            error_prob = 1.0 - correct_state_prob
+            error_factor = error_prob / self.observation_error_prob
+            error_factors.append(error_factor)
+
+        # Verify continuous scaling (not just min_factor or 1.0)
+        min_factor = 0.0001
+        assert np.isclose(
+            error_factors[0], min_factor, atol=1e-5
+        ), f"At distance 0, error factor should be {min_factor}"
+        assert np.isclose(
+            error_factors[-1], 1.0, atol=1e-10
+        ), "At distance beacon_radius, error factor should be 1.0"
+        # Verify intermediate values are different (continuous)
+        assert not np.isclose(error_factors[1], min_factor, atol=1e-5) and not np.isclose(
+            error_factors[1], 1.0, atol=1e-10
+        ), "Intermediate error factor should be between min_factor and 1.0"
+        assert not np.isclose(error_factors[2], 0.2, atol=1e-10) and not np.isclose(
+            error_factors[2], 1.0, atol=1e-10
+        ), "Intermediate error factor should be between 0.2 and 1.0"
+        # Verify monotonic increase
+        for i in range(len(error_factors) - 1):
+            assert (
+                error_factors[i] <= error_factors[i + 1]
+            ), f"Error factor should increase with distance: {error_factors[i]} <= {error_factors[i + 1]}"
+
+    def test_edge_case_exactly_on_beacon_radius(self):
+        """Test behavior when state is exactly on beacon radius boundary."""
+        next_state_on_boundary = np.array([1.0, 0.0])  # Exactly 1.0 from beacon at (0,0)
+        beacons = np.array([[0], [0]])
+
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=next_state_on_boundary,
+            action=self.action,
+            beacons=beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Should still return observations (distance == radius, so <= radius)
+        assert obs_model.distribution is not None, "Distribution should exist when on boundary"
+        observations = obs_model.sample(n_samples=5)
+        assert all(
+            o is not None for o in observations
+        ), "Should return observations when exactly on boundary"
+
+    def test_edge_case_just_outside_beacon_radius(self):
+        """Test behavior when state is just outside beacon radius."""
+        epsilon = 0.01
+        next_state_outside = np.array([1.0 + epsilon, 0.0])
+        beacons = np.array([[0], [0]])
+
+        obs_model = DiscreteLDDistanceBasedObservationModel(
+            next_state=next_state_outside,
+            action=self.action,
+            beacons=beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Should return None (distance > radius)
+        assert obs_model.distribution is None, "Distribution should be None when outside boundary"
+        observations = obs_model.sample(n_samples=5)
+        assert all(o is None for o in observations), "Should return None when outside boundary"
