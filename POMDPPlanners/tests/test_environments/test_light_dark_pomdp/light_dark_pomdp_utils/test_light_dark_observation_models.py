@@ -4,21 +4,29 @@ This module tests the observation models from light_dark_observation_models.py, 
 - Base observation model functionality
 - Continuous light dark normal noise observation model
 - Continuous light dark normal noise no observation in dark model
+- Discrete light dark observation model
+- Discrete light dark observation model no observation in dark
 """
 
 # pylint: disable=protected-access  # Tests need to access protected members
 
 import random
-from typing import List, Union
+from typing import List, Union, cast
 
 import numpy as np
 import pytest
 from scipy.stats import multivariate_normal
 
+from POMDPPlanners.core.environment import ObservationModel
+from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
+    DiscreteLightDarkPOMDP,
+)
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
-    BaseLightDarkObservationModel,
+    BaseContinuousLightDarkObservationModel,
     ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel,
     ContinuousLightDarkNormalNoiseObservationModel,
+    DiscreteLDObservationModel,
+    DiscreteLDObservationModelNoObsInDark,
 )
 
 # Set seeds for reproducible tests
@@ -32,7 +40,7 @@ class TestBaseLightDarkObservationModel:
     def test_abstract_class_cannot_be_instantiated(self):
         """Test that abstract base class cannot be instantiated."""
         with pytest.raises(TypeError):
-            BaseLightDarkObservationModel(  # type: ignore  # pylint: disable=abstract-class-instantiated
+            BaseContinuousLightDarkObservationModel(  # type: ignore  # pylint: disable=abstract-class-instantiated
                 next_state=np.array([1.0, 2.0]),
                 action=np.array([0.5, -0.3]),
                 observation_cov_matrix=np.eye(2),
@@ -45,7 +53,7 @@ class TestBaseLightDarkObservationModel:
         """Test that near_beacon is correctly detected."""
 
         # Create a concrete implementation for testing
-        class ConcreteObservationModel(BaseLightDarkObservationModel):
+        class ConcreteObservationModel(BaseContinuousLightDarkObservationModel):
             def sample(self, n_samples: int = 1) -> List[np.ndarray]:
                 return [np.array([0.0, 0.0])] * n_samples
 
@@ -958,3 +966,439 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         assert obs_model.near_beacon == False, "Should not detect proximity when outside radius"
         observations = obs_model.sample(n_samples=5)
         assert all(o is None for o in observations), "Should return None when outside boundary"
+
+
+class TestDiscreteLDObservationModel:
+    """Test cases for DiscreteLDObservationModel."""
+
+    def test_observation_model(self):
+        """Test observation model.
+
+        Purpose: Validates that DiscreteLightDarkPOMDP observation model correctly handles partial observability with error probabilities
+
+        Given: DiscreteLightDarkPOMDP with observation_error_prob=0.1, state=[5,5], action="up"
+        When: observation_model generates observation distribution with true and noisy observations
+        Then: Returns ObservationModel with highest probability (>0.5) for correct state observation
+
+        Test type: unit
+        """
+        env = DiscreteLightDarkPOMDP(discount_factor=0.95, observation_error_prob=0.1)
+        state = np.array([5, 5])
+
+        # Test observation model
+        dist = env.observation_model(state, "up")
+        assert isinstance(dist, ObservationModel)
+
+        # Check that the correct state has highest probability
+        # Cast to specific type to access distribution attribute
+        typed_dist = cast(DiscreteLDObservationModel, dist)
+
+        correct_state_idx = (
+            len(typed_dist.distribution.values) - 1
+        )  # Last value is the correct state
+        assert (
+            typed_dist.distribution.probs[correct_state_idx] > 0.5  # type: ignore[index]
+        )  # Should be 1 - observation_error_prob
+
+
+class TestDiscreteLDObservationModelNoObsInDark:
+    """Test cases for DiscreteLDObservationModelNoObsInDark."""
+
+    def setup_method(self):
+        """Set up test environment before each test method."""
+        self.next_state = np.array([5.0, 5.0])
+        self.action = "up"
+        self.beacons = np.array([[0, 10], [0, 10]])  # Beacons at (0,0) and (10,10)
+        self.obstacles = np.array([[3, 5], [7, 5]])
+        self.beacon_radius = 1.0
+        self.observation_error_prob = 0.1
+
+    def test_initialization_near_beacon(self):
+        """Test initialization when state is near a beacon."""
+        next_state_near = np.array([0.5, 0.5])  # Near beacon at (0,0)
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=next_state_near,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        assert obs_model.near_beacon == True, "Should detect proximity to beacon"
+        assert obs_model.distribution is not None, "Distribution should be created when near beacon"
+
+    def test_initialization_far_from_beacon(self):
+        """Test initialization when state is far from beacons."""
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=self.next_state,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        assert obs_model.near_beacon == False, "Should not detect proximity when far from beacons"
+        assert obs_model.distribution is None, "Distribution should be None when far from beacon"
+
+    def test_sample_near_beacon_returns_observations(self):
+        """Test that sampling near beacon returns actual observations."""
+        next_state_near = np.array([0.5, 0.5])  # Near beacon at (0,0)
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=next_state_near,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Sample multiple observations
+        observations = obs_model.sample(n_samples=10)
+
+        assert len(observations) == 10, "Should return requested number of samples"
+        assert all(
+            obs is not None for obs in observations
+        ), "All observations should be non-None when near beacon"
+        assert all(
+            isinstance(obs, np.ndarray) for obs in observations
+        ), "All observations should be numpy arrays"
+        assert all(
+            obs.shape == (2,) for obs in observations
+        ), "All observations should be 2D vectors"
+
+    def test_sample_far_from_beacon_returns_none(self):
+        """Test that sampling far from beacon returns None."""
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=self.next_state,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Sample multiple observations
+        observations = obs_model.sample(n_samples=10)
+
+        assert len(observations) == 10, "Should return requested number of samples"
+        assert all(
+            obs is None for obs in observations
+        ), "All observations should be None when far from beacon"
+
+    def test_sample_single_observation_near_beacon(self):
+        """Test sampling a single observation near beacon."""
+        next_state_near = np.array([0.5, 0.5])
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=next_state_near,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        observations = obs_model.sample(n_samples=1)
+
+        assert len(observations) == 1, "Should return one observation"
+        assert observations[0] is not None, "Observation should not be None"
+        assert isinstance(observations[0], np.ndarray), "Observation should be numpy array"
+
+    def test_sample_single_observation_far_from_beacon(self):
+        """Test sampling a single observation far from beacon."""
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=self.next_state,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        observations = obs_model.sample(n_samples=1)
+
+        assert len(observations) == 1, "Should return one observation"
+        assert observations[0] is None, "Observation should be None when far from beacon"
+
+    def test_probability_none_value_when_far_from_beacon(self):
+        """Test probability calculation for None when far from beacon."""
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=self.next_state,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Probability of None when far from beacon should be 1
+        probabilities = obs_model.probability([None])
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 1, "Should return one probability"
+        assert np.isclose(
+            probabilities[0], 1.0
+        ), f"Probability of None when far from beacon should be 1.0, got {probabilities[0]}"
+
+    def test_probability_none_value_when_near_beacon(self):
+        """Test probability calculation for None when near beacon."""
+        next_state_near = np.array([0.5, 0.5])
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=next_state_near,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Probability of None when near beacon should be 0
+        probabilities = obs_model.probability([None])
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 1, "Should return one probability"
+        assert np.isclose(
+            probabilities[0], 0.0
+        ), f"Probability of None when near beacon should be 0.0, got {probabilities[0]}"
+
+    def test_probability_actual_observation_when_near_beacon(self):
+        """Test probability calculation for actual observation when near beacon."""
+        next_state_near = np.array([0.5, 0.5])
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=next_state_near,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Test probability of observation at correct state (should have high probability)
+        observation_values = [next_state_near]
+        probabilities = obs_model.probability(observation_values)
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 1, "Should return one probability"
+        assert probabilities[0] > 0, "Probability should be positive"
+        # The correct state should have high probability (1 - observation_error_prob * 0.2)
+        assert probabilities[0] > 0.5, "Correct state should have high probability"
+
+    def test_probability_actual_observation_when_far_from_beacon(self):
+        """Test probability calculation for actual observation when far from beacon."""
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=self.next_state,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Test probability of actual observation when far from beacon
+        # Should be 0 (no observations possible when far from beacon)
+        observation_values = [np.array([5.0, 5.0])]
+        probabilities = obs_model.probability(observation_values)
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 1, "Should return one probability"
+        assert np.isclose(
+            probabilities[0], 0.0
+        ), f"Probability of actual observation when far from beacon should be 0.0, got {probabilities[0]}"
+
+    def test_probability_mixed_none_and_observations(self):
+        """Test probability calculation with mixed None and actual observations."""
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=self.next_state,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Mix of None and actual observations
+        observation_values: List[Union[np.ndarray, None]] = [
+            None,
+            np.array([5.0, 5.0]),
+            None,
+            np.array([6.0, 6.0]),
+        ]
+        probabilities = obs_model.probability(observation_values)
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 4, "Should return four probabilities"
+
+        # First None should have probability 1 (far from beacon)
+        assert np.isclose(probabilities[0], 1.0), "First None should have probability 1.0"
+
+        # Second observation should have probability 0 (far from beacon)
+        assert np.isclose(
+            probabilities[1], 0.0
+        ), "Second observation should have probability 0.0 when far"
+
+        # Third None should have probability 1 (far from beacon)
+        assert np.isclose(probabilities[2], 1.0), "Third None should have probability 1.0"
+
+        # Fourth observation should have probability 0 (far from beacon)
+        assert np.isclose(
+            probabilities[3], 0.0
+        ), "Fourth observation should have probability 0.0 when far"
+
+    def test_probability_multiple_observations_near_beacon(self):
+        """Test probability calculation for multiple observations when near beacon."""
+        next_state_near = np.array([0.5, 0.5])
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=next_state_near,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Test multiple observation values
+        observation_values = [
+            next_state_near,  # Correct state (should have highest probability)
+            np.array([0.5, 1.5]),  # One step up
+            np.array([1.5, 0.5]),  # One step right
+        ]
+        probabilities = obs_model.probability(observation_values)  # type: ignore
+
+        assert isinstance(probabilities, np.ndarray), "Should return numpy array"
+        assert len(probabilities) == 3, "Should return three probabilities"
+        assert np.all(probabilities >= 0), "All probabilities should be non-negative"
+        # Correct state should have highest probability
+        assert (
+            probabilities[0] > probabilities[1]
+        ), "Correct state should have higher probability than offset"
+        assert (
+            probabilities[0] > probabilities[2]
+        ), "Correct state should have higher probability than offset"
+
+    def test_beacon_proximity_with_multiple_beacons(self):
+        """Test beacon proximity detection with multiple beacons."""
+        # Multiple beacons: (0,0), (5,5), (10,10)
+        beacons = np.array([[0, 5, 10], [0, 5, 10]])
+        obstacles = np.array([[3, 5], [7, 5]])
+        beacon_radius = 1.5
+
+        # Test near first beacon (0,0)
+        near_first_beacon = np.array([1.0, 1.0])
+        obs_model_1 = DiscreteLDObservationModelNoObsInDark(
+            next_state=near_first_beacon,
+            action=self.action,
+            beacons=beacons,
+            obstacles=obstacles,
+            beacon_radius=beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Test near middle beacon (5,5)
+        near_middle_beacon = np.array([5.0, 6.0])
+        obs_model_2 = DiscreteLDObservationModelNoObsInDark(
+            next_state=near_middle_beacon,
+            action=self.action,
+            beacons=beacons,
+            obstacles=obstacles,
+            beacon_radius=beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Test far from all beacons
+        far_state = np.array([3.0, 3.0])
+        obs_model_3 = DiscreteLDObservationModelNoObsInDark(
+            next_state=far_state,
+            action=self.action,
+            beacons=beacons,
+            obstacles=obstacles,
+            beacon_radius=beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Verify proximity detection
+        assert obs_model_1.near_beacon == True, "Should detect proximity to first beacon"
+        assert obs_model_2.near_beacon == True, "Should detect proximity to middle beacon"
+        assert obs_model_3.near_beacon == False, "Should not detect proximity when far"
+
+        # Verify sampling behavior
+        obs_1 = obs_model_1.sample(n_samples=10)
+        obs_2 = obs_model_2.sample(n_samples=10)
+        obs_3 = obs_model_3.sample(n_samples=10)
+
+        assert all(o is not None for o in obs_1), "Should return observations near beacon 1"
+        assert all(o is not None for o in obs_2), "Should return observations near beacon 2"
+        assert all(o is None for o in obs_3), "Should return None when far from beacons"
+
+    def test_edge_case_exactly_on_beacon_radius(self):
+        """Test behavior when state is exactly on beacon radius boundary."""
+        next_state_on_boundary = np.array([1.0, 0.0])  # Exactly 1.0 from beacon at (0,0)
+        beacons = np.array([[0], [0]])
+        obstacles = np.array([[3, 5], [7, 5]])
+
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=next_state_on_boundary,
+            action=self.action,
+            beacons=beacons,
+            obstacles=obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Should NOT be considered near beacon (distance == radius, but uses < not <=)
+        assert (
+            obs_model.near_beacon == False
+        ), "Should not detect proximity when exactly on radius (uses < not <=)"
+        assert obs_model.distribution is None, "Distribution should be None when on boundary"
+        observations = obs_model.sample(n_samples=5)
+        assert all(o is None for o in observations), "Should return None when on boundary"
+
+    def test_edge_case_just_outside_beacon_radius(self):
+        """Test behavior when state is just outside beacon radius."""
+        # Use sqrt(2) + epsilon to be just outside radius 1.0
+        epsilon = 0.01
+        next_state_outside = np.array([1.0 + epsilon, 1.0 + epsilon])
+        beacons = np.array([[0], [0]])
+        obstacles = np.array([[3, 5], [7, 5]])
+
+        obs_model = DiscreteLDObservationModelNoObsInDark(
+            next_state=next_state_outside,
+            action=self.action,
+            beacons=beacons,
+            obstacles=obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+
+        # Should not be considered near beacon
+        assert obs_model.near_beacon == False, "Should not detect proximity when outside radius"
+        assert obs_model.distribution is None, "Distribution should be None when outside boundary"
+        observations = obs_model.sample(n_samples=5)
+        assert all(o is None for o in observations), "Should return None when outside boundary"
+
+    def test_distribution_creation_conditional(self):
+        """Test that distribution is only created when near beacon."""
+        # Near beacon - should have distribution
+        next_state_near = np.array([0.5, 0.5])
+        obs_model_near = DiscreteLDObservationModelNoObsInDark(
+            next_state=next_state_near,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+        assert obs_model_near.distribution is not None, "Distribution should exist when near beacon"
+
+        # Far from beacon - should not have distribution
+        obs_model_far = DiscreteLDObservationModelNoObsInDark(
+            next_state=self.next_state,
+            action=self.action,
+            beacons=self.beacons,
+            obstacles=self.obstacles,
+            beacon_radius=self.beacon_radius,
+            observation_error_prob=self.observation_error_prob,
+        )
+        assert (
+            obs_model_far.distribution is None
+        ), "Distribution should be None when far from beacon"
