@@ -13,6 +13,9 @@ from POMDPPlanners.core.simulation import History, MetricValue
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_light_dark_pomdp import (
     BaseLightDarkPOMDPDiscreteActions,
 )
+from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
+    DiscreteLDObservationModel,
+)
 from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 
@@ -24,53 +27,6 @@ class DiscreteLightDarkPOMDPMetrics(Enum):
     AVG_OBSTACLE_HIT_COUNTER = "avg_obstacle_hit_counter"
     OUT_OF_GRID_RATE = "out_of_grid_rate"
     AVG_DANGEROUS_STATES_COUNTER = "avg_dangerous_states_counter"
-
-
-class DiscreteLDObservationModel(ObservationModel):
-    def __init__(
-        self,
-        next_state: np.ndarray,
-        action: Any,
-        beacons: np.ndarray,
-        obstacles: np.ndarray,
-        beacon_radius: float,
-        observation_error_prob: float,
-    ):
-        super().__init__(next_state=next_state, action=action)
-
-        self.beacons = beacons
-        self.obstacles = obstacles
-        self.beacon_radius = beacon_radius
-        self.observation_error_prob = observation_error_prob
-        self.actions = ["up", "down", "right", "left"]
-        self.action_to_vector = {
-            "up": np.array([0, 1]),
-            "down": np.array([0, -1]),
-            "right": np.array([1, 0]),
-            "left": np.array([-1, 0]),
-        }
-
-        distances = np.linalg.norm(self.beacons - next_state[:, np.newaxis], axis=0)
-        min_distance: float = float(np.min(distances))
-        if min_distance < self.beacon_radius:
-            beacon_error_factor = 0.2
-        else:
-            beacon_error_factor = 1.0
-
-        values = [next_state + self.action_to_vector[action] for action in self.actions]
-        values.append(next_state)
-
-        observation_error_prob = self.observation_error_prob * beacon_error_factor
-        probs = np.ones(len(values)) * (observation_error_prob / (len(values) - 1))
-        probs[-1] = 1 - observation_error_prob
-
-        self.distribution = DiscreteDistribution(values=values, probs=probs)
-
-    def sample(self, n_samples: int = 1) -> List[np.ndarray]:
-        return self.distribution.sample(n_samples)
-
-    def probability(self, values: List[Any]) -> np.ndarray:
-        return self.distribution.probability(values)
 
 
 class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsEnvironment):

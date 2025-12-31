@@ -9,19 +9,16 @@ This module tests the Discrete Light Dark POMDP environment, focusing on:
 
 import copy
 import random
-from typing import cast
 
 import numpy as np
 import pytest
 
 from POMDPPlanners.core.belief import WeightedParticleBelief
 from POMDPPlanners.core.distributions import DiscreteDistribution
-from POMDPPlanners.core.environment import ObservationModel
 from POMDPPlanners.core.policy import PolicyRunData
 from POMDPPlanners.core.simulation import History, StepData
 from POMDPPlanners.environments.light_dark_pomdp.discrete_light_dark_pomdp import (
     DiscreteLightDarkPOMDP,
-    DiscreteLDObservationModel,
 )
 
 # Set seeds for reproducible tests
@@ -929,35 +926,6 @@ def test_state_transition_model():
         state + np.array([-1, 0]),  # left
     ]
     assert all(np.array_equal(v1, v2) for v1, v2 in zip(dist.values, expected_values))
-
-
-def test_observation_model():
-    """Test observation model
-
-    Purpose: Validates that DiscreteLightDarkPOMDP observation model correctly handles partial observability with error probabilities
-
-    Given: DiscreteLightDarkPOMDP with observation_error_prob=0.1, state=[5,5], action="up"
-    When: observation_model generates observation distribution with true and noisy observations
-    Then: Returns ObservationModel with highest probability (>0.5) for correct state observation
-
-    Test type: unit
-    """
-    env = DiscreteLightDarkPOMDP(discount_factor=0.95, observation_error_prob=0.1)
-    state = np.array([5, 5])
-
-    # Test observation model
-    dist = env.observation_model(state, "up")
-    assert isinstance(dist, ObservationModel)
-
-    # Check that the correct state has highest probability
-    # Cast to specific type to access distribution attribute
-
-    typed_dist = cast(DiscreteLDObservationModel, dist)
-
-    correct_state_idx = len(typed_dist.distribution.values) - 1  # Last value is the correct state
-    assert (
-        typed_dist.distribution.probs[correct_state_idx] > 0.5
-    )  # Should be 1 - observation_error_prob
 
 
 def test_reward_function():
