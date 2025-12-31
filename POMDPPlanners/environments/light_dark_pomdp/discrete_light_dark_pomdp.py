@@ -14,6 +14,7 @@ from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.base_lig
     BaseLightDarkPOMDPDiscreteActions,
 )
 from POMDPPlanners.environments.light_dark_pomdp.light_dark_pomdp_utils.light_dark_observation_models import (
+    DiscreteLDDistanceBasedObservationModel,
     DiscreteLDObservationModel,
     DiscreteLDObservationModelNoObsInDark,
 )
@@ -33,6 +34,7 @@ class DiscreteLightDarkPOMDPMetrics(Enum):
 class ObservationModelType(Enum):
     NORMAL = "normal"
     NO_OBS_IN_DARK = "no_obs_in_dark"
+    DISTANCE_BASED = "distance_based"
 
 
 class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsEnvironment):
@@ -195,6 +197,15 @@ class DiscreteLightDarkPOMDP(BaseLightDarkPOMDPDiscreteActions, DiscreteActionsE
             )
         elif self.observation_model_type == ObservationModelType.NO_OBS_IN_DARK:
             return DiscreteLDObservationModelNoObsInDark(
+                next_state=next_state,
+                action=action,
+                beacons=self.beacons,
+                obstacles=self.obstacles,
+                beacon_radius=self.beacon_radius,
+                observation_error_prob=self.observation_error_prob,
+            )
+        elif self.observation_model_type == ObservationModelType.DISTANCE_BASED:
+            return DiscreteLDDistanceBasedObservationModel(
                 next_state=next_state,
                 action=action,
                 beacons=self.beacons,
