@@ -582,14 +582,14 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
 
         assert len(observations) == 10, "Should return requested number of samples"
         assert all(
-            obs is not None for obs in observations
-        ), "All observations should be non-None when near beacon"
+            isinstance(obs, np.ndarray) for obs in observations
+        ), "All observations should be numpy arrays when near beacon"
         assert all(
             isinstance(obs, np.ndarray) for obs in observations
         ), "All observations should be numpy arrays"
-        assert all(
-            obs.shape == (2,) for obs in observations
-        ), "All observations should be 2D vectors"
+        # Type narrowing: filter to only numpy arrays before checking shape
+        numpy_obs: List[np.ndarray] = [obs for obs in observations if isinstance(obs, np.ndarray)]
+        assert all(obs.shape == (2,) for obs in numpy_obs), "All observations should be 2D vectors"
 
         # Check that observations are within reasonable range (3 standard deviations)
         for obs in observations:
@@ -614,8 +614,8 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
 
         assert len(observations) == 10, "Should return requested number of samples"
         assert all(
-            obs is None for obs in observations
-        ), "All observations should be None when far from beacon"
+            isinstance(obs, str) and obs == "None" for obs in observations
+        ), "All observations should be 'None' when far from beacon"
 
     def test_sample_single_observation_near_beacon(self):
         """Test sampling a single observation near beacon."""
@@ -649,7 +649,7 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         observations = obs_model.sample(n_samples=1)
 
         assert len(observations) == 1, "Should return one observation"
-        assert observations[0] is None, "Observation should be None when far from beacon"
+        assert observations[0] == "None", "Observation should be 'None' when far from beacon"
 
     def test_sample_observations_clipped_to_grid(self):
         """Test that observations are clipped to grid boundaries."""
@@ -668,9 +668,13 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         observations = obs_model.sample(n_samples=100)
 
         for obs in observations:
-            assert obs is not None, "Observations should not be None near beacon"
-            assert np.all(obs >= 0), f"Observation {obs} should be >= 0"
-            assert np.all(obs <= self.grid_size), f"Observation {obs} should be <= grid_size"
+            assert isinstance(obs, np.ndarray), "Observations should be numpy arrays near beacon"
+            # Type narrowing: obs is confirmed to be np.ndarray after isinstance check
+            obs_array = cast(np.ndarray, obs)
+            assert np.all(obs_array >= 0), f"Observation {obs_array} should be >= 0"
+            assert np.all(
+                obs_array <= self.grid_size
+            ), f"Observation {obs_array} should be <= grid_size"
 
     def test_probability_none_value_when_far_from_beacon(self):
         """Test probability calculation for None when far from beacon."""
@@ -684,7 +688,7 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         )
 
         # Probability of None when far from beacon should be 1
-        probabilities = obs_model.probability([None])
+        probabilities = obs_model.probability(["None"])
 
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
         assert len(probabilities) == 1, "Should return one probability"
@@ -705,7 +709,7 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         )
 
         # Probability of None when near beacon should be 0
-        probabilities = obs_model.probability([None])
+        probabilities = obs_model.probability(["None"])
 
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
         assert len(probabilities) == 1, "Should return one probability"
@@ -780,11 +784,11 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
             beacon_radius=self.beacon_radius,
         )
 
-        # Mix of None and actual observations
-        observation_values: List[Union[np.ndarray, None]] = [
-            None,
+        # Mix of "None" and actual observations
+        observation_values: List[Union[np.ndarray, str]] = [
+            "None",
             np.array([5.0, 3.0]),
-            None,
+            "None",
             np.array([5.5, 3.5]),
         ]
         probabilities = obs_model.probability(observation_values)
@@ -792,11 +796,13 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
         assert len(probabilities) == 4, "Should return four probabilities"
 
-        # First None should have probability 1 (far from beacon)
-        assert np.isclose(probabilities[0], 1.0), "First None should have probability 1.0"
+        # First "None" should have probability 1 (far from beacon)
+        assert np.isclose(probabilities[0], 1.0), "First 'None' should have probability 1.0"
 
         # Second observation should have normal probability
-        assert observation_values[1] is not None, "Second observation should not be None"
+        assert isinstance(
+            observation_values[1], np.ndarray
+        ), "Second observation should be numpy array"
         expected_prob_2 = multivariate_normal.pdf(
             observation_values[1], mean=self.next_state, cov=self.observation_cov_matrix  # type: ignore
         )
@@ -804,11 +810,13 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
             probabilities[1], expected_prob_2, rtol=1e-10
         ), "Second observation should have normal probability"
 
-        # Third None should have probability 1 (far from beacon)
-        assert np.isclose(probabilities[2], 1.0), "Third None should have probability 1.0"
+        # Third "None" should have probability 1 (far from beacon)
+        assert np.isclose(probabilities[2], 1.0), "Third 'None' should have probability 1.0"
 
         # Fourth observation should have normal probability
-        assert observation_values[3] is not None, "Fourth observation should not be None"
+        assert isinstance(
+            observation_values[3], np.ndarray
+        ), "Fourth observation should be numpy array"
         expected_prob_4 = multivariate_normal.pdf(
             observation_values[3], mean=self.next_state, cov=self.observation_cov_matrix  # type: ignore
         )
@@ -921,9 +929,15 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         obs_2 = obs_model_2.sample(n_samples=10)
         obs_3 = obs_model_3.sample(n_samples=10)
 
-        assert all(o is not None for o in obs_1), "Should return observations near beacon 1"
-        assert all(o is not None for o in obs_2), "Should return observations near beacon 2"
-        assert all(o is None for o in obs_3), "Should return None when far from beacons"
+        assert all(
+            isinstance(o, np.ndarray) for o in obs_1
+        ), "Should return observations near beacon 1"
+        assert all(
+            isinstance(o, np.ndarray) for o in obs_2
+        ), "Should return observations near beacon 2"
+        assert all(
+            isinstance(o, str) and o == "None" for o in obs_3
+        ), "Should return 'None' when far from beacons"
 
     def test_edge_case_exactly_on_beacon_radius(self):
         """Test behavior when state is exactly on beacon radius boundary."""
@@ -967,7 +981,9 @@ class TestContinuousLightDarkNormalNoiseNoObsInDarkObservationModel:
         # Should not be considered near beacon
         assert obs_model.near_beacon == False, "Should not detect proximity when outside radius"
         observations = obs_model.sample(n_samples=5)
-        assert all(o is None for o in observations), "Should return None when outside boundary"
+        assert all(
+            isinstance(o, str) and o == "None" for o in observations
+        ), "Should return 'None' when outside boundary"
 
 
 class TestDiscreteLDObservationModel:
@@ -1061,14 +1077,14 @@ class TestDiscreteLDObservationModelNoObsInDark:
 
         assert len(observations) == 10, "Should return requested number of samples"
         assert all(
-            obs is not None for obs in observations
-        ), "All observations should be non-None when near beacon"
+            isinstance(obs, np.ndarray) for obs in observations
+        ), "All observations should be numpy arrays when near beacon"
         assert all(
             isinstance(obs, np.ndarray) for obs in observations
         ), "All observations should be numpy arrays"
-        assert all(
-            obs.shape == (2,) for obs in observations
-        ), "All observations should be 2D vectors"
+        # Type narrowing: filter to only numpy arrays before checking shape
+        numpy_obs: List[np.ndarray] = [obs for obs in observations if isinstance(obs, np.ndarray)]
+        assert all(obs.shape == (2,) for obs in numpy_obs), "All observations should be 2D vectors"
 
     def test_sample_far_from_beacon_returns_none(self):
         """Test that sampling far from beacon returns None."""
@@ -1086,8 +1102,8 @@ class TestDiscreteLDObservationModelNoObsInDark:
 
         assert len(observations) == 10, "Should return requested number of samples"
         assert all(
-            obs is None for obs in observations
-        ), "All observations should be None when far from beacon"
+            isinstance(obs, str) and obs == "None" for obs in observations
+        ), "All observations should be 'None' when far from beacon"
 
     def test_sample_single_observation_near_beacon(self):
         """Test sampling a single observation near beacon."""
@@ -1121,7 +1137,7 @@ class TestDiscreteLDObservationModelNoObsInDark:
         observations = obs_model.sample(n_samples=1)
 
         assert len(observations) == 1, "Should return one observation"
-        assert observations[0] is None, "Observation should be None when far from beacon"
+        assert observations[0] == "None", "Observation should be 'None' when far from beacon"
 
     def test_probability_none_value_when_far_from_beacon(self):
         """Test probability calculation for None when far from beacon."""
@@ -1135,7 +1151,7 @@ class TestDiscreteLDObservationModelNoObsInDark:
         )
 
         # Probability of None when far from beacon should be 1
-        probabilities = obs_model.probability([None])
+        probabilities = obs_model.probability(["None"])
 
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
         assert len(probabilities) == 1, "Should return one probability"
@@ -1156,7 +1172,7 @@ class TestDiscreteLDObservationModelNoObsInDark:
         )
 
         # Probability of None when near beacon should be 0
-        probabilities = obs_model.probability([None])
+        probabilities = obs_model.probability(["None"])
 
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
         assert len(probabilities) == 1, "Should return one probability"
@@ -1219,11 +1235,11 @@ class TestDiscreteLDObservationModelNoObsInDark:
             observation_error_prob=self.observation_error_prob,
         )
 
-        # Mix of None and actual observations
-        observation_values: List[Union[np.ndarray, None]] = [
-            None,
+        # Mix of "None" and actual observations
+        observation_values: List[Union[np.ndarray, str]] = [
+            "None",
             np.array([5.0, 5.0]),
-            None,
+            "None",
             np.array([6.0, 6.0]),
         ]
         probabilities = obs_model.probability(observation_values)
@@ -1231,16 +1247,16 @@ class TestDiscreteLDObservationModelNoObsInDark:
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
         assert len(probabilities) == 4, "Should return four probabilities"
 
-        # First None should have probability 1 (far from beacon)
-        assert np.isclose(probabilities[0], 1.0), "First None should have probability 1.0"
+        # First "None" should have probability 1 (far from beacon)
+        assert np.isclose(probabilities[0], 1.0), "First 'None' should have probability 1.0"
 
         # Second observation should have probability 0 (far from beacon)
         assert np.isclose(
             probabilities[1], 0.0
         ), "Second observation should have probability 0.0 when far"
 
-        # Third None should have probability 1 (far from beacon)
-        assert np.isclose(probabilities[2], 1.0), "Third None should have probability 1.0"
+        # Third "None" should have probability 1 (far from beacon)
+        assert np.isclose(probabilities[2], 1.0), "Third 'None' should have probability 1.0"
 
         # Fourth observation should have probability 0 (far from beacon)
         assert np.isclose(
@@ -1328,9 +1344,15 @@ class TestDiscreteLDObservationModelNoObsInDark:
         obs_2 = obs_model_2.sample(n_samples=10)
         obs_3 = obs_model_3.sample(n_samples=10)
 
-        assert all(o is not None for o in obs_1), "Should return observations near beacon 1"
-        assert all(o is not None for o in obs_2), "Should return observations near beacon 2"
-        assert all(o is None for o in obs_3), "Should return None when far from beacons"
+        assert all(
+            isinstance(o, np.ndarray) for o in obs_1
+        ), "Should return observations near beacon 1"
+        assert all(
+            isinstance(o, np.ndarray) for o in obs_2
+        ), "Should return observations near beacon 2"
+        assert all(
+            isinstance(o, str) and o == "None" for o in obs_3
+        ), "Should return 'None' when far from beacons"
 
     def test_edge_case_exactly_on_beacon_radius(self):
         """Test behavior when state is exactly on beacon radius boundary."""
@@ -1353,7 +1375,9 @@ class TestDiscreteLDObservationModelNoObsInDark:
         ), "Should not detect proximity when exactly on radius (uses < not <=)"
         assert obs_model.distribution is None, "Distribution should be None when on boundary"
         observations = obs_model.sample(n_samples=5)
-        assert all(o is None for o in observations), "Should return None when on boundary"
+        assert all(
+            isinstance(o, str) and o == "None" for o in observations
+        ), "Should return 'None' when on boundary"
 
     def test_edge_case_just_outside_beacon_radius(self):
         """Test behavior when state is just outside beacon radius."""
@@ -1376,7 +1400,9 @@ class TestDiscreteLDObservationModelNoObsInDark:
         assert obs_model.near_beacon == False, "Should not detect proximity when outside radius"
         assert obs_model.distribution is None, "Distribution should be None when outside boundary"
         observations = obs_model.sample(n_samples=5)
-        assert all(o is None for o in observations), "Should return None when outside boundary"
+        assert all(
+            isinstance(o, str) and o == "None" for o in observations
+        ), "Should return 'None' when outside boundary"
 
     def test_distribution_creation_conditional(self):
         """Test that distribution is only created when near beacon."""
@@ -1509,8 +1535,8 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
 
         assert len(observations) == 10, "Should return requested number of samples"
         assert all(
-            obs is None for obs in observations
-        ), "All observations should be None when far from beacon"
+            isinstance(obs, str) and obs == "None" for obs in observations
+        ), "All observations should be 'None' when far from beacon"
 
     def test_sample_returns_observations_when_near_beacon(self):
         """Test that sampling returns actual observations when distance <= beacon_radius."""
@@ -1529,14 +1555,14 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
 
         assert len(observations) == 10, "Should return requested number of samples"
         assert all(
-            obs is not None for obs in observations
-        ), "All observations should be non-None when near beacon"
+            isinstance(obs, np.ndarray) for obs in observations
+        ), "All observations should be numpy arrays when near beacon"
         assert all(
             isinstance(obs, np.ndarray) for obs in observations
         ), "All observations should be numpy arrays"
-        assert all(
-            obs.shape == (2,) for obs in observations
-        ), "All observations should be 2D vectors"
+        # Type narrowing: filter to only numpy arrays before checking shape
+        numpy_obs: List[np.ndarray] = [obs for obs in observations if isinstance(obs, np.ndarray)]
+        assert all(obs.shape == (2,) for obs in numpy_obs), "All observations should be 2D vectors"
 
     def test_probability_none_when_far_from_beacon(self):
         """Test probability calculation for None when far from beacon."""
@@ -1549,7 +1575,7 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
             beacon_radius=self.beacon_radius,
         )
 
-        probabilities = obs_model.probability([None])
+        probabilities = obs_model.probability(["None"])
 
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
         assert len(probabilities) == 1, "Should return one probability"
@@ -1569,7 +1595,7 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
             beacon_radius=self.beacon_radius,
         )
 
-        probabilities = obs_model.probability([None])
+        probabilities = obs_model.probability(["None"])
 
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
         assert len(probabilities) == 1, "Should return one probability"
@@ -1712,7 +1738,9 @@ class TestContinuousLightDarkDistanceBasedObservationModel:
 
         # Should return None (distance > radius)
         observations = obs_model.sample(n_samples=5)
-        assert all(o is None for o in observations), "Should return None when outside boundary"
+        assert all(
+            isinstance(o, str) and o == "None" for o in observations
+        ), "Should return 'None' when outside boundary"
 
 
 class TestDiscreteLDDistanceBasedObservationModel:
@@ -1824,8 +1852,8 @@ class TestDiscreteLDDistanceBasedObservationModel:
 
         assert len(observations) == 10, "Should return requested number of samples"
         assert all(
-            obs is None for obs in observations
-        ), "All observations should be None when far from beacon"
+            isinstance(obs, str) and obs == "None" for obs in observations
+        ), "All observations should be 'None' when far from beacon"
 
     def test_sample_returns_observations_when_near_beacon(self):
         """Test that sampling returns actual observations when distance <= beacon_radius."""
@@ -1844,14 +1872,14 @@ class TestDiscreteLDDistanceBasedObservationModel:
 
         assert len(observations) == 10, "Should return requested number of samples"
         assert all(
-            obs is not None for obs in observations
-        ), "All observations should be non-None when near beacon"
+            isinstance(obs, np.ndarray) for obs in observations
+        ), "All observations should be numpy arrays when near beacon"
         assert all(
             isinstance(obs, np.ndarray) for obs in observations
         ), "All observations should be numpy arrays"
-        assert all(
-            obs.shape == (2,) for obs in observations
-        ), "All observations should be 2D vectors"
+        # Type narrowing: filter to only numpy arrays before checking shape
+        numpy_obs: List[np.ndarray] = [obs for obs in observations if isinstance(obs, np.ndarray)]
+        assert all(obs.shape == (2,) for obs in numpy_obs), "All observations should be 2D vectors"
 
     def test_distribution_created_when_near_beacon(self):
         """Test that distribution is created when near beacon."""
@@ -1891,7 +1919,7 @@ class TestDiscreteLDDistanceBasedObservationModel:
             observation_error_prob=self.observation_error_prob,
         )
 
-        probabilities = obs_model.probability([None])
+        probabilities = obs_model.probability(["None"])
 
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
         assert len(probabilities) == 1, "Should return one probability"
@@ -1911,7 +1939,7 @@ class TestDiscreteLDDistanceBasedObservationModel:
             observation_error_prob=self.observation_error_prob,
         )
 
-        probabilities = obs_model.probability([None])
+        probabilities = obs_model.probability(["None"])
 
         assert isinstance(probabilities, np.ndarray), "Should return numpy array"
         assert len(probabilities) == 1, "Should return one probability"
@@ -2052,4 +2080,6 @@ class TestDiscreteLDDistanceBasedObservationModel:
         # Should return None (distance > radius)
         assert obs_model.distribution is None, "Distribution should be None when outside boundary"
         observations = obs_model.sample(n_samples=5)
-        assert all(o is None for o in observations), "Should return None when outside boundary"
+        assert all(
+            isinstance(o, str) and o == "None" for o in observations
+        ), "Should return 'None' when outside boundary"

@@ -1311,13 +1311,13 @@ def test_no_obs_in_dark_observation_model():
         obs is not None for obs in observations_near
     ), "No obs in dark model should return observations when near beacon"
 
-    # Test far from beacon - should return None
+    # Test far from beacon - should return "None"
     state_far = np.array([3, 3])  # Far from beacons
     obs_model_far = env.observation_model(state_far, action)
     observations_far = obs_model_far.sample(n_samples=10)
     assert all(
-        obs is None for obs in observations_far
-    ), "No obs in dark model should return None when far from beacons"
+        obs == "None" for obs in observations_far
+    ), "No obs in dark model should return 'None' when far from beacons"
 
 
 def test_default_observation_model_type():
@@ -1431,13 +1431,13 @@ def test_distance_based_observation_model():
         correct_state_prob, 1.0 - expected_error_prob, atol=1e-5
     ), f"Distance-based model should scale error probability continuously. Expected correct state prob {1.0 - expected_error_prob}, got {correct_state_prob}"
 
-    # Test far from beacon - should return None
+    # Test far from beacon - should return "None"
     state_far = np.array([3, 3])  # Far from beacons (distance > beacon_radius)
     obs_model_far = env.observation_model(state_far, action)
     observations_far = obs_model_far.sample(n_samples=10)
     assert all(
-        obs is None for obs in observations_far
-    ), "Distance-based model should return None when far from beacons"
+        obs == "None" for obs in observations_far
+    ), "Distance-based model should return 'None' when far from beacons"
 
     # Test at beacon radius boundary - should return observations
     state_at_radius = np.array([1, 0])  # Exactly at beacon_radius from beacon at (0,0)
@@ -1522,7 +1522,7 @@ def test_distance_based_observation_model_probability():
     # Test probability of None when far from beacon
     state_far = np.array([3, 3])
     obs_model_far = env.observation_model(state_far, action)
-    prob_none = obs_model_far.probability([None])[0]
+    prob_none = obs_model_far.probability(["None"])[0]
     assert np.isclose(
         prob_none, 1.0
     ), f"Probability of None when far from beacon should be 1.0, got {prob_none}"
@@ -1530,7 +1530,7 @@ def test_distance_based_observation_model_probability():
     # Test probability of None when near beacon
     state_near = np.array([0, 0])
     obs_model_near = env.observation_model(state_near, action)
-    prob_none_near = obs_model_near.probability([None])[0]
+    prob_none_near = obs_model_near.probability(["None"])[0]
     assert np.isclose(
         prob_none_near, 0.0
     ), f"Probability of None when near beacon should be 0.0, got {prob_none_near}"

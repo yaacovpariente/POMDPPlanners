@@ -114,7 +114,7 @@ class ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             beacon_radius=beacon_radius,
         )
 
-    def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, None]]:
+    def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, str]]:
         noise = np.random.multivariate_normal(
             mean=np.zeros(2), cov=self.observation_cov_matrix, size=n_samples
         )
@@ -125,12 +125,12 @@ class ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel(
             observations = np.clip(observations, 0, self.grid_size)
             return [obs for obs in observations]
         else:
-            return [None] * n_samples
+            return ["None"] * n_samples
 
-    def probability(self, values: List[Union[np.ndarray, None]]) -> np.ndarray:
+    def probability(self, values: List[Union[np.ndarray, str]]) -> np.ndarray:
         res = np.zeros(len(values))
         for i, value in enumerate(values):
-            if value is None:
+            if isinstance(value, str) and value == "None":
                 if self.near_beacon:
                     res[i] = 0
                 else:
@@ -149,7 +149,7 @@ class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkOb
     This observation model scales the observation covariance matrix continuously based on
     the distance to the nearest beacon, rather than using a binary threshold. The covariance
     scales linearly from a minimum value (when at beacon) to the base value (when at beacon_radius
-    distance). When the distance exceeds beacon_radius, observations are None (no observation available).
+    distance). When the distance exceeds beacon_radius, observations are "None" (no observation available).
 
     The scaling formula is:
         cov_scale = min_scale + (1 - min_scale) * (distance / beacon_radius)
@@ -160,7 +160,7 @@ class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkOb
         - distance = distance to nearest beacon
         - At distance 0: Σ = 0.5 * Σ_base
         - At distance beacon_radius: Σ = 1.0 * Σ_base
-        - Beyond beacon_radius: observation = None
+        - Beyond beacon_radius: observation = "None"
 
     Attributes:
         observation_cov_matrix: Distance-scaled covariance matrix (only used when near beacon)
@@ -199,17 +199,17 @@ class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkOb
             cov_scale = min_scale + (1.0 - min_scale) * distance_ratio
             self.observation_cov_matrix *= cov_scale
         elif self.beacon_radius > 0:
-            # Beyond beacon_radius: observations will be None, but keep base covariance
-            # in case probability is called (though it should return 0 for non-None values)
+            # Beyond beacon_radius: observations will be "None", but keep base covariance
+            # in case probability is called (though it should return 0 for non-"None" values)
             pass
         else:
             # If beacon_radius is 0, use base covariance
             self.observation_cov_matrix *= 1.0
 
-    def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, None]]:
-        # If beyond beacon_radius, return None observations
+    def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, str]]:
+        # If beyond beacon_radius, return "None" observations
         if self.min_distance_to_beacon > self.beacon_radius:
-            return [None] * n_samples
+            return ["None"] * n_samples
 
         # Vectorized sampling: generate all noise samples at once
         noise = np.random.multivariate_normal(
@@ -223,14 +223,14 @@ class ContinuousLightDarkDistanceBasedObservationModel(BaseContinuousLightDarkOb
         # Convert to list of arrays
         return [obs for obs in observations]
 
-    def probability(self, values: List[Union[np.ndarray, None]]) -> np.ndarray:
+    def probability(self, values: List[Union[np.ndarray, str]]) -> np.ndarray:
         res = np.zeros(len(values))
         for i, value in enumerate(values):
-            if value is None:
+            if isinstance(value, str) and value == "None":
                 if self.min_distance_to_beacon > self.beacon_radius:
-                    res[i] = 1.0  # None observation is certain when far from beacon
+                    res[i] = 1.0  # "None" observation is certain when far from beacon
                 else:
-                    res[i] = 0.0  # None observation is impossible when near beacon
+                    res[i] = 0.0  # "None" observation is impossible when near beacon
             else:
                 if self.min_distance_to_beacon > self.beacon_radius:
                     res[i] = 0.0  # Actual observations have probability 0 when far from beacon
@@ -354,7 +354,7 @@ class DiscreteLDDistanceBasedObservationModel(BaseDiscreteLightDarkObservationMo
     the distance to the nearest beacon, rather than using a binary threshold. The error
     probability scales linearly from a minimum value (when at beacon) to the base value
     (when at beacon_radius distance). When the distance exceeds beacon_radius, observations
-    are None (no observation available).
+    are "None" (no observation available).
 
     The scaling formula is:
         error_factor = min_factor + (1 - min_factor) * (distance / beacon_radius)
@@ -365,7 +365,7 @@ class DiscreteLDDistanceBasedObservationModel(BaseDiscreteLightDarkObservationMo
         - distance = distance to nearest beacon
         - At distance 0: error_prob = 0.2 * base_error_prob
         - At distance beacon_radius: error_prob = 1.0 * base_error_prob
-        - Beyond beacon_radius: observation = None
+        - Beyond beacon_radius: observation = "None"
 
     Attributes:
         distribution: DiscreteDistribution for sampling observations (only used when near beacon),
@@ -399,7 +399,7 @@ class DiscreteLDDistanceBasedObservationModel(BaseDiscreteLightDarkObservationMo
         if self.min_distance_to_beacon <= self.beacon_radius:
             self.distribution = self._create_distribution(next_state)
         else:
-            # Distribution not needed when far from beacon (will return None)
+            # Distribution not needed when far from beacon (will return "None")
             self.distribution = None
 
     def _create_distribution(self, next_state: np.ndarray) -> DiscreteDistribution:
@@ -432,40 +432,40 @@ class DiscreteLDDistanceBasedObservationModel(BaseDiscreteLightDarkObservationMo
 
         return DiscreteDistribution(values=values, probs=probs)
 
-    def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, None]]:
-        """Sample observations from the discrete distribution or return None.
+    def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, str]]:
+        """Sample observations from the discrete distribution or return "None".
 
         Args:
             n_samples: Number of samples to generate
 
         Returns:
-            List of sampled observation states when near beacon, or list of None when far from beacon
+            List of sampled observation states when near beacon, or list of "None" when far from beacon
         """
         if self.min_distance_to_beacon <= self.beacon_radius:
             return self.distribution.sample(n_samples)  # type: ignore[union-attr]
         else:
-            return [None] * n_samples
+            return ["None"] * n_samples
 
-    def probability(self, values: List[Union[Any, None]]) -> np.ndarray:
+    def probability(self, values: List[Union[Any, str]]) -> np.ndarray:
         """Calculate probability of given observation values.
 
         Args:
             values: List of observation values to calculate probabilities for.
-                   Can include None values.
+                   Can include "None" values.
 
         Returns:
             Array of probabilities for each value:
-            - If value is None and near beacon: probability is 0
-            - If value is None and far from beacon: probability is 1
+            - If value is "None" and near beacon: probability is 0
+            - If value is "None" and far from beacon: probability is 1
             - If value is actual observation: probability from distribution (if near beacon) or 0 (if far)
         """
         res = np.zeros(len(values))
         for i, value in enumerate(values):
-            if value is None:
+            if isinstance(value, str) and value == "None":
                 if self.min_distance_to_beacon <= self.beacon_radius:
-                    res[i] = 0.0  # None observation is impossible when near beacon
+                    res[i] = 0.0  # "None" observation is impossible when near beacon
                 else:
-                    res[i] = 1.0  # None observation is certain when far from beacon
+                    res[i] = 1.0  # "None" observation is certain when far from beacon
             else:
                 if self.min_distance_to_beacon <= self.beacon_radius:
                     # Calculate probability from distribution
@@ -533,11 +533,11 @@ class DiscreteLDObservationModel(BaseDiscreteLightDarkObservationModel):
 
 
 class DiscreteLDObservationModelNoObsInDark(BaseDiscreteLightDarkObservationModel):
-    """Discrete Light-Dark observation model that returns None when not near beacons.
+    """Discrete Light-Dark observation model that returns "None" when not near beacons.
 
     This observation model provides discrete observations based on the robot's position
     relative to beacons. When near beacons, observations are sampled from a discrete
-    distribution. When far from beacons, observations are None (no observation available).
+    distribution. When far from beacons, observations are "None" (no observation available).
 
     Similar to ContinuousLightDarkNormalNoiseNoObsInDarkObservationModel but for discrete
     observations using DiscreteDistribution instead of continuous multivariate normal.
@@ -569,39 +569,39 @@ class DiscreteLDObservationModelNoObsInDark(BaseDiscreteLightDarkObservationMode
         if self.near_beacon:
             self.distribution = self._create_distribution(next_state)
         else:
-            # Distribution not needed when far from beacon (will return None)
+            # Distribution not needed when far from beacon (will return "None")
             self.distribution = None
 
-    def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, None]]:
-        """Sample observations from the discrete distribution or return None.
+    def sample(self, n_samples: int = 1) -> List[Union[np.ndarray, str]]:
+        """Sample observations from the discrete distribution or return "None".
 
         Args:
             n_samples: Number of samples to generate
 
         Returns:
-            List of sampled observation states when near beacon, or list of None when far from beacon
+            List of sampled observation states when near beacon, or list of "None" when far from beacon
         """
         if self.near_beacon:
             return self.distribution.sample(n_samples)  # type: ignore[union-attr]
         else:
-            return [None] * n_samples
+            return ["None"] * n_samples
 
-    def probability(self, values: List[Union[Any, None]]) -> np.ndarray:
+    def probability(self, values: List[Union[Any, str]]) -> np.ndarray:
         """Calculate probability of given observation values.
 
         Args:
             values: List of observation values to calculate probabilities for.
-                   Can include None values.
+                   Can include "None" values.
 
         Returns:
             Array of probabilities for each value:
-            - If value is None and near beacon: probability is 0
-            - If value is None and far from beacon: probability is 1
+            - If value is "None" and near beacon: probability is 0
+            - If value is "None" and far from beacon: probability is 1
             - If value is actual observation: probability from distribution (if near beacon) or 0 (if far)
         """
         res = np.zeros(len(values))
         for i, value in enumerate(values):
-            if value is None:
+            if isinstance(value, str) and value == "None":
                 if self.near_beacon:
                     res[i] = 0
                 else:
