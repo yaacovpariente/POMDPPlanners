@@ -18,6 +18,7 @@ Classes:
 """
 
 import math
+from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional
 
@@ -34,6 +35,14 @@ from POMDPPlanners.core.environment import (
     SpaceType,
     StateTransitionModel,
 )
+from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.utils.statistics_utils import confidence_interval
+
+
+class CartPolePOMDPMetrics(Enum):
+    """Metric names for CartPole POMDP environment."""
+
+    GOAL_REACHING_RATE = "goal_reaching_rate"
 
 
 class CartPoleStateTransition(StateTransitionModel):
@@ -386,3 +395,41 @@ class CartPolePOMDP(DiscreteActionsEnvironment):
 
     def is_equal_observation(self, observation1: np.ndarray, observation2: np.ndarray) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def get_metric_names(self) -> List[str]:
+        """Get names of CartPole POMDP specific metrics.
+
+        Returns:
+            List containing metric names: goal_reaching_rate
+        """
+        return [metric.value for metric in CartPolePOMDPMetrics]
+
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute CartPole POMDP specific metrics from simulation histories.
+
+        Args:
+            histories: List of simulation histories
+
+        Returns:
+            List of MetricValue objects containing the computed metrics
+        """
+        goal_reached = []
+        for history in histories:
+            goal_reached_in_history = True  # Goal is reached if episode didn't crash
+            for step in history.history:
+                if self.is_terminal(step.state):
+                    goal_reached_in_history = False
+                    break
+            goal_reached.append(1 if goal_reached_in_history else 0)
+
+        avg_goal_reached = float(np.mean(goal_reached))
+        goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
+
+        return [
+            MetricValue(
+                name=CartPolePOMDPMetrics.GOAL_REACHING_RATE.value,
+                value=avg_goal_reached,
+                lower_confidence_bound=goal_reached_ci[0],
+                upper_confidence_bound=goal_reached_ci[1],
+            ),
+        ]

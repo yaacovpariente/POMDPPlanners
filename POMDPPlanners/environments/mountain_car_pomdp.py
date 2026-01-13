@@ -21,6 +21,7 @@ Classes:
     MountainCarPOMDP: Main Mountain Car environment with POMDP formulation
 """
 
+from enum import Enum
 from pathlib import Path
 from typing import Any, List, Optional, Tuple
 
@@ -37,8 +38,16 @@ from POMDPPlanners.core.environment import (
     StateTransitionModel,
     StepData,
 )
+from POMDPPlanners.core.simulation import History, MetricValue
+from POMDPPlanners.utils.statistics_utils import confidence_interval
 
 matplotlib.use("Agg")  # Use non-interactive backend
+
+
+class MountainCarPOMDPMetrics(Enum):
+    """Metric names for Mountain Car POMDP environment."""
+
+    GOAL_REACHING_RATE = "goal_reaching_rate"
 
 
 class MountainCarTransition(StateTransitionModel):
@@ -335,3 +344,42 @@ class MountainCarPOMDP(DiscreteActionsEnvironment):
         self, observation1: Tuple[float, float], observation2: Tuple[float, float]
     ) -> bool:
         return np.array_equal(observation1, observation2)
+
+    def get_metric_names(self) -> List[str]:
+        """Get names of Mountain Car POMDP specific metrics.
+
+        Returns:
+            List containing metric names: goal_reaching_rate
+        """
+        return [metric.value for metric in MountainCarPOMDPMetrics]
+
+    def compute_metrics(self, histories: List[History]) -> List[MetricValue]:
+        """Compute Mountain Car POMDP specific metrics from simulation histories.
+
+        Args:
+            histories: List of simulation histories
+
+        Returns:
+            List of MetricValue objects containing the computed metrics
+        """
+        goal_reached = []
+        for history in histories:
+            goal_reached_in_history = False
+            for step in history.history:
+                position, _ = step.state
+                if position >= self.goal_position:
+                    goal_reached_in_history = True
+                    break
+            goal_reached.append(1 if goal_reached_in_history else 0)
+
+        avg_goal_reached = float(np.mean(goal_reached))
+        goal_reached_ci = confidence_interval(data=goal_reached, confidence=0.95)
+
+        return [
+            MetricValue(
+                name=MountainCarPOMDPMetrics.GOAL_REACHING_RATE.value,
+                value=avg_goal_reached,
+                lower_confidence_bound=goal_reached_ci[0],
+                upper_confidence_bound=goal_reached_ci[1],
+            ),
+        ]
