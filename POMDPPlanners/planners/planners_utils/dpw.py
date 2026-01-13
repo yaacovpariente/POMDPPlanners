@@ -191,7 +191,7 @@ class ActionSampler(ABC):
         Args:
             state: Dictionary containing the object's state
         """
-        self.__dict__.update(state)
+        vars(self).update(state)
 
     def __reduce__(self):
         """Custom reduction for pickle to handle abstract base classes.

@@ -953,7 +953,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         Args:
             state: State dictionary from pickle
         """
-        self.__dict__.update(state)
+        vars(self).update(state)
 
         # Reconstruct simulator
         self._reconstruct_simulator()
