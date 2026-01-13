@@ -72,7 +72,9 @@ class RiskAverseParameterToOptimizeMapper(ParameterToOptimizeMapper):
         self, environment: Environment, policy_cls: Optional[Type[Policy]] = None
     ) -> List[Tuple[str, HyperParameterOptimizationDirection]]:
         if isinstance(environment, CartPolePOMDP):
-            raise NotImplementedError("Risk-averse optimization is not supported for CartPolePOMDP")
+            return [
+                ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+            ]
         elif isinstance(environment, MountainCarPOMDP):
             return [
                 ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
