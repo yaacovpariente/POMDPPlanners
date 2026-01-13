@@ -861,3 +861,150 @@ class TestMountainCarPOMDPConfigId:
         config_id1 = base_mountain_car_environment.config_id
         config_id2 = base_mountain_car_environment.config_id
         assert config_id1 == config_id2
+
+
+def test_get_metric_names():
+    """Test that get_metric_names returns goal_reaching_rate.
+
+    Purpose: Validates that MountainCarPOMDP returns the correct metric names
+
+    Given: A MountainCarPOMDP environment
+    When: get_metric_names is called
+    Then: Returns list containing "goal_reaching_rate"
+
+    Test type: unit
+    """
+    pomdp = MountainCarPOMDP(discount_factor=0.95)
+    metric_names = pomdp.get_metric_names()
+    assert "goal_reaching_rate" in metric_names
+    assert len(metric_names) == 1
+
+
+def test_compute_metrics_goal_reaching():
+    """Test computation of goal-reaching metrics for different simulation histories.
+
+    Purpose: Validates that MountainCarPOMDP computes goal-reaching rate correctly
+
+    Given: Three simulation histories - 2 reaching goal, 1 not reaching goal
+    When: compute_metrics analyzes the simulation histories
+    Then: Returns goal_reaching_rate=2/3 with confidence bounds
+
+    Test type: unit
+    """
+    from POMDPPlanners.core.policy import PolicyRunData
+    from POMDPPlanners.core.simulation import History, StepData
+
+    pomdp = MountainCarPOMDP(discount_factor=0.95)
+
+    # Create a simple belief for testing
+    def create_test_belief(state):
+        from POMDPPlanners.core.belief import WeightedParticleBelief
+
+        return WeightedParticleBelief(
+            particles=[state], log_weights=np.array([1.0]), resampling=False
+        )
+
+    # History 1: Reaches goal (position >= 0.5)
+    history1 = History(
+        [
+            StepData(
+                state=np.array([0.0, 0.0]),
+                action=1,
+                next_state=np.array([0.1, 0.01]),
+                observation=np.array([0.1, 0.01]),
+                reward=-1.0,
+                belief=create_test_belief(np.array([0.0, 0.0])),
+            ),
+            StepData(
+                state=np.array([0.5, 0.02]),  # At goal position
+                action=1,
+                next_state=np.array([0.6, 0.03]),
+                observation=np.array([0.6, 0.03]),
+                reward=0.0,
+                belief=create_test_belief(np.array([0.5, 0.02])),
+            ),
+        ],
+        discount_factor=0.95,
+        average_state_sampling_time=0.0,
+        average_action_time=0.0,
+        average_observation_time=0.0,
+        average_belief_update_time=0.0,
+        average_reward_time=0.0,
+        actual_num_steps=2,
+        reach_terminal_state=True,
+        policy_run_data=[PolicyRunData(info_variables=[])],
+    )
+
+    # History 2: Reaches goal (position > 0.5)
+    history2 = History(
+        [
+            StepData(
+                state=np.array([0.0, 0.0]),
+                action=1,
+                next_state=np.array([0.1, 0.01]),
+                observation=np.array([0.1, 0.01]),
+                reward=-1.0,
+                belief=create_test_belief(np.array([0.0, 0.0])),
+            ),
+            StepData(
+                state=np.array([0.6, 0.02]),  # Past goal position
+                action=1,
+                next_state=np.array([0.7, 0.03]),
+                observation=np.array([0.7, 0.03]),
+                reward=0.0,
+                belief=create_test_belief(np.array([0.6, 0.02])),
+            ),
+        ],
+        discount_factor=0.95,
+        average_state_sampling_time=0.0,
+        average_action_time=0.0,
+        average_observation_time=0.0,
+        average_belief_update_time=0.0,
+        average_reward_time=0.0,
+        actual_num_steps=2,
+        reach_terminal_state=True,
+        policy_run_data=[PolicyRunData(info_variables=[])],
+    )
+
+    # History 3: Does not reach goal (position < 0.5)
+    history3 = History(
+        [
+            StepData(
+                state=np.array([0.0, 0.0]),
+                action=-1,
+                next_state=np.array([-0.1, -0.01]),
+                observation=np.array([-0.1, -0.01]),
+                reward=-1.0,
+                belief=create_test_belief(np.array([0.0, 0.0])),
+            ),
+            StepData(
+                state=np.array([-0.2, -0.02]),  # Far from goal
+                action=-1,
+                next_state=np.array([-0.3, -0.03]),
+                observation=np.array([-0.3, -0.03]),
+                reward=-1.0,
+                belief=create_test_belief(np.array([-0.2, -0.02])),
+            ),
+        ],
+        discount_factor=0.95,
+        average_state_sampling_time=0.0,
+        average_action_time=0.0,
+        average_observation_time=0.0,
+        average_belief_update_time=0.0,
+        average_reward_time=0.0,
+        actual_num_steps=2,
+        reach_terminal_state=False,
+        policy_run_data=[PolicyRunData(info_variables=[])],
+    )
+
+    # Compute metrics
+    metrics = pomdp.compute_metrics([history1, history2, history3])
+
+    # Convert metrics to dictionary for easier access
+    metrics_dict = {metric.name: metric for metric in metrics}
+
+    # Test goal reaching rate
+    assert "goal_reaching_rate" in metrics_dict
+    goal_rate = metrics_dict["goal_reaching_rate"]
+    assert goal_rate.value == 2 / 3  # 2 out of 3 histories reach goal
+    assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound

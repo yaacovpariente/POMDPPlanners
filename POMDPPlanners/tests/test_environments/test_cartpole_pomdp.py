@@ -578,3 +578,144 @@ def test_cartpole_observation_model_probability_values_reasonable():
     # Both should be positive (Gaussian has non-zero probability everywhere)
     assert probs[0] > 0.0, "Close observation should have positive probability"
     assert probs[1] > 0.0, "Far observation should have positive (but smaller) probability"
+
+
+def test_get_metric_names():
+    """Test that get_metric_names returns goal_reaching_rate.
+
+    Purpose: Validates that CartPolePOMDP returns the correct metric names
+
+    Given: A CartPolePOMDP environment
+    When: get_metric_names is called
+    Then: Returns list containing "goal_reaching_rate"
+
+    Test type: unit
+    """
+    noise_cov = np.eye(4) * 0.1
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+    metric_names = env.get_metric_names()
+    assert "goal_reaching_rate" in metric_names
+    assert len(metric_names) == 1
+
+
+def test_compute_metrics_goal_reaching():
+    """Test computation of goal-reaching metrics for different simulation histories.
+
+    Purpose: Validates that CartPolePOMDP computes goal-reaching rate correctly
+
+    Given: Three simulation histories - 2 completing successfully (no crash), 1 crashing
+    When: compute_metrics analyzes the simulation histories
+    Then: Returns goal_reaching_rate=2/3 with confidence bounds
+
+    Test type: unit
+    """
+    from POMDPPlanners.core.policy import PolicyRunData
+    from POMDPPlanners.core.simulation import History, StepData
+
+    noise_cov = np.eye(4) * 0.1
+    env = CartPolePOMDP(discount_factor=0.95, noise_cov=noise_cov)
+
+    # Create a simple belief for testing
+    def create_test_belief(state):
+        from POMDPPlanners.core.belief import WeightedParticleBelief
+
+        return WeightedParticleBelief(
+            particles=[state], log_weights=np.array([1.0]), resampling=False
+        )
+
+    # History 1: Completes successfully (no terminal state reached)
+    history1 = History(
+        [
+            StepData(
+                state=np.array([0.0, 0.0, 0.0, 0.0]),
+                action=0,
+                next_state=np.array([0.0, 0.0, 0.0, 0.0]),
+                observation=np.array([0.0, 0.0, 0.0, 0.0]),
+                reward=1.0,
+                belief=create_test_belief(np.array([0.0, 0.0, 0.0, 0.0])),
+            ),
+            StepData(
+                state=np.array([0.0, 0.0, 0.0, 0.0]),
+                action=1,
+                next_state=np.array([0.0, 0.0, 0.0, 0.0]),
+                observation=np.array([0.0, 0.0, 0.0, 0.0]),
+                reward=1.0,
+                belief=create_test_belief(np.array([0.0, 0.0, 0.0, 0.0])),
+            ),
+        ],
+        discount_factor=0.95,
+        average_state_sampling_time=0.0,
+        average_action_time=0.0,
+        average_observation_time=0.0,
+        average_belief_update_time=0.0,
+        average_reward_time=0.0,
+        actual_num_steps=2,
+        reach_terminal_state=False,
+        policy_run_data=[PolicyRunData(info_variables=[])],
+    )
+
+    # History 2: Completes successfully (no terminal state reached)
+    history2 = History(
+        [
+            StepData(
+                state=np.array([0.0, 0.0, 0.0, 0.0]),
+                action=1,
+                next_state=np.array([0.0, 0.0, 0.0, 0.0]),
+                observation=np.array([0.0, 0.0, 0.0, 0.0]),
+                reward=1.0,
+                belief=create_test_belief(np.array([0.0, 0.0, 0.0, 0.0])),
+            ),
+        ],
+        discount_factor=0.95,
+        average_state_sampling_time=0.0,
+        average_action_time=0.0,
+        average_observation_time=0.0,
+        average_belief_update_time=0.0,
+        average_reward_time=0.0,
+        actual_num_steps=1,
+        reach_terminal_state=False,
+        policy_run_data=[PolicyRunData(info_variables=[])],
+    )
+
+    # History 3: Crashes (reaches terminal state - pole angle too large)
+    history3 = History(
+        [
+            StepData(
+                state=np.array([0.0, 0.0, 0.0, 0.0]),
+                action=0,
+                next_state=np.array([0.0, 0.0, 0.0, 0.0]),
+                observation=np.array([0.0, 0.0, 0.0, 0.0]),
+                reward=1.0,
+                belief=create_test_belief(np.array([0.0, 0.0, 0.0, 0.0])),
+            ),
+            StepData(
+                state=np.array([0.0, 0.0, 0.3, 0.0]),  # Terminal state (theta > threshold)
+                action=0,
+                next_state=np.array([0.0, 0.0, 0.3, 0.0]),
+                observation=np.array([0.0, 0.0, 0.3, 0.0]),
+                reward=0.0,
+                belief=create_test_belief(np.array([0.0, 0.0, 0.3, 0.0])),
+            ),
+        ],
+        discount_factor=0.95,
+        average_state_sampling_time=0.0,
+        average_action_time=0.0,
+        average_observation_time=0.0,
+        average_belief_update_time=0.0,
+        average_reward_time=0.0,
+        actual_num_steps=2,
+        reach_terminal_state=True,
+        policy_run_data=[PolicyRunData(info_variables=[])],
+    )
+
+    # Compute metrics
+    metrics = env.compute_metrics([history1, history2, history3])
+
+    # Convert metrics to dictionary for easier access
+    metrics_dict = {metric.name: metric for metric in metrics}
+
+    # Test goal reaching rate
+    assert "goal_reaching_rate" in metrics_dict
+    goal_rate = metrics_dict["goal_reaching_rate"]
+    assert goal_rate.value == 2 / 3  # 2 out of 3 histories complete successfully
+    assert goal_rate.lower_confidence_bound <= goal_rate.value <= goal_rate.upper_confidence_bound
