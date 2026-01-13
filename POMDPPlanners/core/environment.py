@@ -14,12 +14,14 @@ Classes:
     SpaceInfo: Data class containing space type information
 """
 
+import importlib
+import inspect
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -561,6 +563,194 @@ class Environment(ABC):
             List of computed metrics with confidence intervals
         """
         return []
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize environment to dictionary format.
+
+        Extracts environment class information and constructor parameters
+        to enable JSON serialization and reconstruction.
+
+        Returns:
+            Dictionary with structure:
+                - class: Full class path (module.ClassName)
+                - module: Module name
+                - params: Constructor parameters
+                - config_id: Deterministic configuration identifier
+
+        Example:
+            >>> env = TigerPOMDP(discount_factor=0.95)
+            >>> env_dict = env.to_dict()
+            >>> # env_dict contains class info and all parameters
+        """
+
+        def serialize_value(value):
+            """Serialize value for JSON compatibility."""
+            if value is None:
+                return None
+            elif isinstance(value, Path):
+                return str(value)
+            elif isinstance(value, np.ndarray):
+                return value.tolist()
+            elif isinstance(value, (np.integer, np.floating)):
+                return value.item()
+            elif isinstance(value, Enum):
+                return value.value
+            elif isinstance(value, SpaceInfo):
+                return {
+                    "action_space": value.action_space.value,
+                    "observation_space": value.observation_space.value,
+                }
+            elif isinstance(value, (str, int, float, bool)):
+                return value
+            elif isinstance(value, set):
+                # Serialize sets as lists with a marker
+                return {"__type__": "set", "values": [serialize_value(v) for v in value]}
+            elif isinstance(value, tuple):
+                # Serialize tuples as lists with a marker
+                return {"__type__": "tuple", "values": [serialize_value(v) for v in value]}
+            elif isinstance(value, list):
+                return [serialize_value(v) for v in value]
+            elif isinstance(value, dict):
+                return {str(k): serialize_value(v) for k, v in value.items()}
+            elif isinstance(value, logging.Logger):
+                return None  # Skip loggers
+            else:
+                return str(value)
+
+        # Get environment class information
+        env_class = self.__class__
+        env_module = env_class.__module__
+        env_class_name = env_class.__name__
+
+        # Extract constructor parameters
+        sig = inspect.signature(env_class.__init__)
+        params = {}
+
+        for param_name, _ in sig.parameters.items():
+            if param_name == "self":
+                continue
+            if hasattr(self, param_name):
+                value = getattr(self, param_name)
+                serialized_value = serialize_value(value)
+                if serialized_value is not None:  # Skip None values (like logger)
+                    params[param_name] = serialized_value
+
+        return {
+            "class": f"{env_module}.{env_class_name}",
+            "module": env_module,
+            "params": params,
+            "config_id": self.config_id,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Environment":
+        """Reconstruct environment from dictionary.
+
+        Dynamically imports the environment class and instantiates it
+        with the saved parameters.
+
+        Args:
+            data: Dictionary containing environment serialization data
+                with keys: class, module, params, config_id
+
+        Returns:
+            Reconstructed environment instance
+
+        Raises:
+            ImportError: If environment class cannot be imported
+            ValueError: If required data fields are missing
+            TypeError: If parameters are invalid for environment constructor
+
+        Example:
+            >>> env_dict = {"class": "...", "module": "...", "params": {...}}
+            >>> env = Environment.from_dict(env_dict)
+        """
+
+        def deserialize_value(value, target_type, param_name=""):
+            """Deserialize value to target type."""
+            if value is None:
+                return None
+
+            # Handle dictionaries with type markers (sets, tuples)
+            if isinstance(value, dict):
+                if value.get("__type__") == "set":
+                    return set(deserialize_value(v, type(v), param_name) for v in value["values"])
+                elif value.get("__type__") == "tuple":
+                    return tuple(deserialize_value(v, type(v), param_name) for v in value["values"])
+                elif "action_space" in value and "observation_space" in value:
+                    # Handle SpaceInfo reconstruction
+                    return SpaceInfo(
+                        action_space=SpaceType(value["action_space"]),
+                        observation_space=SpaceType(value["observation_space"]),
+                    )
+
+            # Handle Path objects
+            if target_type == Path and isinstance(value, str):
+                return Path(value)
+
+            # Handle Optional types
+            if hasattr(target_type, "__origin__") and target_type.__origin__ is Union:
+                # Get the non-None type from Optional[T]
+                args = [arg for arg in target_type.__args__ if arg is not type(None)]
+                if args:
+                    return deserialize_value(value, args[0], param_name)
+
+            # Handle numpy arrays - convert lists to numpy arrays for specific parameter names
+            # Be selective to avoid converting lists of tuples or nested structures
+            if isinstance(value, list):
+                # Only convert specific parameters that MUST be numpy arrays (matrices)
+                matrix_param_names = [
+                    "noise_cov",
+                    "_cov",
+                    "cov_matrix",
+                    "state_transition_cov_matrix",
+                    "observation_cov_matrix",
+                ]
+                if any(name in param_name.lower() for name in matrix_param_names):
+                    return np.array(value)
+                # Also check type annotation for np.ndarray
+                if target_type == np.ndarray or (
+                    hasattr(target_type, "__name__") and "ndarray" in target_type.__name__
+                ):
+                    return np.array(value)
+
+            return value
+
+        # Validate required fields
+        if "class" not in data or "module" not in data or "params" not in data:
+            raise ValueError("Environment data missing required fields: class, module, or params")
+
+        # Import environment class dynamically
+        module_name = data["module"]
+        class_name = data["class"].split(".")[-1]
+
+        try:
+            module = importlib.import_module(module_name)
+            env_class = getattr(module, class_name)
+        except (ImportError, AttributeError) as e:
+            raise ImportError(f"Failed to import environment class {data['class']}: {str(e)}") from e
+
+        # Deserialize parameters with type hints
+        sig = inspect.signature(env_class.__init__)
+        params = {}
+
+        for param_name, param in sig.parameters.items():
+            if param_name == "self":
+                continue
+            if param_name in data["params"]:
+                value = data["params"][param_name]
+                # Try to deserialize with type annotation if available
+                if param.annotation != inspect.Parameter.empty:
+                    value = deserialize_value(value, param.annotation, param_name)
+                else:
+                    value = deserialize_value(value, type(value), param_name)
+                params[param_name] = value
+
+        # Reconstruct environment
+        try:
+            return env_class(**params)
+        except TypeError as e:
+            raise TypeError(f"Failed to construct {class_name} with params {params}: {str(e)}") from e
 
 
 class DiscreteActionsEnvironment(Environment):
