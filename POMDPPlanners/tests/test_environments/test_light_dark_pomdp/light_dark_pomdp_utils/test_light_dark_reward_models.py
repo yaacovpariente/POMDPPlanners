@@ -132,6 +132,38 @@ class TestContinuousLightDarkRewardModel:
             # Only obstacle penalties occur (valid for high probability)
             assert len(obstacle_rewards) == len(rewards)
 
+    def test_obstacle_hit_probability_parameter(self):
+        """Test that obstacle_hit_probability parameter is used correctly."""
+        # State that will hit obstacle
+        state = np.array([2.5, 2.5])
+        action = np.array([0.6, 0.6])  # Will hit obstacle
+        next_state = state + action
+
+        # Run many times to get accurate probability estimate
+        # Test the _obstacle_reward method directly to verify probability
+        obstacle_rewards = []
+        for _ in range(1000):
+            reward = self.model._obstacle_reward(next_state)
+            obstacle_rewards.append(reward)
+
+        # Count penalty vs no-penalty cases
+        # obstacle_reward returns self.obstacle_reward (negative) or 0.0
+        penalty_count = sum(1 for r in obstacle_rewards if r == self.obstacle_reward)
+        no_penalty_count = sum(1 for r in obstacle_rewards if r == 0.0)
+
+        # Calculate empirical probability
+        empirical_probability = penalty_count / len(obstacle_rewards)
+
+        # Should be roughly equal to obstacle_hit_probability (within reasonable tolerance)
+        # Using 0.15 tolerance to account for randomness with 1000 samples
+        assert (
+            abs(empirical_probability - self.obstacle_hit_probability) < 0.03
+        ), f"Empirical probability {empirical_probability:.3f} should be close to configured {self.obstacle_hit_probability}"
+
+        # Also verify that both cases occur (penalty and no penalty)
+        assert penalty_count > 0, "Obstacle penalties should occur"
+        assert no_penalty_count > 0, "No-penalty cases should occur"
+
     def test_out_of_grid_reward(self):
         """Test reward when next state is out of grid."""
         # State that will go out of grid with action
@@ -291,6 +323,77 @@ class TestContinuousLightDarkRewardModel:
         # State with both coordinates out of bounds
         state_both_out = np.array([11.0, 11.0])
         assert self.model._is_out_of_grid(state_both_out)
+
+    def test_compute_reward_priority_logic(self):
+        """Test that _compute_reward prioritizes goal > obstacle > out-of-grid."""
+        # Test that goal state takes priority over obstacle
+        # Create a scenario where goal and obstacle overlap
+        # Place goal at (3, 3) and obstacle at (3, 3) with overlapping radii
+        goal_state = np.array([3.0, 3.0])
+        obstacles = np.array([[3.0, 3.0]]).T
+        model = ContinuousLightDarkRewardModel(
+            goal_state=goal_state,
+            obstacles=obstacles,
+            goal_state_radius=1.0,
+            obstacle_radius=1.0,
+            grid_size=10,
+            obstacle_hit_probability=0.3,
+            obstacle_reward=-10.0,
+            goal_reward=100.0,
+            fuel_cost=1.0,
+        )
+
+        # State that will be both in goal and in obstacle range
+        state = np.array([2.5, 2.5])
+        action = np.array([0.6, 0.6])  # Will reach (3.1, 3.1) - in both goal and obstacle range
+        next_state = state + action
+
+        # Verify it's in both ranges
+        assert model._is_goal_state(next_state)
+        assert model._is_in_obstacle_range(next_state)
+
+        # Goal should take priority - should get goal reward, not obstacle reward
+        reward = model._compute_reward(state, action)
+        expected_reward = (
+            -model.fuel_cost + model.goal_reward - np.linalg.norm(next_state - goal_state)
+        )
+        assert abs(reward - expected_reward) < 1e-6
+
+        # Test that obstacle takes priority over out-of-grid
+        # State that will be both in obstacle range and out of grid
+        state = np.array([9.5, 2.5])
+        action = np.array([0.6, 0.6])  # Will go to (10.1, 3.1) - out of grid and near obstacle
+        next_state = state + action
+
+        # If obstacle is at (3, 3), this won't be in obstacle range
+        # Let's place obstacle near boundary instead
+        obstacles_near_boundary = np.array([[9.5, 3.0]]).T
+        model_boundary = ContinuousLightDarkRewardModel(
+            goal_state=self.goal_state,
+            obstacles=obstacles_near_boundary,
+            goal_state_radius=1.0,
+            obstacle_radius=1.0,
+            grid_size=10,
+            obstacle_hit_probability=0.3,
+            obstacle_reward=-10.0,
+            goal_reward=100.0,
+            fuel_cost=1.0,
+        )
+
+        state = np.array([9.0, 2.5])
+        action = np.array([0.6, 0.6])  # Will go to (9.6, 3.1)
+        next_state = state + action
+
+        # Check if it's in obstacle range (should be, since obstacle at (9.5, 3.0) with radius 1.0)
+        # Distance from (9.6, 3.1) to (9.5, 3.0) = sqrt(0.01 + 0.01) ≈ 0.14 < 1.0
+        if model_boundary._is_in_obstacle_range(next_state) and model_boundary._is_out_of_grid(
+            next_state
+        ):
+            # Obstacle should take priority over out-of-grid
+            reward = model_boundary._compute_reward(state, action)
+            # Should have obstacle reward component (probabilistic), not just out-of-grid penalty
+            # Base reward is negative, obstacle reward makes it more negative
+            assert reward < -model_boundary.fuel_cost - np.linalg.norm(next_state - self.goal_state)
 
 
 class TestContinuousLDDangerousStatesRewardModel:

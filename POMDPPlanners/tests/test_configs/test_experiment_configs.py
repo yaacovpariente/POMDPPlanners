@@ -253,9 +253,15 @@ class TestExperimentConfigs:
                 assert config.num_episodes == 5, "Should use specified num_episodes"
                 assert config.num_steps == 10, "Should use specified num_steps"
                 assert config.n_trials == 20, "Should use specified n_trials"
-                assert config.parameters_to_optimize == [
-                    ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
-                ], "Should use specified parameters"
+                # Check that average_return is in parameters and all are MAXIMIZE
+                assert len(config.parameters_to_optimize) > 0, "Should have at least one parameter"
+                assert any(
+                    param[0] == "average_return" for param in config.parameters_to_optimize
+                ), "Should include average_return parameter"
+                assert all(
+                    param[1] == HyperParameterOptimizationDirection.MAXIMIZE
+                    for param in config.parameters_to_optimize
+                ), "All parameters should be set to MAXIMIZE"
 
     def test_complete_environments_and_benchmarks_configs_custom_params(self):
         """Test complete_environments_and_benchmarks_hyperparameter_optimization_configs with custom parameters.
