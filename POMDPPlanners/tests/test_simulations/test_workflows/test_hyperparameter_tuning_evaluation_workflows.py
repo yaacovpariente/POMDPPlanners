@@ -11,8 +11,10 @@ import shutil
 import tempfile
 from pathlib import Path
 from typing import Optional
+from unittest.mock import Mock, patch
 
 import numpy as np
+import pandas as pd
 import pytest
 
 from POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows import (
@@ -637,3 +639,308 @@ class TestWorkflowValidation:
 
         # Should not raise any exception
         workflow._validate_configs([config])
+
+
+class TestWorkflowOptimizedConfigUsage:
+    """Test that optimized hyperparameters are used in evaluation."""
+
+    @patch(
+        "POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows.POMDPSimulator"
+    )
+    @patch(
+        "POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows.HyperParameterOptimizer"
+    )
+    def test_workflow_uses_optimized_config_for_evaluation(
+        self, mock_optimizer_class, mock_simulator_class, temp_cache_dir
+    ):
+        """Test that optimized hyperparameters are actually used in evaluation.
+
+        Purpose: Validates that the policy configuration selected by hyperparameter tuning
+                 is the actual configuration used for evaluation in the workflow
+
+        Given: Optimization returns a policy with specific hyperparameters
+        When: optimize_and_evaluate executes both optimization and evaluation phases
+        Then: The policy passed to evaluation is the same policy from optimization,
+              and its hyperparameters match the chosen_hyper_parameters from optimization
+
+        Test type: integration
+        """
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        from POMDPPlanners.core.belief import get_initial_belief
+        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+            HyperParameterRunParams,
+            HyperParamPlannerConfig,
+            HyperParameterOptimizationDirection,
+            OptimizedPolicyResult,
+        )
+
+        # Create environment and belief
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+
+        # Create workflow
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=temp_cache_dir,
+            experiment_name="test_optimized_config",
+            optimization_n_jobs=1,
+            evaluation_episodes=2,
+            evaluation_steps=6,
+        )
+
+        # Create config
+        config = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                constant_parameters={"discount_factor": 0.95, "name": "TestPOMCP"},
+            ),
+            num_episodes=3,
+            num_steps=6,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        # Create policy with specific hyperparameters stored as attributes
+        chosen_hyperparams = {"exploration_constant": 1.75, "n_simulations": 18}
+        optimized_policy = POMCP(
+            environment=env,
+            name="OptimizedPOMCP",
+            **chosen_hyperparams,  # Store hyperparameters as policy attributes
+        )
+
+        # Create optimization result with the same hyperparameters
+        optimization_result = OptimizedPolicyResult(
+            environment=env,
+            policy=optimized_policy,
+            chosen_hyper_parameters=chosen_hyperparams,
+            num_episodes=3,
+            num_steps=6,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 10.5},
+        )
+
+        # Mock optimizer to return our optimization result
+        mock_optimizer = Mock()
+        mock_optimizer_class.return_value = mock_optimizer
+        mock_optimizer.optimize.return_value = [optimization_result]
+
+        # Mock simulator and its context manager
+        mock_simulator = Mock()
+        mock_simulator_class.return_value.__enter__ = Mock(return_value=mock_simulator)
+        mock_simulator_class.return_value.__exit__ = Mock(return_value=None)
+
+        # Mock evaluation results
+        mock_evaluation_results = {"TigerPOMDP": {"OptimizedPOMCP": [Mock(), Mock()]}}
+        mock_evaluation_statistics = pd.DataFrame(
+            {"policy": ["OptimizedPOMCP"], "metric": ["average_return"], "value": [8.5]}
+        )
+        mock_simulator.compare_multiple_environments_policies.return_value = (
+            mock_evaluation_results,
+            mock_evaluation_statistics,
+        )
+
+        # Execute workflow
+        results = workflow.optimize_and_evaluate([config])
+
+        # Verify optimizer was created and called
+        mock_optimizer_class.assert_called_once()
+        mock_optimizer.optimize.assert_called_once_with([config])
+
+        # Verify simulator was created
+        mock_simulator_class.assert_called_once()
+
+        # Verify evaluation was called
+        mock_simulator.compare_multiple_environments_policies.assert_called_once()
+
+        # Capture the arguments passed to compare_multiple_environments_policies
+        eval_call_args = mock_simulator.compare_multiple_environments_policies.call_args
+        eval_environment_run_params = eval_call_args[1]["environment_run_params"]
+
+        # Verify that we have the correct number of environment run params
+        assert len(eval_environment_run_params) == 1
+        eval_run_params = eval_environment_run_params[0]
+
+        # Verify that the policies passed to evaluation are the same policies from optimization
+        assert len(eval_run_params.policies) == 1
+        evaluated_policy = eval_run_params.policies[0]
+        assert (
+            evaluated_policy is optimized_policy
+        ), "Evaluation should use the exact same policy object from optimization"
+
+        # Verify that the policy's hyperparameters match the chosen_hyper_parameters
+        for param_name, param_value in optimization_result.chosen_hyper_parameters.items():
+            assert hasattr(
+                evaluated_policy, param_name
+            ), f"Policy should have hyperparameter attribute '{param_name}'"
+            assert (
+                getattr(evaluated_policy, param_name) == param_value
+            ), f"Policy hyperparameter '{param_name}' should be {param_value}, got {getattr(evaluated_policy, param_name)}"
+
+        # Verify that all chosen hyperparameters are present in the policy
+        assert len(optimization_result.chosen_hyper_parameters) > 0
+        for param_name in optimization_result.chosen_hyper_parameters:
+            assert hasattr(
+                evaluated_policy, param_name
+            ), f"Policy missing hyperparameter '{param_name}' from optimization result"
+
+        # Verify evaluation parameters
+        assert eval_run_params.num_episodes == workflow.evaluation_episodes
+        assert eval_run_params.num_steps == workflow.evaluation_steps
+        assert eval_run_params.environment is env
+        assert eval_run_params.belief is belief
+
+    @patch(
+        "POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows.POMDPSimulator"
+    )
+    @patch(
+        "POMDPPlanners.simulations.workflows.hyperparameter_tuning_evaluation_workflows.HyperParameterOptimizer"
+    )
+    def test_workflow_uses_optimized_config_for_evaluation_multiple_policies(
+        self, mock_optimizer_class, mock_simulator_class, temp_cache_dir
+    ):
+        """Test that multiple optimized policies are correctly used in evaluation.
+
+        Purpose: Validates that when multiple policies are optimized, all are correctly
+                 passed to evaluation with their optimized hyperparameters
+
+        Given: Optimization returns multiple policies with different hyperparameters
+        When: optimize_and_evaluate executes with multiple configs
+        Then: All optimized policies are passed to evaluation with correct hyperparameters
+
+        Test type: integration
+        """
+        from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+        from POMDPPlanners.core.belief import get_initial_belief
+        from POMDPPlanners.planners.mcts_planners.pomcp import POMCP
+        from POMDPPlanners.core.simulation.hyperparameter_tuning import (
+            HyperParameterRunParams,
+            HyperParamPlannerConfig,
+            HyperParameterOptimizationDirection,
+            OptimizedPolicyResult,
+        )
+
+        # Create environment and belief
+        env = TigerPOMDP(discount_factor=0.95)
+        belief = get_initial_belief(env, n_particles=10)
+
+        # Create workflow
+        workflow = OptimizationEvaluationLocalWorkflow(
+            cache_dir=temp_cache_dir,
+            experiment_name="test_multiple_policies",
+            optimization_n_jobs=1,
+        )
+
+        # Create two configs
+        config1 = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                constant_parameters={"discount_factor": 0.95, "name": "POMCP1"},
+            ),
+            num_episodes=3,
+            num_steps=6,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        config2 = HyperParameterRunParams(
+            environment=env,
+            belief=belief,
+            hyper_param_planner_config=HyperParamPlannerConfig(
+                policy_cls=POMCP,
+                hyper_parameters=[NumericalHyperParameter(0.1, 2.0, "exploration_constant")],
+                constant_parameters={"discount_factor": 0.95, "name": "POMCP2"},
+            ),
+            num_episodes=3,
+            num_steps=6,
+            n_trials=2,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+        )
+
+        # Create two policies with different hyperparameters
+        chosen_hyperparams_1 = {"exploration_constant": 1.2, "n_simulations": 15}
+        optimized_policy_1 = POMCP(environment=env, name="POMCP1", **chosen_hyperparams_1)
+
+        chosen_hyperparams_2 = {"exploration_constant": 2.1, "n_simulations": 25}
+        optimized_policy_2 = POMCP(environment=env, name="POMCP2", **chosen_hyperparams_2)
+
+        # Create optimization results
+        optimization_result_1 = OptimizedPolicyResult(
+            environment=env,
+            policy=optimized_policy_1,
+            chosen_hyper_parameters=chosen_hyperparams_1,
+            num_episodes=3,
+            num_steps=6,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 12.0},
+        )
+
+        optimization_result_2 = OptimizedPolicyResult(
+            environment=env,
+            policy=optimized_policy_2,
+            chosen_hyper_parameters=chosen_hyperparams_2,
+            num_episodes=3,
+            num_steps=6,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 15.0},
+        )
+
+        # Mock optimizer to return both results
+        mock_optimizer = Mock()
+        mock_optimizer_class.return_value = mock_optimizer
+        mock_optimizer.optimize.return_value = [optimization_result_1, optimization_result_2]
+
+        # Mock simulator
+        mock_simulator = Mock()
+        mock_simulator_class.return_value.__enter__ = Mock(return_value=mock_simulator)
+        mock_simulator_class.return_value.__exit__ = Mock(return_value=None)
+
+        mock_evaluation_results = {"TigerPOMDP": {"POMCP1": [Mock()], "POMCP2": [Mock()]}}
+        mock_evaluation_statistics = pd.DataFrame()
+        mock_simulator.compare_multiple_environments_policies.return_value = (
+            mock_evaluation_results,
+            mock_evaluation_statistics,
+        )
+
+        # Execute workflow
+        workflow.optimize_and_evaluate([config1, config2])
+
+        # Capture evaluation arguments
+        eval_call_args = mock_simulator.compare_multiple_environments_policies.call_args
+        eval_environment_run_params = eval_call_args[1]["environment_run_params"]
+
+        # Verify we have one environment run params (both policies grouped by environment)
+        assert len(eval_environment_run_params) == 1
+        eval_run_params = eval_environment_run_params[0]
+
+        # Verify both policies are present
+        assert len(eval_run_params.policies) == 2
+
+        # Verify first policy matches optimization result
+        evaluated_policy_1 = eval_run_params.policies[0]
+        assert evaluated_policy_1 is optimized_policy_1
+        for param_name, param_value in optimization_result_1.chosen_hyper_parameters.items():
+            assert getattr(evaluated_policy_1, param_name) == param_value
+
+        # Verify second policy matches optimization result
+        evaluated_policy_2 = eval_run_params.policies[1]
+        assert evaluated_policy_2 is optimized_policy_2
+        for param_name, param_value in optimization_result_2.chosen_hyper_parameters.items():
+            assert getattr(evaluated_policy_2, param_name) == param_value

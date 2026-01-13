@@ -502,6 +502,106 @@ class TestOptimizeAndEvaluatePlanners:
         assert planner_2_info["policy_name"] == "TestPOMCP2"
         assert planner_2_info["policy_type"] == "POMCP"
 
+    @patch("POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters")
+    @patch(
+        "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
+    )
+    def test_optimize_and_evaluate_planners_uses_optimized_config_for_evaluation(
+        self,
+        mock_evaluate,
+        mock_optimize,
+        temp_dir,
+        test_environment,
+        test_initial_belief,
+        test_planner_configs,
+    ):
+        """Test that optimized hyperparameters are actually used in evaluation.
+
+        Purpose: Validates that the policy configuration selected by hyperparameter tuning
+                 is the actual configuration used for evaluation
+
+        Given: Optimization returns a policy with specific hyperparameters
+        When: optimize_and_evaluate_planners executes both optimization and evaluation
+        Then: The policy passed to evaluation is the same policy from optimization,
+              and its hyperparameters match the chosen_hyper_parameters from optimization
+
+        Test type: integration
+        """
+        # Create policy with specific hyperparameters stored as attributes
+        chosen_hyperparams = {"exploration_constant": 1.75, "n_simulations": 18}
+        mock_policy = MockTestPolicy(
+            environment=test_environment,
+            name="OptimizedPOMCP",
+            **chosen_hyperparams,  # Store hyperparameters as policy attributes
+        )
+
+        # Create optimization result with the same hyperparameters
+        mock_optimization_result = OptimizedPolicyResult(
+            environment=test_environment,
+            policy=mock_policy,
+            chosen_hyper_parameters=chosen_hyperparams,
+            num_episodes=3,
+            num_steps=6,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 10.5},
+        )
+        mock_optimize.return_value = [mock_optimization_result]
+
+        # Mock evaluation result
+        mock_evaluation_results = {"TestTiger": {"OptimizedPOMCP": [Mock(), Mock(), Mock()]}}
+        mock_evaluation_statistics = pd.DataFrame(
+            {"policy": ["OptimizedPOMCP"], "metric": ["average_return"], "value": [8.5]}
+        )
+        mock_evaluate.return_value = (
+            mock_evaluation_results,
+            mock_evaluation_statistics,
+        )
+
+        # Execute function
+        result = optimize_and_evaluate_planners(
+            environment=test_environment,
+            initial_belief=test_initial_belief,
+            planner_configs=test_planner_configs,
+            cache_dir=temp_dir,
+            n_trials=2,
+            optimization_episodes=2,
+            evaluation_episodes=3,
+            verbose=False,
+        )
+
+        # Verify evaluation was called
+        assert mock_evaluate.call_count == 1
+
+        # Capture the arguments passed to evaluate_multiple_optimized_planners
+        eval_call_args = mock_evaluate.call_args
+        evaluated_policies = eval_call_args[1]["optimized_policies"]
+
+        # Verify that the policy passed to evaluation is the same policy from optimization
+        assert len(evaluated_policies) == 1
+        evaluated_policy = evaluated_policies[0]
+        assert (
+            evaluated_policy is mock_policy
+        ), "Evaluation should use the exact same policy object from optimization"
+
+        # Verify that the policy's hyperparameters match the chosen_hyper_parameters
+        optimization_result = result["optimization_results"][0]
+        for param_name, param_value in optimization_result.chosen_hyper_parameters.items():
+            assert hasattr(
+                evaluated_policy, param_name
+            ), f"Policy should have hyperparameter attribute '{param_name}'"
+            assert (
+                getattr(evaluated_policy, param_name) == param_value
+            ), f"Policy hyperparameter '{param_name}' should be {param_value}, got {getattr(evaluated_policy, param_name)}"
+
+        # Verify that all chosen hyperparameters are present in the policy
+        assert len(optimization_result.chosen_hyper_parameters) > 0
+        for param_name in optimization_result.chosen_hyper_parameters:
+            assert hasattr(
+                evaluated_policy, param_name
+            ), f"Policy missing hyperparameter '{param_name}' from optimization result"
+
 
 class TestOptimizeAndEvaluatePlannersPBS:
     """Test cases for the optimize_and_evaluate_planners_pbs function."""
@@ -879,6 +979,113 @@ class TestOptimizeAndEvaluatePlannersPBS:
         planner_2_info = summary["planners"][1]
         assert planner_2_info["policy_name"] == "PBSTestPOMCP2"
         assert planner_2_info["policy_type"] == "POMCP"
+
+    @patch(
+        "POMDPPlanners.utils.hyperparameter_tuning_and_eval.optimize_planner_hyperparameters_pbs"
+    )
+    @patch(
+        "POMDPPlanners.utils.hyperparameter_tuning_and_eval.evaluate_multiple_optimized_planners"
+    )
+    def test_optimize_and_evaluate_planners_pbs_uses_optimized_config_for_evaluation(
+        self,
+        mock_evaluate,
+        mock_optimize_pbs,
+        temp_dir,
+        test_environment,
+        test_initial_belief,
+        test_planner_configs,
+    ):
+        """Test that PBS optimized hyperparameters are actually used in evaluation.
+
+        Purpose: Validates that the policy configuration selected by PBS hyperparameter tuning
+                 is the actual configuration used for evaluation
+
+        Given: PBS optimization returns a policy with specific hyperparameters
+        When: optimize_and_evaluate_planners_pbs executes both optimization and evaluation
+        Then: The policy passed to evaluation is the same policy from optimization,
+              and its hyperparameters match the chosen_hyper_parameters from optimization
+
+        Test type: integration
+        """
+        # Create policy with specific hyperparameters stored as attributes
+        chosen_hyperparams = {"exploration_constant": 2.25, "n_simulations": 22}
+        mock_policy = MockTestPolicy(
+            environment=test_environment,
+            name="PBSOptimizedPOMCP",
+            **chosen_hyperparams,  # Store hyperparameters as policy attributes
+        )
+
+        # Create PBS optimization result with the same hyperparameters
+        mock_optimization_result = OptimizedPolicyResult(
+            environment=test_environment,
+            policy=mock_policy,
+            chosen_hyper_parameters=chosen_hyperparams,
+            num_episodes=3,
+            num_steps=6,
+            parameters_to_optimize=[
+                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE)
+            ],
+            optimized_metric_values={"average_return": 11.2},
+        )
+        mock_optimize_pbs.return_value = [mock_optimization_result]
+
+        # Mock evaluation result
+        mock_evaluation_results = {"TestTiger": {"PBSOptimizedPOMCP": [Mock(), Mock(), Mock()]}}
+        mock_evaluation_statistics = pd.DataFrame(
+            {"policy": ["PBSOptimizedPOMCP"], "metric": ["average_return"], "value": [9.1]}
+        )
+        mock_evaluate.return_value = (
+            mock_evaluation_results,
+            mock_evaluation_statistics,
+        )
+
+        # Execute PBS function
+        result = optimize_and_evaluate_planners_pbs(
+            environment=test_environment,
+            initial_belief=test_initial_belief,
+            planner_configs=test_planner_configs,
+            cache_dir=temp_dir,
+            queue="short",
+            n_workers=4,
+            cores=2,
+            memory="8GB",
+            walltime="02:00:00",
+            n_trials=2,
+            optimization_episodes=2,
+            evaluation_episodes=3,
+            verbose=False,
+        )
+
+        # Verify evaluation was called
+        assert mock_evaluate.call_count == 1
+
+        # Capture the arguments passed to evaluate_multiple_optimized_planners
+        eval_call_args = mock_evaluate.call_args
+        evaluated_policies = eval_call_args[1]["optimized_policies"]
+
+        # Verify that the policy passed to evaluation is the same policy from optimization
+        assert len(evaluated_policies) == 1
+        evaluated_policy = evaluated_policies[0]
+        assert (
+            evaluated_policy is mock_policy
+        ), "Evaluation should use the exact same policy object from PBS optimization"
+
+        # Verify that the policy's hyperparameters match the chosen_hyper_parameters
+        optimization_result = result["optimization_results"][0]
+        for param_name, param_value in optimization_result.chosen_hyper_parameters.items():
+            assert hasattr(
+                evaluated_policy, param_name
+            ), f"Policy should have hyperparameter attribute '{param_name}'"
+            assert (
+                getattr(evaluated_policy, param_name) == param_value
+            ), f"Policy hyperparameter '{param_name}' should be {param_value}, got {getattr(evaluated_policy, param_name)}"
+
+        # Verify that all chosen hyperparameters are present in the policy
+        assert len(optimization_result.chosen_hyper_parameters) > 0
+        for param_name in optimization_result.chosen_hyper_parameters:
+            assert hasattr(
+                evaluated_policy, param_name
+            ), f"Policy missing hyperparameter '{param_name}' from PBS optimization result"
 
     def test_optimize_and_evaluate_planners_pbs_docstring_example(self, temp_dir):
         """Test the PBS optimization and evaluation docstring example.
