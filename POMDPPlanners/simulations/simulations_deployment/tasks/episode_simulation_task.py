@@ -2,7 +2,7 @@ import logging
 import random
 import time
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 import numpy as np
 
@@ -576,7 +576,7 @@ class EpisodeSimulationTask(SimulationTask):
         state.pop("logger", None)
         return state
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: Dict[str, Any]) -> None:
         """Restore task state after unpickling.
 
         Args:
