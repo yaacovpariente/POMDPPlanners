@@ -74,50 +74,45 @@ class RiskAverseParameterToOptimizeMapper(ParameterToOptimizeMapper):
         if isinstance(environment, CartPolePOMDP):
             raise NotImplementedError("Risk-averse optimization is not supported for CartPolePOMDP")
         elif isinstance(environment, MountainCarPOMDP):
-            raise NotImplementedError(
-                "Risk-averse optimization is not supported for MountainCarPOMDP"
-            )
+            return [
+                ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+            ]
         elif isinstance(environment, ContinuousLightDarkPOMDP):
             return [
                 ("avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE),
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
                 ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         elif isinstance(environment, DiscreteLightDarkPOMDP):
             return [
                 ("avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE),
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
                 ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         elif isinstance(environment, PushPOMDP):
             return [
                 ("total_all_obstacle_collisions", HyperParameterOptimizationDirection.MINIMIZE),
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
                 ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         elif isinstance(environment, SafeAntVelocityPOMDP):
             return [
                 ("total_safety_violations", HyperParameterOptimizationDirection.MINIMIZE),
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         elif isinstance(environment, TigerPOMDP):
-            raise NotImplementedError("Risk-averse optimization is not supported for TigerPOMDP")
+            return [
+                ("success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
+            ]
         elif isinstance(environment, RockSamplePOMDP):
             return [
                 ("average_dangerous_area_steps", HyperParameterOptimizationDirection.MINIMIZE),
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
                 ("exit_success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         elif isinstance(environment, LaserTagPOMDP):
             return [
                 ("average_all_dangerous_encounters", HyperParameterOptimizationDirection.MINIMIZE),
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
                 ("tag_success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         elif isinstance(environment, PacManPOMDP):
             return [
                 ("avg_collision_encounters", HyperParameterOptimizationDirection.MINIMIZE),
-                ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
                 ("win_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         else:
