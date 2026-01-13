@@ -582,5 +582,5 @@ class EpisodeSimulationTask(SimulationTask):
         Args:
             state: State dictionary from pickle
         """
-        self.__dict__.update(state)
+        vars(self).update(state)
         # Logger will be recreated via @property when first accessed
