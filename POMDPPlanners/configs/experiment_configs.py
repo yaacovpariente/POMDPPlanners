@@ -41,7 +41,30 @@ class AverageReturnParameterToOptimizeMapper(ParameterToOptimizeMapper):
     def generate(
         self, environment: Environment, policy_cls: Optional[Type[Policy]] = None
     ) -> List[Tuple[str, HyperParameterOptimizationDirection]]:
-        return [("average_return", HyperParameterOptimizationDirection.MAXIMIZE)]
+        params = [("average_return", HyperParameterOptimizationDirection.MAXIMIZE)]
+
+        # Add goal-reaching metric based on environment type
+        if isinstance(environment, CartPolePOMDP):
+            params.append(("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+        elif isinstance(environment, MountainCarPOMDP):
+            params.append(("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+        elif isinstance(environment, ContinuousLightDarkPOMDP):
+            params.append(("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+        elif isinstance(environment, DiscreteLightDarkPOMDP):
+            params.append(("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+        elif isinstance(environment, PushPOMDP):
+            params.append(("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+        elif isinstance(environment, TigerPOMDP):
+            params.append(("success_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+        elif isinstance(environment, RockSamplePOMDP):
+            params.append(("exit_success_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+        elif isinstance(environment, LaserTagPOMDP):
+            params.append(("tag_success_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+        elif isinstance(environment, PacManPOMDP):
+            params.append(("win_rate", HyperParameterOptimizationDirection.MAXIMIZE))
+        # SafeAntVelocityPOMDP doesn't have a goal metric
+
+        return params
 
 
 class RiskAverseParameterToOptimizeMapper(ParameterToOptimizeMapper):
@@ -58,16 +81,19 @@ class RiskAverseParameterToOptimizeMapper(ParameterToOptimizeMapper):
             return [
                 ("avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE),
                 ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+                ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         elif isinstance(environment, DiscreteLightDarkPOMDP):
             return [
                 ("avg_obstacle_hit_counter", HyperParameterOptimizationDirection.MINIMIZE),
                 ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+                ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         elif isinstance(environment, PushPOMDP):
             return [
                 ("total_all_obstacle_collisions", HyperParameterOptimizationDirection.MINIMIZE),
                 ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+                ("goal_reaching_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         elif isinstance(environment, SafeAntVelocityPOMDP):
             return [
@@ -80,16 +106,19 @@ class RiskAverseParameterToOptimizeMapper(ParameterToOptimizeMapper):
             return [
                 ("average_dangerous_area_steps", HyperParameterOptimizationDirection.MINIMIZE),
                 ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+                ("exit_success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         elif isinstance(environment, LaserTagPOMDP):
             return [
                 ("average_all_dangerous_encounters", HyperParameterOptimizationDirection.MINIMIZE),
                 ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+                ("tag_success_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         elif isinstance(environment, PacManPOMDP):
             return [
                 ("avg_collision_encounters", HyperParameterOptimizationDirection.MINIMIZE),
                 ("average_return", HyperParameterOptimizationDirection.MAXIMIZE),
+                ("win_rate", HyperParameterOptimizationDirection.MAXIMIZE),
             ]
         else:
             raise ValueError(f"Environment {environment.__class__.__name__} is not supported")
