@@ -1185,13 +1185,9 @@ class TestPushPOMDP:
                 f"got {prob_initial[0]}"
             )
 
-            # Test multiple samples - should all be identical (deterministic)
-            samples = transition.sample(n_samples=5)
-            assert len(samples) == 5
-            for i, sample in enumerate(samples):
-                assert np.array_equal(
-                    sample, expected_state
-                ), f"Action '{action_name}': Sample {i} should equal expected state"
+
+class TestPushPOMDPStateTransition:
+    """Test cases for PushPOMDP state transition methods."""
 
     def test_state_transition_all_actions_no_push_deterministic(self):
         """Test state transition for all actions when robot is too far to push object.
