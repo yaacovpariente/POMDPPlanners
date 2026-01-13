@@ -527,3 +527,224 @@ class TestEnvironmentSerializationRoundTrip:
         action = np.array([0.5, 0.5])  # Sample action
         next_state, obs, reward = unpickled_env.sample_next_step(unpickled_state, action)
         assert next_state is not None
+
+
+class TestEnvironmentDictSerialization:
+    """Test environment to_dict/from_dict serialization for all environments."""
+
+    def _test_environment_dict_serialization(self, env_class: type, init_params: Dict[str, Any]) -> None:
+        """Helper to test environment dict serialization.
+
+        Purpose: Validates that environment can be serialized to dict and reconstructed
+
+        Given: An environment class and initialization parameters
+        When: Environment is converted to dict and reconstructed with from_dict
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+
+        Args:
+            env_class: Environment class to test
+            init_params: Parameters for environment initialization
+        """
+        # Create environment
+        env = env_class(**init_params)
+
+        # Serialize to dict
+        env_dict = env.to_dict()
+
+        # Verify dict structure
+        assert "class" in env_dict
+        assert "module" in env_dict
+        assert "params" in env_dict
+        assert "config_id" in env_dict
+
+        # Reconstruct from dict
+        from POMDPPlanners.core.environment import Environment
+
+        reconstructed_env = Environment.from_dict(env_dict)
+
+        # Verify properties preserved
+        assert reconstructed_env.name == env.name
+        assert reconstructed_env.discount_factor == env.discount_factor
+        assert reconstructed_env.config_id == env.config_id
+        assert reconstructed_env.space_info.action_space == env.space_info.action_space
+        assert reconstructed_env.space_info.observation_space == env.space_info.observation_space
+
+        # Test functionality
+        initial_state = reconstructed_env.initial_state_dist().sample()[0]
+        assert initial_state is not None
+
+        # Test state transitions for environments with get_actions
+        get_actions = getattr(reconstructed_env, "get_actions", None)
+        if get_actions is not None:
+            actions = get_actions()
+            if actions:
+                action = actions[0]
+                next_state, obs, reward = reconstructed_env.sample_next_step(initial_state, action)
+                assert next_state is not None
+                assert obs is not None
+                assert isinstance(reward, (int, float))
+
+    def test_tiger_pomdp_dict_serialization(self):
+        """Test TigerPOMDP dict serialization.
+
+        Purpose: Validates TigerPOMDP can be serialized to dict and reconstructed
+
+        Given: TigerPOMDP instance with default parameters
+        When: Environment is serialized to dict and reconstructed
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+        """
+        self._test_environment_dict_serialization(TigerPOMDP, {"discount_factor": 0.95})
+
+    def test_sanity_pomdp_dict_serialization(self):
+        """Test SanityPOMDP dict serialization.
+
+        Purpose: Validates SanityPOMDP can be serialized to dict and reconstructed
+
+        Given: SanityPOMDP instance with default parameters
+        When: Environment is serialized to dict and reconstructed
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+        """
+        self._test_environment_dict_serialization(SanityPOMDP, {"discount_factor": 0.95})
+
+    def test_cartpole_pomdp_dict_serialization(self):
+        """Test CartPolePOMDP dict serialization.
+
+        Purpose: Validates CartPolePOMDP can be serialized to dict and reconstructed
+
+        Given: CartPolePOMDP instance with noise covariance parameter
+        When: Environment is serialized to dict and reconstructed
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+        """
+        noise_cov = np.eye(4) * 0.1
+        self._test_environment_dict_serialization(
+            CartPolePOMDP, {"discount_factor": 0.95, "noise_cov": noise_cov}
+        )
+
+    def test_mountain_car_pomdp_dict_serialization(self):
+        """Test MountainCarPOMDP dict serialization.
+
+        Purpose: Validates MountainCarPOMDP can be serialized to dict and reconstructed
+
+        Given: MountainCarPOMDP instance with default parameters
+        When: Environment is serialized to dict and reconstructed
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+        """
+        self._test_environment_dict_serialization(MountainCarPOMDP, {"discount_factor": 0.95})
+
+    def test_discrete_light_dark_pomdp_dict_serialization(self):
+        """Test DiscreteLightDarkPOMDP dict serialization.
+
+        Purpose: Validates DiscreteLightDarkPOMDP can be serialized to dict and reconstructed
+
+        Given: DiscreteLightDarkPOMDP instance with default parameters
+        When: Environment is serialized to dict and reconstructed
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+        """
+        self._test_environment_dict_serialization(DiscreteLightDarkPOMDP, {"discount_factor": 0.95})
+
+    def test_continuous_light_dark_pomdp_dict_serialization(self):
+        """Test ContinuousLightDarkPOMDP dict serialization.
+
+        Purpose: Validates ContinuousLightDarkPOMDP can be serialized to dict and reconstructed
+
+        Given: ContinuousLightDarkPOMDP instance with default parameters
+        When: Environment is serialized to dict and reconstructed
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+        """
+        self._test_environment_dict_serialization(ContinuousLightDarkPOMDP, {"discount_factor": 0.95})
+
+    def test_continuous_light_dark_pomdp_discrete_actions_dict_serialization(self):
+        """Test ContinuousLightDarkPOMDPDiscreteActions dict serialization.
+
+        Purpose: Validates ContinuousLightDarkPOMDPDiscreteActions can be serialized and reconstructed
+
+        Given: ContinuousLightDarkPOMDPDiscreteActions instance with default parameters
+        When: Environment is serialized to dict and reconstructed
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+        """
+        self._test_environment_dict_serialization(
+            ContinuousLightDarkPOMDPDiscreteActions, {"discount_factor": 0.95}
+        )
+
+    def test_push_pomdp_dict_serialization(self):
+        """Test PushPOMDP dict serialization.
+
+        Purpose: Validates PushPOMDP can be serialized to dict and reconstructed
+
+        Given: PushPOMDP instance with default parameters
+        When: Environment is serialized to dict and reconstructed
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+        """
+        self._test_environment_dict_serialization(PushPOMDP, {"discount_factor": 0.95})
+
+    def test_laser_tag_pomdp_dict_serialization(self):
+        """Test LaserTagPOMDP dict serialization.
+
+        Purpose: Validates LaserTagPOMDP can be serialized to dict and reconstructed
+
+        Given: LaserTagPOMDP instance with default parameters
+        When: Environment is serialized to dict and reconstructed
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+        """
+        self._test_environment_dict_serialization(LaserTagPOMDP, {"discount_factor": 0.95})
+
+    def test_rock_sample_pomdp_dict_serialization(self):
+        """Test RockSamplePOMDP dict serialization.
+
+        Purpose: Validates RockSamplePOMDP can be serialized to dict and reconstructed
+
+        Given: RockSamplePOMDP instance with map_size parameter
+        When: Environment is serialized to dict and reconstructed
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+        """
+        self._test_environment_dict_serialization(
+            RockSamplePOMDP, {"discount_factor": 0.95, "map_size": (5, 5)}
+        )
+
+    def test_pacman_pomdp_dict_serialization(self):
+        """Test PacManPOMDP dict serialization.
+
+        Purpose: Validates PacManPOMDP can be serialized to dict and reconstructed
+
+        Given: PacManPOMDP instance with default parameters
+        When: Environment is serialized to dict and reconstructed
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+        """
+        self._test_environment_dict_serialization(PacManPOMDP, {"discount_factor": 0.95})
+
+    def test_safety_ant_velocity_pomdp_dict_serialization(self):
+        """Test SafeAntVelocityPOMDP dict serialization.
+
+        Purpose: Validates SafeAntVelocityPOMDP can be serialized to dict and reconstructed
+
+        Given: SafeAntVelocityPOMDP instance with default parameters
+        When: Environment is serialized to dict and reconstructed
+        Then: Reconstructed environment maintains all properties and functionality
+
+        Test type: interface
+        """
+        self._test_environment_dict_serialization(SafeAntVelocityPOMDP, {"discount_factor": 0.95})
