@@ -35,7 +35,6 @@
   "reportFunctionMemberAccess": "warning",
   "reportIncompatibleMethodOverride": "error",
   "reportIncompatibleVariableOverride": "error",
-  "reportOverlappingOverloads": "error",
   "reportAssignmentType": "warning",
   "reportReturnType": "warning",
   "reportArgumentType": "warning",
