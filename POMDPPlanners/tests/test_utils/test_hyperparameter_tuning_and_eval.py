@@ -57,6 +57,9 @@ class MockTestPolicy(Policy):
             discount_factor=discount_factor,
             name=name,
         )
+        # Store any additional kwargs as attributes (e.g., hyperparameters)
+        for key, value in kwargs.items():
+            setattr(self, key, value)
 
     def action(self, belief):
         """Return first action from environment"""

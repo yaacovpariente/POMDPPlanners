@@ -709,6 +709,8 @@ class TestWorkflowOptimizedConfigUsage:
         chosen_hyperparams = {"exploration_constant": 1.75, "n_simulations": 18}
         optimized_policy = POMCP(
             environment=env,
+            discount_factor=0.95,
+            depth=5,
             name="OptimizedPOMCP",
             **chosen_hyperparams,  # Store hyperparameters as policy attributes
         )
@@ -872,10 +874,14 @@ class TestWorkflowOptimizedConfigUsage:
 
         # Create two policies with different hyperparameters
         chosen_hyperparams_1 = {"exploration_constant": 1.2, "n_simulations": 15}
-        optimized_policy_1 = POMCP(environment=env, name="POMCP1", **chosen_hyperparams_1)
+        optimized_policy_1 = POMCP(
+            environment=env, discount_factor=0.95, depth=5, name="POMCP1", **chosen_hyperparams_1
+        )
 
         chosen_hyperparams_2 = {"exploration_constant": 2.1, "n_simulations": 25}
-        optimized_policy_2 = POMCP(environment=env, name="POMCP2", **chosen_hyperparams_2)
+        optimized_policy_2 = POMCP(
+            environment=env, discount_factor=0.95, depth=5, name="POMCP2", **chosen_hyperparams_2
+        )
 
         # Create optimization results
         optimization_result_1 = OptimizedPolicyResult(
