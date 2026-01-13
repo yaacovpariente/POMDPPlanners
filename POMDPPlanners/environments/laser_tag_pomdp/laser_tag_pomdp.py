@@ -42,6 +42,7 @@ class LaserTagPOMDPMetrics(Enum):
     """Metric names for LaserTag POMDP environment."""
 
     TAG_SUCCESS_RATE = "tag_success_rate"
+    GOAL_REACHING_RATE = "goal_reaching_rate"
     AVERAGE_EPISODE_LENGTH = "average_episode_length"
     AVERAGE_FAILED_TAG_ATTEMPTS = "average_failed_tag_attempts"
     AVERAGE_OBSTACLE_COLLISIONS = "average_obstacle_collisions"
@@ -914,6 +915,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     def _collect_episode_data(self, histories: List[History]) -> Tuple:
         episode_lengths = []
         success_indicators = []
+        goal_reached_indicators = []
         failed_tags_per_episode = []
         obstacle_collisions_per_episode = []
         dangerous_area_steps_per_episode = []
@@ -932,6 +934,15 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             )
             success_indicators.append(1 if episode_successful else 0)
 
+            # Check if goal was reached (opponent was tagged) by checking if any step reached terminal state
+            goal_reached = False
+            for step in history.history:
+                if isinstance(step.state, np.ndarray) and len(step.state) == 5:
+                    if bool(step.state[4]):  # Terminal flag is set when tag is successful
+                        goal_reached = True
+                        break
+            goal_reached_indicators.append(1 if goal_reached else 0)
+
             (
                 episode_failed_tags,
                 episode_obstacle_collisions,
@@ -947,6 +958,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         return (
             episode_lengths,
             success_indicators,
+            goal_reached_indicators,
             failed_tags_per_episode,
             obstacle_collisions_per_episode,
             dangerous_area_steps_per_episode,
@@ -957,6 +969,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         self,
         total_episodes: int,
         success_indicators: List[int],
+        goal_reached_indicators: List[int],
         episode_lengths: List[int],
         failed_tags_per_episode: List[int],
         obstacle_collisions_per_episode: List[int],
@@ -965,6 +978,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     ) -> Tuple:
         if total_episodes >= 2:
             success_ci = confidence_interval(data=success_indicators, confidence=0.95)
+            goal_reached_ci = confidence_interval(data=goal_reached_indicators, confidence=0.95)
             episode_length_ci = confidence_interval(data=episode_lengths, confidence=0.95)
             failed_tags_ci = confidence_interval(data=failed_tags_per_episode, confidence=0.95)
             obstacle_collisions_ci = confidence_interval(
@@ -978,6 +992,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
             )
         else:
             success_ci = (-np.inf, np.inf)
+            goal_reached_ci = (-np.inf, np.inf)
             episode_length_ci = (-np.inf, np.inf)
             failed_tags_ci = (-np.inf, np.inf)
             obstacle_collisions_ci = (-np.inf, np.inf)
@@ -986,6 +1001,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         return (
             success_ci,
+            goal_reached_ci,
             episode_length_ci,
             failed_tags_ci,
             obstacle_collisions_ci,
@@ -1006,12 +1022,14 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
     def _build_metric_values(
         self,
         success_rate: float,
+        goal_reaching_rate: float,
         avg_episode_length: float,
         avg_failed_tags: float,
         avg_obstacle_collisions: float,
         avg_dangerous_area_steps: float,
         avg_all_dangerous_encounters: float,
         success_ci: Tuple[float, float],
+        goal_reached_ci: Tuple[float, float],
         episode_length_ci: Tuple[float, float],
         failed_tags_ci: Tuple[float, float],
         obstacle_collisions_ci: Tuple[float, float],
@@ -1024,6 +1042,12 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
                 value=success_rate,
                 lower_confidence_bound=success_ci[0],
                 upper_confidence_bound=success_ci[1],
+            ),
+            MetricValue(
+                name=LaserTagPOMDPMetrics.GOAL_REACHING_RATE.value,
+                value=goal_reaching_rate,
+                lower_confidence_bound=goal_reached_ci[0],
+                upper_confidence_bound=goal_reached_ci[1],
             ),
             MetricValue(
                 name=LaserTagPOMDPMetrics.AVERAGE_EPISODE_LENGTH.value,
@@ -1066,6 +1090,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         (
             episode_lengths,
             success_indicators,
+            goal_reached_indicators,
             failed_tags_per_episode,
             obstacle_collisions_per_episode,
             dangerous_area_steps_per_episode,
@@ -1074,6 +1099,8 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         successful_tags = sum(success_indicators)
         success_rate = successful_tags / total_episodes
+        goals_reached = sum(goal_reached_indicators)
+        goal_reaching_rate = goals_reached / total_episodes
         avg_episode_length = float(np.mean(episode_lengths))
         avg_failed_tags = float(np.mean(failed_tags_per_episode))
         avg_obstacle_collisions = float(np.mean(obstacle_collisions_per_episode))
@@ -1082,6 +1109,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         (
             success_ci,
+            goal_reached_ci,
             episode_length_ci,
             failed_tags_ci,
             obstacle_collisions_ci,
@@ -1090,6 +1118,7 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
         ) = self._calculate_confidence_intervals(
             total_episodes,
             success_indicators,
+            goal_reached_indicators,
             episode_lengths,
             failed_tags_per_episode,
             obstacle_collisions_per_episode,
@@ -1099,12 +1128,14 @@ class LaserTagPOMDP(DiscreteActionsEnvironment):
 
         return self._build_metric_values(
             success_rate,
+            goal_reaching_rate,
             avg_episode_length,
             avg_failed_tags,
             avg_obstacle_collisions,
             avg_dangerous_area_steps,
             avg_all_dangerous_encounters,
             success_ci,
+            goal_reached_ci,
             episode_length_ci,
             failed_tags_ci,
             obstacle_collisions_ci,
