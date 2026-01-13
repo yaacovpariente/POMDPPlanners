@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -182,7 +182,7 @@ class ActionSampler(ABC):
         """
         return self.__dict__.copy()
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: Dict[str, Any]) -> None:
         """Restore state from serialization.
 
         This method is automatically called by pickle to restore the object's state.

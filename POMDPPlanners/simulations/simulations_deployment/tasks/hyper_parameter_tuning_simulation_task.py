@@ -947,7 +947,7 @@ class HyperParameterTuningSimulationTask(SimulationTask):
         # Logger is already a @property, not stored in __dict__
         return state
 
-    def __setstate__(self, state):
+    def __setstate__(self, state: Dict[str, Any]) -> None:
         """Restore task state after unpickling and reconstruct excluded attributes.
 
         Args:
