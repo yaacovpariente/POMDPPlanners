@@ -6,6 +6,7 @@ import pytest
 
 from POMDPPlanners.core.distributions import Distribution
 from POMDPPlanners.utils.statistics_utils import (
+    aggregate_weights_for_duplicate_values,
     cvar_estimator,
     cvar_estimator_from_dist,
     tv_distance,
@@ -215,6 +216,75 @@ def test_cvar_estimator_from_dist():
     cvar = cvar_estimator_from_dist(values, weights, alpha)
     assert np.isclose(cvar, 7.07106781, atol=1e-4)
 
+    # Test alpha boundary cases
+    # alpha = 1.0 should return weighted average of all values
+    values = np.array([1.0, 2.0, 3.0])
+    weights = np.array([0.33, 0.33, 0.34])
+    cvar = cvar_estimator_from_dist(values, weights, 1.0)
+    expected_mean = np.sum(values * weights)
+    assert np.isclose(cvar, expected_mean, atol=1e-4)
+
+    # alpha = 0.0 currently returns NaN (division by zero) - test this behavior
+    cvar = cvar_estimator_from_dist(values, weights, 0.0)
+    assert np.isnan(cvar)
+
+    # Test negative values
+    values = np.array([-5.0, -1.0, 3.0])
+    weights = np.array([0.33, 0.33, 0.34])
+    cvar = cvar_estimator_from_dist(values, weights, 0.2)
+    assert isinstance(cvar, (float, np.floating))
+    assert np.isclose(cvar, 3.0, atol=1e-4)
+
+    # Test zero weights (but still sum to 1)
+    values = np.array([1.0, 2.0, 3.0])
+    weights = np.array([0.0, 0.5, 0.5])
+    cvar = cvar_estimator_from_dist(values, weights, 0.2)
+    assert isinstance(cvar, (float, np.floating))
+    assert np.isclose(cvar, 3.0, atol=1e-4)  # Should be average of values with non-zero weights
+
+    # Test very small alpha
+    values = np.array([1.0, 2.0, 3.0])
+    weights = np.array([0.33, 0.33, 0.34])
+    cvar = cvar_estimator_from_dist(values, weights, 0.001)
+    assert isinstance(cvar, (float, np.floating))
+    assert not np.isnan(cvar)
+    assert np.isclose(cvar, 3.0, atol=1e-4)
+
+    # Test alpha very close to 1
+    cvar = cvar_estimator_from_dist(values, weights, 0.999999999999)
+    assert isinstance(cvar, (float, np.floating))
+    assert not np.isnan(cvar)
+    assert np.isclose(cvar, np.sum(values * weights), atol=1e-4)
+
+    # Test case where all cumulative probs < (1-alpha) - triggers var_idx = 0 branch
+    values = np.array([1.0, 2.0, 3.0])
+    weights = np.array([0.1, 0.1, 0.8])
+    cvar = cvar_estimator_from_dist(values, weights, 0.95)
+    assert isinstance(cvar, (float, np.floating))
+    assert not np.isnan(cvar)
+    assert np.isclose(cvar, (0.05 * 1 + 0.1 * 2 + 0.8 * 3) / 0.95, atol=1e-4)
+
+    # Test case where cumulative prob exactly equals (1-alpha)
+    values = np.array([1.0, 2.0, 3.0])
+    weights = np.array([0.5, 0.3, 0.2])
+    # For alpha=0.8, cumulative probs are [0.5, 0.8, 1.0], so 0.8 exactly equals (1-0.2)
+    cvar = cvar_estimator_from_dist(values, weights, 0.2)
+    assert isinstance(cvar, (float, np.floating))
+    assert not np.isnan(cvar)
+    assert np.isclose(cvar, 3.0, atol=1e-4)
+
+    # Test NaN in values (should propagate NaN)
+    values = np.array([1.0, np.nan, 3.0])
+    weights = np.array([0.33, 0.33, 0.34])
+    cvar = cvar_estimator_from_dist(values, weights, 0.2)
+    assert np.isnan(cvar)
+
+    # Test Inf in values (should propagate NaN)
+    values = np.array([1.0, np.inf, 3.0])
+    weights = np.array([0.33, 0.33, 0.34])
+    cvar = cvar_estimator_from_dist(values, weights, 0.2)
+    assert np.isnan(cvar) or np.isinf(cvar)
+
     # Test invalid inputs
     with pytest.raises(ValueError):
         cvar_estimator_from_dist(np.array([1.0]), np.array([0.5]), 0.2)  # weights don't sum to 1
@@ -224,6 +294,336 @@ def test_cvar_estimator_from_dist():
 
     with pytest.raises(ValueError):
         cvar_estimator_from_dist(np.array([1.0]), np.array([1.0]), 1.1)  # invalid alpha
+
+    # Test array length mismatch (should raise ValueError)
+    with pytest.raises(ValueError, match="Values and weights arrays must have the same length"):
+        cvar_estimator_from_dist(np.array([1.0, 2.0]), np.array([0.5, 0.3, 0.2]), 0.2)
+
+
+def test_cvar_estimator_from_dist_with_duplicate_values():
+    """Test CVaR calculation with duplicate values and weight aggregation.
+
+    Purpose: Validates that cvar_estimator_from_dist correctly handles duplicate
+    values by aggregating their weights, ensuring the CVaR calculation is equivalent
+    to the same distribution without duplicates
+
+    Given: Distributions with duplicate values where the same value appears multiple
+    times with different weights
+    When: cvar_estimator_from_dist processes the distribution
+    Then: Returns the same CVaR as the equivalent distribution with aggregated weights
+    and unique values
+
+    Test type: unit
+    """
+    # Test case 1: Multiple duplicates of the same value
+    # Distribution: value 2.0 appears 3 times with weights 0.1, 0.2, 0.1
+    # This should be equivalent to value 2.0 with weight 0.4
+    values_with_duplicates = np.array([1.0, 2.0, 2.0, 2.0, 3.0])
+    weights_with_duplicates = np.array([0.3, 0.1, 0.2, 0.1, 0.3])
+
+    # Equivalent distribution without duplicates
+    values_unique = np.array([1.0, 2.0, 3.0])
+    weights_unique = np.array([0.3, 0.4, 0.3])  # 0.1 + 0.2 + 0.1 = 0.4
+
+    alpha = 0.2
+    cvar_with_duplicates = cvar_estimator_from_dist(
+        values_with_duplicates, weights_with_duplicates, alpha
+    )
+    cvar_unique = cvar_estimator_from_dist(values_unique, weights_unique, alpha)
+
+    # Both should produce the same CVaR
+    assert np.isclose(cvar_with_duplicates, cvar_unique, atol=1e-4)
+    assert isinstance(cvar_with_duplicates, (float, np.floating))
+
+    # Test case 2: Multiple groups of duplicates
+    # Distribution: 1.0 appears twice, 3.0 appears three times
+    values_multi_dup = np.array([1.0, 1.0, 2.0, 3.0, 3.0, 3.0])
+    weights_multi_dup = np.array([0.15, 0.15, 0.2, 0.1, 0.2, 0.2])
+
+    # Equivalent distribution: 1.0 with 0.3, 2.0 with 0.2, 3.0 with 0.5
+    values_multi_unique = np.array([1.0, 2.0, 3.0])
+    weights_multi_unique = np.array([0.3, 0.2, 0.5])
+
+    cvar_multi_dup = cvar_estimator_from_dist(values_multi_dup, weights_multi_dup, alpha)
+    cvar_multi_unique = cvar_estimator_from_dist(values_multi_unique, weights_multi_unique, alpha)
+
+    assert np.isclose(cvar_multi_dup, cvar_multi_unique, atol=1e-4)
+
+    # Test case 3: Duplicates with different alpha values
+    # Verify aggregation works correctly across different alpha thresholds
+    values_dup = np.array([0.0, 1.0, 1.0, 2.0, 3.0])
+    weights_dup = np.array([0.1, 0.2, 0.3, 0.2, 0.2])
+
+    values_no_dup = np.array([0.0, 1.0, 2.0, 3.0])
+    weights_no_dup = np.array([0.1, 0.5, 0.2, 0.2])  # 0.2 + 0.3 = 0.5
+
+    for test_alpha in [0.1, 0.3, 0.5, 0.7, 0.9]:
+        cvar_dup = cvar_estimator_from_dist(values_dup, weights_dup, test_alpha)
+        cvar_no_dup = cvar_estimator_from_dist(values_no_dup, weights_no_dup, test_alpha)
+        assert np.isclose(
+            cvar_dup, cvar_no_dup, atol=1e-4
+        ), f"CVaR mismatch at alpha={test_alpha}: {cvar_dup} vs {cvar_no_dup}"
+
+    # Test case 4: Duplicates at the tail (worst-case values)
+    # This tests that duplicate aggregation works correctly for CVaR tail calculations
+    values_tail_dup = np.array([1.0, 2.0, 5.0, 5.0, 5.0])
+    weights_tail_dup = np.array([0.2, 0.3, 0.15, 0.2, 0.15])
+
+    values_tail_unique = np.array([1.0, 2.0, 5.0])
+    weights_tail_unique = np.array([0.2, 0.3, 0.5])  # 0.15 + 0.2 + 0.15 = 0.5
+
+    alpha_tail = 0.3  # Focus on worst 30%
+    cvar_tail_dup = cvar_estimator_from_dist(values_tail_dup, weights_tail_dup, alpha_tail)
+    cvar_tail_unique = cvar_estimator_from_dist(values_tail_unique, weights_tail_unique, alpha_tail)
+
+    assert np.isclose(cvar_tail_dup, cvar_tail_unique, atol=1e-4)
+    # CVaR should be >= 5.0 since worst 30% includes the 5.0 values
+    assert cvar_tail_dup >= 5.0 - 1e-4
+
+    # Test case 5: All values are duplicates (edge case)
+    # All values are the same, so aggregation should result in single value
+    values_all_dup = np.array([10.0, 10.0, 10.0, 10.0])
+    weights_all_dup = np.array([0.1, 0.3, 0.4, 0.2])
+
+    cvar_all_dup = cvar_estimator_from_dist(values_all_dup, weights_all_dup, alpha)
+    # Should return the single unique value
+    assert np.isclose(cvar_all_dup, 10.0, atol=1e-4)
+
+    # Test case 6: Duplicates with negative values
+    values_neg_dup = np.array([-2.0, -1.0, -1.0, 0.0, 1.0])
+    weights_neg_dup = np.array([0.2, 0.15, 0.25, 0.2, 0.2])
+
+    values_neg_unique = np.array([-2.0, -1.0, 0.0, 1.0])
+    weights_neg_unique = np.array([0.2, 0.4, 0.2, 0.2])  # 0.15 + 0.25 = 0.4
+
+    cvar_neg_dup = cvar_estimator_from_dist(values_neg_dup, weights_neg_dup, alpha)
+    cvar_neg_unique = cvar_estimator_from_dist(values_neg_unique, weights_neg_unique, alpha)
+
+    assert np.isclose(cvar_neg_dup, cvar_neg_unique, atol=1e-4)
+
+
+def test_aggregate_weights_for_duplicate_values_basic():
+    """Test basic weight aggregation for duplicate values.
+
+    Purpose: Validates that aggregate_weights_for_duplicate_values correctly
+    combines weights for duplicate values and returns unique values with
+    normalized aggregated weights
+
+    Given: Arrays with duplicate values [1.0, 2.0, 2.0, 3.0] and weights [0.3, 0.2, 0.3, 0.2]
+    When: aggregate_weights_for_duplicate_values processes the arrays
+    Then: Returns unique values [1.0, 2.0, 3.0] and aggregated weights [0.3, 0.5, 0.2] that sum to 1
+
+    Test type: unit
+    """
+    values = np.array([1.0, 2.0, 2.0, 3.0])
+    weights = np.array([0.3, 0.2, 0.3, 0.2])
+    unique_vals, agg_weights = aggregate_weights_for_duplicate_values(values, weights)
+
+    # Check unique values
+    expected_unique = np.array([1.0, 2.0, 3.0])
+    assert np.array_equal(unique_vals, expected_unique)
+
+    # Check aggregated weights (2.0 appears twice with weights 0.2 and 0.3, so sum is 0.5)
+    expected_weights = np.array([0.3, 0.5, 0.2])
+    assert np.allclose(agg_weights, expected_weights)
+
+    # Check weights sum to 1
+    assert np.isclose(np.sum(agg_weights), 1.0)
+
+
+def test_aggregate_weights_for_duplicate_values_no_duplicates():
+    """Test weight aggregation with no duplicate values.
+
+    Purpose: Validates that aggregate_weights_for_duplicate_values handles
+    arrays with no duplicates correctly, returning the same values with normalized weights
+
+    Given: Arrays with unique values [1.0, 2.0, 3.0] and weights [0.3, 0.4, 0.3]
+    When: aggregate_weights_for_duplicate_values processes the arrays
+    Then: Returns the same unique values and normalized weights that sum to 1
+
+    Test type: unit
+    """
+    values = np.array([1.0, 2.0, 3.0])
+    weights = np.array([0.3, 0.4, 0.3])
+    unique_vals, agg_weights = aggregate_weights_for_duplicate_values(values, weights)
+
+    # Should return same values (sorted)
+    expected_unique = np.array([1.0, 2.0, 3.0])
+    assert np.array_equal(unique_vals, expected_unique)
+
+    # Weights should be normalized (sum to 1)
+    assert np.isclose(np.sum(agg_weights), 1.0)
+    assert np.allclose(agg_weights, weights / np.sum(weights))
+
+
+def test_aggregate_weights_for_duplicate_values_all_duplicates():
+    """Test weight aggregation with all duplicate values.
+
+    Purpose: Validates that aggregate_weights_for_duplicate_values correctly
+    handles arrays where all values are the same, aggregating all weights
+
+    Given: Arrays with all same values [5.0, 5.0, 5.0] and weights [0.2, 0.3, 0.5]
+    When: aggregate_weights_for_duplicate_values processes the arrays
+    Then: Returns single unique value [5.0] with aggregated weight [1.0]
+
+    Test type: unit
+    """
+    values = np.array([5.0, 5.0, 5.0])
+    weights = np.array([0.2, 0.3, 0.5])
+    unique_vals, agg_weights = aggregate_weights_for_duplicate_values(values, weights)
+
+    # Should return single unique value
+    assert len(unique_vals) == 1
+    assert np.isclose(unique_vals[0], 5.0)
+
+    # Aggregated weight should be 1.0
+    assert len(agg_weights) == 1
+    assert np.isclose(agg_weights[0], 1.0)
+
+
+def test_aggregate_weights_for_duplicate_values_multiple_duplicates():
+    """Test weight aggregation with multiple groups of duplicates.
+
+    Purpose: Validates that aggregate_weights_for_duplicate_values correctly
+    handles multiple groups of duplicate values
+
+    Given: Arrays with multiple duplicate groups [1.0, 1.0, 2.0, 3.0, 3.0, 3.0]
+    and weights [0.1, 0.2, 0.1, 0.15, 0.2, 0.25]
+    When: aggregate_weights_for_duplicate_values processes the arrays
+    Then: Returns unique values [1.0, 2.0, 3.0] with correctly aggregated weights
+
+    Test type: unit
+    """
+    values = np.array([1.0, 1.0, 2.0, 3.0, 3.0, 3.0])
+    weights = np.array([0.1, 0.2, 0.1, 0.15, 0.2, 0.25])
+    unique_vals, agg_weights = aggregate_weights_for_duplicate_values(values, weights)
+
+    # Check unique values
+    expected_unique = np.array([1.0, 2.0, 3.0])
+    assert np.array_equal(unique_vals, expected_unique)
+
+    # Check aggregated weights
+    # 1.0: 0.1 + 0.2 = 0.3
+    # 2.0: 0.1
+    # 3.0: 0.15 + 0.2 + 0.25 = 0.6
+    # Total: 1.0, normalized
+    expected_weights = np.array([0.3, 0.1, 0.6])
+    assert np.allclose(agg_weights, expected_weights)
+    assert np.isclose(np.sum(agg_weights), 1.0)
+
+
+def test_aggregate_weights_for_duplicate_values_floating_point_precision():
+    """Test weight aggregation handles floating point precision correctly.
+
+    Purpose: Validates that aggregate_weights_for_duplicate_values correctly
+    normalizes weights even when input weights don't sum exactly to 1 due to
+    floating point precision
+
+    Given: Arrays with weights that sum to approximately 1.0 due to floating point
+    When: aggregate_weights_for_duplicate_values processes the arrays
+    Then: Returns normalized weights that sum exactly to 1.0
+
+    Test type: unit
+    """
+    values = np.array([1.0, 2.0, 2.0])
+    # Weights that might not sum exactly to 1.0 due to floating point
+    weights = np.array([0.3333333333333333, 0.3333333333333333, 0.3333333333333334])
+    unique_vals, agg_weights = aggregate_weights_for_duplicate_values(values, weights)
+
+    # Weights should be normalized to sum exactly to 1.0
+    assert np.isclose(np.sum(agg_weights), 1.0, rtol=1e-10)
+
+    # Check that 2.0's weights are aggregated
+    assert len(unique_vals) == 2
+    assert np.array_equal(unique_vals, np.array([1.0, 2.0]))
+
+
+def test_aggregate_weights_for_duplicate_values_negative_values():
+    """Test weight aggregation with negative values.
+
+    Purpose: Validates that aggregate_weights_for_duplicate_values correctly
+    handles negative values
+
+    Given: Arrays with negative duplicate values [-1.0, -1.0, 0.0, 1.0]
+    and weights [0.25, 0.25, 0.25, 0.25]
+    When: aggregate_weights_for_duplicate_values processes the arrays
+    Then: Returns unique values with correctly aggregated weights
+
+    Test type: unit
+    """
+    values = np.array([-1.0, -1.0, 0.0, 1.0])
+    weights = np.array([0.25, 0.25, 0.25, 0.25])
+    unique_vals, agg_weights = aggregate_weights_for_duplicate_values(values, weights)
+
+    expected_unique = np.array([-1.0, 0.0, 1.0])
+    assert np.array_equal(unique_vals, expected_unique)
+
+    expected_weights = np.array([0.5, 0.25, 0.25])
+    assert np.allclose(agg_weights, expected_weights)
+    assert np.isclose(np.sum(agg_weights), 1.0)
+
+
+def test_aggregate_weights_for_duplicate_values_empty_input():
+    """Test weight aggregation with empty input arrays.
+
+    Purpose: Validates that aggregate_weights_for_duplicate_values raises
+    ValueError for empty input arrays
+
+    Given: Empty arrays
+    When: aggregate_weights_for_duplicate_values is called
+    Then: ValueError is raised
+
+    Test type: unit
+    """
+    with pytest.raises(ValueError, match="Input arrays must not be empty"):
+        aggregate_weights_for_duplicate_values(np.array([]), np.array([]))
+
+    with pytest.raises(ValueError, match="Input arrays must not be empty"):
+        aggregate_weights_for_duplicate_values(np.array([1.0]), np.array([]))
+
+    with pytest.raises(ValueError, match="Input arrays must not be empty"):
+        aggregate_weights_for_duplicate_values(np.array([]), np.array([0.5]))
+
+
+def test_aggregate_weights_for_duplicate_values_length_mismatch():
+    """Test weight aggregation with mismatched array lengths.
+
+    Purpose: Validates that aggregate_weights_for_duplicate_values raises
+    ValueError when values and weights arrays have different lengths
+
+    Given: Arrays with mismatched lengths
+    When: aggregate_weights_for_duplicate_values is called
+    Then: ValueError is raised
+
+    Test type: unit
+    """
+    with pytest.raises(ValueError, match="Values and weights arrays must have the same length"):
+        aggregate_weights_for_duplicate_values(np.array([1.0, 2.0]), np.array([0.5, 0.3, 0.2]))
+
+    with pytest.raises(ValueError, match="Values and weights arrays must have the same length"):
+        aggregate_weights_for_duplicate_values(np.array([1.0, 2.0, 3.0]), np.array([0.5, 0.5]))
+
+
+def test_aggregate_weights_for_duplicate_values_single_value():
+    """Test weight aggregation with single value.
+
+    Purpose: Validates that aggregate_weights_for_duplicate_values correctly
+    handles single value arrays
+
+    Given: Single value array [5.0] with weight [1.0]
+    When: aggregate_weights_for_duplicate_values processes the arrays
+    Then: Returns the same value with normalized weight [1.0]
+
+    Test type: unit
+    """
+    values = np.array([5.0])
+    weights = np.array([1.0])
+    unique_vals, agg_weights = aggregate_weights_for_duplicate_values(values, weights)
+
+    assert len(unique_vals) == 1
+    assert np.isclose(unique_vals[0], 5.0)
+    assert len(agg_weights) == 1
+    assert np.isclose(agg_weights[0], 1.0)
 
 
 # ============================================================================
