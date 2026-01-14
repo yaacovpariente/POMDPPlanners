@@ -489,6 +489,9 @@ def cvar_estimator_from_dist(values: np.ndarray, weights: np.ndarray, alpha: flo
     if len(values) == 1:
         return float(values[0])
 
+    if np.unique(values).size == 1:
+        return float(values[0])
+
     # Sort values and weights
     sort_idx = np.argsort(values)
     sorted_values = values[sort_idx]
