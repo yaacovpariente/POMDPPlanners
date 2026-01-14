@@ -532,7 +532,9 @@ class TestEnvironmentSerializationRoundTrip:
 class TestEnvironmentDictSerialization:
     """Test environment to_dict/from_dict serialization for all environments."""
 
-    def _test_environment_dict_serialization(self, env_class: type, init_params: Dict[str, Any]) -> None:
+    def _test_environment_dict_serialization(
+        self, env_class: type, init_params: Dict[str, Any]
+    ) -> None:
         """Helper to test environment dict serialization.
 
         Purpose: Validates that environment can be serialized to dict and reconstructed
@@ -665,7 +667,9 @@ class TestEnvironmentDictSerialization:
 
         Test type: interface
         """
-        self._test_environment_dict_serialization(ContinuousLightDarkPOMDP, {"discount_factor": 0.95})
+        self._test_environment_dict_serialization(
+            ContinuousLightDarkPOMDP, {"discount_factor": 0.95}
+        )
 
     def test_continuous_light_dark_pomdp_discrete_actions_dict_serialization(self):
         """Test ContinuousLightDarkPOMDPDiscreteActions dict serialization.
