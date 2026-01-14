@@ -26,9 +26,57 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 import numpy as np
 
 from POMDPPlanners.core.distributions import Distribution
+from POMDPPlanners.core.serialization import (
+    deserialize_value as deserialize_value_base,
+    register_deserializer,
+    register_serializer,
+    serialize_value as serialize_value_base,
+)
 from POMDPPlanners.core.simulation import History, MetricValue, StepData
 from POMDPPlanners.utils.config_to_id import config_to_id
 from POMDPPlanners.utils.logger import get_logger
+
+
+def _serialize_space_info(space_info: Any) -> dict:
+    """Serialize SpaceInfo to plain dict without type markers.
+
+    Maintains backward compatibility with existing saved environments.
+    Format: {"action_space": "discrete", "observation_space": "continuous"}
+
+    Args:
+        space_info: SpaceInfo instance to serialize
+
+    Returns:
+        Plain dict with action_space and observation_space string values
+    """
+    return {
+        "action_space": space_info.action_space.value,
+        "observation_space": space_info.observation_space.value,
+    }
+
+
+def _deserialize_space_info(data: dict) -> Any:
+    """Deserialize SpaceInfo from plain dict format.
+
+    Handles dicts with action_space and observation_space keys without
+    requiring __type__ markers for backward compatibility.
+
+    Args:
+        data: Dict with action_space and observation_space keys
+
+    Returns:
+        SpaceInfo instance
+
+    Raises:
+        ValueError: If data cannot be deserialized to SpaceInfo
+    """
+    if isinstance(data, dict) and "action_space" in data and "observation_space" in data:
+        # Import SpaceType here to avoid circular dependency
+        return SpaceInfo(
+            action_space=SpaceType(data["action_space"]),
+            observation_space=SpaceType(data["observation_space"]),
+        )
+    raise ValueError(f"Cannot deserialize SpaceInfo from {data}")
 
 
 class SpaceType(Enum):
@@ -71,6 +119,12 @@ class SpaceInfo:
 
     action_space: SpaceType
     observation_space: SpaceType
+
+
+# Register SpaceInfo serialization handlers at module load time
+# This enables centralized serialization system to handle SpaceInfo automatically
+register_serializer(SpaceInfo, _serialize_space_info)
+register_deserializer(SpaceInfo, _deserialize_space_info)
 
 
 class ObservationModel(Distribution, ABC):
@@ -354,7 +408,15 @@ class Environment(ABC):
 
     @property
     def config_id(self) -> str:
-        """Generate a deterministic identifier based on environment configuration."""
+        """Generate a deterministic identifier based on environment configuration.
+
+        Note:
+            Uses custom serialization logic (not centralized serialize_value) to ensure:
+            - Deterministic dict key ordering for consistent hashing
+            - Compact format without __type__ markers
+            - Recursive handling of nested objects
+            Changing this serialization format would invalidate all cached results.
+        """
 
         def serialize_value(value):
             if isinstance(value, np.ndarray):
@@ -581,42 +643,10 @@ class Environment(ABC):
             >>> env = TigerPOMDP(discount_factor=0.95)
             >>> env_dict = env.to_dict()
             >>> # env_dict contains class info and all parameters
+
+        Note:
+            Uses centralized serialization system with registered SpaceInfo handler.
         """
-
-        def serialize_value(value):
-            """Serialize value for JSON compatibility."""
-            if value is None:
-                return None
-            elif isinstance(value, Path):
-                return str(value)
-            elif isinstance(value, np.ndarray):
-                return value.tolist()
-            elif isinstance(value, (np.integer, np.floating)):
-                return value.item()
-            elif isinstance(value, Enum):
-                return value.value
-            elif isinstance(value, SpaceInfo):
-                return {
-                    "action_space": value.action_space.value,
-                    "observation_space": value.observation_space.value,
-                }
-            elif isinstance(value, (str, int, float, bool)):
-                return value
-            elif isinstance(value, set):
-                # Serialize sets as lists with a marker
-                return {"__type__": "set", "values": [serialize_value(v) for v in value]}
-            elif isinstance(value, tuple):
-                # Serialize tuples as lists with a marker
-                return {"__type__": "tuple", "values": [serialize_value(v) for v in value]}
-            elif isinstance(value, list):
-                return [serialize_value(v) for v in value]
-            elif isinstance(value, dict):
-                return {str(k): serialize_value(v) for k, v in value.items()}
-            elif isinstance(value, logging.Logger):
-                return None  # Skip loggers
-            else:
-                return str(value)
-
         # Get environment class information
         env_class = self.__class__
         env_module = env_class.__module__
@@ -631,7 +661,8 @@ class Environment(ABC):
                 continue
             if hasattr(self, param_name):
                 value = getattr(self, param_name)
-                serialized_value = serialize_value(value)
+                # Use centralized serialization (SpaceInfo handled by registered handler)
+                serialized_value = serialize_value_base(value)
                 if serialized_value is not None:  # Skip None values (like logger)
                     params[param_name] = serialized_value
 
@@ -667,54 +698,76 @@ class Environment(ABC):
         """
 
         def deserialize_value(value, target_type, param_name=""):
-            """Deserialize value to target type."""
-            if value is None:
-                return None
+            """Deserialize value with environment-specific handling.
 
-            # Handle dictionaries with type markers (sets, tuples)
-            if isinstance(value, dict):
-                if value.get("__type__") == "set":
-                    return set(deserialize_value(v, type(v), param_name) for v in value["values"])
-                elif value.get("__type__") == "tuple":
-                    return tuple(deserialize_value(v, type(v), param_name) for v in value["values"])
-                elif "action_space" in value and "observation_space" in value:
-                    # Handle SpaceInfo reconstruction
-                    return SpaceInfo(
-                        action_space=SpaceType(value["action_space"]),
-                        observation_space=SpaceType(value["observation_space"]),
-                    )
+            Handles environment-specific patterns before delegating to centralized system:
+            - List[Tuple[...]] / Set[Tuple[...]] for obstacles, rock positions
+            - Matrix parameters (covariance matrices) with parameter name detection
 
-            # Handle Path objects
-            if target_type == Path and isinstance(value, str):
-                return Path(value)
-
-            # Handle Optional types
+            Note:
+                SpaceInfo is handled automatically by registered handler in centralized system.
+            """
+            # Unwrap Optional[T] types first
+            unwrapped_type = target_type
             if hasattr(target_type, "__origin__") and target_type.__origin__ is Union:
-                # Get the non-None type from Optional[T]
+                # Get non-None type from Optional
+                # pylint: disable=unidiomatic-typecheck
                 args = [arg for arg in target_type.__args__ if arg is not type(None)]
                 if args:
-                    return deserialize_value(value, args[0], param_name)
+                    unwrapped_type = args[0]
 
-            # Handle numpy arrays - convert lists to numpy arrays for specific parameter names
-            # Be selective to avoid converting lists of tuples or nested structures
-            if isinstance(value, list):
-                # Only convert specific parameters that MUST be numpy arrays (matrices)
-                matrix_param_names = [
-                    "noise_cov",
-                    "_cov",
-                    "cov_matrix",
-                    "state_transition_cov_matrix",
-                    "observation_cov_matrix",
-                ]
-                if any(name in param_name.lower() for name in matrix_param_names):
-                    return np.array(value)
-                # Also check type annotation for np.ndarray
-                if target_type == np.ndarray or (
-                    hasattr(target_type, "__name__") and "ndarray" in target_type.__name__
-                ):
-                    return np.array(value)
+            # Environment-specific pattern: List[Tuple[...]] and Set[Tuple[...]]
+            # Used by PushPOMDP (obstacles) and RockSamplePOMDP (rock_positions)
+            # Handles multiple serialized formats for compatibility
+            if hasattr(unwrapped_type, "__origin__"):
+                if unwrapped_type.__origin__ in (list, set):
+                    # Check if the element type is a tuple
+                    args = getattr(unwrapped_type, "__args__", ())
+                    if args and hasattr(args[0], "__origin__") and args[0].__origin__ is tuple:
+                        # This is List[Tuple[...]] or Set[Tuple[...]]
+                        if isinstance(value, list) and value:
+                            # Format 1: Tuple markers like {'__type__': 'tuple', 'values': [x, y]}
+                            if isinstance(value[0], dict) and value[0].get("__type__") == "tuple":
+                                return [deserialize_value_base(elem, None) for elem in value]
 
-            return value
+                        # First deserialize the value (might be ndarray marker or plain list)
+                        deserialized = deserialize_value_base(value, None)
+
+                        # Format 2: NumPy array shape (2, N) → [(x1,y1), (x2,y2), ...]
+                        if isinstance(deserialized, np.ndarray):
+                            if deserialized.ndim == 2 and deserialized.shape[0] == 2:
+                                return list(zip(deserialized[0], deserialized[1]))
+                        # Format 3: 2D list [[x1,x2,...], [y1,y2,...]] → [(x1,y1), ...]
+                        elif isinstance(deserialized, list) and deserialized:
+                            if len(deserialized) == 2 and isinstance(deserialized[0], list):
+                                return list(zip(deserialized[0], deserialized[1]))
+
+            # Environment-specific pattern: Matrix parameter name detection
+            # Ensures covariance matrices are always numpy arrays
+            matrix_param_names = [
+                "noise_cov",
+                "_cov",
+                "cov_matrix",
+                "state_transition_cov_matrix",
+                "observation_cov_matrix",
+            ]
+            if any(name in param_name.lower() for name in matrix_param_names):
+                result = deserialize_value_base(value, target_type)
+                if not isinstance(result, np.ndarray):
+                    result = np.array(result)
+                return result
+
+            # Handle numpy array type annotations
+            if target_type == np.ndarray or (
+                hasattr(target_type, "__name__") and "ndarray" in target_type.__name__
+            ):
+                result = deserialize_value_base(value, target_type)
+                if not isinstance(result, np.ndarray):
+                    result = np.array(result)
+                return result
+
+            # Delegate to centralized deserialization for all other types
+            return deserialize_value_base(value, target_type)
 
         # Validate required fields
         if "class" not in data or "module" not in data or "params" not in data:
@@ -728,7 +781,9 @@ class Environment(ABC):
             module = importlib.import_module(module_name)
             env_class = getattr(module, class_name)
         except (ImportError, AttributeError) as e:
-            raise ImportError(f"Failed to import environment class {data['class']}: {str(e)}") from e
+            raise ImportError(
+                f"Failed to import environment class {data['class']}: {str(e)}"
+            ) from e
 
         # Deserialize parameters with type hints
         sig = inspect.signature(env_class.__init__)
@@ -750,7 +805,9 @@ class Environment(ABC):
         try:
             return env_class(**params)
         except TypeError as e:
-            raise TypeError(f"Failed to construct {class_name} with params {params}: {str(e)}") from e
+            raise TypeError(
+                f"Failed to construct {class_name} with params {params}: {str(e)}"
+            ) from e
 
 
 class DiscreteActionsEnvironment(Environment):
