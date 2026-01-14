@@ -640,9 +640,11 @@ class Environment(ABC):
                 - config_id: Deterministic configuration identifier
 
         Example:
+            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
             >>> env = TigerPOMDP(discount_factor=0.95)
             >>> env_dict = env.to_dict()
-            >>> # env_dict contains class info and all parameters
+            >>> 'class' in env_dict and 'params' in env_dict
+            True
 
         Note:
             Uses centralized serialization system with registered SpaceInfo handler.
@@ -693,8 +695,12 @@ class Environment(ABC):
             TypeError: If parameters are invalid for environment constructor
 
         Example:
-            >>> env_dict = {"class": "...", "module": "...", "params": {...}}
-            >>> env = Environment.from_dict(env_dict)
+            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            >>> env = TigerPOMDP(discount_factor=0.95)
+            >>> env_dict = env.to_dict()
+            >>> reconstructed_env = Environment.from_dict(env_dict)
+            >>> reconstructed_env.discount_factor
+            0.95
         """
 
         def deserialize_value(value, target_type, param_name=""):

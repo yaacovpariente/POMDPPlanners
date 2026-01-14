@@ -495,9 +495,9 @@ def aggregate_weights_for_duplicate_values(
         >>> unique_vals, agg_weights = aggregate_weights_for_duplicate_values(values, weights)
         >>> unique_vals
         array([1., 2., 3.])
-        >>> np.isclose(agg_weights, np.array([0.3, 0.5, 0.2])).all()
+        >>> bool(np.isclose(agg_weights, np.array([0.3, 0.5, 0.2])).all())
         True
-        >>> np.isclose(np.sum(agg_weights), 1.0)
+        >>> bool(np.isclose(np.sum(agg_weights), 1.0))
         True
     """
     if len(values) == 0 or len(weights) == 0:

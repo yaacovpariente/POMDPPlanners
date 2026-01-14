@@ -532,12 +532,20 @@ class Policy(ABC):
             ImportError: If policy/environment classes cannot be imported
 
         Example:
+            >>> import tempfile
+            >>> from pathlib import Path
             >>> from POMDPPlanners.planners import POMCP
-            >>> # Load policy from file
-            >>> planner = POMCP.load("saved_policies/TigerPOMDP/POMCP/test_20260113_103045.json")
-            >>> # Verify reconstruction
-            >>> print(planner.depth)  # 10
-            >>> print(planner.exploration_constant)  # 1.0
+            >>> from POMDPPlanners.environments.tiger_pomdp import TigerPOMDP
+            >>> # Create and save a policy
+            >>> env = TigerPOMDP(discount_factor=0.95)
+            >>> planner = POMCP(environment=env, depth=10, exploration_constant=1.0, name="test")
+            >>> with tempfile.TemporaryDirectory() as tmpdir:
+            ...     filepath = Path(tmpdir) / "test_policy.json"
+            ...     planner.save(filepath)
+            ...     # Load the policy back
+            ...     loaded_planner = POMCP.load(filepath)
+            ...     print(loaded_planner.depth)
+            10
         """
         filepath = Path(filepath)
 
