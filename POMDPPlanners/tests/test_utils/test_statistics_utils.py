@@ -208,6 +208,13 @@ def test_cvar_estimator_from_dist():
     cvar = cvar_estimator_from_dist(values, weights, alpha)
     assert np.isclose(cvar, 2.0, atol=1e-4)
 
+    # Test case with identical values and uniform weights (real-world use case)
+    values = np.array([7.07106781, 7.07106781, 7.07106781, 7.07106781, 7.07106781])
+    weights = np.array([0.2, 0.2, 0.2, 0.2, 0.2])
+    alpha = 0.1
+    cvar = cvar_estimator_from_dist(values, weights, alpha)
+    assert np.isclose(cvar, 7.07106781, atol=1e-4)
+
     # Test invalid inputs
     with pytest.raises(ValueError):
         cvar_estimator_from_dist(np.array([1.0]), np.array([0.5]), 0.2)  # weights don't sum to 1
